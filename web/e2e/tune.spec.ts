@@ -34,6 +34,15 @@ async function instrument(page: Page) {
 
 const log = (page: Page) => page.evaluate(() => window.__audioLog.map((e) => e.what));
 
+/**
+ * True for a stop scheduled at most 5 ms ahead. A negative delay means the time was already past
+ * when read back, as the audio clock moves between reads: the oscillator stops at once.
+ */
+function stopsAtOnce(entry: string | undefined): boolean {
+  const m = /^stop in (-?\d+) ms$/.exec(entry ?? '');
+  return !!m && Number(m[1]) <= 5;
+}
+
 test('Tune asks first, counts down, and Halt stops the tone at once', async ({ page }) => {
   await instrument(page);
   await page.goto('./#/settings/radio');
@@ -67,7 +76,7 @@ test('Tune asks first, counts down, and Halt stops the tone at once', async ({ p
   await expect(sheet.getByRole('timer')).toHaveText(/^(9|8) s$/);
   await halt.click();
   const after = await log(page);
-  expect(after.at(-1)).toMatch(/^stop in [0-9] ms$/);
+  expect(stopsAtOnce(after.at(-1)), after.at(-1)).toBe(true);
   await expect(sheet).toBeHidden();
   // No other node ever reached the output.
   expect(after.filter((w) => w.includes('-> destination'))).toEqual(['connect GainNode -> destination']);
@@ -80,7 +89,7 @@ test('a tap outside the Tune sheet closes it and halts', async ({ page }) => {
   await page.getByRole('button', { name: 'Start tune' }).click();
   await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeVisible();
   await page.mouse.click(200, 20);
-  expect((await log(page)).at(-1)).toMatch(/^stop in [0-9] ms$/);
+  expect(stopsAtOnce((await log(page)).at(-1)), (await log(page)).at(-1)).toBe(true);
   await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeHidden();
 });
 
@@ -104,6 +113,6 @@ test('Escape closes the Tune sheet and halts', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeVisible();
   await page.keyboard.press('Escape');
   // The halt happens in the same task as the key press.
-  expect((await log(page)).at(-1)).toMatch(/^stop in [0-9] ms$/);
+  expect(stopsAtOnce((await log(page)).at(-1)), (await log(page)).at(-1)).toBe(true);
   await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeHidden();
 });
