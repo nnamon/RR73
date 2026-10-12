@@ -131,9 +131,17 @@ export function isProse(s) {
   return /\s/.test(t) && /[a-z]/.test(t) && (/^[A-Z]/.test(t) || /[.,:;?](\s|$)/.test(t));
 }
 
+/**
+ * Blanks text inside double quotation marks, straight or curly, within a line. Quoting a phrase
+ * mentions it, as when a commit message names the words a rule catches; it is not a use.
+ */
+export function stripQuoted(line) {
+  return line.replace(/"[^"\n]*"|\u201c[^\u201d\n]*\u201d/g, (m) => ' '.repeat(m.length));
+}
+
 export function lintText(prose, file) {
   const findings = [];
-  const lines = prose.split('\n');
+  const lines = prose.split('\n').map(stripQuoted);
   lines.forEach((line, i) => {
     for (const [level, rules] of [['error', ERROR_RULES], ['warning', WARN_RULES]]) {
       for (const rule of rules) {

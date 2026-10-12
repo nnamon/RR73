@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, stripDisabled } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, stripDisabled, stripQuoted } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
 
@@ -47,4 +47,11 @@ test('source prose picks sentences and ignores class lists', () => {
   const svelte = '<script>const label = "Simply tap here.";</script>\n<p>Fast — very</p>\n<div class="a b c"></div>';
   const found = lintText(sourceProse(svelte, '.svelte'), 'x').map((f) => f.rule).sort();
   assert.deepEqual(found, ['em-dash', 'filler']);
+});
+
+test('quoted phrases are mentions and pass', () => {
+  assert.deepEqual(rules('The rule now catches "harness the" and "seamless".'), []);
+  assert.deepEqual(rules('The rule catches \u201csimply\u201d too.'), []);
+  assert.deepEqual(rules('Unquoted, simply fails.'), ['error:filler']);
+  assert.equal(stripQuoted('a "b" c').length, 7);
 });
