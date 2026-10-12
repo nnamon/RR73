@@ -1,17 +1,17 @@
 import { defineConfig, devices } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 
-// Chromium plays a generated WAV as the microphone (see e2e/global-setup.ts).
-const fakeMic = {
+// Chromium plays a WAV as the microphone, looped from when capture starts.
+const micPlaying = (file: string) => ({
   permissions: ['microphone'],
   launchOptions: {
-    args: [
-      '--use-fake-ui-for-media-stream',
-      '--use-fake-device-for-media-stream',
-      `--use-file-for-fake-audio-capture=${fileURLToPath(new URL('./e2e/.fixtures/tones.wav', import.meta.url))}`,
-    ],
+    args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${fileURLToPath(new URL(file, import.meta.url))}`],
   },
-};
+});
+// Test tones written by e2e/global-setup.ts.
+const fakeMic = micPlaying('./e2e/.fixtures/tones.wav');
+// One FT8 slot with 4 known messages (e2e/fixtures/ft8-four-signals.json).
+const ft8Mic = micPlaying('./e2e/fixtures/ft8-four-signals.wav');
 
 // Paths are absolute so the suite runs the same from web/ (npm --prefix web run e2e) and from the
 // repository root (npx --prefix web playwright test, through the root playwright.config.ts).
@@ -47,6 +47,7 @@ export default defineConfig({
       },
   projects: [
     { name: 'mic', testMatch: /audio\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
