@@ -1,0 +1,6 @@
+# Lint settings for this tool. Run: docker compose run --rm kiwi ruff check tools/wsjtx
+target-version = "py312"
+line-length = 120
+
+[lint]
+select = ["E", "F", "W", "I", "UP", "B"]
