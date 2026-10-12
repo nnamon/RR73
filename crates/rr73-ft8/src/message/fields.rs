@@ -3,15 +3,17 @@
 use super::PackError;
 use std::fmt;
 
-/// ARRL and RAC sections in S7 code order (QEX, Appendix A; list `arrl_rac_sections.txt` of
-/// the public protocol description).
-pub(crate) const SECTIONS: [&str; 84] = [
-    "AB", "AK", "AL", "AR", "AZ", "BC", "CO", "CT", "DE", "EB", "EMA", "ENY", "EPA", "EWA", "GA", "GTA",
-    "IA", "ID", "IL", "IN", "KS", "KY", "LA", "LAX", "MAR", "MB", "MDC", "ME", "MI", "MN", "MO", "MS", "MT",
-    "NC", "ND", "NE", "NFL", "NH", "NL", "NLI", "NM", "NNJ", "NNY", "NT", "NTX", "NV", "OH", "OK", "ONE",
-    "ONN", "ONS", "OR", "ORG", "PAC", "PR", "QC", "RI", "SB", "SC", "SCV", "SD", "SDG", "SF", "SFL", "SJV",
-    "SK", "SNJ", "STX", "SV", "TN", "UT", "VA", "VI", "VT", "WCF", "WI", "WMA", "WNY", "WPA", "WTX", "WV",
-    "WWA", "WY", "DX",
+/// ARRL and RAC sections in S7 code order; the first has code 1. This is the list WSJT-X
+/// 2.7.0-rc3 packs (probed with ft8sim, fixtures/ft8/wsjtx.json): the list `arrl_rac_sections.txt`
+/// of the public protocol description with GH, NS and TER in place of GTA, MAR and NT, and PE
+/// and NB added. QEX, Appendix A gives codes 0 to 83; WSJT-X sends AB as 1.
+pub(crate) const SECTIONS: [&str; 86] = [
+    "AB", "AK", "AL", "AR", "AZ", "BC", "CO", "CT", "DE", "EB", "EMA", "ENY", "EPA", "EWA", "GA", "GH", "IA",
+    "ID", "IL", "IN", "KS", "KY", "LA", "LAX", "NS", "MB", "MDC", "ME", "MI", "MN", "MO", "MS", "MT", "NC",
+    "ND", "NE", "NFL", "NH", "NL", "NLI", "NM", "NNJ", "NNY", "TER", "NTX", "NV", "OH", "OK", "ONE", "ONN",
+    "ONS", "OR", "ORG", "PAC", "PR", "QC", "RI", "SB", "SC", "SCV", "SD", "SDG", "SF", "SFL", "SJV", "SK",
+    "SNJ", "STX", "SV", "TN", "UT", "VA", "VI", "VT", "WCF", "WI", "WMA", "WNY", "WPA", "WTX", "WV", "WWA",
+    "WY", "DX", "PE", "NB",
 ];
 
 /// US states and Canadian provinces in s13 code order, from 8001 (QEX, Appendix A; list
@@ -179,17 +181,19 @@ impl fmt::Debug for Grid6 {
     }
 }
 
-/// A signal report in dB, −30 to +99, shown with a sign and two digits: `-15`, `+05`.
+/// A signal report in dB, −50 to +50, shown with a sign and two digits: `-15`, `+05`.
 ///
-/// DXpedition messages carry only even reports from −30 to +32.
+/// This is the range WSJT-X 2.7.0-rc3 packs. QEX, Appendix A gives −30 to +99; WSJT-X sends −30
+/// to +50 as g15 codes 5 to 85 and −50 to −31 as codes 86 to 105, the codes QEX would use for
+/// +51 to +70. DXpedition messages carry only even reports from −30 to +32.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Report(i8);
 
 impl Report {
     /// Lowest report a message carries, in dB.
-    pub const MIN_DB: i8 = -30;
-    /// Highest report a standard message carries, in dB.
-    pub const MAX_DB: i8 = 99;
+    pub const MIN_DB: i8 = -50;
+    /// Highest report a message carries, in dB.
+    pub const MAX_DB: i8 = 50;
 
     /// Checks a report in dB.
     pub fn new(db: i32) -> Result<Report, PackError> {
@@ -203,6 +207,29 @@ impl Report {
     /// The report in dB.
     pub fn db(&self) -> i8 {
         self.0
+    }
+
+    /// The report code in g15 above the locators (g15 − 32 400): `dB + 35` from −30 dB up,
+    /// `dB + 136` below.
+    pub(crate) fn code(&self) -> u16 {
+        let db = i16::from(self.0);
+        (if db >= -30 { db + 35 } else { db + 136 }) as u16
+    }
+
+    /// The report for a code from 5 up, and whether the code is the one [`Report::code`]
+    /// writes. WSJT-X reads code `c` as `c − 35` up to 85 and as `c − 136` from 86, so codes
+    /// 106 to 186 repeat −30 to +50; codes from 187 give reports above +50 and are rejected.
+    pub(crate) fn from_code(code: u16) -> Option<(Report, bool)> {
+        if code < 5 {
+            return None;
+        }
+        let db = if code <= 85 {
+            i32::from(code) - 35
+        } else {
+            i32::from(code) - 136
+        };
+        let report = Report::new(db).ok()?;
+        Some((report, report.code() == code))
     }
 
     /// Parses `+05`, `-15` or `-5`: a sign and one or two digits.
@@ -316,7 +343,8 @@ impl fmt::Debug for FreeText {
     }
 }
 
-/// Telemetry: 71 bits, shown as 18 hexadecimal digits with a first digit of 0 to 7.
+/// Telemetry: 71 bits, shown as up to 18 hexadecimal digits without leading zeros, as WSJT-X
+/// shows it. Zero is shown as `0` (WSJT-X shows nothing).
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Telemetry(u128);
 
@@ -356,7 +384,7 @@ impl Telemetry {
 
 impl fmt::Display for Telemetry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:018X}", self.0)
+        write!(f, "{:X}", self.0)
     }
 }
 
@@ -397,7 +425,8 @@ impl SignalStrength {
     }
 }
 
-/// ARRL Field Day class, A to F.
+/// ARRL Field Day class, A to H: the 8 values of field k3. QEX, Appendix A lists A to F;
+/// WSJT-X 2.7.0-rc3 packs and shows G and H too.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum FieldDayClass {
     /// Class A.
@@ -412,19 +441,25 @@ pub enum FieldDayClass {
     E,
     /// Class F.
     F,
+    /// Class G.
+    G,
+    /// Class H.
+    H,
 }
 
 impl FieldDayClass {
-    const ALL: [FieldDayClass; 6] = [
+    const ALL: [FieldDayClass; 8] = [
         FieldDayClass::A,
         FieldDayClass::B,
         FieldDayClass::C,
         FieldDayClass::D,
         FieldDayClass::E,
         FieldDayClass::F,
+        FieldDayClass::G,
+        FieldDayClass::H,
     ];
 
-    /// The class for a letter A to F.
+    /// The class for a letter A to H.
     pub fn from_letter(letter: char) -> Result<FieldDayClass, PackError> {
         let i = (letter.to_ascii_uppercase() as u32).wrapping_sub('A' as u32);
         Self::ALL
@@ -438,13 +473,14 @@ impl FieldDayClass {
         char::from(b'A' + self.code())
     }
 
-    /// k3 code, 0 to 5.
+    /// k3 code, 0 to 7.
     pub(crate) fn code(&self) -> u8 {
         *self as u8
     }
 
-    pub(crate) fn from_code(code: u8) -> Option<FieldDayClass> {
-        Self::ALL.get(usize::from(code)).copied()
+    /// The class for k3 code `code & 7`.
+    pub(crate) fn from_code(code: u8) -> FieldDayClass {
+        Self::ALL[usize::from(code & 7)]
     }
 }
 
@@ -467,13 +503,14 @@ impl ArrlSection {
         SECTIONS[usize::from(self.0)]
     }
 
-    /// S7 code, 0 to 83.
+    /// S7 code, 1 to 86.
     pub(crate) fn code(&self) -> u8 {
-        self.0
+        self.0 + 1
     }
 
     pub(crate) fn from_code(code: u8) -> Option<ArrlSection> {
-        (usize::from(code) < SECTIONS.len()).then_some(ArrlSection(code))
+        let index = code.checked_sub(1)?;
+        (usize::from(index) < SECTIONS.len()).then_some(ArrlSection(index))
     }
 }
 
@@ -532,13 +569,16 @@ impl fmt::Debug for StateProvince {
 /// The exchange of a RTTY Roundup or FT Roundup message.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum RoundupExchange {
-    /// A serial number, 0 to 7999, shown with 4 digits: `0013`.
+    /// A serial number, 1 to 7999, shown with 4 digits: `0013`. WSJT-X 2.7.0-rc3 does not pack 0
+    /// and shows nothing for it.
     Serial(u16),
     /// A US state or Canadian province.
     State(StateProvince),
 }
 
 impl RoundupExchange {
+    /// Lowest serial number the field carries.
+    pub const MIN_SERIAL: u16 = 1;
     /// Highest serial number the field carries.
     pub const MAX_SERIAL: u16 = 7999;
 
@@ -552,7 +592,7 @@ impl RoundupExchange {
 
     pub(crate) fn from_s13(code: u16) -> Option<RoundupExchange> {
         match code {
-            0..=Self::MAX_SERIAL => Some(RoundupExchange::Serial(code)),
+            Self::MIN_SERIAL..=Self::MAX_SERIAL => Some(RoundupExchange::Serial(code)),
             8001.. => StateProvince::from_code(u8::try_from(code - 8001).ok()?).map(RoundupExchange::State),
             _ => None,
         }
@@ -591,6 +631,9 @@ pub enum Exchange {
     Rrr,
     /// `RR73`.
     Rr73,
+    /// `R RR73`: RR73 with the acknowledgement flag. WSJT-X sends the text `R RR73` this way
+    /// (R1 set, g15 the locator RR73).
+    AckRr73,
     /// `73`.
     SeventyThree,
 }
@@ -603,6 +646,7 @@ impl fmt::Display for Exchange {
             Exchange::Report { report, ack } => write!(f, "{}{report}", if *ack { "R" } else { "" }),
             Exchange::Rrr => f.write_str("RRR"),
             Exchange::Rr73 => f.write_str("RR73"),
+            Exchange::AckRr73 => f.write_str("R RR73"),
             Exchange::SeventyThree => f.write_str("73"),
         }
     }
@@ -689,13 +733,37 @@ mod tests {
         assert_eq!(show(-30), Ok("-30".into()));
         assert_eq!(show(-5), Ok("-05".into()));
         assert_eq!(show(0), Ok("+00".into()));
-        assert_eq!(show(99), Ok("+99".into()));
-        assert_eq!(show(-31), Err(PackError::ReportOutOfRange(-31)));
-        assert_eq!(show(100), Err(PackError::ReportOutOfRange(100)));
+        assert_eq!(show(50), Ok("+50".into()));
+        assert_eq!(show(-50), Ok("-50".into()));
+        assert_eq!(show(-51), Err(PackError::ReportOutOfRange(-51)));
+        assert_eq!(show(51), Err(PackError::ReportOutOfRange(51)));
         assert_eq!(Report::parse("-5"), Some(Report::new(-5)));
         assert_eq!(Report::parse("+100"), None);
         assert_eq!(Report::parse("15"), None);
         assert_eq!(Report::parse("-"), None);
+    }
+
+    #[test]
+    fn report_codes_follow_wsjtx() {
+        // Codes seen from WSJT-X 2.7.0-rc3 (ft8sim and jt9, fixtures/ft8/wsjtx*.json).
+        let code = |db| Report::new(db).map(|r| r.code());
+        assert_eq!((code(-30), code(0), code(50)), (Ok(5), Ok(35), Ok(85)));
+        assert_eq!((code(-50), code(-31)), (Ok(86), Ok(105)));
+        let db = |c| Report::from_code(c).map(|(r, canonical)| (r.db(), canonical));
+        assert_eq!(
+            (db(86), db(105), db(106), db(186)),
+            (
+                Some((-50, true)),
+                Some((-31, true)),
+                Some((-30, false)),
+                Some((50, false))
+            )
+        );
+        assert_eq!((db(4), db(187), db(367)), (None, None, None));
+        for d in -50..=50 {
+            let r = Report::new(d).expect("in range");
+            assert_eq!(Report::from_code(r.code()), Some((r, true)));
+        }
     }
 
     #[test]
@@ -723,13 +791,14 @@ mod tests {
     }
 
     #[test]
-    fn telemetry_shows_18_digits() {
+    fn telemetry_shows_hex_without_leading_zeros() {
         let t = Telemetry::from_hex("123456789abcdef012").expect("telemetry");
         assert_eq!(t.to_string(), "123456789ABCDEF012");
         assert_eq!(
-            Telemetry::from_hex("1F").map(|t| t.to_string()),
-            Ok("00000000000000001F".into())
+            Telemetry::from_hex("00001F").map(|t| t.to_string()),
+            Ok("1F".into())
         );
+        assert_eq!(Telemetry::from_hex("000").map(|t| t.to_string()), Ok("0".into()));
         assert_eq!(
             Telemetry::from_hex("800000000000000000"),
             Err(PackError::TelemetryTooLarge)
@@ -743,13 +812,21 @@ mod tests {
         assert_eq!(SignalStrength::new(7).map(|s| (s.rst(), s.rs())), Ok((579, 57)));
         assert!(SignalStrength::new(1).is_err());
         assert_eq!(FieldDayClass::from_letter('c'), Ok(FieldDayClass::C));
-        assert!(FieldDayClass::from_letter('G').is_err());
+        assert_eq!(FieldDayClass::from_letter('H'), Ok(FieldDayClass::H));
+        assert!(FieldDayClass::from_letter('I').is_err());
+        assert_eq!(FieldDayClass::from_code(7), FieldDayClass::H);
         assert_eq!(
             ArrlSection::new("ema").map(|s| (s.code(), s.as_str())),
-            Ok((10, "EMA"))
+            Ok((11, "EMA"))
         );
-        assert_eq!(ArrlSection::new("DX").map(|s| s.code()), Ok(83));
+        assert_eq!(ArrlSection::new("AB").map(|s| s.code()), Ok(1));
+        assert_eq!(ArrlSection::new("DX").map(|s| s.code()), Ok(84));
+        assert_eq!(ArrlSection::new("NB").map(|s| s.code()), Ok(86));
+        assert!(ArrlSection::new("GTA").is_err());
+        assert_eq!(ArrlSection::from_code(0), None);
+        assert_eq!(ArrlSection::from_code(87), None);
         assert_eq!(StateProvince::new("DC").map(|s| s.code()), Ok(64));
+        assert_eq!(RoundupExchange::from_s13(0), None);
         assert_eq!(RoundupExchange::from_s13(8000), None);
         assert_eq!(RoundupExchange::from_s13(8066), None);
         assert_eq!(
