@@ -32,4 +32,5 @@ test('release turns Unreleased into a dated version', () => {
   assert.deepEqual(parseChangelog(out).map((x) => x.version), ['0.2.0', '0.1.0']);
   assert.throws(() => release(out, '0.3.0', '2026-10-21'), /Unreleased/);
   assert.throws(() => release(LOG, '0.1.0', '2026-10-21'), /already has/);
+  assert.match(out, /## 0\.2\.0 · 2026-10-20\n\n- Decodes FT4\./);
 });

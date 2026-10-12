@@ -6,6 +6,7 @@
 //                                                   bumps Cargo.toml and web/package.json, turns
 //                                                   "## Unreleased" into "## x.y.z · date", prints x.y.z
 //   node tools/release/version.mjs notes <x.y.z>     prints that version's changelog entries
+//   node tools/release/version.mjs current           prints the current version
 
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 
@@ -57,7 +58,7 @@ export function release(text, version, date) {
     throw new Error('CHANGELOG.md has no entries under "## Unreleased"; add them before releasing');
   }
   if (sections.some((s) => s.version === version)) throw new Error(`CHANGELOG.md already has ${version}`);
-  return text.replace(/^## Unreleased\s*$/m, `## ${version} · ${date}`);
+  return text.replace(/^## Unreleased[ \t]*$/m, `## ${version} · ${date}`);
 }
 
 function check() {
@@ -93,6 +94,11 @@ function bump(level, date = new Date().toISOString().slice(0, 10)) {
   return 0;
 }
 
+function current() {
+  console.log(cargoVersion(readFileSync(CARGO, 'utf8')));
+  return 0;
+}
+
 function notes(version) {
   const section = parseChangelog(readFileSync(CHANGELOG, 'utf8')).find((s) => s.version === version);
   if (!section) {
@@ -105,9 +111,9 @@ function notes(version) {
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   const [cmd, ...args] = process.argv.slice(2);
-  const run = { check, bump, notes }[cmd];
+  const run = { check, bump, notes, current }[cmd];
   if (!run) {
-    console.error('usage: version.mjs check | bump <major|minor|patch|x.y.z> [date] | notes <x.y.z>');
+    console.error('usage: version.mjs check | current | bump <major|minor|patch|x.y.z> [date] | notes <x.y.z>');
     process.exit(2);
   }
   try {

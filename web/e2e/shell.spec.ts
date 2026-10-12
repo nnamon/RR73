@@ -1,5 +1,5 @@
 // The app shell: tabs, headings, settings stored in IndexedDB, version history and the update notice.
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 
 const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
@@ -58,20 +58,29 @@ test('the callsign is stored on the phone and marks nothing until set', async ({
   await field.fill('9v1ne');
   await field.press('Enter');
   await expect(field).toHaveValue('9V1NE');
+  // The IndexedDB write is asynchronous: reload only once it has committed.
+  await expect.poll(() => storedSettings(page)).toMatchObject({ key: 'settings', value: { callsign: '9V1NE' } });
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Callsign' })).toHaveValue('9V1NE');
-  const stored = await page.evaluate(
+});
+
+/** Reads the settings record straight from IndexedDB; null until the store exists. */
+function storedSettings(page: Page): Promise<unknown> {
+  return page.evaluate(
     () =>
       new Promise<unknown>((resolve) => {
         const req = indexedDB.open('rr73');
+        req.onerror = () => resolve(null);
         req.onsuccess = () => {
-          const get = req.result.transaction('kv').objectStore('kv').get('settings');
-          get.onsuccess = () => resolve(get.result);
+          const db = req.result;
+          if (!db.objectStoreNames.contains('kv')) return resolve(null);
+          const get = db.transaction('kv').objectStore('kv').get('settings');
+          get.onsuccess = () => resolve(get.result ?? null);
+          get.onerror = () => resolve(null);
         };
       }),
   );
-  expect(stored).toMatchObject({ key: 'settings', value: { callsign: '9V1NE' } });
-});
+}
 
 test('the theme setting overrides the system', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'light' });

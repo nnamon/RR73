@@ -84,12 +84,12 @@ SlotAudio (12 kHz f32, start time, mode)
 ### rr73-chansim
 
 - `Scene { mode, signals: Vec<SimSignal>, noise: Noise }` with `SimSignal { message, freq_hz, dt_s, snr_db, fading: Option<Watterson>, drift_hz_per_s }`.
-- `render(&Scene, seed) -> (Vec<f32>, Vec<Truth>)`. SNR follows the WSJT-X convention: signal power against noise power in 2500 Hz.
+- `render(&Scene, seed) -> Result<(Vec<f32>, Vec<Truth>), RenderError>`. SNR follows the WSJT-X convention: signal power against noise power in 2500 Hz.
 
 ### rr73-corpus
 
 - Reads and writes slots as described in `docs/corpus.md`.
-- `score(decodes, reference, truth) -> SlotScore` with matching by message text, then frequency within 10 Hz and DT within 0.5 s.
+- `match_entries(decodes, expected) -> SlotScore`, where `SlotMeta::expected` picks the truth for synthetic slots or a named reference for recorded ones. Matching is by message text, then frequency within 10 Hz and DT within 0.5 s.
 
 ### rr73-bench
 

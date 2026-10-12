@@ -37,7 +37,7 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Versions follow semantic versioning, at 0.x until the app is ready for operating. One version covers the app and the crates: `Cargo.toml` `[workspace.package]` and `web/package.json`, kept equal by `tools/release/version.mjs check` in CI.
 - Every user-visible change adds a line under `## Unreleased` in `CHANGELOG.md`, in the style guide's voice. The app shows the file as Version history.
 - Release often: every merge that changes the app or the decoder is followed by a release. Patch for fixes, minor for features.
-- `tools/release/release.sh patch|minor|x.y.z` on an up-to-date `main` dates the changelog, bumps both versions, commits, tags `v<version>`, pushes, and publishes the GitHub release with the changelog entries. The tag deploys the app to GitHub Pages.
+- Releases take two steps so CI tests the exact release commit. On the branch, `tools/release/release.sh prepare patch|minor|x.y.z` dates the changelog, bumps both versions and commits "Release x.y.z". After CI is green and the branch is merged, `tools/release/release.sh publish` on `main` checks CI on that commit, tags `v<version>`, pushes the tag and publishes the GitHub release with the changelog entries. The tag deploys the app to GitHub Pages.
 
 ## Code
 
