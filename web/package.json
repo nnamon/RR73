@@ -37,5 +37,8 @@
   },
   "dependencies": {
     "idb": "^8.0.4"
+  },
+  "overrides": {
+    "playwright-core": "1.63.0"
   }
 }
