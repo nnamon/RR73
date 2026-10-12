@@ -36,7 +36,7 @@ test('Operate shows the band, the frequency and the empty decode list', async ({
   await expect(band).toContainText('20m');
   await expect(band).toContainText('FT8');
   await expect(band).toContainText('14.074 MHz · USB');
-  await expect(page.getByText('No decoder in this version')).toBeVisible();
+  await expect(page.getByText('No decodes yet')).toBeVisible();
 });
 
 test('changing band updates the header', async ({ page }) => {

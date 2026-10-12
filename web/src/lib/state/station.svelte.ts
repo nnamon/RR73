@@ -13,8 +13,9 @@ import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import type { CaptureReport } from '../audio/report';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
 import { SLOT_SAMPLES, type Mode } from '../clock/slots';
-import { createDecoder } from '../decode/null-client';
-import type { Decode } from '../decode/types';
+import { NullDecoder } from '../decode/null-client';
+import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
+import { DecoderBusyError, createDecoder } from '../decode/worker-client';
 import { dialHz } from '../radio/bands';
 import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
@@ -33,8 +34,10 @@ export interface DecodedSlot {
   startUtcMs: number;
   mode: Mode;
   decodes: Decode[];
-  /** Time the decoder took, ms. */
+  /** Time from handing the slot to the decoder to its decodes, ms. */
   ms: number;
+  /** True when the decoder was still busy with earlier slots and this one was not decoded. */
+  skipped?: boolean;
 }
 
 export interface KeyingResult {
@@ -60,7 +63,11 @@ export const audio = $state({
 });
 
 export const recent = $state<{ slots: SlotSummary[] }>({ slots: [] });
-export const band = $state<{ slots: DecodedSlot[]; decoderAvailable: boolean }>({ slots: [], decoderAvailable: false });
+/** Decoded slots, newest first, and the decoder's state. */
+export const band = $state<{ slots: DecodedSlot[]; decoder: DecoderStatus }>({ slots: [], decoder: { state: 'idle' } });
+
+/** Slots kept in the decode list: 2 minutes of FT8. */
+const KEEP_SLOTS = 8;
 export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null });
 
 let engine: CaptureEngine | null = null;
@@ -68,8 +75,17 @@ const output = new TransmitOutput();
 let wake: WakeLockKeeper | null = null;
 let assembler: SlotAssembler | null = null;
 const recorder = new SlotRecorder(8);
-const decoder = createDecoder();
-band.decoderAvailable = decoder.available;
+let decoder: DecoderClient = createDecoder();
+band.decoder = decoder.status;
+decoder.onStatus((st) => {
+  band.decoder = st;
+  if (st.state === 'ready') console.info(`RR73 decoder ${st.version} loaded in ${Math.round(st.loadMs)} ms`);
+  if (st.state === 'failed') {
+    console.warn(`RR73 decoder unavailable (${st.reason}): ${st.detail}`);
+    // Receive carries on without decodes.
+    decoder = new NullDecoder(st);
+  }
+});
 const chunkListeners = new Set<(c: Chunk) => void>();
 /** Recent input levels for the keying check: [performance.now() ms, RMS dBFS]. */
 let levelLog: [number, number][] = [];
@@ -123,12 +139,18 @@ function onSlot(slot: AssembledSlot) {
   recorder.add(slot);
   recent.slots = recorder.list().map(({ startUtcMs, mode, filled, lateStart, gap }) => ({ startUtcMs, mode, filled, lateStart, gap }));
   // A slot with less than half its audio cannot hold a whole FT8 or FT4 message.
-  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2) return;
+  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available) return;
   const t0 = performance.now();
-  void decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then((decodes) => {
-    const entry: DecodedSlot = { startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 };
-    band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== slot.startUtcMs)].slice(0, 4);
-  });
+  const keep = (entry: DecodedSlot) => {
+    band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
+  };
+  // The decoder gets a copy: the recorder keeps the slot for Save slot.
+  decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
+    (decodes) => keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 }),
+    (e: unknown) => {
+      if (e instanceof DecoderBusyError) keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
+    },
+  );
 }
 
 /** Listens to the 12 kHz capture stream (the waterfall). */
@@ -137,8 +159,9 @@ export function onAudioChunk(fn: (c: Chunk) => void): () => void {
   return () => chunkListeners.delete(fn);
 }
 
-/** Starts audio. Call from a tap. */
+/** Starts audio, and loads the decoder the first time. Call from a tap. */
 export function startAudio() {
+  decoder.load();
   return getEngine().start(settings.inputDeviceId);
 }
 

@@ -2,7 +2,7 @@
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
-  import { audio } from '../lib/state/station.svelte';
+  import { audio, band } from '../lib/state/station.svelte';
 
   let callsign = $state(settings.callsign);
   $effect(() => {
@@ -20,6 +20,14 @@
     if (audio.status !== 'running' || !r) return 'Audio off';
     const ch = r.channelUsed === 'mono' || !r.channelUsed ? 'mono' : `${r.channelUsed} channel`;
     return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
+  });
+
+  const decoderText = $derived.by(() => {
+    const d = band.decoder;
+    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
+    if (d.state === 'loading') return 'Loading';
+    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
+    return 'Loads when audio starts';
   });
 
   const themes: { id: Theme; label: string }[] = [
@@ -85,6 +93,10 @@
         <span class="row-value">Version history</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Decoder</span></span>
+        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
+      </div>
     </div>
     <p class="section-foot">RR73 is free software under the MIT or Apache 2.0 licence.</p>
   </div>

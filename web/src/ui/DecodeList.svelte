@@ -1,7 +1,7 @@
 <script lang="ts" module>
-  import type { DecodeRowData } from '../lib/decode/marking';
+  import type { ListItem } from '../lib/decode/list';
 
-  export type DecodeListItem = { kind: 'header'; id: string; text: string } | { kind: 'row'; id: string; row: DecodeRowData };
+  export type DecodeListItem = ListItem;
 </script>
 
 <script lang="ts">
@@ -10,7 +10,7 @@
    * you sent amber, each with a 4 px bar, a tint and the callsign in bold.
    */
   import { dt, snr } from '../lib/clock/format';
-  import { splitKey } from '../lib/decode/marking';
+  import { splitKey, type DecodeRowData } from '../lib/decode/marking';
 
   let { items, label = 'Decodes' }: { items: DecodeListItem[]; label?: string } = $props();
 
