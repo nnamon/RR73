@@ -73,5 +73,6 @@ export default defineConfig({
   worker: { format: 'es' },
   server: { host: '0.0.0.0', port: 7374, strictPort: true },
   preview: { host: '0.0.0.0', port: 7374, strictPort: true },
-  build: { target: 'es2022', sourcemap: true },
+  // iOS 26 is the target, so CSS keeps light-dark() native. Older targets get the minifier's fallback.
+  build: { target: 'es2022', cssTarget: ['safari18', 'chrome123'], sourcemap: true },
 });

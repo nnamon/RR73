@@ -1,11 +1,32 @@
 {
-  "extends": ["stylelint-config-standard"],
+  "extends": [
+    "stylelint-config-standard"
+  ],
   "customSyntax": "postcss-html",
   "rules": {
     "color-no-hex": true,
     "color-named": "never",
-    "function-disallowed-list": ["rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "light-dark"],
-    "selector-pseudo-class-no-unknown": [true, { "ignorePseudoClasses": ["global"] }],
+    "function-disallowed-list": [
+      "rgb",
+      "rgba",
+      "hsl",
+      "hsla",
+      "hwb",
+      "lab",
+      "lch",
+      "oklab",
+      "oklch",
+      "color",
+      "light-dark"
+    ],
+    "selector-pseudo-class-no-unknown": [
+      true,
+      {
+        "ignorePseudoClasses": [
+          "global"
+        ]
+      }
+    ],
     "no-descending-specificity": null,
     "selector-class-pattern": null,
     "custom-property-pattern": "^rr-[a-z0-9-]+$",
@@ -14,14 +35,25 @@
     "font-family-name-quotes": null,
     "import-notation": null,
     "media-feature-range-notation": null,
-    "declaration-property-value-no-unknown": null
+    "declaration-property-value-no-unknown": null,
+    "declaration-property-value-disallowed-list": {
+      "/^font-size$/": [
+        "/\\d/"
+      ],
+      "/^(margin|padding|gap|row-gap|column-gap)(-.+)?$/": [
+        "/\\d*\\.?\\d+(px|rem|em)/"
+      ]
+    }
   },
   "overrides": [
     {
-      "files": ["src/styles/tokens.css"],
+      "files": [
+        "src/styles/tokens.css"
+      ],
       "rules": {
         "color-no-hex": null,
-        "function-disallowed-list": null
+        "function-disallowed-list": null,
+        "declaration-property-value-disallowed-list": null
       }
     }
   ]
