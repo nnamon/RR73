@@ -1,0 +1,14 @@
+[package]
+name = "rr73-dsp"
+description = "FFT plans, windows, spectrograms and resampling for RR73"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rustfft.workspace = true
+
+[lints]
+workspace = true

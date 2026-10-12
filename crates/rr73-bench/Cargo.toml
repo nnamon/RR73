@@ -1,0 +1,21 @@
+[package]
+name = "rr73-bench"
+description = "Decoder research bench"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rr73-ft8.workspace = true
+rr73-decode.workspace = true
+rr73-chansim.workspace = true
+rr73-corpus.workspace = true
+clap.workspace = true
+rayon.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,49 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/nnamon/RR73"
+
+[workspace.dependencies]
+rr73-ft8 = { path = "crates/rr73-ft8" }
+rr73-dsp = { path = "crates/rr73-dsp" }
+rr73-decode = { path = "crates/rr73-decode" }
+rr73-chansim = { path = "crates/rr73-chansim" }
+rr73-corpus = { path = "crates/rr73-corpus" }
+clap = { version = "4", features = ["derive"] }
+hound = "3"
+rand = "0.9"
+rand_chacha = "0.9"
+rand_distr = "0.5"
+rayon = "1"
+rustfft = "6"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+wasm-bindgen = "0.2"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+unwrap_used = "warn"
+
+[profile.dev]
+# Debug info is most of the target directory; the dev machine has little disk.
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[profile.bench-fast]
+inherits = "release"
+lto = false
+codegen-units = 16

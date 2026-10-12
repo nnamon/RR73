@@ -1,0 +1,16 @@
+# Rust
+/target/
+# Web
+/web/node_modules/
+/web/dist/
+/web/src/wasm/pkg/
+/web/test-results/
+/web/playwright-report/
+# Research data and outputs
+/corpus/
+/results/
+# Tool checkouts built in containers
+/tools/ft8lib/src/
+/tools/kiwi/vendor/
+# OS
+.DS_Store

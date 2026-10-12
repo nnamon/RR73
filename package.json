@@ -1,0 +1,10 @@
+{
+  "name": "rr73-repo",
+  "private": true,
+  "description": "Repository-level scripts. The app's package lives in web/.",
+  "type": "module",
+  "scripts": {
+    "lint:copy": "node tools/lint-copy/lint-copy.mjs",
+    "test:tools": "node --test tools/lint-copy/lint-copy.test.mjs"
+  }
+}

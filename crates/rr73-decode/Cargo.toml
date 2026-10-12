@@ -1,0 +1,17 @@
+[package]
+name = "rr73-decode"
+description = "FT8 and FT4 decoder pipeline with swappable stages"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rr73-ft8.workspace = true
+rr73-dsp.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[lints]
+workspace = true

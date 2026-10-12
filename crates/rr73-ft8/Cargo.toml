@@ -1,0 +1,18 @@
+[package]
+name = "rr73-ft8"
+description = "FT8 and FT4 protocol: messages, packing, CRC, LDPC code, tones and GFSK synthesis"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+serde.workspace = true
+
+[lints]
+workspace = true

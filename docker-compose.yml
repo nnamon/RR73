@@ -1,0 +1,62 @@
+# All RR73 tooling runs in containers; nothing is installed on the host. The project
+# name comes from the directory, so each git worktree gets its own build volumes.
+#
+#   docker compose build rust
+#   docker compose run --rm rust cargo test --workspace
+#   docker compose run --rm node npm --prefix web ci
+#   docker compose run --rm --service-ports node npm --prefix web run dev
+#   docker compose run --rm e2e npx --prefix web playwright test
+#   docker compose run --rm wsjtx jt9 -8 -d 3 corpus/public/ft8_lib/<file>.wav
+#   docker compose run --rm kiwi record --help
+
+
+x-workspace: &workspace
+  working_dir: /work
+  # The default bridge network: this machine has no free address pools for project networks.
+  network_mode: bridge
+  volumes:
+    - .:/work
+    - cargo-registry:/usr/local/cargo/registry
+    - cargo-target:/work/target
+    - web-node-modules:/work/web/node_modules
+
+services:
+  rust:
+    build: { context: ., dockerfile: docker/rust.Dockerfile }
+    image: rr73-rust:1.98.1
+    <<: *workspace
+
+  node:
+    image: node:24-slim
+    <<: *workspace
+    ports:
+      - "7374:7374"
+    environment:
+      - CI=1
+
+  e2e:
+    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    <<: *workspace
+    environment:
+      - CI=1
+
+  wsjtx:
+    build: { context: tools/wsjtx }
+    image: rr73-wsjtx:latest
+    network_mode: bridge
+    working_dir: /work
+    volumes:
+      - .:/work
+
+  kiwi:
+    build: { context: tools/kiwi }
+    image: rr73-kiwi:latest
+    network_mode: bridge
+    working_dir: /work
+    volumes:
+      - .:/work
+
+volumes:
+  cargo-registry:
+  cargo-target:
+  web-node-modules:

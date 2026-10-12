@@ -1,0 +1,3 @@
+#!/bin/sh
+# Runs the bench from the workspace in release mode. Used inside the rust container.
+exec cargo run --quiet --release -p rr73-bench -- "$@"
