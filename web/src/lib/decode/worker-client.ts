@@ -29,7 +29,12 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
-export const PRESET = 'baseline';
+/**
+ * The decoder preset operators get. `subtract-3` decodes up to 3 passes, subtracting each decoded
+ * signal before the next; docs/experiments/0001-subtraction.md has the measurements, and CI gates
+ * this preset against bench/subtract-3.json.
+ */
+export const PRESET = 'subtract-3';
 
 export class WorkerDecoder implements DecoderClient {
   private worker: WorkerLike | null = null;

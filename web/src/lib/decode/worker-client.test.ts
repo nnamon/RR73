@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { DecoderBusyError, DecoderUnavailableError, WorkerDecoder, type WorkerLike } from './worker-client';
+import { existsSync, readFileSync } from 'node:fs';
+import { DecoderBusyError, DecoderUnavailableError, PRESET, WorkerDecoder, type WorkerLike } from './worker-client';
 import type { FromDecoder, ToDecoder } from './protocol';
 import type { DecoderStatus } from './types';
 
@@ -51,7 +52,7 @@ describe('WorkerDecoder', () => {
     const s = slot();
     const done = d.decodeSlot(s);
     const sent = workers[0].sent[1];
-    expect(sent.m).toMatchObject({ type: 'decode', id: 1, mode: 'FT8', preset: 'baseline' });
+    expect(sent.m).toMatchObject({ type: 'decode', id: 1, mode: 'FT8', preset: PRESET });
     expect(sent.transfer).toEqual([s.samples.buffer]);
     workers[0].reply({ type: 'decoded', id: 1, decodes: [{ text: 'CQ K1ABC FN42', freq_hz: 500, dt_s: 0, snr_db: -3 }], ms: 380 });
     await expect(done).resolves.toEqual([{ text: 'CQ K1ABC FN42', freq_hz: 500, dt_s: 0, snr_db: -3 }]);
@@ -99,5 +100,13 @@ describe('WorkerDecoder', () => {
     });
     d.load();
     expect(d.status).toMatchObject({ state: 'failed', reason: 'worker' });
+  });
+});
+
+describe('shipped preset', () => {
+  it('has a CI gate file recorded for the same preset', () => {
+    const gate = new URL(`../../../../bench/${PRESET}.json`, import.meta.url);
+    expect(existsSync(gate)).toBe(true);
+    expect(JSON.parse(readFileSync(gate, 'utf8')).preset).toBe(PRESET);
   });
 });
