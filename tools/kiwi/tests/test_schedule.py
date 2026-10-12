@@ -150,3 +150,21 @@ def test_attempts_are_never_closer_than_the_minimum_gap(tmp_path: Path) -> None:
     _, runner, _ = schedule(tmp_path, [CLUB], outcomes, sessions=2)
     assert len(runner.attempts) >= 6
     assert min(gaps(runner.attempts)) >= 60.0
+
+
+def test_a_crash_during_a_session_leaves_a_full_session_and_break_before_the_next(tmp_path: Path) -> None:
+    clock = SimClock()
+
+    def crash(*args: object) -> SessionResult:
+        raise OSError("disk full")
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    try:
+        run_schedule([CLUB], request, tmp_path, crash, clock, threading.Event())
+    except OSError:
+        pass
+    else:
+        raise AssertionError("the runner's exception should propagate")
+    state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert state.next_attempt_unix >= T0 + CLUB.session_s + CLUB.break_s
+    assert not (receiver_dir(tmp_path, CLUB.id) / LOCK_NAME).exists()

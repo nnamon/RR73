@@ -148,9 +148,10 @@ def run_schedule(
             state.save(state_path)
             continue
         try:
-            # Saved before connecting, so a crash during the session still leaves the gap in place.
+            # Saved before connecting: if the process dies during the session, the next one still
+            # waits for a full session and a break.
             state.last_attempt_unix = now
-            state.next_attempt_unix = now + rules_for(receiver.access).min_attempt_gap_s
+            state.next_attempt_unix = now + length_s + receiver.break_s
             state.save(state_path)
             log.info("%s %s: session of up to %.0f s", receiver.id, band, length_s)
             result = runner(receiver, band, length_s, state, lock.refresh)
