@@ -1,6 +1,9 @@
 /** Level of silence and of anything quieter, dBFS. */
 export const FLOOR_DB = -120;
 
+/** Input level the decoders want: band noise between −30 and −14 dBFS RMS. */
+export const TARGET_DB = { low: -30, high: -14 } as const;
+
 /** Converts a linear amplitude (1 = full scale) to dBFS, clamped at FLOOR_DB. */
 export function toDb(amplitude: number): number {
   return amplitude > 0 ? Math.max(FLOOR_DB, 20 * Math.log10(amplitude)) : FLOOR_DB;

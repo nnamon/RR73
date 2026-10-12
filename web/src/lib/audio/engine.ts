@@ -1,0 +1,335 @@
+/**
+ * Capture engine: the one AudioContext, the microphone, the capture worklet and the clock
+ * mapping. Browsers allow audio only after a tap, so start() and resume() must be called from
+ * one.
+ *
+ * Interruptions stop capture and wait for a tap: the context leaving "running" (a phone call
+ * on iOS shows as "interrupted"), the input track ending or going mute, and the page being
+ * hidden. The engine reports the UTC time of the last audio it received.
+ */
+
+import workletUrl from './capture.worklet.ts?worker&url';
+import { AudioClockMapper } from '../clock/mapping';
+import { FLOOR_DB } from './level';
+import { CAPTURE_PROCESSOR, type CaptureMessage } from './messages';
+import { RateMeter, captureConstraints, readReport, type CaptureReport } from './report';
+import { setAudioSession } from './session';
+
+export type AudioStatus = 'off' | 'starting' | 'running' | 'stopped' | 'failed';
+
+/** Why capture stopped. */
+export type StopReason = 'interrupted' | 'suspended' | 'input-ended' | 'input-muted' | 'hidden';
+
+/** Why capture could not start. */
+export type StartError = 'insecure' | 'unsupported' | 'denied' | 'no-device' | 'busy' | 'worklet' | 'unknown';
+
+export interface EngineState {
+  status: AudioStatus;
+  reason: StopReason | null;
+  /** UTC of the last audio received before a stop, ms. */
+  stoppedAtUtcMs: number | null;
+  error: StartError | null;
+}
+
+export interface Chunk {
+  /** Mono samples at 12000 Hz. */
+  samples: Float32Array;
+  /** Running index of samples[0], samples at 12 kHz. */
+  index: number;
+  /** Audio-clock time of samples[0], s. */
+  contextTime: number;
+  /** UTC time of samples[0], ms. */
+  utcMs: number;
+  peakDb: number;
+  rmsDb: number;
+}
+
+export interface EngineDeps {
+  createContext(): AudioContext;
+  getUserMedia(c: MediaStreamConstraints): Promise<MediaStream>;
+  /** Loads the worklet into the context (once) and creates the capture node. */
+  createNode(ctx: AudioContext): Promise<AudioWorkletNode>;
+  doc: Document;
+  dateNow(): number;
+  perfNow(): number;
+  secure(): boolean;
+  setSession(): string | null;
+}
+
+const loaded = new WeakSet<BaseAudioContext>();
+
+export function browserDeps(): EngineDeps {
+  return {
+    createContext: () => new AudioContext({ latencyHint: 'interactive' }),
+    getUserMedia: (c) => navigator.mediaDevices.getUserMedia(c),
+    async createNode(ctx) {
+      if (!loaded.has(ctx)) {
+        await ctx.audioWorklet.addModule(workletUrl);
+        loaded.add(ctx);
+      }
+      return new AudioWorkletNode(ctx, CAPTURE_PROCESSOR, { numberOfInputs: 1, numberOfOutputs: 0, channelCountMode: 'max' });
+    },
+    doc: document,
+    dateNow: () => Date.now(),
+    perfNow: () => performance.now(),
+    secure: () => typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
+    setSession: () => setAudioSession('play-and-record'),
+  };
+}
+
+function startError(e: unknown): StartError {
+  const name = e instanceof DOMException || e instanceof Error ? e.name : '';
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied';
+  if (name === 'NotFoundError' || name === 'OverconstrainedError') return 'no-device';
+  if (name === 'NotReadableError' || name === 'AbortError') return 'busy';
+  return 'unknown';
+}
+
+export class CaptureEngine {
+  readonly mapper = new AudioClockMapper();
+  private readonly deps: EngineDeps;
+  private ctx: AudioContext | null = null;
+  private stream: MediaStream | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
+  private node: AudioWorkletNode | null = null;
+  private deviceId: string | null = null;
+  private lastUtcMs: number | null = null;
+  private readonly rate = new RateMeter();
+  private report: CaptureReport | null = null;
+  private stateValue: EngineState = { status: 'off', reason: null, stoppedAtUtcMs: null, error: null };
+  private readonly chunkListeners = new Set<(c: Chunk) => void>();
+  private readonly stateListeners = new Set<(s: EngineState) => void>();
+  private readonly reportListeners = new Set<(r: CaptureReport) => void>();
+  private trackCleanup: (() => void) | null = null;
+  /** The mapper holds observations from currentTime, without output timestamps. */
+  private fallbackClock = false;
+
+  constructor(deps: EngineDeps = browserDeps()) {
+    this.deps = deps;
+    deps.doc.addEventListener('visibilitychange', () => {
+      if (deps.doc.visibilityState === 'hidden') this.interrupt('hidden');
+    });
+  }
+
+  get state(): EngineState {
+    return this.stateValue;
+  }
+
+  get context(): AudioContext | null {
+    return this.ctx;
+  }
+
+  get captureReport(): CaptureReport | null {
+    return this.report;
+  }
+
+  onChunk(fn: (c: Chunk) => void): () => void {
+    this.chunkListeners.add(fn);
+    return () => this.chunkListeners.delete(fn);
+  }
+
+  onState(fn: (s: EngineState) => void): () => void {
+    this.stateListeners.add(fn);
+    return () => this.stateListeners.delete(fn);
+  }
+
+  onReport(fn: (r: CaptureReport) => void): () => void {
+    this.reportListeners.add(fn);
+    return () => this.reportListeners.delete(fn);
+  }
+
+  /**
+   * Creates the context if needed and resumes it. Call from a tap. Used by Tune, which plays
+   * without the microphone.
+   */
+  ensureContext(): AudioContext {
+    this.deps.setSession();
+    if (!this.ctx) {
+      this.ctx = this.deps.createContext();
+      this.ctx.onstatechange = () => this.onContextState();
+    }
+    if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
+    return this.ctx;
+  }
+
+  /** Starts capture from the given input, or the system default. Call from a tap. */
+  async start(deviceId: string | null = null): Promise<EngineState> {
+    if (this.stateValue.status === 'starting' || this.stateValue.status === 'running') return this.stateValue;
+    return this.begin(deviceId);
+  }
+
+  private async begin(deviceId: string | null): Promise<EngineState> {
+    if (!this.deps.secure()) return this.fail('insecure');
+    this.deviceId = deviceId;
+    this.closeInput();
+    // Context first, inside the tap: Safari allows resume() only during a user gesture.
+    const ctx = this.ensureContext();
+    this.set({ status: 'starting', reason: null, stoppedAtUtcMs: null, error: null });
+    try {
+      await this.openInput(ctx);
+    } catch (e) {
+      this.closeInput();
+      return this.fail(e instanceof WorkletError ? 'worklet' : startError(e));
+    }
+    try {
+      if (ctx.state !== 'running') await ctx.resume();
+    } catch {
+      // A context that will not run shows as a stop below.
+    }
+    this.mapper.reset();
+    this.fallbackClock = false;
+    this.rate.reset();
+    this.lastUtcMs = null;
+    if (ctx.state !== 'running') {
+      this.set({ status: 'stopped', reason: 'suspended', stoppedAtUtcMs: this.deps.dateNow(), error: null });
+      return this.stateValue;
+    }
+    this.set({ status: 'running', reason: null, stoppedAtUtcMs: null, error: null });
+    return this.stateValue;
+  }
+
+  /** Resumes after an interruption. Call from a tap. Opens the input again if it ended. */
+  async resume(): Promise<EngineState> {
+    const usable = this.stream?.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false;
+    if (!usable) return this.begin(this.deviceId);
+    const ctx = this.ensureContext();
+    this.set({ status: 'starting', reason: null, stoppedAtUtcMs: null, error: null });
+    try {
+      await ctx.resume();
+    } catch {
+      // Checked below.
+    }
+    this.mapper.reset();
+    this.rate.reset();
+    if (ctx.state !== 'running') {
+      this.set({ status: 'stopped', reason: 'suspended', stoppedAtUtcMs: this.deps.dateNow(), error: null });
+      return this.stateValue;
+    }
+    this.set({ status: 'running', reason: null, stoppedAtUtcMs: null, error: null });
+    return this.stateValue;
+  }
+
+  /** Switches to another input. Call from a tap. */
+  async useInput(deviceId: string | null): Promise<EngineState> {
+    this.deviceId = deviceId;
+    if (this.stateValue.status === 'off' || this.stateValue.status === 'failed') return this.stateValue;
+    return this.begin(deviceId);
+  }
+
+  /** Stops capture after an interruption and records when the audio ended. */
+  interrupt(reason: StopReason) {
+    if (this.stateValue.status !== 'running' && this.stateValue.status !== 'starting') return;
+    const at = this.lastUtcMs ?? this.deps.dateNow();
+    this.mapper.reset();
+    this.rate.reset();
+    if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => undefined);
+    this.set({ status: 'stopped', reason, stoppedAtUtcMs: at, error: null });
+  }
+
+  private async openInput(ctx: AudioContext) {
+    const stream = await this.deps.getUserMedia(captureConstraints(this.deviceId));
+    this.stream = stream;
+    let node: AudioWorkletNode;
+    try {
+      node = await this.deps.createNode(ctx);
+    } catch {
+      throw new WorkletError();
+    }
+    this.node = node;
+    node.port.onmessage = (e: MessageEvent<CaptureMessage>) => this.onMessage(e.data);
+    this.source = ctx.createMediaStreamSource(stream);
+    this.source.connect(node);
+    const track = stream.getAudioTracks()[0];
+    if (!track) throw new DOMException('No audio track.', 'NotFoundError');
+    const ended = () => this.interrupt('input-ended');
+    const muted = () => this.interrupt('input-muted');
+    track.addEventListener('ended', ended);
+    track.addEventListener('mute', muted);
+    this.trackCleanup = () => {
+      track.removeEventListener('ended', ended);
+      track.removeEventListener('mute', muted);
+    };
+    this.report = readReport(track, ctx.sampleRate, this.deps.setSession());
+    this.emitReport();
+  }
+
+  private closeInput() {
+    this.trackCleanup?.();
+    this.trackCleanup = null;
+    this.source?.disconnect();
+    this.node?.port.close();
+    this.node?.disconnect();
+    this.stream?.getTracks().forEach((t) => t.stop());
+    this.source = null;
+    this.node = null;
+    this.stream = null;
+  }
+
+  private onContextState() {
+    const ctx = this.ctx;
+    if (!ctx || this.stateValue.status !== 'running') return;
+    if (ctx.state === 'running') return;
+    this.interrupt((ctx.state as string) === 'interrupted' ? 'interrupted' : 'suspended');
+  }
+
+  private onMessage(m: CaptureMessage) {
+    if (m.type === 'format') {
+      if (this.report) {
+        this.report = { ...this.report, arrivingChannels: m.channels, channelUsed: m.channelUsed, contextRate: m.sampleRate };
+        this.emitReport();
+      }
+      return;
+    }
+    if (this.stateValue.status !== 'running' || !this.ctx) return;
+    this.observeClock(this.ctx);
+    if (!this.mapper.ready) return;
+    const utcMs = this.mapper.toUtcMs(m.contextTime);
+    this.lastUtcMs = utcMs + (m.samples.length / 12000) * 1000;
+    this.rate.add(this.deps.perfNow(), m.contextTime);
+    const measured = this.rate.rate(this.ctx.sampleRate);
+    if (this.report && measured !== null && (this.report.measuredRate === null || Math.abs(measured - this.report.measuredRate) >= 1)) {
+      this.report = { ...this.report, measuredRate: measured };
+      this.emitReport();
+    }
+    const chunk: Chunk = { samples: m.samples, index: m.index, contextTime: m.contextTime, utcMs, peakDb: m.peakDb ?? FLOOR_DB, rmsDb: m.rmsDb ?? FLOOR_DB };
+    for (const l of this.chunkListeners) l(chunk);
+  }
+
+  private observeClock(ctx: AudioContext) {
+    const perfNow = this.deps.perfNow();
+    const dateNow = this.deps.dateNow();
+    const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+    const valid = !!ts && (ts.performanceTime ?? 0) > 0 && (ts.contextTime ?? 0) > 0;
+    if (ts && valid) {
+      // Output timestamps differ from the fallback by the output latency: start over on them.
+      if (this.fallbackClock) this.mapper.reset();
+      this.fallbackClock = false;
+      this.mapper.observe({ contextTime: ts.contextTime!, performanceTime: ts.performanceTime! }, perfNow, dateNow);
+      return;
+    }
+    // Until output timestamps arrive, or where the browser has none, pair currentTime with now:
+    // off by the output latency, which the DT-based correction removes later.
+    if (this.mapper.ready && !this.fallbackClock) return;
+    this.fallbackClock = true;
+    this.mapper.observe({ contextTime: ctx.currentTime, performanceTime: perfNow }, perfNow, dateNow);
+  }
+
+  private fail(error: StartError): EngineState {
+    this.set({ status: 'failed', reason: null, stoppedAtUtcMs: null, error });
+    return this.stateValue;
+  }
+
+  private set(s: EngineState) {
+    this.stateValue = s;
+    for (const l of this.stateListeners) l(s);
+  }
+
+  private emitReport() {
+    if (!this.report) return;
+    for (const l of this.reportListeners) l(this.report);
+  }
+}
+
+class WorkletError extends Error {
+  override name = 'WorkletError';
+}
