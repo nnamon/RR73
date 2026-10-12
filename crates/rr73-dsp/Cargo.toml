@@ -7,8 +7,18 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
+[features]
+# Uses rustfft's WebAssembly SIMD kernels when built for wasm32 with +simd128.
+wasm-simd = ["rustfft/wasm_simd"]
+
 [dependencies]
 rustfft.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[[bench]]
+name = "spectrogram"
+harness = false
 
 [lints]
 workspace = true
