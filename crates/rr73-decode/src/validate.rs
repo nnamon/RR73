@@ -1,7 +1,6 @@
 //! Validation of LDPC codewords: CRC, payload checks, message unpacking and duplicates.
 
 use rr73_ft8::message::{self, Message, UnpackError};
-use rr73_ft8::tones::FT4_XOR;
 use rr73_ft8::{CallsignHashes, Mode, Payload, crc, ldpc};
 
 use crate::layout::CODEWORD_BITS;
@@ -48,11 +47,12 @@ pub trait Validator {
     fn is_duplicate(&self, new: &Validated, seen: &[Payload]) -> bool;
 }
 
-/// CRC-14 check, non-zero payload, unpack. Duplicates are identical payloads.
+/// CRC-14 check (with the FT4 descrambling), non-zero payload, unpack. Duplicates are
+/// identical payloads.
 ///
-/// After a successful unpack the message is packed again into a scratch payload so that
-/// `rr73-ft8` records its full callsigns in `hashes`; later candidates in the slot can then
-/// resolve hashed callsigns, as ft8_lib does with its hash table.
+/// After a successful unpack the message's full callsigns go into `hashes`, so later
+/// candidates in the slot (and later slots sharing the table) resolve their hashes, as
+/// ft8_lib does with its hash table.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct CrcUnpack;
 
@@ -68,17 +68,12 @@ impl Validator for CrcUnpack {
         hashes: &mut CallsignHashes,
     ) -> Result<Validated, Rejection> {
         let m91 = ldpc::message_bits(codeword);
-        let mut payload = crc::check(&m91).ok_or(Rejection::Crc)?;
-        if mode == Mode::Ft4 {
-            for (p, x) in payload.0.iter_mut().zip(FT4_XOR.iter()) {
-                *p ^= x;
-            }
-        }
+        let payload = crc::payload_from_message91(mode, &m91).ok_or(Rejection::Crc)?;
         if payload.0.iter().all(|&b| b == 0) {
             return Err(Rejection::ZeroPayload);
         }
         let message = message::unpack(&payload, hashes).map_err(Rejection::Unpack)?;
-        let _ = message::pack(&message, hashes);
+        hashes.learn(&message);
         let text = message.to_string();
         Ok(Validated {
             payload,

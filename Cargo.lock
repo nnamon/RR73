@@ -408,6 +408,10 @@ dependencies = [
 name = "rr73-decode"
 version = "0.1.0"
 dependencies = [
+ "rand",
+ "rand_chacha",
+ "rand_distr",
+ "rr73-chansim",
  "rr73-dsp",
  "rr73-ft8",
  "serde",
@@ -437,6 +441,7 @@ dependencies = [
 name = "rr73-wasm"
 version = "0.1.0"
 dependencies = [
+ "rr73-chansim",
  "rr73-decode",
  "rr73-dsp",
  "rr73-ft8",

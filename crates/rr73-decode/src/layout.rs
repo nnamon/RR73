@@ -2,11 +2,9 @@
 //! sync groups, data symbol order and the Gray map.
 
 use rr73_ft8::Mode;
-use rr73_ft8::tones::{self, FT4_COSTAS, FT4_GRAY, FT8_COSTAS, FT8_COSTAS_STARTS, FT8_GRAY};
-
-/// Channel symbol index where each FT4 sync group starts, counting the leading ramp symbol
-/// as symbol 0 (105-symbol frame).
-pub const FT4_SYNC_STARTS: [usize; 4] = [1, 34, 67, 100];
+use rr73_ft8::tones::{
+    self, FT4_COSTAS, FT4_COSTAS_STARTS, FT4_GRAY, FT8_COSTAS, FT8_COSTAS_STARTS, FT8_GRAY,
+};
 
 /// Number of LLRs per candidate: the (174,91) codeword length.
 pub const CODEWORD_BITS: usize = rr73_ft8::ldpc::N;
@@ -63,7 +61,7 @@ impl FrameLayout {
                 FT8_GRAY.to_vec(),
             ),
             Mode::Ft4 => (
-                FT4_SYNC_STARTS
+                FT4_COSTAS_STARTS
                     .iter()
                     .zip(FT4_COSTAS.iter())
                     .map(|(&start, t)| SyncGroup {
@@ -195,7 +193,7 @@ pub(crate) mod test_layouts {
             tone_spacing_hz: 12_000.0 / 576.0,
             slot_s: 7.5,
             start_offset_s: 0.5,
-            sync: FT4_SYNC_STARTS
+            sync: FT4_COSTAS_STARTS
                 .iter()
                 .zip(FT4_COSTAS.iter())
                 .map(|(&start, t)| SyncGroup {

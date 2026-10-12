@@ -12,6 +12,9 @@ use rr73_ft8::Mode;
 /// Names accepted by `--set`.
 pub const SETS: &[&str] = &["smoke", "noise-ci", "noise", "snr-sweep", "crowded"];
 
+/// Slots in the `noise-ci` set.
+pub const NOISE_CI_SLOTS: usize = 200;
+
 /// Sizes that `synth` options can change.
 #[derive(Clone, Debug)]
 pub struct SynthOptions {
@@ -129,7 +132,7 @@ fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>, St
             }
         }
         "noise-ci" => {
-            for i in 0..50 {
+            for i in 0..NOISE_CI_SLOTS {
                 push("", i, &mut |_| noise_only(Mode::Ft8));
             }
         }
@@ -246,7 +249,7 @@ mod tests {
         };
         let base = Path::new("unused");
         assert_eq!(jobs_for("smoke", base, &opts).map(|j| j.len()), Ok(30));
-        assert_eq!(jobs_for("noise-ci", base, &opts).map(|j| j.len()), Ok(50));
+        assert_eq!(jobs_for("noise-ci", base, &opts).map(|j| j.len()), Ok(200));
         assert_eq!(jobs_for("noise", base, &opts).map(|j| j.len()), Ok(7));
         assert_eq!(
             jobs_for("snr-sweep", base, &opts).map(|j| j.len()),

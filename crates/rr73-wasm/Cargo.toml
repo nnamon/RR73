@@ -19,5 +19,8 @@ wasm-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
+[dev-dependencies]
+rr73-chansim.workspace = true
+
 [lints]
 workspace = true

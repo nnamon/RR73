@@ -2,7 +2,8 @@
 //!
 //! Callsigns follow the standard pattern the 28-bit callsign field encodes: a prefix of one
 //! letter, two letters, or a digit and a letter, then an area digit, then one to three
-//! letters (K1ABC, JA1XYZ, 9V1NE). Messages are the QSO forms of i3 = 1: CQ with a grid,
+//! letters (K1ABC, JA1XYZ, 9V1NE). Two layouts that the field reserves for other prefixes
+//! are never generated: Q followed by a letter (stands for 3X) and 3D0 (stands for 3DA0). Messages are the QSO forms of i3 = 1: CQ with a grid,
 //! a call pair with a grid, a report, an R-report, RRR, RR73 or 73.
 
 use rand::Rng;
@@ -16,6 +17,17 @@ fn pick<R: Rng>(rng: &mut R, set: &[u8]) -> char {
 
 /// A random standard callsign.
 pub fn callsign<R: Rng>(rng: &mut R) -> String {
+    loop {
+        let s = candidate_callsign(rng);
+        let b = s.as_bytes();
+        let reserved = (b[0] == b'Q' && b[1].is_ascii_uppercase()) || s.starts_with("3D0");
+        if !reserved {
+            return s;
+        }
+    }
+}
+
+fn candidate_callsign<R: Rng>(rng: &mut R) -> String {
     let mut s = String::new();
     match rng.random_range(0..3) {
         0 => s.push(pick(rng, LETTERS)),
@@ -88,6 +100,10 @@ mod tests {
             assert!((1..=2).contains(&digit), "{c}");
             assert!(b[..digit].iter().all(u8::is_ascii_alphanumeric), "{c}");
             assert!(b[..digit].iter().any(u8::is_ascii_uppercase), "{c}");
+            assert!(
+                !(b[0] == b'Q' && b[1].is_ascii_uppercase()) && !c.starts_with("3D0"),
+                "{c}"
+            );
             let suffix = &b[digit + 1..];
             assert!(
                 (1..=3).contains(&suffix.len()) && suffix.iter().all(u8::is_ascii_uppercase),

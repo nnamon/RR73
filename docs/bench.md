@@ -33,7 +33,7 @@ The decode lists record neither the WSJT-X version nor the decode depth. Some en
 | --- | --- | --- | --- |
 | `smoke` | `smoke/ft8` | 24 | FT8: 12 steady signals from -16 to -6 dB, 4 with Watterson fading (-12 to -6 dB), 2 drifting at 0.3 Hz/s (-8 dB), 4 bands of 10 signals (-16 to -2 dB), 2 noise-only. |
 | | `smoke/ft4` | 6 | FT4: steady signals from -14 to -4 dB. |
-| `noise-ci` | `noise-ci` | 50 | Noise only. |
+| `noise-ci` | `noise-ci` | 200 | Noise only. |
 | `noise` | `noise` | `--noise-count`, default 1000 | Noise only. |
 | `snr-sweep` | `snr-sweep/awgn`, `snr-sweep/fading` | 21 x `--per-step` each, default 40 | One signal per slot at -28 to -8 dB in 1 dB steps; `fading` adds Watterson fading at 0.5 Hz spread and 1 ms delay (ITU-R F.1487 moderate). |
 | `crowded` | `crowded/n10`, `n20`, `n40`, `n20-overlap` | `--crowded-count` each, default 20 | 10, 20 or 40 signals per slot, SNR uniform in -18 to 0 dB, base tones at least 60 Hz apart; `n20-overlap` places 20 signals at uniform random frequencies. |
