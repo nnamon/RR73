@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { tick } from 'svelte';
   import AudioBanner from '../ui/AudioBanner.svelte';
   import BandSheet from '../ui/BandSheet.svelte';
-  import DecodeList, { type DecodeListItem } from '../ui/DecodeList.svelte';
+  import DecodeList from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
   import LevelMeter from '../ui/LevelMeter.svelte';
   import SaveSlotSheet from '../ui/SaveSlotSheet.svelte';
@@ -9,15 +10,16 @@
   import Waterfall from '../ui/Waterfall.svelte';
   import { mhz, utcTime } from '../lib/clock/format';
   import { SLOT_MS, parity, slotProgress } from '../lib/clock/slots';
-  import { markDecode, type Mark } from '../lib/decode/marking';
+  import { TouchFreeze } from '../lib/decode/freeze';
+  import { buildList, filterCounts, type Filter } from '../lib/decode/list';
   import { dialHz } from '../lib/radio/bands';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
-  import { audio, band, recent, resumeAudio, startAudio, tx } from '../lib/state/station.svelte';
+  import { audio, band, recent, resumeAudio, startAudio, tx, type DecodedSlot } from '../lib/state/station.svelte';
 
   let bandOpen = $state(false);
   let saveOpen = $state(false);
-  let filter = $state<'all' | 'cq' | 'me'>('all');
+  let filter = $state<Filter>('all');
 
   const dial = $derived(dialHz(settings.band, settings.mode));
   const live = $derived(audio.status === 'running');
@@ -27,27 +29,97 @@
   );
   const slotSeconds = $derived(SLOT_MS[settings.mode] / 1000);
 
-  const rows = $derived(
-    band.slots.flatMap((s) =>
-      s.decodes.map((d, i) => ({ slot: s.startUtcMs, i, row: { decode: d, ...markDecode(d, settings.callsign) } })),
-    ),
-  );
-  const counts = $derived({
-    all: rows.length,
-    cq: rows.filter((r) => r.row.mark === 'cq').length,
-    me: rows.filter((r) => r.row.mark === 'me').length,
-  });
-  const items = $derived.by(() => {
-    const out: DecodeListItem[] = [];
-    const want: Mark | null = filter === 'all' ? null : filter;
-    for (const s of band.slots) {
-      const shown = s.decodes.map((d) => ({ decode: d, ...markDecode(d, settings.callsign) })).filter((r) => !want || r.mark === want);
-      if (!shown.length) continue;
-      out.push({ kind: 'header', id: `h${s.startUtcMs}`, text: `${utcTime(s.startUtcMs)} UTC · ${s.decodes.length} decodes · decoded in ${(s.ms / 1000).toFixed(2)} s` });
-      shown.forEach((row, i) => out.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row }));
+  // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
+  // scroll, new slots wait. When they go in above a list scrolled down, the rows in view stay put
+  // and a pill offers the new ones.
+  const freeze = new TouchFreeze();
+  let shown = $state<DecodedSlot[]>([]);
+  let unseen = $state(0);
+  let touching = false;
+  let listEl: HTMLDivElement | undefined = $state();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+
+  function rowsIn(slots: DecodedSlot[]): number {
+    return slots.reduce((n, s) => n + s.decodes.length, 0);
+  }
+
+  async function sync() {
+    clearTimeout(timer);
+    const now = performance.now();
+    if (freeze.frozen(now)) {
+      const wait = freeze.wait(now);
+      if (wait !== Number.POSITIVE_INFINITY) timer = setTimeout(sync, wait + 20);
+      return;
     }
-    return out;
+    const next = band.slots;
+    if (next === shown) return;
+    const known = new Set(shown.map((s) => s.startUtcMs));
+    const added = rowsIn(next.filter((s) => !known.has(s.startUtcMs)));
+    const el = listEl;
+    const top = el?.scrollTop ?? 0;
+    const height = el?.scrollHeight ?? 0;
+    shown = next;
+    if (!el || top <= 4) return;
+    await tick();
+    el.scrollTop = top + (el.scrollHeight - height);
+    unseen += added;
+  }
+
+  $effect(() => {
+    void band.slots;
+    void sync();
   });
+
+  // Touch and scroll on the list only freeze it; they are not interactions of their own.
+  $effect(() => {
+    const el = listEl;
+    if (!el) return;
+    el.addEventListener('pointerdown', down, { passive: true });
+    el.addEventListener('scroll', scrolled, { passive: true });
+    return () => {
+      el.removeEventListener('pointerdown', down);
+      el.removeEventListener('scroll', scrolled);
+    };
+  });
+
+  function down() {
+    touching = true;
+    freeze.down(performance.now());
+  }
+
+  function up() {
+    if (!touching) return;
+    touching = false;
+    freeze.up(performance.now());
+    void sync();
+  }
+
+  function scrolled() {
+    freeze.activity(performance.now());
+    if ((listEl?.scrollTop ?? 0) <= 4) unseen = 0;
+    void sync();
+  }
+
+  function showNewest() {
+    unseen = 0;
+    listEl?.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  const items = $derived(buildList(shown, settings.callsign, filter, settings.rxHz));
+  const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
+  const chips: { id: Filter; label: string }[] = [
+    { id: 'all', label: 'All' },
+    { id: 'cq', label: 'CQ' },
+    { id: 'me', label: 'To me' },
+    { id: 'rx', label: 'Rx freq' },
+  ];
+
+  const FAILED = {
+    missing: 'This version was built without the decoder.',
+    load: 'The decoder module did not load.',
+    worker: 'The decoder could not start on this phone.',
+    crashed: 'The decoder stopped.',
+  } as const;
 </script>
 
 <section class="operate" aria-labelledby="operate-title">
@@ -97,29 +169,44 @@
     <button class="btn tint compact" disabled={!recent.slots.length} onclick={() => (saveOpen = true)}>Save slot</button>
   </div>
 
-  <div class="list">
-    {#if rows.length}
+  <div class="list-wrap">
+    {#if band.decoder.state === 'failed'}
+      <div class="decoder-error" role="alert">
+        <p class="t">{band.decoder.reason === 'crashed' ? 'Decoding stopped' : 'No decodes: the decoder did not load'}</p>
+        <p class="s">{FAILED[band.decoder.reason]} Receive still works: the waterfall and Save slot carry on. Reload RR73 to try again.</p>
+      </div>
+    {/if}
+    {#if shown.length}
       <div class="chips" role="radiogroup" aria-label="Show decodes">
-        {#each [['all', 'All'], ['cq', 'CQ'], ['me', 'To me']] as const as [id, label] (id)}
-          <button class="chip" class:on={filter === id} role="radio" aria-checked={filter === id} onclick={() => (filter = id)}>
-            {label} <span class="n">{counts[id]}</span>
+        {#each chips as c (c.id)}
+          <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
+            {c.label} <span class="n">{counts[c.id]}</span>
           </button>
         {/each}
       </div>
-      <DecodeList {items} />
-    {:else}
-      <div class="empty">
-        {#if !band.decoderAvailable}
-          <h2>No decoder in this version</h2>
-          <p>The waterfall and Save slot work now. Decodes will appear here after each {slotSeconds} s slot once the decoder is added.</p>
-        {:else}
-          <h2>No decodes yet</h2>
-          <p>Decodes appear here after each {slotSeconds} s slot while audio runs.</p>
-        {/if}
-      </div>
     {/if}
+    {#if unseen > 0}
+      <button class="newpill" onclick={showNewest}><Icon name="chevdown" size={13} class="up" />{unseen} new {unseen === 1 ? 'decode' : 'decodes'}</button>
+    {/if}
+    <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
+      {#if shown.length}
+        <DecodeList {items} />
+      {:else if band.decoder.state !== 'failed'}
+        <div class="empty">
+          {#if band.decoder.state === 'loading'}
+            <h2>Loading the decoder</h2>
+            <p>Decodes appear here after each {slotSeconds} s slot ends.</p>
+          {:else}
+            <h2>No decodes yet</h2>
+            <p>Decodes appear here after each {slotSeconds} s slot ends, while audio runs.</p>
+          {/if}
+        </div>
+      {/if}
+    </div>
   </div>
 </section>
+
+<svelte:window onpointerup={up} onpointercancel={up} />
 
 <BandSheet bind:open={bandOpen} />
 <SaveSlotSheet bind:open={saveOpen} />
@@ -236,6 +323,14 @@
     color: var(--rr-label2);
   }
 
+  .list-wrap {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
+  }
+
   .list {
     flex: 1;
     min-height: 0;
@@ -243,8 +338,51 @@
     overscroll-behavior: contain;
   }
 
+  .decoder-error {
+    flex: none;
+    margin: var(--rr-space-2) var(--rr-space-4) 0;
+    padding: var(--rr-space-2) var(--rr-space-3);
+    border-radius: var(--rr-radius-xl);
+    background: var(--rr-warn-soft);
+  }
+
+  .decoder-error .t {
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-sub);
+    color: var(--rr-warn);
+  }
+
+  .decoder-error .s {
+    font-size: var(--rr-text-foot);
+    line-height: var(--rr-leading-foot);
+  }
+
+  .newpill {
+    position: absolute;
+    top: calc(var(--rr-tap) + var(--rr-space-1));
+    left: 50%;
+    z-index: 2;
+    display: inline-flex;
+    gap: var(--rr-space-1);
+    align-items: center;
+    min-height: var(--rr-tap);
+    padding: 0 var(--rr-space-4);
+    border-radius: var(--rr-radius-pill);
+    background: var(--rr-accent-fill);
+    color: var(--rr-on-fill);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    transform: translateX(-50%);
+  }
+
+  .newpill :global(.up) {
+    transform: rotate(180deg);
+  }
+
   .chips {
     display: flex;
+    flex: none;
     gap: var(--rr-space-2);
     align-items: center;
     height: var(--rr-tap);

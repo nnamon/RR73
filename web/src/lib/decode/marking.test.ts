@@ -7,8 +7,8 @@ describe('looksLikeCall', () => {
   it('accepts callsigns and hashed calls and rejects CQ modifiers and reports', () => {
     for (const c of ['9V1NE', 'JA1KXM', 'VK3/9V1NE', 'W7QRP/P', '<PJ4/K1ABC>', '3D2KQ']) expect(looksLikeCall(c), c).toBe(true);
     for (const c of ['CQ', 'POTA', 'DX', '73', '-09', 'R-14', '290']) expect(looksLikeCall(c), c).toBe(false);
-    // Grids and RR73 have the same shape as a callsign; markDecode only looks after CQ or a callsign.
-    expect(looksLikeCall('QF22')).toBe(true);
+    // Grid squares and RR73 are not callsigns.
+    for (const c of ['QF22', 'OJ02', 'RR73', 'AA00']) expect(looksLikeCall(c), c).toBe(false);
   });
 });
 
@@ -32,6 +32,15 @@ describe('markDecode', () => {
     expect(markDecode(d('9V1NE JA1KXM -09'), '9V1NE')).toEqual({ mark: 'me', key: 'JA1KXM' });
     expect(markDecode(d('9V1NE JA1KXM RR73'), '9v1ne')).toEqual({ mark: 'me', key: 'JA1KXM' });
     expect(markDecode(d('9V1NE JA1KXM -09'), 'VK3/9V1NE')).toEqual({ mark: 'me', key: 'JA1KXM' });
+  });
+
+  it('marks any message containing my callsign, with the other station in bold', () => {
+    expect(markDecode(d('JA1KXM 9V1NE R-14'), '9V1NE')).toEqual({ mark: 'me', key: 'JA1KXM' });
+    expect(markDecode(d('<JA1KXM> 9V1NE RR73'), '9V1NE')).toEqual({ mark: 'me', key: '<JA1KXM>' });
+    // My own CQ heard back is still mine.
+    expect(markDecode(d('CQ 9V1NE OJ11'), '9V1NE')).toEqual({ mark: 'me', key: null });
+    // A grid that looks like a callsign is not mine.
+    expect(markDecode(d('CQ K1ABC FN42'), 'FN42')).toEqual({ mark: 'cq', key: 'K1ABC' });
   });
 
   it('leaves other traffic unmarked, and everything when no callsign is set', () => {

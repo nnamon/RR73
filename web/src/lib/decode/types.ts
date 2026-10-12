@@ -1,4 +1,5 @@
 import type { Mode } from '../clock/slots';
+import type { DecoderFailure } from './protocol';
 
 /** One message recovered from a slot. Field names match the corpus JSON and rr73-decode. */
 export interface Decode {
@@ -21,9 +22,20 @@ export interface SlotAudio {
   samples: Float32Array;
 }
 
+/** Where the decoder stands. */
+export type DecoderStatus =
+  | { state: 'idle' }
+  | { state: 'loading' }
+  | { state: 'ready'; version: string; loadMs: number }
+  | { state: 'failed'; reason: DecoderFailure; detail: string };
+
 export interface DecoderClient {
-  /** False for the null decoder: the app says no decoder is built in. */
+  /** False once the decoder has failed, and always for the null decoder. */
   readonly available: boolean;
+  readonly status: DecoderStatus;
+  onStatus(fn: (s: DecoderStatus) => void): () => void;
+  /** Starts loading the decoder. Safe to call more than once. */
+  load(): void;
   /** Decodes one slot. The samples may be transferred to a worker; callers keep a copy if needed. */
   decodeSlot(slot: SlotAudio): Promise<Decode[]>;
   dispose(): void;
