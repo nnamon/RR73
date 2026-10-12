@@ -59,7 +59,7 @@ impl SpectrogramConfig {
     /// Builds the oversampled layout used by FSK decoders: `symbol_samples` per symbol, frames
     /// every `symbol_samples / time_osr` samples, FFT of `symbol_samples * freq_osr` points
     /// (bins `1 / freq_osr` of the symbol rate apart), a window spanning the whole FFT, and
-    /// bins covering `[min_hz, max_hz]`.
+    /// bins covering `[min_hz, max_hz]` rounded outwards to whole tone spacings.
     pub fn oversampled(
         symbol_samples: usize,
         time_osr: usize,
@@ -84,10 +84,17 @@ impl SpectrogramConfig {
             ));
         }
         let fft_size = symbol_samples * freq_osr;
-        let bin_hz = sample_rate as f32 / fft_size as f32;
+        // Whole tone spacings, as in ft8_lib: from floor(min / spacing) up to and including
+        // floor(max / spacing), each split into freq_osr bins.
+        let spacing_hz = sample_rate as f32 / symbol_samples as f32;
         let nyquist_bin = fft_size / 2 + 1;
-        let min_bin = ((min_hz / bin_hz).floor() as usize).min(nyquist_bin);
-        let max_bin = ((max_hz / bin_hz).ceil() as usize + 1).min(nyquist_bin);
+        let min_bin = ((min_hz / spacing_hz).floor() as usize * freq_osr).min(nyquist_bin);
+        let max_bin = (((max_hz / spacing_hz).floor() as usize + 1) * freq_osr).min(nyquist_bin);
+        if min_bin >= max_bin {
+            return Err(DspError::InvalidParameter(
+                "frequency range is above the Nyquist frequency",
+            ));
+        }
         Ok(Self {
             fft_size,
             hop: symbol_samples / time_osr,
@@ -407,7 +414,7 @@ mod tests {
         assert_eq!(c.hop, 960);
         assert!((c.bin_hz() - 3.125).abs() < 1e-6);
         assert_eq!(c.min_bin, 64);
-        assert_eq!(c.max_bin, 961);
+        assert_eq!(c.max_bin, 962);
         assert_eq!(c.frames_for(180_000), 188);
     }
 
