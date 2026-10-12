@@ -13,6 +13,8 @@ test('flags em dashes, exclamation marks and emoji', () => {
 test('flags hype, corporate verbs, fillers and meta narration', () => {
   assert.deepEqual(rules('A seamless experience'), ['error:hype']);
   assert.deepEqual(rules('We leverage the decoder'), ['error:corporate']);
+  assert.deepEqual(rules('Harness the decoder'), ['error:corporate']);
+  assert.deepEqual(rules('The test harness links ft8_lib.'), []);
   assert.deepEqual(rules('Simply tap Call'), ['error:filler']);
   assert.deepEqual(rules("Here's how the log works"), ['error:meta']);
   assert.deepEqual(rules("It's not just a decoder, it's a lab"), ['error:contrast']);
