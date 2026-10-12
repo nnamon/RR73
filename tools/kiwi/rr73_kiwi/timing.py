@@ -14,6 +14,8 @@ NTP: the host clock at frame arrival. A frame arrives after its last sample was 
 the lower envelope of (arrival time - sample time of the frame's end) over many frames bounds
 the true mapping. It is late by the smallest network and receiver latency, which the
 configured latency_s corrects. The measured offset of the host clock from NTP is also applied.
+The receiver's reported sample rate is used unless the envelope gives a rate with a standard
+error below 2 ppm.
 """
 
 from __future__ import annotations
@@ -36,6 +38,7 @@ GPS_LATENCY_RANGE_S = (-0.05, 10.0)
 ARRIVAL_BIN_S = 10.0
 MIN_RATE_SPAN_S = 120.0
 MAX_ARRIVAL_RATE_ERROR = 300e-6
+MAX_RATE_SE = 2e-6  # relative standard error needed before a measured arrival rate is used
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,9 @@ class SampleClock:
     offset_s: float
     rms_s: float
     anchors: int
+    rate_source: str = "reported"  # "gps", "arrival" (measured from arrival times) or "reported"
+    measured_rate_hz: float | None = None
+    measured_rate_se_hz: float | None = None
 
     def time_at(self, index: float | np.ndarray) -> float | np.ndarray:
         return self.t0 + np.asarray(index, dtype=np.float64) / self.rate_hz
@@ -120,34 +126,71 @@ def fit_gps(frames: FrameLog, nominal_rate_hz: float) -> SampleClock | str:
     if rms > 1.0 / nominal_rate_hz:
         return f"GPS anchors scatter by {rms * 1e6:.0f} us rms"
     t0 = ref_t + intercept - ref_n * slope
-    return SampleClock(t0=t0, rate_hz=rate, reference="gps", offset_s=0.0, rms_s=rms, anchors=kept)
+    return SampleClock(
+        t0=t0,
+        rate_hz=rate,
+        reference="gps",
+        offset_s=0.0,
+        rms_s=rms,
+        anchors=kept,
+        rate_source="gps",
+        measured_rate_hz=rate,
+    )
+
+
+def _envelope_rate(frames: FrameLog, nominal_rate_hz: float) -> tuple[float, float, float] | None:
+    """Sample rate from the lower envelope of arrival times: (rate, standard error, residual rms).
+
+    The envelope is the smallest delay in each ARRIVAL_BIN_S bin; a least-squares line through
+    those minima gives the rate. None when the frames span less than MIN_RATE_SPAN_S.
+    """
+    end = (frames.index + frames.count).astype(np.float64)
+    if (end[-1] - frames.index[0]) / nominal_rate_hz < MIN_RATE_SPAN_S:
+        return None
+    bins = np.floor(end / (ARRIVAL_BIN_S * nominal_rate_hz)).astype(np.int64)
+    lag = frames.arrival - end / nominal_rate_hz
+    order = np.lexsort((lag, bins))
+    first = np.ones(len(order), dtype=bool)
+    first[1:] = bins[order][1:] != bins[order][:-1]
+    pick = order[first]
+    # Bins cut short at either end of the stream have too few frames to show the smallest delay.
+    counts = np.bincount(bins - bins.min())
+    pick = pick[counts[bins[pick] - bins.min()] >= 0.5 * counts.max()]
+    if len(pick) < 6:
+        return None
+    x = end[pick] - end[pick][0]
+    y = lag[pick] - lag[pick].min()
+    slope, intercept = np.polyfit(x, y, 1)
+    residual = y - (intercept + slope * x)
+    slope_se = float(np.sqrt(np.sum(residual**2) / (len(x) - 2) / np.sum((x - x.mean()) ** 2)))
+    rate = nominal_rate_hz / (1.0 + slope * nominal_rate_hz)
+    return rate, rate * rate * slope_se, float(np.sqrt(np.mean(residual**2)))
 
 
 def fit_arrival(frames: FrameLog, nominal_rate_hz: float, correction_s: float) -> SampleClock:
     """An NTP-referenced clock from arrival times, with correction_s added to every sample time.
 
-    The sample rate is measured from the lower envelope of arrival times once the frames span
-    MIN_RATE_SPAN_S; before that, or when the measurement is implausible, the reported rate is used.
+    The receiver's reported rate is used unless the envelope measurement is precise to
+    MAX_RATE_SE. Network jitter of a few milliseconds needs a stream of tens of minutes for that.
     """
     end = (frames.index + frames.count).astype(np.float64)
-    rate = nominal_rate_hz
+    rate, source = nominal_rate_hz, "reported"
+    measured = _envelope_rate(frames, nominal_rate_hz)
     rms = 0.0
-    span_s = (end[-1] - frames.index[0]) / nominal_rate_hz
-    if span_s >= MIN_RATE_SPAN_S:
-        bins = np.floor(end / (ARRIVAL_BIN_S * nominal_rate_hz)).astype(np.int64)
-        lag = frames.arrival - end / nominal_rate_hz
-        # Minimum lag per bin: the frames that waited least in buffers.
-        order = np.lexsort((lag, bins))
-        first = np.ones(len(order), dtype=bool)
-        first[1:] = bins[order][1:] != bins[order][:-1]
-        pick = order[first]
-        if len(pick) >= 6:
-            base = lag[pick].min()
-            slope, intercept = np.polyfit(end[pick] - end[pick][0], lag[pick] - base, 1)
-            measured = nominal_rate_hz / (1.0 + slope * nominal_rate_hz)
-            if abs(measured / nominal_rate_hz - 1.0) <= MAX_ARRIVAL_RATE_ERROR:
-                rate = measured
-                fitted = base + intercept + slope * (end[pick] - end[pick][0])
-                rms = float(np.sqrt(np.mean((lag[pick] - fitted) ** 2)))
+    if measured is not None:
+        measured_rate, measured_se, rms = measured
+        precise = measured_se <= MAX_RATE_SE * nominal_rate_hz
+        if precise and abs(measured_rate / nominal_rate_hz - 1.0) <= MAX_ARRIVAL_RATE_ERROR:
+            rate, source = measured_rate, "arrival"
     t0 = float(np.min(frames.arrival - end / rate)) + correction_s
-    return SampleClock(t0=t0, rate_hz=rate, reference="ntp", offset_s=correction_s, rms_s=rms, anchors=len(end))
+    return SampleClock(
+        t0=t0,
+        rate_hz=rate,
+        reference="ntp",
+        offset_s=correction_s,
+        rms_s=rms,
+        anchors=len(end),
+        rate_source=source,
+        measured_rate_hz=None if measured is None else measured[0],
+        measured_rate_se_hz=None if measured is None else measured[1],
+    )

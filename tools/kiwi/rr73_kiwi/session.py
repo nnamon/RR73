@@ -217,6 +217,9 @@ def run_session(
             else {
                 "reference": clock.reference,
                 "rate_hz": clock.rate_hz,
+                "rate_source": clock.rate_source,
+                "measured_rate_hz": clock.measured_rate_hz,
+                "measured_rate_se_hz": clock.measured_rate_se_hz,
                 "offset_s": clock.offset_s,
                 "rms_s": clock.rms_s,
             },

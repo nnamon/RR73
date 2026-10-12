@@ -86,6 +86,24 @@ def test_arrival_clock_measures_the_rate_over_long_spans() -> None:
     stream = Stream(start_unix=START, rate_hz=12001.135, duration_s=300.0, latency_s=0.3)
     log = frame_log(stream, "none", jitter_s=0.05)
     clock = fit_arrival(log, 12000.0, correction_s=0.0)
+    assert clock.rate_source == "arrival"
     assert clock.rate_hz == pytest.approx(12001.135, abs=0.05)
     short = Stream(start_unix=START, rate_hz=12001.135, duration_s=60.0)
     assert fit_arrival(frame_log(short, "none", jitter_s=0.05), 12000.0, 0.0).rate_hz == 12000.0
+
+
+def test_arrival_rate_is_used_only_when_precise() -> None:
+    stream = Stream(start_unix=START, rate_hz=12000.0, duration_s=240.0, latency_s=0.3)
+    log = frame_log(stream, "none", jitter_s=0.01)
+    precise = fit_arrival(log, 12000.0, 0.0)
+    assert precise.rate_source == "arrival" and precise.measured_rate_se_hz < 0.024
+    # Network delays that shift by up to 25 ms from one 10 s stretch to the next, as seen on the
+    # SARTS receiver (7.5 ms rms), leave the measurement too uncertain: the reported rate is used.
+    rng = np.random.default_rng(7)
+    shift = rng.uniform(0.0, 0.025, size=int(stream.duration_s // 10) + 2)
+    stretch = (log.index / 12000.0 // 10).astype(int)
+    noisy = FrameLog(log.index, log.count, log.arrival + shift[stretch], log.gps_tow, log.fresh)
+    clock = fit_arrival(noisy, 12000.0, 0.0)
+    assert clock.rate_source == "reported" and clock.rate_hz == 12000.0
+    assert clock.measured_rate_se_hz > 0.024
+    assert clock.rms_s > 0.003
