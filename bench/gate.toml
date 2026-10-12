@@ -1,0 +1,29 @@
+# Thresholds for `rr73-bench gate`. docs/bench.md describes every check.
+#
+# The gate compares each set found in both the results and the baseline: slot count,
+# recall (absolute, 0 to 1), false decodes on synthetic and noise-only slots, SNR50 where
+# the baseline has a fit, and optionally the median time per slot. Time checks are off
+# (0): CI runners and the machine that recorded the baseline differ.
+
+# CI runs these sets (.github/workflows/ci.yml); each must be present in the results.
+required_sets = ["public/ft8_lib", "synthetic/smoke/ft8", "synthetic/smoke/ft4", "synthetic/noise-ci"]
+
+[default]
+max_recall_drop = 0.0
+max_false_increase = 0
+max_snr50_rise_db = 0.3
+max_time_ratio = 0
+
+# The baseline was recorded on aarch64 and CI runs on x86_64. FFT rounding differs between
+# the two, which can flip a decode at the margin; 0.002 allows 2 of the 1298 references.
+[sets."public/ft8_lib"]
+max_recall_drop = 0.002
+
+# 1 signal in either smoke set.
+[sets."synthetic/smoke/ft8"]
+max_recall_drop = 0.017
+max_snr50_rise_db = 1.5
+
+[sets."synthetic/smoke/ft4"]
+max_recall_drop = 0.17
+max_snr50_rise_db = 1.5

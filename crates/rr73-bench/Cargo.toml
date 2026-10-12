@@ -13,9 +13,12 @@ rr73-decode.workspace = true
 rr73-chansim.workspace = true
 rr73-corpus.workspace = true
 clap.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
 rayon.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+toml.workspace = true
 
 [lints]
 workspace = true
