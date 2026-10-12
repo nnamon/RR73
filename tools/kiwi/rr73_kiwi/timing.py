@@ -84,13 +84,17 @@ class FrameLog:
     fresh: np.ndarray  # True when the frame carries a fresh GPS fix
 
 
-def fit_gps(frames: FrameLog, nominal_rate_hz: float) -> SampleClock | str:
-    """A GPS-referenced clock, or the reason the timestamps cannot be used."""
+def fit_gps(frames: FrameLog, nominal_rate_hz: float, host_offset_s: float = 0.0) -> SampleClock | str:
+    """A GPS-referenced clock, or the reason the timestamps cannot be used.
+
+    host_offset_s is the measured offset of the host clock from NTP (true time minus host time);
+    the GPS timestamps are compared with the arrival times corrected by it.
+    """
     usable = frames.fresh & np.isfinite(frames.gps_tow)
     if np.count_nonzero(usable) < MIN_ANCHORS:
         return f"fewer than {MIN_ANCHORS} frames carry a fresh GPS timestamp"
     index = frames.index[usable].astype(np.float64)
-    arrival = frames.arrival[usable]
+    arrival = frames.arrival[usable] + host_offset_s
     end_offset = frames.count[usable] / nominal_rate_hz
     chosen = None
     latency = 0.0

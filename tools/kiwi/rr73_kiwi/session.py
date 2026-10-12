@@ -114,12 +114,14 @@ def run_session(
         return result(NO_ALLOWANCE, "the receiver's daily time limit for this address is used up")
 
     correction_s = -receiver.latency_s
+    host_offset_s = 0.0
     if ctx.ntp_server:
         offset = measure_offset(ctx.ntp_server)
         if offset is None:
             log.warning("NTP server %s did not answer; using the host clock as it is", ctx.ntp_server)
         else:
             correction_s += offset.offset_s
+            host_offset_s = offset.offset_s
             record["ntp"] = {"server": offset.server, "offset_s": offset.offset_s, "rtt_s": offset.rtt_s}
     record["correction_s"] = correction_s
 
@@ -142,7 +144,9 @@ def run_session(
         if "assembler" in holder:
             holder["assembler"].set_rate(rate_hz)
         else:
-            holder["assembler"] = SlotAssembler(rate_hz, on_slot, correction_s=correction_s)
+            holder["assembler"] = SlotAssembler(
+                rate_hz, on_slot, correction_s=correction_s, host_offset_s=host_offset_s
+            )
 
     def on_frame(seq: int, samples: np.ndarray, gps: dict[str, int] | None, arrival: float) -> None:
         if "assembler" in holder:

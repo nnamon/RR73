@@ -86,3 +86,13 @@ def test_first_second_is_not_used() -> None:
     start = FIRST_SLOT - 0.5
     slots, _ = run(Stream(start_unix=start, duration_s=33.0), "fresh")
     assert [s.start_unix for s in slots] == [FIRST_SLOT + 15]
+
+
+def test_slots_use_gps_when_the_host_clock_is_off_but_measured() -> None:
+    stream = marker_stream()
+    slots: list[Slot] = []
+    assembler = SlotAssembler(stream.rate_hz, slots.append, correction_s=-12.0, host_offset_s=-12.0)
+    for seq, samples, fields, arrival in stream.frames("fresh"):
+        assembler.add(seq, samples, fields, arrival + 12.0)
+    assert slots and all(s.clock.reference == "gps" for s in slots)
+    assert all(abs(pulse_position(s.samples) - OUT_RATE_HZ) < 0.3 for s in slots)
