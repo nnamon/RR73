@@ -1,0 +1,3 @@
+#!/bin/sh
+# rr73-kiwi recorder entry point inside the kiwi image. See tools/kiwi/README.md.
+exec python -m rr73_kiwi "$@"
