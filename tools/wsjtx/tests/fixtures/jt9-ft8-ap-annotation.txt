@@ -1,0 +1,2 @@
+000005 -22 -0.0 1200 ~  CQ K1ABC FN42                       ? a1
+<DecodeFinished>   0   1        0

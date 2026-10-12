@@ -1,0 +1,34 @@
+# KiwiSDR receivers for rr73-kiwi. tools/kiwi/README.md lists the fields and the politeness
+# rules, which apply to every receiver and cannot be relaxed here.
+#
+# access: "club" for receivers of a club the RR73 owner (9V1NE) belongs to, "public" for any
+# other receiver. Public receivers get longer breaks (at least 30 minutes) and waits.
+# plan: bands by UTC time; sessions rotate through the bands of the current window. The
+# windows must cover all 24 hours.
+
+[[receiver]]
+id = "sarts-web888"
+name = "SARTS Web-888, Singapore"
+host = "167.172.88.10"
+port = 80                      # behind nginx
+operator = "9V1YC for SARTS"
+access = "club"                # 9V1NE is a SARTS member; other members still need free channels
+software = "KiwiSDR v2026.205 (Web888_v2026.205)"
+channels = 13
+antenna = "Wellbrook loop"
+grid = "OJ11"
+session_minutes = 12
+break_minutes = 5
+latency_s = 0.0                # NTP timing correction; the IQ stream carries no usable GPS time
+
+# Singapore is UTC+8. Daytime there (23:00 to 11:00 UTC): the high bands.
+[[receiver.plan]]
+from = "23:00"
+to = "11:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+# Evening and night there (11:00 to 23:00 UTC): the low bands and 20m.
+[[receiver.plan]]
+from = "11:00"
+to = "23:00"
+bands = ["40m", "30m", "20m"]

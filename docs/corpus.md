@@ -1,6 +1,6 @@
 # Corpus format
 
-The corpus is a directory tree of slots. Each slot is a WAV file and a JSON sidecar with the same stem. The corpus lives in `corpus/`, which git ignores. CI uses synthetic slots and public files fetched at a pinned commit.
+The corpus is a directory tree of slots. Containers mount it at `/work/corpus` from `RR73_CORPUS` (set in `.env`), so every worktree shares one copy. Each slot is a WAV file and a JSON sidecar with the same stem. The corpus lives in `corpus/`, which git ignores. CI uses synthetic slots and public files fetched at a pinned commit.
 
 ## Layout
 

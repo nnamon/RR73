@@ -18,6 +18,8 @@ x-workspace: &workspace
     - .:/work
     - cargo-registry:/usr/local/cargo/registry
     - cargo-target:/work/target
+    # One corpus for every worktree: set RR73_CORPUS in .env to an absolute path.
+    - ${RR73_CORPUS:-./corpus}:/work/corpus
     - web-node-modules:/work/web/node_modules
 
 services:
@@ -47,6 +49,7 @@ services:
     working_dir: /work
     volumes:
       - .:/work
+      - ${RR73_CORPUS:-./corpus}:/work/corpus
 
   kiwi:
     build: { context: tools/kiwi }
@@ -55,6 +58,7 @@ services:
     working_dir: /work
     volumes:
       - .:/work
+      - ${RR73_CORPUS:-./corpus}:/work/corpus
 
 volumes:
   cargo-registry:

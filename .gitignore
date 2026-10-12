@@ -12,5 +12,7 @@
 # Tool checkouts built in containers
 /tools/ft8lib/src/
 /tools/kiwi/vendor/
+# Local settings such as RR73_CORPUS
+/.env
 # OS
 .DS_Store
