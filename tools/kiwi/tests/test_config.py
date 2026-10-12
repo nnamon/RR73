@@ -74,3 +74,15 @@ def test_unknown_band_is_rejected(tmp_path: Path) -> None:
     path.write_text(text.replace('bands = ["20m"]', 'bands = ["60m"]', 1))
     with pytest.raises(ConfigError, match="unknown bands"):
         load_receivers(path)
+
+
+def test_one_receiver_cannot_appear_twice_under_two_ids(tmp_path: Path) -> None:
+    # Two entries for one address would let the recorder hold two of its channels.
+    one = BASE.format(access="club", extra="", to="23:59") + _wrap("00:00")
+    two = one.replace('id = "test-kiwi"', 'id = "test-kiwi-2"').replace(
+        'host = "kiwi.example"', 'host = "KIWI.example"'
+    )
+    path = tmp_path / "receivers.toml"
+    path.write_text(one + two)
+    with pytest.raises(ConfigError, match="same receiver"):
+        load_receivers(path)
