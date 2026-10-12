@@ -325,3 +325,33 @@ def test_jt9_on_path_leaves_no_working_files_in_the_current_directory(tmp_path: 
     assert run.returncode == 0
     assert parse_jt9_output(run.stdout, "FT8")[0].text == "CQ 9V1NE OJ11"
     assert sorted(p.name for p in tmp_path.iterdir()) == ["000000_000001.wav"]
+
+
+def test_changes_made_to_a_sidecar_while_jt9_runs_are_kept(tmp_path: Path, version_file: Path) -> None:
+    wav = make_slot(tmp_path / "slots", "261013_131415")
+    script = tmp_path / "jt9"
+    edit = (
+        "import json, sys; p = sys.argv[1]; d = json.load(open(p)); d['noise_only'] = True; json.dump(d, open(p, 'w'))"
+    )
+    script.write_text(
+        "#!/bin/sh\n"
+        f'for last; do :; done\npython3 -c "{edit}" "${{last%.wav}}.json"\n'
+        f"cat '{FIXTURES / 'jt9-ft8-191111_110130.txt'}'\n"
+    )
+    script.chmod(0o755)
+    assert reference.main(["--jt9", str(script), str(wav)]) == 0
+    sidecar = json.loads(wav.with_suffix(".json").read_text())
+    assert sidecar["noise_only"] is True
+    assert len(sidecar["reference"]["jt9-d3"]["decodes"]) == 5
+
+
+@pytest.mark.parametrize("bad", [[], "none", {"jt9-d3": "old"}, {"jt9-d3": []}])
+def test_a_sidecar_with_a_malformed_reference_is_skipped(
+    tmp_path: Path, fake_jt9: Path, version_file: Path, capsys: pytest.CaptureFixture[str], bad: object
+) -> None:
+    make_slot(tmp_path / "slots", "261013_131415", dict(SIDECAR, reference=bad))
+    good = make_slot(tmp_path / "slots", "261013_131430")
+    assert reference.main(["--jt9", str(fake_jt9), str(tmp_path / "slots")]) == 1
+    err = capsys.readouterr().err
+    assert "261013_131415.json: reference" in err and "1 slots decoded" in err
+    assert "jt9-d3" in json.loads(good.with_suffix(".json").read_text())["reference"]
