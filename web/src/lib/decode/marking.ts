@@ -1,0 +1,77 @@
+/**
+ * Decode row marking as in WSJT-X: a 4 px bar, a tint and the callsign in bold.
+ * - cq: a CQ call (green), the calling station in bold;
+ * - me: a message to my callsign (red), the sender in bold;
+ * - sent: a message I transmitted (amber), the other station in bold.
+ */
+
+import type { Decode } from './types';
+
+export type Mark = 'cq' | 'me' | 'sent' | null;
+
+export type BadgeTone = 'teal' | 'mag' | 'muted' | 'bad';
+
+export interface Badge {
+  text: string;
+  tone: BadgeTone;
+}
+
+export interface DecodeRowData {
+  decode: Decode;
+  mark: Mark;
+  /** The callsign shown in bold, as it appears in the text. */
+  key: string | null;
+  /** Shown in place of SNR and DT for sent rows: "13:14:30". */
+  time?: string;
+  badge?: Badge;
+  /** Right-hand note, such as a country or "You sent". */
+  meta?: string;
+  /** Already worked: the message is dimmed. */
+  worked?: boolean;
+}
+
+/** Text with one bold span, for rendering without HTML. */
+export interface TextParts {
+  before: string;
+  bold: string;
+  after: string;
+}
+
+/** A token that can be a callsign: letters and digits with at least one of each, or a hashed call. */
+export function looksLikeCall(token: string): boolean {
+  if (/^<.+>$/.test(token)) return true;
+  return /^[A-Z0-9/]{3,13}$/.test(token) && /[A-Z]/.test(token) && /\d/.test(token);
+}
+
+/** The base callsign without prefixes or suffixes: "VK3/9V1NE/P" gives "9V1NE". */
+export function baseCall(call: string): string {
+  const parts = call.replace(/[<>]/g, '').split('/').filter(Boolean);
+  if (parts.length <= 1) return parts[0] ?? '';
+  return parts.reduce((a, b) => (looksLikeCall(b) && b.length > a.length ? b : a), parts[0]);
+}
+
+function sameStation(a: string, b: string): boolean {
+  return !!a && !!b && baseCall(a) === baseCall(b);
+}
+
+/** Marks a decode for the list. `sent` is true for messages this station transmitted. */
+export function markDecode(decode: Decode, myCall: string, sent = false): { mark: Mark; key: string | null } {
+  const tokens = decode.text.trim().split(/\s+/);
+  const me = myCall.trim().toUpperCase();
+  if (sent) return { mark: 'sent', key: tokens[0] ?? null };
+  if (tokens[0] === 'CQ') {
+    const key = tokens.slice(1).find(looksLikeCall) ?? null;
+    return { mark: 'cq', key };
+  }
+  if (me && tokens.length >= 2 && sameStation(tokens[0], me)) return { mark: 'me', key: tokens[1] };
+  return { mark: null, key: null };
+}
+
+/** Splits the text around the first whole-word occurrence of `key`. */
+export function splitKey(text: string, key: string | null): TextParts {
+  if (!key) return { before: text, bold: '', after: '' };
+  const tokens = text.split(/(\s+)/);
+  const i = tokens.indexOf(key);
+  if (i < 0) return { before: text, bold: '', after: '' };
+  return { before: tokens.slice(0, i).join(''), bold: key, after: tokens.slice(i + 1).join('') };
+}

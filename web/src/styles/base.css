@@ -1,0 +1,310 @@
+@import url('./tokens.css');
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  background: var(--rr-bg);
+}
+
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background: var(--rr-bg);
+  color: var(--rr-label);
+  font-family: var(--rr-sans);
+  font-size: var(--rr-text-body);
+  line-height: var(--rr-leading-body);
+  letter-spacing: var(--rr-tracking-body);
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+h1,
+h2,
+h3,
+p,
+ul,
+ol {
+  margin: 0;
+  padding: 0;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+  letter-spacing: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+
+button:disabled {
+  cursor: default;
+}
+
+a {
+  color: var(--rr-accent);
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: 2px;
+}
+
+[tabindex='-1']:focus {
+  outline: none;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.mono {
+  font-family: var(--rr-mono);
+  letter-spacing: 0;
+}
+
+/* Screens that scroll: a large title, then inset grouped sections, as in iOS Settings. */
+.screen {
+  min-height: 100%;
+  padding: calc(var(--rr-safe-top) + var(--rr-space-2)) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+}
+
+.large-title {
+  padding: var(--rr-space-1) var(--rr-space-4) var(--rr-space-2);
+  font-size: var(--rr-text-large-title);
+  font-weight: var(--rr-weight-bold);
+  line-height: var(--rr-leading-large-title);
+  letter-spacing: 0.011em;
+}
+
+.section {
+  margin-top: var(--rr-space-4);
+  padding: 0 var(--rr-space-4);
+}
+
+.section-head {
+  padding: 0 var(--rr-space-4) var(--rr-space-1);
+  font-size: var(--rr-text-foot);
+  font-weight: var(--rr-weight-regular);
+  line-height: var(--rr-leading-row);
+  color: var(--rr-label2);
+}
+
+.section-foot {
+  padding: var(--rr-space-1) var(--rr-space-4) 0;
+  font-size: var(--rr-text-foot);
+  line-height: var(--rr-leading-row);
+  color: var(--rr-label2);
+}
+
+.group {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--rr-radius-xl);
+  background: var(--rr-surface);
+}
+
+.row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--rr-space-3);
+  width: 100%;
+  min-height: var(--rr-tap);
+  padding: var(--rr-space-2) var(--rr-space-4);
+  text-align: left;
+}
+
+.row + .row::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: var(--rr-space-4);
+  height: var(--rr-hairline);
+  background: var(--rr-sep-strong);
+  transform: scaleY(0.5);
+  transform-origin: 0 0;
+}
+
+.row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.row-title {
+  display: block;
+  font-size: var(--rr-text-body);
+  line-height: var(--rr-leading-body);
+}
+
+.row-sub {
+  display: block;
+  margin-top: 1px;
+  font-size: var(--rr-text-foot);
+  line-height: var(--rr-leading-foot);
+  color: var(--rr-label2);
+}
+
+.row-value {
+  flex: none;
+  max-width: 60%;
+  font-size: var(--rr-text-body);
+  color: var(--rr-label2);
+  text-align: right;
+}
+
+.row-chevron {
+  flex: none;
+  width: 13px;
+  height: 13px;
+  color: var(--rr-chev);
+}
+
+/* Buttons */
+.btn {
+  display: inline-flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--rr-button);
+  padding: 0 var(--rr-space-3);
+  border-radius: var(--rr-radius-xl);
+  background: var(--rr-fill);
+  color: var(--rr-label);
+  font-size: var(--rr-text-callout);
+  font-weight: var(--rr-weight-semibold);
+  line-height: var(--rr-leading-sub);
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+}
+
+.btn.primary {
+  background: var(--rr-accent-fill);
+  color: var(--rr-on-fill);
+}
+
+.btn.tint {
+  background: var(--rr-accent-soft);
+  color: var(--rr-accent);
+}
+
+.btn.tx {
+  background: var(--rr-tx-fill);
+  color: var(--rr-on-fill);
+}
+
+/* Halt: the largest control wherever output can play. Outlined in transmit red. */
+.btn.halt {
+  min-height: var(--rr-button-large);
+  background: transparent;
+  box-shadow: inset 0 0 0 2px var(--rr-tx);
+  color: var(--rr-tx-text);
+  font-size: var(--rr-text-body);
+  font-weight: var(--rr-weight-bold);
+}
+
+.btn.compact {
+  flex: none;
+  min-height: var(--rr-tap);
+  padding: 0 var(--rr-space-4);
+  border-radius: var(--rr-radius-l);
+  font-size: var(--rr-text-sub);
+}
+
+.text-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--rr-tap);
+  color: var(--rr-accent);
+  font-size: var(--rr-text-body);
+}
+
+/* Empty states: what will appear, and when. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--rr-space-2);
+  max-width: var(--rr-reading);
+  margin: var(--rr-space-12) auto 0;
+  padding: 0 var(--rr-space-8);
+  text-align: center;
+  color: var(--rr-label2);
+}
+
+.empty h2 {
+  font-size: var(--rr-text-body);
+  font-weight: var(--rr-weight-semibold);
+  color: var(--rr-label);
+}
+
+.empty p {
+  font-size: var(--rr-text-sub);
+  line-height: var(--rr-leading-sub);
+}
+
+/* Segmented control: native radio inputs in labels, 44 px segments. */
+.seg {
+  display: flex;
+  height: calc(var(--rr-tap) + 2 * var(--rr-space-half));
+  padding: var(--rr-space-half);
+  border-radius: var(--rr-radius-l);
+  background: var(--rr-fill-bg);
+}
+
+.seg-i {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--rr-radius-m);
+  font-size: var(--rr-text-sub);
+  font-weight: var(--rr-weight-medium);
+  cursor: pointer;
+}
+
+.seg-i.on {
+  background: var(--rr-seg-sel);
+  box-shadow: 0 1px 4px var(--rr-shadow-seg);
+  font-weight: var(--rr-weight-semibold);
+}
+
+.seg-i:has(:focus-visible) {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: 2px;
+}

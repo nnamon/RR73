@@ -1,0 +1,225 @@
+// @vitest-environment jsdom
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { CaptureEngine, type EngineDeps } from './engine';
+import type { CaptureMessage } from './messages';
+
+vi.mock('./capture.worklet.ts?worker&url', () => ({ default: 'capture.js' }));
+
+class FakeTrack extends EventTarget {
+  readyState: 'live' | 'ended' = 'live';
+  muted = false;
+  label = 'Headset Microphone';
+  stopped = false;
+  getSettings() {
+    return { deviceId: 'd1', echoCancellation: false, sampleRate: 48000, channelCount: 1 };
+  }
+  stop() {
+    this.stopped = true;
+    this.readyState = 'ended';
+  }
+}
+
+class FakeStream {
+  track = new FakeTrack();
+  getAudioTracks() {
+    return [this.track];
+  }
+  getTracks() {
+    return [this.track];
+  }
+}
+
+class FakeNode {
+  port = { onmessage: null as ((e: { data: CaptureMessage }) => void) | null, close: vi.fn() };
+  disconnect = vi.fn();
+  post(m: CaptureMessage) {
+    this.port.onmessage?.({ data: m });
+  }
+}
+
+class FakeContext {
+  state: 'suspended' | 'running' | 'interrupted' | 'closed' = 'suspended';
+  sampleRate = 48000;
+  currentTime = 1;
+  onstatechange: (() => void) | null = null;
+  perf = 5000;
+  resume = vi.fn(async () => this.setState('running'));
+  suspend = vi.fn(async () => this.setState('suspended'));
+  createMediaStreamSource() {
+    return { connect: vi.fn(), disconnect: vi.fn() };
+  }
+  getOutputTimestamp() {
+    return { contextTime: this.currentTime, performanceTime: this.perf };
+  }
+  setState(s: FakeContext['state']) {
+    this.state = s;
+    this.onstatechange?.();
+  }
+}
+
+const T0 = Date.UTC(2026, 9, 13, 13, 14, 52);
+
+function setup(over: Partial<EngineDeps> = {}) {
+  const ctx = new FakeContext();
+  const nodes: FakeNode[] = [];
+  const streams: FakeStream[] = [];
+  const clock = { perf: 5000, date: T0 };
+  const deps: EngineDeps = {
+    createContext: () => ctx as unknown as AudioContext,
+    getUserMedia: vi.fn(async () => {
+      const s = new FakeStream();
+      streams.push(s);
+      return s as unknown as MediaStream;
+    }),
+    createNode: vi.fn(async () => {
+      const n = new FakeNode();
+      nodes.push(n);
+      return n as unknown as AudioWorkletNode;
+    }),
+    doc: document,
+    dateNow: () => clock.date,
+    perfNow: () => clock.perf,
+    secure: () => true,
+    setSession: () => 'play-and-record',
+    ...over,
+  };
+  const engine = new CaptureEngine(deps);
+  return { engine, ctx, nodes, streams, deps, clock };
+}
+
+function chunk(index: number, contextTime: number): CaptureMessage {
+  return { type: 'chunk', samples: new Float32Array(512), index, contextTime, peakDb: -20, rmsDb: -30 };
+}
+
+function setVisibility(v: 'visible' | 'hidden') {
+  Object.defineProperty(document, 'visibilityState', { value: v, configurable: true });
+  document.dispatchEvent(new Event('visibilitychange'));
+}
+
+describe('CaptureEngine', () => {
+  beforeEach(() => setVisibility('visible'));
+
+  it('starts from a tap and reports what the browser applied', async () => {
+    const { engine, deps } = setup();
+    const state = await engine.start();
+    expect(state.status).toBe('running');
+    expect(deps.getUserMedia).toHaveBeenCalledWith(
+      expect.objectContaining({ audio: expect.objectContaining({ echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }) }),
+    );
+    expect(engine.captureReport).toMatchObject({ inputLabel: 'Headset Microphone', contextRate: 48000, echoCancellation: false, audioSession: 'play-and-record' });
+  });
+
+  it('stamps chunks with UTC through the output timestamp', async () => {
+    const { engine, ctx, nodes, clock } = setup();
+    await engine.start();
+    const got: number[] = [];
+    engine.onChunk((c) => got.push(c.utcMs));
+    // Output timestamp: context time 2 s is heard at performance time 5000 ms, which is T0.
+    ctx.currentTime = 2;
+    ctx.perf = 5000;
+    clock.perf = 5000;
+    clock.date = T0;
+    nodes[0].post(chunk(0, 1.5));
+    expect(got).toEqual([T0 - 500]);
+  });
+
+  it('maps from currentTime until output timestamps arrive, then starts over on them', async () => {
+    const { engine, ctx, nodes, clock } = setup();
+    await engine.start();
+    const got: number[] = [];
+    engine.onChunk((c) => got.push(c.utcMs));
+    // No output yet: the timestamp is empty, so currentTime pairs with now.
+    ctx.getOutputTimestamp = () => ({ contextTime: 0, performanceTime: 0 });
+    ctx.currentTime = 2;
+    clock.perf = 5000;
+    clock.date = T0;
+    nodes[0].post(chunk(0, 1.5));
+    expect(got[0]).toBe(T0 - 500);
+    // Output starts: context time 2 s is heard 40 ms after now. Only these observations count.
+    ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
+    nodes[0].post(chunk(512, 1.5 + 512 / 12000));
+    expect(got[1]).toBeCloseTo(T0 + 40 - 500 + (512 / 12000) * 1000, 6);
+  });
+
+  it('updates the report with the channels that arrive', async () => {
+    const { engine, nodes } = setup();
+    await engine.start();
+    nodes[0].post({ type: 'format', channels: 2, channelUsed: 'left', sampleRate: 48000 });
+    expect(engine.captureReport).toMatchObject({ arrivingChannels: 2, channelUsed: 'left' });
+  });
+
+  it('stops when iOS interrupts the context and says when audio ended', async () => {
+    const { engine, ctx, nodes } = setup();
+    await engine.start();
+    ctx.currentTime = 2;
+    nodes[0].post(chunk(0, 1.5));
+    ctx.setState('interrupted');
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'interrupted' });
+    // The last chunk started 0.5 s before T0 and lasted 512 samples.
+    expect(engine.state.stoppedAtUtcMs).toBeCloseTo(T0 - 500 + (512 / 12000) * 1000, 6);
+  });
+
+  it('stops when the page is hidden and waits for a tap', async () => {
+    const { engine, ctx } = setup();
+    await engine.start();
+    setVisibility('hidden');
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'hidden' });
+    expect(ctx.suspend).toHaveBeenCalled();
+    setVisibility('visible');
+    expect(engine.state.status).toBe('stopped');
+    expect((await engine.resume()).status).toBe('running');
+  });
+
+  it('stops when the input ends and opens it again on resume', async () => {
+    const { engine, streams, deps } = setup();
+    await engine.start();
+    streams[0].track.readyState = 'ended';
+    streams[0].track.dispatchEvent(new Event('ended'));
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'input-ended' });
+    expect((await engine.resume()).status).toBe('running');
+    expect(deps.getUserMedia).toHaveBeenCalledTimes(2);
+  });
+
+  it('stops when the input goes mute', async () => {
+    const { engine, streams } = setup();
+    await engine.start();
+    streams[0].track.muted = true;
+    streams[0].track.dispatchEvent(new Event('mute'));
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'input-muted' });
+  });
+
+  it('keeps a live input on resume', async () => {
+    const { engine, ctx, deps } = setup();
+    await engine.start();
+    ctx.setState('suspended');
+    expect(engine.state.reason).toBe('suspended');
+    await engine.resume();
+    expect(deps.getUserMedia).toHaveBeenCalledTimes(1);
+    expect(engine.state.status).toBe('running');
+  });
+
+  it('reports a refused microphone', async () => {
+    const { engine } = setup({ getUserMedia: async () => Promise.reject(new DOMException('no', 'NotAllowedError')) });
+    expect(await engine.start()).toMatchObject({ status: 'failed', error: 'denied' });
+  });
+
+  it('reports a page without microphone access', async () => {
+    const { engine } = setup({ secure: () => false });
+    expect(await engine.start()).toMatchObject({ status: 'failed', error: 'insecure' });
+  });
+
+  it('reports a worklet that will not load and releases the microphone', async () => {
+    const { engine, streams } = setup({ createNode: async () => Promise.reject(new Error('404')) });
+    expect(await engine.start()).toMatchObject({ status: 'failed', error: 'worklet' });
+    expect(streams[0].track.stopped).toBe(true);
+  });
+
+  it('switches input by opening the new device', async () => {
+    const { engine, streams, deps } = setup();
+    await engine.start();
+    await engine.useInput('d2');
+    expect(streams[0].track.stopped).toBe(true);
+    expect(deps.getUserMedia).toHaveBeenLastCalledWith(expect.objectContaining({ audio: expect.objectContaining({ deviceId: { exact: 'd2' } }) }));
+    expect(engine.state.status).toBe('running');
+  });
+});

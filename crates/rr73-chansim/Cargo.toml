@@ -9,10 +9,12 @@ repository.workspace = true
 
 [dependencies]
 rr73-ft8.workspace = true
+rr73-dsp.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
 rand_distr.workspace = true
 serde.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

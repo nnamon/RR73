@@ -13,9 +13,14 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 rr73-ft8.workspace = true
 rr73-decode.workspace = true
+# rustfft's WebAssembly SIMD kernels; .cargo/config.toml enables simd128 for wasm32.
+rr73-dsp = { workspace = true, features = ["wasm-simd"] }
 wasm-bindgen.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+
+[dev-dependencies]
+rr73-chansim.workspace = true
 
 [lints]
 workspace = true
