@@ -1,0 +1,171 @@
+/*
+ * Design tokens: the only file with colour values, type sizes and spacing. stylelint rejects raw
+ * colours everywhere else. Values come from the approved mockups (.t-light and .t-dark).
+ *
+ * Each colour is light-dark(light, dark). The theme follows the system unless Settings sets
+ * data-theme on the root element, which pins color-scheme.
+ *
+ * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a marked decode
+ * row's tint 1.35:1 or more against the list, badge text 4.5:1 or more on its fill.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Type */
+  --rr-sans: -apple-system, blinkmacsystemfont, "SF Pro Text", "Helvetica Neue", arial, sans-serif;
+  --rr-mono: "SF Mono", ui-monospace, menlo, "Roboto Mono", monospace;
+  --rr-text-large-title: 34px;
+  --rr-text-title: 22px;
+  --rr-text-clock: 20px;
+  --rr-text-body: 17px;
+  --rr-text-callout: 16px;
+  --rr-text-sub: 15px;
+  --rr-text-row: 14px;
+  --rr-text-foot: 13px;
+  --rr-text-caption: 12px;
+  --rr-text-axis: 10px;
+  --rr-leading-large-title: 41px;
+  --rr-leading-title: 24px;
+  --rr-leading-body: 22px;
+  --rr-leading-sub: 20px;
+  --rr-leading-row: 18px;
+  --rr-leading-foot: 17px;
+  --rr-leading-caption: 15px;
+  --rr-weight-regular: 400;
+  --rr-weight-medium: 500;
+  --rr-weight-semibold: 600;
+  --rr-weight-bold: 700;
+  --rr-tracking-body: -0.024em;
+  --rr-tracking-tight: -0.01em;
+
+  /* Space: a 4 px grid. */
+  --rr-space-1: 4px;
+  --rr-space-2: 8px;
+  --rr-space-3: 12px;
+  --rr-space-4: 16px;
+  --rr-space-5: 20px;
+  --rr-space-6: 24px;
+  --rr-space-8: 32px;
+  --rr-space-12: 48px;
+
+  /* Shape */
+  --rr-radius-xs: 3px;
+  --rr-radius-s: 5px;
+  --rr-radius-m: 8px;
+  --rr-radius-l: 10px;
+  --rr-radius-xl: 12px;
+  --rr-radius-sheet: 14px;
+  --rr-radius-pill: 999px;
+  --rr-hairline: 1px;
+
+  /* Sizes */
+  --rr-tap: 44px;
+  --rr-row-decode: 40px;
+  --rr-button: 46px;
+  --rr-button-large: 54px;
+  --rr-chip: 30px;
+  --rr-mark-bar: 4px;
+  --rr-icon: 24px;
+  --rr-icon-tab: 25px;
+  --rr-ring: 30px;
+  --rr-row-icon: 30px;
+  --rr-tabbar: 49px;
+  --rr-axis: 24px;
+  --rr-waterfall: clamp(128px, 21dvh, 220px);
+  --rr-meter-mini: 60px;
+  --rr-reading: 640px;
+
+  /* Notch and home indicator. */
+  --rr-safe-top: env(safe-area-inset-top, 0px);
+  --rr-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --rr-safe-left: env(safe-area-inset-left, 0px);
+  --rr-safe-right: env(safe-area-inset-right, 0px);
+
+  --rr-transition: 160ms;
+
+  /* Colour: surfaces */
+  --rr-bg: light-dark(#F2F3F6, #0B0D10);
+  --rr-surface: light-dark(#FFF, #15181D);
+  --rr-plain: light-dark(#FFF, #0B0D10);
+  --rr-dock: light-dark(#F8F9FB, #15181D);
+  --rr-fill: light-dark(#EEF0F4, #232831);
+  --rr-fill-bg: light-dark(#E4E6EB, #232831);
+  --rr-fill2: light-dark(#E1E3E8, #2E3440);
+  --rr-sep: light-dark(#E1E3E8, #2A2F38);
+  --rr-sep-strong: light-dark(#C9CDD4, #3A404B);
+  --rr-bar: light-dark(rgb(249 250 252 / 94%), rgb(19 22 27 / 94%));
+  --rr-sheet: light-dark(#F2F3F6, #15181D);
+  --rr-grab: light-dark(#B9BEC6, #4A515D);
+  --rr-dim: light-dark(rgb(14 17 22 / 32%), rgb(0 0 0 / 50%));
+
+  /* Colour: text */
+  --rr-label: light-dark(#0E1116, #ECEEF2);
+  --rr-label2: light-dark(#4F5561, #A7AEBA);
+  --rr-label3: light-dark(#5F6570, #8C93A0);
+  --rr-chev: light-dark(#9CA2AC, #6B7280);
+  --rr-on-fill: #FFF;
+  --rr-on-strong: light-dark(#FFF, #0B0D10);
+
+  /* Colour: accent, receive and transmit */
+  --rr-accent: light-dark(#2851D8, #7A9DFF);
+  --rr-accent-fill: light-dark(#2851D8, #3F6BE8);
+  --rr-accent-soft: light-dark(rgb(40 81 216 / 10%), rgb(110 149 255 / 18%));
+  --rr-tx: light-dark(#D23A2F, #FF5A4E);
+  --rr-tx-text: light-dark(#B42C22, #FF7468);
+  --rr-tx-fill: #C8352B;
+  --rr-tx-soft: light-dark(rgb(210 58 47 / 10%), rgb(255 90 78 / 17%));
+  --rr-cq: light-dark(#178A50, #34C77B);
+  --rr-amber: light-dark(#C98A1A, #E0A93B);
+  --rr-mag: light-dark(#9333B8, #D07BEA);
+  --rr-teal: light-dark(#0E7490, #3EC1D3);
+  --rr-ok: light-dark(#12703F, #34C77B);
+  --rr-ok-bar: light-dark(#178A50, #34C77B);
+  --rr-ok-soft: light-dark(rgb(23 138 80 / 12%), rgb(52 199 123 / 16%));
+  --rr-warn: light-dark(#A84D08, #F0A23B);
+  --rr-warn-soft: light-dark(rgb(217 119 6 / 13%), rgb(240 162 59 / 16%));
+
+  /* Colour: decode row marking (WSJT-X style: bar, tint, bold callsign) */
+  --rr-cq-tint: light-dark(rgb(23 138 80 / 25%), rgb(52 199 123 / 22%));
+  --rr-me-tint: light-dark(rgb(210 58 47 / 23%), rgb(255 90 78 / 26%));
+  --rr-sent-tint: light-dark(rgb(201 138 26 / 32%), rgb(224 169 59 / 22%));
+  --rr-sel-tint: light-dark(rgb(40 81 216 / 21%), rgb(110 149 255 / 25%));
+
+  /* Colour: controls */
+  --rr-seg-sel: light-dark(#FFF, #4A515E);
+  --rr-thumb: #FFF;
+  --rr-toast: light-dark(#1F242C, #E6E9EE);
+  --rr-toast-text: light-dark(#FFF, #0E1116);
+  --rr-toast-link: light-dark(#9DB5FF, #2851D8);
+  --rr-ic-blue: light-dark(#2F6FE4, #3B7BF0);
+  --rr-ic-green: #237F4E;
+  --rr-ic-orange: #C4621B;
+  --rr-ic-grey: #6E7581;
+  --rr-ic-indigo: #5B57D6;
+  --rr-shadow-seg: light-dark(rgb(14 17 22 / 10%), rgb(0 0 0 / 35%));
+  --rr-shadow-thumb: light-dark(rgb(14 17 22 / 15%), rgb(0 0 0 / 35%));
+
+  /*
+   * Colour: waterfall. The same in both themes. The colormap stops are read by
+   * lib/waterfall/colormap.ts and handed to the waterfall worker, so they stay plain hex.
+   */
+  --rr-wf-bg: #04060A;
+  --rr-wf-line: rgb(255 255 255 / 18%);
+  --rr-wf-text: rgb(255 255 255 / 78%);
+  --rr-wf-tag-bg: rgb(4 6 10 / 62%);
+  --rr-wf-c0: #04060A;
+  --rr-wf-c1: #0A1530;
+  --rr-wf-c2: #123E6E;
+  --rr-wf-c3: #1A7F9A;
+  --rr-wf-c4: #4CC3A3;
+  --rr-wf-c5: #F0D25A;
+  --rr-wf-c6: #FFF8E6;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+}
