@@ -298,3 +298,29 @@ def test_a_receiver_time_limit_gives_the_long_wait(tmp_path: Path) -> None:
     request = Request(sessions=1, hours=None, bands=(), length_s=None)
     run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
     assert attempts[1] - attempts[0] >= 120.0 + TIME_LIMIT_WAIT_S
+
+
+def test_a_crashed_session_counts_towards_the_daily_limit(tmp_path: Path) -> None:
+    def crash(*args: object) -> SessionResult:
+        raise OSError("disk full")
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    with pytest.raises(OSError):
+        run_schedule([CLUB], request, tmp_path, crash, SimClock(), threading.Event())
+    state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert state.sessions == [[T0, T0 + CLUB.session_s]]
+    assert state.used_s(T0 + CLUB.session_s) == CLUB.session_s
+
+
+def test_a_finished_session_is_counted_once_with_its_real_times(tmp_path: Path) -> None:
+    seen: list[float] = []
+
+    def runner(receiver, band, length_s, state) -> SessionResult:
+        seen.append(state.used_s(T0))  # the planned session is not counted against itself
+        return SessionResult(RECORDED, "scripted", T0, T0 + 200.0, 200.0, 13, {})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, SimClock(), threading.Event())
+    state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert seen == [0.0]
+    assert state.sessions == [[T0, T0 + 200.0]]

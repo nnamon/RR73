@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -162,10 +162,12 @@ def run_schedule(
             band = choose_band(receiver, request.bands, state, now)
             length_s = request.length_s if request.length_s is not None else receiver.session_s
             # Saved before connecting: if the process dies during the session, the next one still
-            # waits for a full session and a break.
+            # waits for a full session and a break, and the whole planned length counts towards
+            # the receiver's daily limit. The session itself sees the state without that entry.
             state.last_attempt_unix = now
             state.next_attempt_unix = now + length_s + receiver.break_s
-            state.save(state_path(receiver))
+            planned = replace(state, sessions=[*state.sessions, [now, now + length_s]])
+            planned.save(state_path(receiver))
             log.info("%s %s: session of up to %.0f s", receiver.id, band, length_s)
             result = runner(receiver, band, length_s, state)
             apply_outcome(receiver, state, result)
