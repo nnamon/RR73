@@ -20,7 +20,7 @@ const ERROR_RULES = [
   },
   {
     id: 'corporate',
-    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)?|streamlin\w*|dive into|deep dive)\b/gi,
+    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
     message: 'corporate verb; name the specific action',
   },
   {
