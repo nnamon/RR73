@@ -19,6 +19,7 @@ import numpy as np
 
 from rr73_kiwi.bands import PASSBAND_HZ
 from rr73_kiwi.kiwiclient import client as kc
+from rr73_kiwi.kiwiclient import wsclient
 from rr73_kiwi.politeness import ServerLimits
 
 SOCKET_TIMEOUT_S = 10.0
@@ -93,6 +94,33 @@ class _Client(kc.KiwiSDRStream):
         self._type = "SND"
         self._start_time = None
         self._connection = connection
+
+    def connect(self, host: str, port: int) -> None:
+        """Open the WebSocket with exactly one HTTP handshake.
+
+        kiwiclient's own connect follows 301, 307 and 308 replies in an unbounded loop, to any
+        host, without reading that host's /status. A redirect here ends the attempt instead.
+        """
+        self._stream_name = self._type
+        resource = f"/{self._options.ws_timestamp}/{self._type}"
+        sock = socket.create_connection((host, port), timeout=self._options.socket_timeout)
+        try:
+            location, status = kc.ClientHandshakeProcessor(sock, host, port).handshake(resource)
+            if status != "101":
+                raise StreamEnded("busy", f"the receiver is full and redirects to {location} (HTTP {status})")
+        except wsclient.ClientHandshakeError as exc:
+            sock.close()
+            raise StreamEnded("refused", f"the receiver refused the WebSocket: {exc}") from exc
+        except BaseException:
+            sock.close()
+            raise
+        self._socket = sock
+        request = kc.ClientRequest(sock)
+        request.ws_version = kc.mod_pywebsocket.common.VERSION_HYBI13
+        options = kc.StreamOptions()
+        options.mask_send = True
+        options.unmask_receive = False
+        self._stream = kc.Stream(request, options)
 
     def _setup_rx_params(self) -> None:
         # Sent once the receiver has reported its sample rate.

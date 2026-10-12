@@ -68,7 +68,7 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 - The user name is `RR73 corpus 9V1NE` (sent URL-encoded as `SET ident_user=`), and `/status` requests carry it in the User-Agent.
 - During a session the recorder reads `/status` every 2 minutes and ends the session when other listeners leave 1 channel or fewer free.
 - The receiver's own limits come from its configuration after connecting (`inactivity_timeout_mins`, `ip_limit_mins`). Sessions end 1 minute before the inactivity timeout. With a per-address daily limit, the recorder counts its connected time over 24 hours and stops starting sessions when less than 2 minutes would remain. The SARTS receiver reports a 90-minute inactivity timeout and no daily limit.
-- A receiver that closes a running session counts as an error, and a close that mentions a limit, timeout or kick gives a 6-hour wait. `too_busy`, a redirect or a password refusal counts as busy.
+- A receiver that closes a running session counts as an error, and a close that mentions a limit, timeout or kick gives a 6-hour wait. `too_busy`, a redirect or a password refusal counts as busy. The WebSocket opens with one HTTP handshake: a redirect ends the attempt, and rr73-kiwi never follows it to another host.
 - The next allowed attempt is saved before every connection in `corpus/kiwi/<receiver>/.rr73-kiwi-state`, so restarts keep the waits. A lock file in the same directory keeps a second process off the receiver; a lock whose heartbeat is over 3 minutes old is taken over.
 
 ## Audio and timing

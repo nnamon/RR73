@@ -27,3 +27,4 @@ def _load_client() -> types.ModuleType:
 
 
 client = _load_client()
+wsclient = importlib.import_module("kiwi.wsclient")
