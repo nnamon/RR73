@@ -31,7 +31,7 @@ pub trait Subtractor {
     /// Short name used in reports.
     fn name(&self) -> &'static str;
 
-    /// Subtracts `decodes` (from the pass just finished) from `audio` (12 kHz, slot start
+    /// Subtracts `decodes` (found by the pass that ended) from `audio` (12 kHz, slot start
     /// at sample 0).
     fn subtract(&self, layout: &FrameLayout, audio: &mut [f32], decodes: &[Decode]);
 }
