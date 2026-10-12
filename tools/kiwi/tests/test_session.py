@@ -13,8 +13,9 @@ from fake_kiwi import Behaviour, FakeKiwi
 from helpers import Stream
 
 from rr73_kiwi.config import BandWindow, Receiver
-from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, STOPPED, SessionContext, run_session
+from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, STOPPED, SessionContext, _CrowdWatch, run_session
 from rr73_kiwi.state import ReceiverState
+from rr73_kiwi.status import KiwiStatus, parse_status
 
 START = datetime(2026, 10, 13, 13, 14, 22, 300000, tzinfo=UTC).timestamp()
 
@@ -160,3 +161,19 @@ def test_a_stop_before_connecting_means_no_connection(tmp_path: Path) -> None:
         result = run_session(receiver(fake.port), "20m", 60.0, ReceiverState(), ctx)
     assert result.outcome == STOPPED
     assert fake.ws_connections == 0
+
+
+def test_the_crowd_watch_survives_a_failing_status_read() -> None:
+    calls: list[int] = []
+
+    def read(host: str, port: int) -> KiwiStatus:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("unexpected failure in the status reader")
+        return parse_status("users=12\nusers_max=13\n")
+
+    watch = _CrowdWatch(receiver(80), read, 0.01)
+    watch.start()
+    watch.join(2.0)
+    watch.done.set()
+    assert watch.crowded_by == "12 of 13 channels in use"

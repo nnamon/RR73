@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import http.client
 import urllib.error
 import urllib.request
 from collections.abc import Mapping
@@ -12,6 +13,7 @@ from rr73_kiwi import IDENT
 
 USER_AGENT = f"rr73-kiwi ({IDENT})"
 STATUS_TIMEOUT_S = 10.0
+MAX_STATUS_BYTES = 65536
 
 
 class StatusError(Exception):
@@ -65,10 +67,18 @@ def fetch_status(host: str, port: int, timeout_s: float = STATUS_TIMEOUT_S) -> K
     request = urllib.request.Request(f"http://{host}:{port}/status", headers={"User-Agent": USER_AGENT})
     try:
         with urllib.request.urlopen(request, timeout=timeout_s) as response:
-            body = response.read(65536)
+            body = response.read(MAX_STATUS_BYTES + 1)
+            # read(n) returns what arrived when the server closes early; length is what is missing.
+            missing = response.length
     except urllib.error.HTTPError as exc:
         raise StatusError(f"{host}:{port}/status returned HTTP {exc.code}") from None
     except (urllib.error.URLError, OSError) as exc:
         reason = getattr(exc, "reason", exc)
         raise StatusError(f"{host}:{port}/status is unreachable: {reason}") from None
+    except http.client.HTTPException as exc:
+        raise StatusError(f"{host}:{port}/status sent a broken HTTP reply: {type(exc).__name__}") from None
+    if len(body) > MAX_STATUS_BYTES:
+        raise StatusError(f"{host}:{port}/status is larger than {MAX_STATUS_BYTES // 1024} KiB")
+    if missing:
+        raise StatusError(f"{host}:{port}/status was cut short: {missing} bytes missing")
     return parse_status(body.decode("utf-8", errors="replace"))

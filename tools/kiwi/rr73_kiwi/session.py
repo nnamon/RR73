@@ -79,6 +79,10 @@ class _CrowdWatch(threading.Thread):
                 status = self._read(self._receiver.host, self._receiver.port)
             except StatusError:
                 continue
+            except Exception:
+                # The watch must outlive any failure, or a full receiver would go unnoticed.
+                log.exception("%s: reading /status during the session failed", self._receiver.id)
+                continue
             if crowded(status):
                 self.crowded_by = f"{status.users} of {status.users_max} channels in use"
                 return

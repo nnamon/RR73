@@ -161,3 +161,47 @@ def test_limits_from_the_receiver_configuration() -> None:
     assert limits == ServerLimits(inactivity_timeout_s=5400.0, ip_limit_s=None)
     assert ServerLimits.from_json(limits.to_json()) == limits
     assert ServerLimits.from_config({"inactivity_timeout_mins": True}) == ServerLimits()
+
+
+@contextmanager
+def raw_server(reply: bytes) -> Iterator[int]:
+    """A TCP server on 127.0.0.1 that sends reply to every connection and closes it."""
+    import socket
+
+    listener = socket.socket()
+    listener.bind(("127.0.0.1", 0))
+    listener.listen()
+    done = threading.Event()
+
+    def serve() -> None:
+        listener.settimeout(0.2)
+        while not done.is_set():
+            try:
+                conn, _ = listener.accept()
+            except OSError:
+                continue
+            with conn:
+                conn.recv(4096)
+                conn.sendall(reply)
+
+    thread = threading.Thread(target=serve, daemon=True)
+    thread.start()
+    try:
+        yield listener.getsockname()[1]
+    finally:
+        done.set()
+        thread.join()
+        listener.close()
+
+
+@pytest.mark.parametrize(
+    "reply",
+    [
+        b"HELLO WORLD\r\n\r\n",  # not HTTP: BadStatusLine
+        b"HTTP/1.1 200 OK\r\nContent-Length: 500\r\n\r\nusers=1\nusers_max=8\n",  # cut short: IncompleteRead
+        b"",  # closed without a reply: RemoteDisconnected
+    ],
+)
+def test_broken_http_replies_are_status_errors(reply: bytes) -> None:
+    with raw_server(reply) as port, pytest.raises(StatusError):
+        fetch_status("127.0.0.1", port)
