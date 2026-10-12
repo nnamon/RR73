@@ -317,11 +317,17 @@ fn unpack_rejects_reserved_types_and_bad_fields() {
         unpack(&std_payload(call, 0, NTOKENS + 5, 1, 0, 32_401, 1), &empty),
         invalid(Field::SuffixFlag)
     );
-    // A standard-callsign value that is no real callsign: "00" + "0" + "A", prefix without letter.
+    // A standard-callsign value with a letter after a space in the suffix: " K1 A ".
+    let gap = NTOKENS + MAX22 + ((((20 * 10 + 1) * 27) * 27 + 1) * 27);
+    assert_eq!(
+        unpack(&std_payload(gap, 0, call, 0, 0, 1, 1), &empty),
+        invalid(Field::Callsign)
+    );
+    // WSJT-X shows c28 layouts that are no real callsign as they are: "000A".
     let prefix_00 = NTOKENS + MAX22 + 36 * 10 * 27u128.pow(3) + 27 * 27;
     assert_eq!(
-        unpack(&std_payload(prefix_00, 0, call, 0, 0, 1, 1), &empty),
-        invalid(Field::Callsign)
+        unpack(&std_payload(prefix_00, 0, call, 0, 0, 1, 1), &empty).map(|m| m.to_string()),
+        Ok("000A K1ABC AA01".to_string())
     );
 
     // g15: 32 400 is unused, R before a word, reports above +99 dB.
