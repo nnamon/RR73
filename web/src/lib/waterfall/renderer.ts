@@ -92,6 +92,8 @@ export class WaterfallRenderer {
   private nextIndex = -1;
   /** Samples of real audio in the frame, up to DISPLAY_FFT. */
   private valid = 0;
+  /** Exact zeros in a row at the end of the frame. */
+  private zeroRun = 0;
   private history: Row[] = [];
   /** Rows drawn so far; a row's distance from the top is rowCount − 1 − its number. */
   private rowCount = 0;
@@ -169,6 +171,7 @@ export class WaterfallRenderer {
         // The frame holds audio from before the break; a row across it would smear.
         this.frame.fill(0);
         this.valid = 0;
+        this.zeroRun = 0;
         this.sinceRow = 0;
       }
       this.anchor = { index, utcMs };
@@ -180,22 +183,40 @@ export class WaterfallRenderer {
       const n = Math.min(samples.length - at, this.hop - this.sinceRow, DISPLAY_FFT);
       this.frame.copyWithin(0, n);
       this.frame.set(samples.subarray(at, at + n), DISPLAY_FFT - n);
+      this.countValid(samples, at, n);
       at += n;
       this.sinceRow += n;
-      this.valid = Math.min(DISPLAY_FFT, this.valid + n);
       if (this.sinceRow >= this.hop) {
         this.sinceRow = 0;
-        // Only full frames of audio: a window that starts in silence splatters across every bin.
-        if (this.valid < DISPLAY_FFT) continue;
-        this.spectrum.compute(this.frame, this.db);
         // The row shows the window's centre.
         const t = t0 + ((at - DISPLAY_FFT / 2) / DISPLAY_RATE) * 1000;
+        // Only full frames of audio get a spectrum: a window that starts in silence splatters
+        // across every bin. Until then the row is blank, so the time scale keeps moving.
+        if (this.valid < DISPLAY_FFT) {
+          rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+          continue;
+        }
+        this.spectrum.compute(this.frame, this.db);
         rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
       }
     }
     if (!rows.length) return null;
     this.draw(rows);
     return this.info();
+  }
+
+  /**
+   * Counts the samples of real audio at the end of the frame. A run of 32 or more exact zeros is
+   * digital silence (resampled audio is never exactly 0 for that long), such as the start of a
+   * stream, and does not count.
+   */
+  private countValid(samples: Float32Array, from: number, n: number) {
+    for (let i = from; i < from + n; i++) {
+      if (samples[i] === 0) {
+        if (++this.zeroRun >= 32) this.valid = 0;
+      } else this.zeroRun = 0;
+      if (this.valid < DISPLAY_FFT) this.valid++;
+    }
   }
 
   /** Positions of the slot boundaries on screen. */

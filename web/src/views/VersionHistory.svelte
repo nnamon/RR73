@@ -35,7 +35,7 @@
   {#each releases as r (r.version)}
     <div class="section">
       <h2 class="section-head release" id="v{r.version}" tabindex="-1">
-        <span class="ver">{r.version}</span>{#if r.date}<span class="date"> · {longDate(r.date)}</span>{/if}
+        <span class="ver">{r.version}</span>{#if r.date}{' '}<span class="date">· {longDate(r.date)}</span>{/if}
         {#if r.version === __APP_VERSION__}<span class="current">This version</span>{/if}
       </h2>
       <ul class="group entries">

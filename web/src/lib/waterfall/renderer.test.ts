@@ -174,6 +174,25 @@ describe('WaterfallRenderer', () => {
     expect(all).toBeLessThan(typical * 1.3);
   });
 
+  it('treats digital silence at the start of a stream as no audio, so tones arriving after it leave no streak', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 400);
+    const x = new Float32Array(4 * 12000);
+    x.set(signal(3.5, [700, 1300, 1900, 2600], 1, 0.001), 6000);
+    const info = feed(r, x, T0)!;
+    const rows = Math.round(4000 / info.rowMs);
+    expect(brightestRow(ctx, 0, rows + 2)).toBeLessThan(brightestRow(ctx, 2, 6) * 1.3);
+  });
+
+  it('keeps scrolling through digital silence with blank rows', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 400);
+    const info = feed(r, new Float32Array(12 * 12000), T0)!;
+    expect(info.newestUtcMs).toBeGreaterThan(T0 + 11500);
+    expect(info.boundaries.map((b) => b.utcMs)).toEqual([Date.UTC(2026, 9, 13, 13, 15, 0)]);
+    expect(ctx.pixel(150, 3).slice(0, 3)).toEqual([4, 6, 10]);
+  });
+
   it('starts a fresh frame after a break without a streak', () => {
     const ctx = new FakeContext();
     const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 400);

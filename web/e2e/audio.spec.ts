@@ -94,3 +94,41 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   expect(alias).toBeLessThan(0.05 / 100);
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-save-slot.png` });
 });
+
+test('a hidden page stops audio, says when, and a tap resumes it', async ({ page }) => {
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(3000);
+
+  // iOS stops the microphone in the background; RR73 stops capture when the page is hidden.
+  const before = await page.evaluate(() => Date.now());
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const banner = page.getByRole('status').filter({ hasText: 'Audio stopped at' });
+  await expect(banner).toBeVisible();
+  const text = (await banner.locator('.t').textContent())!;
+  const m = /^Audio stopped at (\d\d):(\d\d):(\d\d)$/.exec(text);
+  expect(m).not.toBeNull();
+  const d = new Date(before);
+  const stopped = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), Number(m![1]), Number(m![2]), Number(m![3]));
+  expect(Math.abs(stopped - before)).toBeLessThan(2000);
+  await expect(banner).toContainText('RR73 left the screen');
+  await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', 'No audio');
+  await expect(page.getByText(/^No audio since \d\d:\d\d:\d\d$/)).toBeVisible();
+
+  // Visible again: still stopped until a tap.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await page.waitForTimeout(1000);
+  await expect(banner).toBeVisible();
+  await page.screenshot({ path: `${SHOTS}/mic-chromium-light-audio-stopped.png` });
+
+  await banner.getByRole('button', { name: 'Resume audio' }).click();
+  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/, { timeout: 10_000 });
+});
