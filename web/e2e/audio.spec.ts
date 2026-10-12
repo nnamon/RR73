@@ -40,8 +40,9 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   const level = Number(await meter.getAttribute('aria-valuenow'));
   expect(level).toBeGreaterThan(-40);
   expect(level).toBeLessThan(0);
+  // The bar animates its width over 80 ms, so poll it.
   const bar = meter.locator('b');
-  expect((await bar.boundingBox())!.width).toBeGreaterThan(5);
+  await expect.poll(async () => (await bar.boundingBox())?.width ?? 0).toBeGreaterThan(5);
 
   // The waterfall shows energy at the tone frequencies, and none where the 13 kHz probe would alias.
   await page.waitForTimeout(8000);

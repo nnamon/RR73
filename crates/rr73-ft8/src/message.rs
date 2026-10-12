@@ -14,7 +14,33 @@
 //! | 4 | [`Message::NonStandard`], [`Message::NonStandardCq`] | `<W9XYZ> PJ4/K1ABC RRR` | h12 c58 h1 r2 c1 |
 //! | 5 | [`Message::EuVhf`] | `<G4ABC> <PA9XYZ> R 570007 JO22DB` | h12 h22 R1 r3 s11 g25 |
 //!
-//! Types 0.2, 0.6, 0.7, 6 and 7 are reserved; [`unpack`] rejects them.
+//! Types 0.2, 0.6, 0.7, 6 and 7 are reserved; [`unpack`] rejects them. WSJT-X 2.7.0-rc3 shows
+//! type 0.6 as a WSPR-style `CALL GRID dBm` message; rr73-ft8 does not decode it (Unverified
+//! layout: its variants with compound callsigns are not known).
+//!
+//! # WSJT-X
+//!
+//! The codec follows WSJT-X 2.7.0-rc3 where QEX and WSJT-X differ, because WSJT-X sets what
+//! other stations send and display. `fixtures/ft8/wsjtx.json` (ft8sim) and
+//! `fixtures/ft8/wsjtx_decodes.json` (jt9 decoding rr73-ft8 signals) pin each case:
+//!
+//! - Reports run from −50 to +50 dB (QEX: −30 to +99); see [`Report`].
+//! - Field Day sections are numbered from 1 and use WSJT-X's current list (QEX: from 0, an
+//!   older list); classes run from A to H (QEX: A to F); see [`ArrlSection`].
+//! - RR73 is sent as the locator RR73, and `R RR73` sets R1 with it.
+//! - CQ carries only a locator, RR73 or nothing, from a callsign sent in full.
+//! - Telemetry is shown without leading zeros, and any single word of 1 to 18 hexadecimal
+//!   digits other than `DE` is telemetry.
+//! - Standard callsigns have no 3DA0 or 3X prefix substitution.
+//! - RTTY Roundup serial numbers run from 1 to 7999.
+//!
+//! Where WSJT-X changes what the operator typed, [`Message::parse`] returns an error or keeps
+//! the text: WSJT-X truncates long free text to 13 characters, rounds odd DXpedition reports,
+//! wraps reports above +50, clamps serial numbers, drops a compound prefix or suffix from an
+//! unbracketed callsign (`PJ4/K1ABC W9XYZ -05` becomes `K1ABC W9XYZ -05`), drops R before RRR,
+//! 73 or a separate report word, and drops the report from `R2RFE/P <EA8/G5LSI> R+12`. WSJT-X
+//! also refuses hashed callsigns in DXpedition, Field Day and RTTY Roundup messages, which its
+//! jt9 decodes; rr73-ft8 packs them.
 //!
 //! # Callsigns
 //!
@@ -34,31 +60,34 @@
 //! which parses back to the same message with these exceptions: messages with an unknown
 //! hash (`<...>`); type 4 messages whose full callsign is a standard one (their text parses
 //! as type 1); free text with runs of spaces; and free text shaped like another message, such
-//! as `K1ABC W9XYZ`.
+//! as `K1ABC W9XYZ` or `CAFE` (telemetry).
 //!
 //! # Packing
 //!
 //! [`pack`] and [`unpack`] are exact inverses: `unpack(pack(m)) == m` for every message that
 //! packs, given the hash table that `pack` updated, and `pack(unpack(p)) == p` for every
-//! payload that unpacks, except for the forms below. `unpack` accepts them and `pack` writes
-//! the canonical form given in brackets: the form the on-air transmissions in
-//! `fixtures/ft8/onair.json` use. Unverified against a WSJT-X binary.
+//! payload that unpacks, except for the forms below. `unpack` accepts them, showing what
+//! WSJT-X 2.7.0-rc3 shows, and `pack` writes the canonical form given in brackets.
 //!
 //! - RR73 as g15 value 32 403, the value in the public protocol description and ft8_lib
-//!   (32 373, the locator RR73: all 66 RR73 messages in the recordings use it).
-//! - Free text padded on the right, as ft8_lib sends it (right-justified in 13 characters,
-//!   as in the public protocol description).
+//!   (32 373, the locator RR73, as WSJT-X and all 66 RR73 messages in
+//!   `fixtures/ft8/onair.json` send it).
+//! - R before a blank, RRR or 73, which WSJT-X ignores (R1 clear).
+//! - Report codes 106 to 186, which WSJT-X reads as −30 to +50 (codes 5 to 85).
+//! - Free text padded on the right, as ft8_lib sends it (right-justified in 13 characters).
 //! - A type 4 callsign padded on the right, as one station in the recordings sends it
-//!   (right-justified in 11 characters, as ft8_lib and all other stations send it).
+//!   (right-justified in 11 characters, as WSJT-X, ft8_lib and all other stations send it).
 //! - A type 4 CQ whose h12 field is not the 12-bit hash of its callsign, such as ft8_lib's
-//!   zero, or whose h1 flag is set (h12 holds the hash and h1 is 0; QEX says receivers
-//!   ignore h12 in a CQ).
+//!   zero (the hash, as WSJT-X sends it; QEX says receivers ignore h12 in a CQ).
 //! - Type 2 without a /P flag (type 1).
 //! - Nonzero bits 77 to 79 (zero).
 //!
-//! `unpack` rejects values that no encoder produces: unused token values, malformed standard
-//! callsigns, a /R or /P flag on a word or hash, R before RRR, RR73, 73 or a blank, and
-//! values beyond the end of each table.
+//! `unpack` rejects what WSJT-X 2.7.0-rc3 shows no text for, and values no encoder produces:
+//! unused token values, a /R or /P flag on a word or hash, CQ with anything but a locator, RR73
+//! (as 32 373) or nothing, R before RR73 sent as 32 403, RTTY Roundup serial number 0, a type
+//! 4 CQ with a reply or the h1 flag, and values beyond the end of each table. It also rejects
+//! two forms WSJT-X shows: report codes from 187 (reports above +50, which no encoder sends)
+//! and CQ, QRZ or DE as the second callsign, which the model has no place for.
 
 mod bits;
 mod callsign;
@@ -214,9 +243,15 @@ pub enum PackError {
     /// Not a 4-character (or 6-character) locator, or the locator RR73.
     #[error("{0} is not a locator FT8 can send")]
     InvalidGrid(String),
-    /// A report outside −30 to +99 dB.
-    #[error("report {0} dB is outside -30 to +99 dB")]
+    /// A report outside −50 to +50 dB.
+    #[error("report {0} dB is outside -50 to +50 dB")]
     ReportOutOfRange(i32),
+    /// CQ with something other than a locator, RR73 or nothing after the callsign.
+    #[error("{0} cannot follow CQ: CQ carries a locator, RR73 or nothing")]
+    CqExchange(Exchange),
+    /// CQ from a hashed callsign. A nonstandard callsign calls CQ as `CQ PJ4/K1ABC`.
+    #[error("CQ cannot carry a hashed callsign; send CQ with the callsign in full")]
+    HashedCq,
     /// A DXpedition report that is odd or above +32 dB.
     #[error("DXpedition report {0} dB must be even, from -30 to +32 dB")]
     DxpeditionReport(i8),
@@ -226,8 +261,8 @@ pub enum PackError {
     /// Field Day transmitters outside 1 to 32.
     #[error("{0} transmitters is outside 1 to 32")]
     Transmitters(u8),
-    /// A Field Day class other than A to F.
-    #[error("Field Day class {0} is not A to F")]
+    /// A Field Day class other than A to H.
+    #[error("Field Day class {0} is not A to H")]
     InvalidFieldDayClass(char),
     /// An ARRL or RAC section not in the list.
     #[error("{0} is not an ARRL or RAC section")]
@@ -235,11 +270,13 @@ pub enum PackError {
     /// A state or province abbreviation not in the list.
     #[error("{0} is not a US state or Canadian province")]
     UnknownStateProvince(String),
-    /// A serial number above the field's maximum.
-    #[error("serial number {serial} is above {max}")]
+    /// A serial number outside the field's range.
+    #[error("serial number {serial} is outside {min} to {max}")]
     SerialOutOfRange {
         /// The serial number.
         serial: u16,
+        /// Lowest serial number of the field.
+        min: u16,
         /// Highest serial number of the field.
         max: u16,
     },
@@ -272,20 +309,19 @@ pub enum Field {
     Grid,
     /// A report outside its range.
     Report,
-    /// R before RRR, RR73, 73 or a blank.
+    /// R before RR73 sent as g15 value 32 403.
     Acknowledgement,
+    /// CQ with a report, R, RRR, 73 or RR73 sent as 32 403, or from a hashed callsign; or a
+    /// type 4 CQ with a reply or the h1 flag.
+    Cq,
     /// Free text of 42^13 or more, or only spaces.
     FreeText,
-    /// Field Day class code 6 or 7.
-    FieldDayClass,
-    /// ARRL section code 84 or above.
+    /// ARRL section code 0 or above 86.
     Section,
-    /// RTTY Roundup exchange 8000 or above 8065.
+    /// RTTY Roundup exchange 0, 8000 or above 8065.
     RoundupExchange,
     /// 6-character locator code beyond RR99XX.
     Grid6,
-    /// RRR, RR73 or 73 in a type 4 CQ.
-    Reply,
 }
 
 impl fmt::Display for Field {
@@ -297,11 +333,10 @@ impl fmt::Display for Field {
             Field::Report => "report",
             Field::Acknowledgement => "acknowledgement",
             Field::FreeText => "free text",
-            Field::FieldDayClass => "Field Day class",
             Field::Section => "section",
             Field::RoundupExchange => "Roundup exchange",
             Field::Grid6 => "6-character locator",
-            Field::Reply => "reply",
+            Field::Cq => "CQ",
         })
     }
 }

@@ -244,7 +244,7 @@ fn grid(rng: &mut Rng) -> Grid {
 }
 
 fn report(rng: &mut Rng) -> Report {
-    Report::new(rng.below(130) as i32 - 30).expect("in range")
+    Report::new(rng.below(101) as i32 - 50).expect("in range")
 }
 
 fn strength(rng: &mut Rng) -> SignalStrength {
@@ -276,7 +276,7 @@ fn random_message(rng: &mut Rng) -> Message {
             de: station28(rng),
             ack: rng.coin(),
             transmitters: 1 + rng.below(32) as u8,
-            class: FieldDayClass::from_letter(char::from(b'A' + rng.below(6) as u8)).expect("A to F"),
+            class: FieldDayClass::from_letter(char::from(b'A' + rng.below(8) as u8)).expect("A to H"),
             section: ArrlSection::new(rng.pick(&["AB", "EMA", "DX", "SCV", "WWA", "ONE", "PR", "VI"]))
                 .expect("listed"),
         },
@@ -301,7 +301,24 @@ fn random_message(rng: &mut Rng) -> Message {
                 2 => *rng.pick(&[Addressee::Qrz, Addressee::De]),
                 _ => Addressee::Station(station_flagged(rng, suffix)),
             };
-            let exchange = match rng.below(6) {
+            if let Addressee::Cq { .. } = to {
+                // CQ carries a locator, RR73 or nothing, from a callsign in full.
+                let exchange = match rng.below(3) {
+                    0 => Exchange::Blank,
+                    1 => Exchange::Grid {
+                        grid: grid(rng),
+                        ack: false,
+                    },
+                    _ => Exchange::Rr73,
+                };
+                let de = loop {
+                    if let Station::Call(c) = station_flagged(rng, suffix) {
+                        break Station::Call(c);
+                    }
+                };
+                return Message::Standard { to, de, exchange };
+            }
+            let exchange = match rng.below(7) {
                 0 => Exchange::Blank,
                 1 => Exchange::Grid {
                     grid: grid(rng),
@@ -313,6 +330,7 @@ fn random_message(rng: &mut Rng) -> Message {
                 },
                 3 => Exchange::Rrr,
                 4 => Exchange::Rr73,
+                5 => Exchange::AckRr73,
                 _ => Exchange::SeventyThree,
             };
             Message::Standard {
@@ -328,7 +346,7 @@ fn random_message(rng: &mut Rng) -> Message {
             ack: rng.coin(),
             report: strength(rng),
             exchange: if rng.coin() {
-                RoundupExchange::Serial(rng.below(8000) as u16)
+                RoundupExchange::Serial(1 + rng.below(7999) as u16)
             } else {
                 RoundupExchange::State(
                     StateProvince::new(rng.pick(&["AL", "DC", "PEI", "NWT", "MA", "QC"])).expect("listed"),
