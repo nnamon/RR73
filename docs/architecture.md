@@ -107,6 +107,9 @@ SlotAudio (12 kHz f32, start time, mode)
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
+| `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
+| `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
+| `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/state` | Settings and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
 
