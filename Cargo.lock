@@ -392,6 +392,8 @@ name = "rr73-dsp"
 version = "0.1.0"
 dependencies = [
  "rustfft",
+ "serde",
+ "thiserror",
 ]
 
 [[package]]
