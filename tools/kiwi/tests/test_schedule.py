@@ -8,9 +8,11 @@ from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from rr73_kiwi.config import BandWindow, Receiver
 from rr73_kiwi.schedule import EXIT_DONE, EXIT_STOPPED, Request, run_schedule
-from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, SessionResult
+from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, REFUSED, SessionResult
 from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, ReceiverState, receiver_dir
 
 T0 = datetime(2026, 10, 13, 21, 0, tzinfo=UTC).timestamp()
@@ -168,3 +170,20 @@ def test_a_crash_during_a_session_leaves_a_full_session_and_break_before_the_nex
     state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
     assert state.next_attempt_unix >= T0 + CLUB.session_s + CLUB.break_s
     assert not (receiver_dir(tmp_path, CLUB.id) / LOCK_NAME).exists()
+
+
+@pytest.mark.parametrize("outcome", [ERROR, REFUSED, BUSY])
+def test_any_session_that_held_a_channel_is_followed_by_the_break(tmp_path: Path, outcome: str) -> None:
+    clock = SimClock()
+    attempts: list[float] = []
+
+    def runner(receiver, band, length_s, state, *_) -> SessionResult:
+        attempts.append(clock.now())
+        start = clock.now()
+        clock.t += 300.0  # held the channel for 5 minutes, then the network failed
+        result = outcome if len(attempts) == 1 else RECORDED
+        return SessionResult(result, "network error", start, clock.now(), 300.0, 10, {"receiver": receiver.id})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
+    assert attempts[1] - attempts[0] >= 300.0 + CLUB.break_s

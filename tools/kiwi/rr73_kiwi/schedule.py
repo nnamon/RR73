@@ -101,6 +101,9 @@ def apply_outcome(receiver: Receiver, state: ReceiverState, result: SessionResul
         wait = backoff_s(rules, state.failures)
     else:
         raise ValueError(f"unknown session outcome {result.outcome!r}")
+    if result.connected_s > 0:
+        # A session that held a channel is followed by the break, however it ended.
+        wait = max(wait, receiver.break_s)
     state.next_attempt_unix = max(end + wait, state.last_attempt_unix + rules.min_attempt_gap_s)
 
 
