@@ -144,6 +144,8 @@ def run_session(
         if "assembler" in holder:
             holder["assembler"].add(seq, samples, gps, arrival)
 
+    if ctx.stop.is_set():
+        return result(STOPPED, "stopped before connecting")
     connection = IqConnection(receiver.host, receiver.port, dial, IDENT, on_frame, on_rate, ctx.now)
     watch = _CrowdWatch(receiver, ctx.status_reader, ctx.status_poll_s)
     outcome, detail = RECORDED, ""

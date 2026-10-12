@@ -13,7 +13,7 @@ from fake_kiwi import Behaviour, FakeKiwi
 from helpers import Stream
 
 from rr73_kiwi.config import BandWindow, Receiver
-from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, SessionContext, run_session
+from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, STOPPED, SessionContext, run_session
 from rr73_kiwi.state import ReceiverState
 
 START = datetime(2026, 10, 13, 13, 14, 22, 300000, tzinfo=UTC).timestamp()
@@ -151,3 +151,12 @@ def test_a_session_never_runs_past_its_length(tmp_path: Path) -> None:
     # The fake's clock runs ahead of the client by the frames in the socket buffers, up to 3 s.
     assert result.connected_s <= 60.0 + 3.0
     assert "session length" in result.detail
+
+
+def test_a_stop_before_connecting_means_no_connection(tmp_path: Path) -> None:
+    with FakeKiwi(Stream(start_unix=START)) as fake:
+        ctx = SessionContext(corpus_root=tmp_path, stop=threading.Event(), ntp_server=None, now=fake.now)
+        ctx.stop.set()  # SIGTERM during the status check
+        result = run_session(receiver(fake.port), "20m", 60.0, ReceiverState(), ctx)
+    assert result.outcome == STOPPED
+    assert fake.ws_connections == 0
