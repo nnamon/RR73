@@ -67,6 +67,7 @@ class ReceiverState:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(asdict(self), out, indent=2)
             out.write("\n")
+        os.chmod(tmp, 0o644)  # mkstemp creates 0600
         os.replace(tmp, path)
 
 

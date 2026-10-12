@@ -14,6 +14,7 @@ from rr73_kiwi.config import Receiver
 from rr73_kiwi.slots import OUT_RATE_HZ, Slot
 
 SIDECAR_FORMAT = "rr73-slot/1"
+FILE_MODE = 0o644
 
 
 def utc(unix_s: float) -> datetime:
@@ -57,6 +58,7 @@ def _atomic_write(path: Path, write: Callable[[Path], None]) -> None:
     os.close(fd)
     try:
         write(Path(tmp))
+        os.chmod(tmp, FILE_MODE)  # mkstemp creates 0600
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)

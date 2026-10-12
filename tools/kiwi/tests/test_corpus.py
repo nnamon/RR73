@@ -86,3 +86,9 @@ def test_wrong_sample_count_is_refused(tmp_path: Path) -> None:
 def test_stems_follow_wsjtx_naming() -> None:
     assert slot_stem(START) == "261013_131415"
     assert slot_stem(int(datetime(2027, 1, 2, 3, 4, 45, tzinfo=UTC).timestamp())) == "270102_030445"
+
+
+def test_slot_files_are_readable_by_everyone(tmp_path: Path) -> None:
+    written = write_slot(tmp_path, SARTS, 14_074_000, slot())
+    assert written.stat().st_mode & 0o777 == 0o644
+    assert written.with_suffix(".json").stat().st_mode & 0o777 == 0o644

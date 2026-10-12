@@ -293,3 +293,11 @@ def test_real_jt9_decodes_a_simulated_slot(tmp_path: Path) -> None:
     assert result["tool"].startswith("jt9 ") and result["tool"].endswith(" -8 -d 3")
     [decode] = result["decodes"]
     assert decode["text"] == "CQ 9V1NE OJ11" and abs(decode["freq_hz"] - 1500) <= 1 and abs(decode["dt_s"]) <= 0.1
+
+
+def test_rewritten_sidecar_keeps_its_file_mode(tmp_path: Path, fake_jt9: Path, version_file: Path) -> None:
+    wav = make_slot(tmp_path / "slots", "261013_131415")
+    sidecar = wav.with_suffix(".json")
+    sidecar.chmod(0o644)
+    assert reference.main(["--jt9", str(fake_jt9), str(wav)]) == 0
+    assert sidecar.stat().st_mode & 0o777 == 0o644

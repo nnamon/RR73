@@ -194,11 +194,13 @@ def with_reference(sidecar: dict, tool: str, decodes: Iterable[Decode]) -> dict:
 
 def write_json_atomic(path: Path, data: dict) -> None:
     """Write JSON through a temporary file in the same directory, then rename it into place."""
+    mode = path.stat().st_mode & 0o777 if path.exists() else 0o644
     fd, tmp = tempfile.mkstemp(prefix=f".{path.stem}.", suffix=".tmp", dir=path.parent)
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as out:
             json.dump(data, out, indent=2, ensure_ascii=False)
             out.write("\n")
+        os.chmod(tmp, mode)  # mkstemp creates 0600; keep the sidecar's own mode
         os.replace(tmp, path)
     except BaseException:
         Path(tmp).unlink(missing_ok=True)
