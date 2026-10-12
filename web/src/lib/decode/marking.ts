@@ -1,7 +1,7 @@
 /**
  * Decode row marking as in WSJT-X: a 4 px bar, a tint and the callsign in bold.
+ * - me: a message containing my callsign (red), the other station in bold. It wins over cq;
  * - cq: a CQ call (green), the calling station in bold;
- * - me: a message to my callsign (red), the sender in bold;
  * - sent: a message I transmitted (amber), the other station in bold.
  */
 
@@ -37,9 +37,13 @@ export interface TextParts {
   after: string;
 }
 
-/** A token that can be a callsign: letters and digits with at least one of each, or a hashed call. */
+/**
+ * A token that can be a callsign: letters and digits with at least one of each, or a hashed
+ * call. Two letters A to R and two digits is a grid square (or RR73), never a callsign.
+ */
 export function looksLikeCall(token: string): boolean {
   if (/^<.+>$/.test(token)) return true;
+  if (/^[A-R]{2}\d{2}$/.test(token)) return false;
   return /^[A-Z0-9/]{3,13}$/.test(token) && /[A-Z]/.test(token) && /\d/.test(token);
 }
 
@@ -59,11 +63,18 @@ export function markDecode(decode: Decode, myCall: string, sent = false): { mark
   const tokens = decode.text.trim().split(/\s+/);
   const me = myCall.trim().toUpperCase();
   if (sent) return { mark: 'sent', key: tokens[0] ?? null };
+  const mine = me ? tokens.findIndex((t) => looksLikeCall(t) && sameStation(t, me)) : -1;
+  if (mine >= 0) {
+    // The other station: the callsign beside mine, before it for "CALL MINE ...", after it for
+    // "MINE CALL ...".
+    const others = tokens.filter((t, i) => i !== mine && t !== 'CQ' && looksLikeCall(t) && !sameStation(t, me));
+    const key = mine === 0 ? (tokens[1] ?? null) : (others[0] ?? null);
+    return { mark: 'me', key: key && !sameStation(key, me) ? key : null };
+  }
   if (tokens[0] === 'CQ') {
     const key = tokens.slice(1).find(looksLikeCall) ?? null;
     return { mark: 'cq', key };
   }
-  if (me && tokens.length >= 2 && sameStation(tokens[0], me)) return { mark: 'me', key: tokens[1] };
   return { mark: null, key: null };
 }
 
