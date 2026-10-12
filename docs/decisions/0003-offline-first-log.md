@@ -8,7 +8,7 @@ SOTA and POTA activations often have no phone signal. Wavelog is optional, and o
 
 ## Decision
 
-The log in IndexedDB is the record. Each destination (Wavelog, ADIF, POTA, SOTA, WWFF files, later relay-backed services) is an adapter with a transport: direct, relay or file. A delivery ledger holds one state per QSO and destination: waiting, delivered, refused, changed, file ready, submitted, not needed.
+The log in IndexedDB is the record. Each destination (Wavelog, ADIF, POTA, SOTA, WWFF files, later relay-backed services) is an adapter with a transport: direct, relay or file. A delivery ledger holds one state per QSO and destination: waiting, delivered, refused, changed, file ready, submitted, or not needed.
 
 ## Consequences
 

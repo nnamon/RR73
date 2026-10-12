@@ -30,6 +30,14 @@ docker compose run --rm kiwi record --help                   # corpus recorder
 - GPL code (WSJT-X and its forks, JTDX, MSHV, Decodium, PyFT8, ft8ts, mfsk-core, webft8) is never read or copied. WSJT-X binaries may be run as a reference. ft8_lib (MIT) may be ported with attribution in the file header.
 - RR73 never allows unattended operation: Tx and Run start by hand, and the watchdog always runs for QSO modes.
 
+## Branches and releases
+
+- Work on short-lived branches. A branch merges to `main` when CI is green: Rust, the decoder gate, web checks, end-to-end tests and the copy lint.
+- Versions follow semantic versioning, at 0.x until the app is ready for operating. One version covers the app and the crates: `Cargo.toml` `[workspace.package]` and `web/package.json`, kept equal by `tools/release/version.mjs check` in CI.
+- Every user-visible change adds a line under `## Unreleased` in `CHANGELOG.md`, in the style guide's voice. The app shows the file as Version history.
+- Release often: every merge that changes the app or the decoder is followed by a release. Patch for fixes, minor for features.
+- `tools/release/release.sh patch|minor|x.y.z` on an up-to-date `main` dates the changelog, bumps both versions, commits, tags `v<version>`, pushes, and publishes the GitHub release with the changelog entries. The tag deploys the app to GitHub Pages.
+
 ## Code
 
 - Rust: stable toolchain from `rust-toolchain.toml`, `cargo fmt`, `clippy -D warnings`, no `unsafe`, no panics on input data. Public items carry doc comments that state units (Hz, s, dB, samples at 12 kHz).

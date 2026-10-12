@@ -1,0 +1,4 @@
+#!/bin/sh
+# Checks the commit message against the style guide. Enable with:
+#   git config core.hooksPath tools/git-hooks
+exec docker compose run --rm -T node node tools/lint-copy/lint-copy.mjs --commit-msg "$1"
