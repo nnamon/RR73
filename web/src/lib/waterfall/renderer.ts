@@ -1,0 +1,304 @@
+/**
+ * Draws the waterfall: newest time at the top, 0 to 3000 Hz across, one device pixel per row.
+ * Runs in the waterfall worker on an OffscreenCanvas, or on the main thread where
+ * OffscreenCanvas is missing; both use this class.
+ *
+ * The visible height covers about 45 s (three FT8 slots), so the row period follows the canvas
+ * height. A slot boundary paints a hairline into the row that contains it. When audio stops and
+ * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
+ */
+
+import { buildLut, type WaterfallPalette } from './colormap';
+import { LevelMapper } from './levels';
+import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
+import { SLOT_MS, type Mode } from '../clock/slots';
+
+/** The parts of a 2D context the renderer uses, shared by canvas and OffscreenCanvas. */
+export type Context2D = Pick<CanvasRenderingContext2D, 'drawImage' | 'putImageData' | 'createImageData' | 'fillRect'> & {
+  fillStyle: unknown;
+  canvas: { width: number; height: number };
+};
+
+export interface Boundary {
+  /** Slot start, UTC ms. */
+  utcMs: number;
+  /** Rows from the top of the canvas, device pixels. */
+  y: number;
+}
+
+export interface FrameInfo {
+  /** Slot boundaries on screen, newest first. */
+  boundaries: Boundary[];
+  /** Time of the top row, UTC ms. */
+  newestUtcMs: number;
+  /** Row period, ms. */
+  rowMs: number;
+}
+
+/** Visible span of the waterfall, s. */
+export const VISIBLE_S = 45;
+/** A jump of more than this between chunks is a gap in the audio, ms. */
+const GAP_MS = 150;
+
+interface Row {
+  levels: Uint8Array;
+  utcMs: number;
+  blank: boolean;
+}
+
+/** For each pixel column, the bins it covers. */
+interface Column {
+  i0: number;
+  i1: number;
+  frac: number;
+  peak: boolean;
+}
+
+export function columns(width: number): Column[] {
+  const out: Column[] = [];
+  for (let x = 0; x < width; x++) {
+    const b0 = ((x * MAX_HZ) / width) / BIN_HZ;
+    const b1 = (((x + 1) * MAX_HZ) / width) / BIN_HZ;
+    if (b1 - b0 >= 1) {
+      out.push({ i0: Math.floor(b0), i1: Math.min(DISPLAY_BINS - 1, Math.ceil(b1) - 1), frac: 0, peak: true });
+    } else {
+      const c = (b0 + b1) / 2;
+      const i0 = Math.min(DISPLAY_BINS - 2, Math.floor(c));
+      out.push({ i0, i1: i0 + 1, frac: c - i0, peak: false });
+    }
+  }
+  return out;
+}
+
+export class WaterfallRenderer {
+  private ctx: Context2D;
+  private width = 0;
+  private height = 0;
+  private mode: Mode;
+  private lut: Uint8ClampedArray;
+  private readonly palette: WaterfallPalette;
+  private cols: Column[] = [];
+  private hop = 1000;
+  private readonly spectrum = new DisplaySpectrum();
+  private readonly mapper = new LevelMapper();
+  private readonly db = new Float32Array(DISPLAY_BINS);
+  /** The newest DISPLAY_FFT samples. */
+  private readonly frame = new Float32Array(DISPLAY_FFT);
+  private sinceRow = 0;
+  /** UTC of the sample after the last one received, ms. */
+  private expectedUtc: number | null = null;
+  /** Sample index and UTC the row times are counted from. */
+  private anchor: { index: number; utcMs: number } | null = null;
+  private nextIndex = -1;
+  /** Samples of real audio in the frame, up to DISPLAY_FFT. */
+  private valid = 0;
+  private history: Row[] = [];
+  /** Rows drawn so far; a row's distance from the top is rowCount − 1 − its number. */
+  private rowCount = 0;
+  private marks: { utcMs: number; row: number }[] = [];
+  private lastRowUtc: number | null = null;
+
+  constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
+    this.ctx = ctx;
+    this.palette = palette;
+    this.mode = mode;
+    this.lut = buildLut(palette.stops);
+    this.resize(width, height);
+  }
+
+  /** Row period, ms. */
+  get rowMs(): number {
+    return (this.hop / DISPLAY_RATE) * 1000;
+  }
+
+  setMode(mode: Mode) {
+    this.mode = mode;
+    this.redraw();
+  }
+
+  /** Sets the canvas size in device pixels and redraws the history. */
+  resize(width: number, height: number) {
+    this.width = Math.max(1, Math.round(width));
+    this.height = Math.max(1, Math.round(height));
+    this.ctx.canvas.width = this.width;
+    this.ctx.canvas.height = this.height;
+    this.cols = columns(this.width);
+    this.hop = Math.max(64, Math.round((VISIBLE_S * DISPLAY_RATE) / this.height));
+    this.history = this.history.slice(-this.height);
+    this.redraw();
+  }
+
+  /** Clears the picture and the history. */
+  clear() {
+    this.history = [];
+    this.marks = [];
+    this.rowCount = 0;
+    this.lastRowUtc = null;
+    this.expectedUtc = null;
+    this.anchor = null;
+    this.nextIndex = -1;
+    this.frame.fill(0);
+    this.valid = 0;
+    this.sinceRow = 0;
+    this.mapper.reset();
+    this.redraw();
+  }
+
+  /**
+   * Adds 12 kHz samples: `index` is the running sample index of samples[0] and `utcMs` its UTC
+   * time. Row times follow the sample count from an anchor, so jitter in chunk times never moves
+   * rows; a break in the index or a jump of more than 150 ms starts a new anchor, drawing the
+   * missing time as blank rows. Returns frame info when rows were drawn.
+   */
+  push(samples: Float32Array, utcMs: number, index: number): FrameInfo | null {
+    const rows: Row[] = [];
+    let t0 = utcMs;
+    if (this.anchor && index === this.nextIndex) {
+      const predicted = this.anchor.utcMs + ((index - this.anchor.index) / DISPLAY_RATE) * 1000;
+      if (Math.abs(utcMs - predicted) <= GAP_MS) t0 = predicted;
+      else this.anchor = null;
+    } else this.anchor = null;
+    if (!this.anchor) {
+      const jump = this.expectedUtc === null ? 0 : utcMs - this.expectedUtc;
+      if (jump > GAP_MS) {
+        const count = Math.min(this.height, Math.floor(jump / this.rowMs));
+        const from = this.lastRowUtc ?? utcMs - jump;
+        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: from + i * this.rowMs, blank: true });
+      }
+      if (this.expectedUtc !== null && Math.abs(jump) > GAP_MS) {
+        // The frame holds audio from before the break; a row across it would smear.
+        this.frame.fill(0);
+        this.valid = 0;
+        this.sinceRow = 0;
+      }
+      this.anchor = { index, utcMs };
+    }
+    this.nextIndex = index + samples.length;
+    this.expectedUtc = t0 + (samples.length / DISPLAY_RATE) * 1000;
+    let at = 0;
+    while (at < samples.length) {
+      const n = Math.min(samples.length - at, this.hop - this.sinceRow, DISPLAY_FFT);
+      this.frame.copyWithin(0, n);
+      this.frame.set(samples.subarray(at, at + n), DISPLAY_FFT - n);
+      at += n;
+      this.sinceRow += n;
+      this.valid = Math.min(DISPLAY_FFT, this.valid + n);
+      if (this.sinceRow >= this.hop) {
+        this.sinceRow = 0;
+        // Only full frames of audio: a window that starts in silence splatters across every bin.
+        if (this.valid < DISPLAY_FFT) continue;
+        this.spectrum.compute(this.frame, this.db);
+        // The row shows the window's centre.
+        const t = t0 + ((at - DISPLAY_FFT / 2) / DISPLAY_RATE) * 1000;
+        rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
+      }
+    }
+    if (!rows.length) return null;
+    this.draw(rows);
+    return this.info();
+  }
+
+  /** Positions of the slot boundaries on screen. */
+  info(): FrameInfo {
+    const boundaries = this.marks
+      .map((m) => ({ utcMs: m.utcMs, y: this.rowCount - 1 - m.row }))
+      .filter((b) => b.y >= 0 && b.y < this.height)
+      .reverse();
+    return { boundaries, newestUtcMs: this.lastRowUtc ?? 0, rowMs: this.rowMs };
+  }
+
+  private draw(rows: Row[]) {
+    // Note every row, oldest first, so row numbers and boundaries stay right even when more
+    // rows arrive than fit on screen.
+    const crossed = rows.map((r) => this.note(r));
+    for (const r of rows) this.history.push(r);
+    if (this.history.length > this.height) this.history.splice(0, this.history.length - this.height);
+    const k = Math.min(rows.length, this.height);
+    const { ctx, width, height } = this;
+    if (k < height) ctx.drawImage(ctx.canvas as CanvasImageSource, 0, 0, width, height - k, 0, k, width, height - k);
+    const img = ctx.createImageData(width, k);
+    // The newest row goes on top.
+    for (let y = 0; y < k; y++) {
+      const i = rows.length - 1 - y;
+      this.paintPixels(rows[i], img.data, y);
+      if (crossed[i]) this.paintLine(img.data, y);
+    }
+    ctx.putImageData(img, 0, 0);
+    this.marks = this.marks.filter((m) => this.rowCount - 1 - m.row < this.height);
+  }
+
+  private redraw() {
+    const { ctx, width, height } = this;
+    this.marks = [];
+    this.rowCount = 0;
+    this.lastRowUtc = null;
+    const img = ctx.createImageData(width, height);
+    const [br, bg, bb] = this.palette.background;
+    for (let i = 0; i < width * height; i++) {
+      img.data[i * 4] = br;
+      img.data[i * 4 + 1] = bg;
+      img.data[i * 4 + 2] = bb;
+      img.data[i * 4 + 3] = 255;
+    }
+    const rows = this.history;
+    // Replay oldest to newest so boundaries are found as they were.
+    for (let j = 0; j < rows.length; j++) this.note(rows[j]);
+    for (let y = 0; y < Math.min(height, rows.length); y++) this.paintPixels(rows[rows.length - 1 - y], img.data, y);
+    for (const m of this.marks) {
+      const y = this.rowCount - 1 - m.row;
+      if (y >= 0 && y < height) this.paintLine(img.data, y);
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  /** Records the row and its slot boundary; returns true when a boundary falls in it. */
+  private note(row: Row): boolean {
+    const slot = SLOT_MS[this.mode];
+    let crossed = false;
+    if (this.lastRowUtc !== null) {
+      const b = Math.floor(row.utcMs / slot) * slot;
+      if (b > this.lastRowUtc && b <= row.utcMs) {
+        this.marks.push({ utcMs: b, row: this.rowCount });
+        crossed = true;
+      }
+    }
+    this.lastRowUtc = row.utcMs;
+    this.rowCount++;
+    return crossed;
+  }
+
+  private paintPixels(row: Row, data: Uint8ClampedArray, y: number) {
+    const lut = this.lut;
+    const lv = row.levels;
+    const [br, bg, bb] = this.palette.background;
+    let o = y * this.width * 4;
+    for (let x = 0; x < this.width; x++, o += 4) {
+      if (row.blank) {
+        data[o] = br;
+        data[o + 1] = bg;
+        data[o + 2] = bb;
+      } else {
+        const c = this.cols[x];
+        let v: number;
+        if (c.peak) {
+          v = 0;
+          for (let i = c.i0; i <= c.i1; i++) if (lv[i] > v) v = lv[i];
+        } else v = Math.round(lv[c.i0] + (lv[c.i1] - lv[c.i0]) * c.frac);
+        data[o] = lut[v * 3];
+        data[o + 1] = lut[v * 3 + 1];
+        data[o + 2] = lut[v * 3 + 2];
+      }
+      data[o + 3] = 255;
+    }
+  }
+
+  private paintLine(data: Uint8ClampedArray, y: number) {
+    const [lr, lg, lb, la] = this.palette.line;
+    let o = y * this.width * 4;
+    for (let x = 0; x < this.width; x++, o += 4) {
+      data[o] = Math.round(data[o] + (lr - data[o]) * la);
+      data[o + 1] = Math.round(data[o + 1] + (lg - data[o + 1]) * la);
+      data[o + 2] = Math.round(data[o + 2] + (lb - data[o + 2]) * la);
+    }
+  }
+}
