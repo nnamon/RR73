@@ -142,3 +142,53 @@ CI (`.github/workflows/ci.yml`) runs the same fetch, synth and run, then the gat
 `baseline` is the ft8_lib method (`crates/rr73-decode`, `DecoderConfig::baseline`): a spectrogram with 2 frames per symbol and 2 bins per tone spacing (Hann window over 2 symbols, 200 to 3000 Hz), the Costas sync score over 60 time steps (DT -2.3 to 2.5 s for FT8), the 140 best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to variance 24, 25 iterations of sum-product belief propagation, CRC-14 check and unpack, one pass. `rr73-bench presets baseline` prints it.
 
 The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth.
+
+## Baseline, 2026-10-13
+
+Decoder commit `6d47dd35661e`, preset `baseline`, release build in the `rust` container (Docker Desktop on an aarch64 Mac, 10 CPUs). Other workloads ran on the host throughout (load average about 14, one container using about 4.4 cores), so times vary between runs; the figures below give the spread over 5 runs. Sets as in the tables above, written by `rr73-bench synth` with the default sizes (`--per-step 40`, `--crowded-count 20`, `--noise-count 1000`); regenerating `smoke` and `crowded` at this commit gives bit-identical WAV files.
+
+ft8_lib's own `decode_ft8`, built at 9fec6ca in the same container and scored with `rr73-bench import --dt-offset 0.66`, is the check that the preset reproduces the ft8_lib method. On the public files `compare` lists 6 decodes gained and 4 lost out of about 960; the differences come from ft8_lib's 0.5 dB quantisation of the waterfall and the order of candidates with equal scores.
+
+### Recordings
+
+| Set | Slots | Reference | Matched | Recall | Unmatched | ft8_lib `decode_ft8` |
+| --- | --- | --- | --- | --- | --- | --- |
+| `public/ft8_lib` | 60 | 1298 (WSJT-X lists shipped with ft8_lib) | 933 | 0.719 | 28 | 932 matched, 27 unmatched |
+| `kiwi/sarts-web888/20261012` (40 m) | 26 | 1070 (`jt9 2.7.0-rc3 -8 -d 3`) | 491 | 0.459 | 0 | not run |
+
+### Synthetic sets
+
+| Set | Slots | Signals | Matched | Recall | SNR50 | 10 to 90 % width | False decodes | ft8_lib `decode_ft8` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `snr-sweep/awgn` | 840 | 840 | 454 | 0.540 | -18.85 dB | 1.86 dB | 0 | 456 matched, SNR50 -18.90 dB |
+| `snr-sweep/fading` | 840 | 840 | 307 | 0.365 | -15.17 dB | 5.89 dB | 0 | 305 matched, SNR50 -15.12 dB |
+| `crowded/n10` | 20 | 200 | 198 | 0.990 | | | 0 | 198 matched |
+| `crowded/n20` | 20 | 400 | 398 | 0.995 | | | 0 | 398 matched |
+| `crowded/n40` | 20 | 800 | 795 | 0.994 | | | 0 | 794 matched |
+| `crowded/n20-overlap` | 20 | 400 | 305 | 0.762 | | | 0 | 304 matched |
+| `noise` | 1000 | 0 | | | | | 0 | 0 |
+| `noise-ci` | 200 | 0 | | | | | 0 | not run |
+| `smoke/ft8` | 24 | 58 | 58 | 1.000 | | | 0 | not run |
+| `smoke/ft4` | 6 | 6 | 6 | 1.000 | | | 0 | not run |
+
+Decoded out of 40 per SNR step in `snr-sweep/awgn`: none at -22 dB and below, 1 at -21, 3 at -20, 14 at -19, 36 at -18, all 40 from -17 dB up. In `snr-sweep/fading`: none at -19 dB and below, 5 at -18, 7 at -17, 20 at -16, 25 at -15 and -14, 35 at -13, 36 at -12, 38 at -11, 36 at -10, all 40 at -9 and -8. The crowded sets miss only signals between -18 and -16.6 dB (9 of 1400 outside the overlap set), so their SNR50 fits are extrapolated and left out.
+
+### Time per slot
+
+| Run | Value |
+| --- | --- |
+| `public/ft8_lib`, 1 thread | median of the per-run p50 9.9 ms (runs from 9.4 to 16.1 ms), p90 11.3 to 25.4 ms |
+| `public/ft8_lib`, 10 threads | 60 slots in 0.26 s (median of runs; 0.19 to 0.76 s), about 4.3 ms per slot; per-slot p50 19 to 58 ms under contention |
+| Stage means, `public/ft8_lib`, 1 thread, quietest run | spectrogram 2.1 ms, search 2.9 ms, demodulation 0.2 ms, LDPC 4.3 ms, validation and SNR 0.3 ms, total 9.8 ms |
+| All 3076 slots, 1 thread | 118 s including reading the files |
+| All 3076 slots, 10 threads | 21 s including reading the files |
+
+### SNR estimate
+
+- Against truth on `snr-sweep/awgn` decodes, the mean estimate is within 0.3 dB of the true SNR at every step from -19 to -8 dB.
+- Against `jt9 2.7.0-rc3 -d 3` on the SARTS slots (491 shared decodes): median difference -0.7 dB, mean -1.8 dB, 10th to 90th percentile -9.6 to +4.2 dB.
+- Against the lists shipped with ft8_lib the estimate reads 6 to 11 dB higher (median per file group). `jt9 2.7.0-rc3` on `websdr_test11` (the fixture in `tools/wsjtx/tests`) also reads 3 to 7 dB above that file's list, and the estimate is within a median 0.7 dB of jt9 2.7 there (12 shared decodes). The lists come from an older WSJT-X with a different SNR scale; which version is unverified.
+
+### Gate baseline
+
+`bench/baseline.json` holds the CI sets (`public/ft8_lib`, `smoke/ft8`, `smoke/ft4`, `noise-ci`; 290 slots) from the same commit, slimmed. The gate passes against it for the CI run and for the full run above.
