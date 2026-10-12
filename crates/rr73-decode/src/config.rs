@@ -5,16 +5,18 @@
 //! so a bench result records exactly what ran.
 
 use rr73_dsp::WindowKind;
+
+pub use crate::osd::OsdSource;
 use serde::{Deserialize, Serialize};
 
 /// Names of the built-in presets.
-pub const PRESETS: &[&str] = &["baseline", "subtract-3"];
+pub const PRESETS: &[&str] = &["baseline", "subtract-3", "subtract-3-osd1", "subtract-3-osd2"];
 
 /// Errors from building a configuration.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ConfigError {
     /// No preset has this name.
-    #[error("unknown preset {0:?}; known presets: baseline, subtract-3")]
+    #[error("unknown preset {0:?}; known presets: baseline, subtract-3, subtract-3-osd1, subtract-3-osd2")]
     UnknownPreset(String),
     /// An override is not `key=value`.
     #[error("override {0:?} is not key=value")]
@@ -137,6 +139,8 @@ pub enum LdpcKind {
     SumProduct,
     /// Normalised min-sum.
     MinSum,
+    /// Sum-product, then ordered-statistics decoding when it fails.
+    BpOsd,
 }
 
 /// LDPC parameters.
@@ -149,6 +153,17 @@ pub struct LdpcParams {
     pub max_iterations: u32,
     /// Min-sum check-message scale factor (used by `min-sum` only).
     pub min_sum_scale: f32,
+    /// OSD order: 0, 1 or 2 flipped information positions (used by `bp-osd`).
+    pub osd_order: u8,
+    /// Least reliable information positions OSD flips, 1 to 91 (used by `bp-osd`).
+    pub osd_window: usize,
+    /// LLRs that order OSD's search (used by `bp-osd`).
+    pub osd_source: OsdSource,
+    /// Most code bits an OSD codeword may change from the channel hard decisions.
+    pub osd_max_hard_errors: u32,
+    /// Largest reliability-weighted distance of an OSD codeword, as a fraction of the total
+    /// reliability.
+    pub osd_max_distance: f32,
 }
 
 /// Validator implementations.
@@ -166,6 +181,23 @@ pub enum ValidateKind {
 pub struct ValidateParams {
     /// Implementation.
     pub kind: ValidateKind,
+    /// Which messages an OSD codeword may carry.
+    pub osd_messages: OsdMessages,
+    /// Lowest SNR an OSD decode may report, in dB; codewords below it are rejected.
+    pub osd_min_snr_db: f32,
+}
+
+/// Messages accepted from OSD codewords. Codewords from belief propagation are not checked.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum OsdMessages {
+    /// Any message that unpacks.
+    Any,
+    /// Standard messages (types 1 and 2) whose callsigns are sent in full and look valid:
+    /// not starting with Q, 0 or 1.
+    Standard,
+    /// As `standard`, and at least one callsign already known from other decodes.
+    StandardKnown,
 }
 
 /// Subtractor implementations.
@@ -227,9 +259,16 @@ impl DecoderConfig {
                 kind: LdpcKind::SumProduct,
                 max_iterations: 25,
                 min_sum_scale: 0.75,
+                osd_order: 2,
+                osd_window: 40,
+                osd_source: OsdSource::Channel,
+                osd_max_hard_errors: 174,
+                osd_max_distance: 1.0,
             },
             validate: ValidateParams {
                 kind: ValidateKind::CrcUnpack,
+                osd_messages: OsdMessages::Standard,
+                osd_min_snr_db: -24.0,
             },
             subtract: SubtractParams {
                 kind: SubtractKind::None,
@@ -254,11 +293,30 @@ impl DecoderConfig {
         c
     }
 
+    /// `subtract-3` with ordered-statistics decoding of `order` (1 or 2) after failed belief
+    /// propagation: reliabilities from the channel LLRs, flips among the `window` least
+    /// reliable information positions, at most 30 hard errors, a weighted distance of at
+    /// most 0.07, an SNR of at least -24 dB, and OSD messages limited to plausible standard
+    /// messages. The limits come from `docs/experiments/0002-osd.md`.
+    fn subtract_3_osd(order: u8, window: usize) -> Self {
+        let mut c = Self::subtract_3();
+        c.ldpc.kind = LdpcKind::BpOsd;
+        c.ldpc.osd_order = order;
+        c.ldpc.osd_window = window;
+        c.ldpc.osd_source = OsdSource::Channel;
+        c.ldpc.osd_max_hard_errors = 30;
+        c.ldpc.osd_max_distance = 0.07;
+        c.validate.osd_messages = OsdMessages::Standard;
+        c
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
             "baseline" => Ok(Self::baseline()),
             "subtract-3" => Ok(Self::subtract_3()),
+            "subtract-3-osd1" => Ok(Self::subtract_3_osd(1, 91)),
+            "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40)),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }
@@ -317,6 +375,14 @@ impl DecoderConfig {
             || !(self.ldpc.min_sum_scale > 0.0 && self.ldpc.min_sum_scale <= 1.0)
         {
             return bad("max_iterations must be at most 10000 and min_sum_scale in (0, 1]");
+        }
+        let l = &self.ldpc;
+        if l.osd_order > 2
+            || !(1..=91).contains(&l.osd_window)
+            || l.osd_max_distance.is_nan()
+            || l.osd_max_distance < 0.0
+        {
+            return bad("osd_order must be 0 to 2, osd_window 1 to 91 and osd_max_distance at least 0");
         }
         if !(self.subtract.smooth_s > 0.0 && self.subtract.smooth_s <= 15.0) {
             return bad("subtract.smooth_s must be in (0, 15] s");

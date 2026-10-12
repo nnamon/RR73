@@ -10,6 +10,7 @@ use crate::config::{DecoderConfig, DemodKind, LdpcKind, RefineKind, SearchKind, 
 use crate::demod::{Demodulator, MaxLogDemod};
 use crate::layout::{CODEWORD_BITS, FrameLayout};
 use crate::ldpc::{LdpcDecoder, LdpcScratch, MinSum, ParityGraph, SumProduct};
+use crate::osd::{BpOsd, OsdParams};
 use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
 use crate::search::{CandidateSearch, CostasSearch};
 use crate::snr::SnrScale;
@@ -162,9 +163,23 @@ impl Pipeline {
                 max_iterations: config.ldpc.max_iterations,
                 scale: config.ldpc.min_sum_scale,
             }),
+            LdpcKind::BpOsd => Box::new(BpOsd {
+                bp: SumProduct {
+                    max_iterations: config.ldpc.max_iterations,
+                },
+                osd: OsdParams {
+                    order: config.ldpc.osd_order,
+                    window: config.ldpc.osd_window,
+                    source: config.ldpc.osd_source,
+                    max_hard_errors: config.ldpc.osd_max_hard_errors,
+                    max_distance: config.ldpc.osd_max_distance,
+                },
+            }),
         };
         let validator: Box<dyn Validator> = match config.validate.kind {
-            ValidateKind::CrcUnpack => Box::new(CrcUnpack),
+            ValidateKind::CrcUnpack => Box::new(CrcUnpack {
+                osd_messages: config.validate.osd_messages,
+            }),
         };
         let subtractor: Box<dyn Subtractor> = match config.subtract.kind {
             SubtractKind::None => Box::new(NoSubtract),
@@ -283,15 +298,20 @@ impl Pipeline {
                     continue;
                 }
                 stats.ldpc_converged += 1;
+                stats.osd_codewords += u32::from(outcome.osd);
 
                 let sw = Stopwatch::start();
-                let valid = match self.validator.validate(layout.mode, &ws.codeword, hashes) {
+                let valid = match self
+                    .validator
+                    .validate(layout.mode, &ws.codeword, &outcome, hashes)
+                {
                     Ok(v) => v,
                     Err(r) => {
                         match r {
                             Rejection::Crc => stats.crc_failures += 1,
                             Rejection::ZeroPayload => stats.zero_payloads += 1,
                             Rejection::Unpack(_) => stats.unpack_failures += 1,
+                            Rejection::Implausible => stats.implausible += 1,
                         }
                         timings.validate_s += sw.elapsed_s();
                         continue;
@@ -302,9 +322,16 @@ impl Pipeline {
                     timings.validate_s += sw.elapsed_s();
                     continue;
                 }
-                ws.seen.push(valid.payload);
                 let tones = rr73_ft8::tones::from_payload(layout.mode, &valid.payload);
                 let snr_db = snr_scale.estimate(&view, &cand, &tones, &mut ws.noise);
+                // An OSD codeword claiming an SNR below what decoding reaches is noise.
+                if outcome.osd && snr_db < config.validate.osd_min_snr_db {
+                    stats.implausible += 1;
+                    timings.validate_s += sw.elapsed_s();
+                    continue;
+                }
+                ws.seen.push(valid.payload);
+                hashes.learn(&valid.message);
                 decodes.push(Decode {
                     text: valid.text,
                     message: valid.message,
@@ -316,6 +343,8 @@ impl Pipeline {
                     ldpc_iterations: outcome.iterations,
                     hard_errors: outcome.hard_errors,
                     score: cand.score,
+                    osd: outcome.osd,
+                    osd_distance: outcome.distance,
                 });
                 timings.validate_s += sw.elapsed_s();
             }

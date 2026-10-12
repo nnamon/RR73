@@ -114,7 +114,7 @@ impl ParityGraph {
 }
 
 /// Result of one LDPC decode.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct LdpcOutcome {
     /// `true` when the hard decision satisfies every check and is not all zero.
     pub converged: bool,
@@ -124,6 +124,11 @@ pub struct LdpcOutcome {
     pub unsatisfied: u32,
     /// Code bits where the final hard decision differs from the channel hard decision.
     pub hard_errors: u32,
+    /// `true` when ordered-statistics decoding produced the codeword after BP failed.
+    pub osd: bool,
+    /// For OSD codewords: the reliability-weighted distance to the received LLRs, as a
+    /// fraction of the total reliability (0 for BP codewords).
+    pub distance: f32,
 }
 
 /// Reusable message storage, sized on first use for a graph.
@@ -133,12 +138,17 @@ pub struct LdpcScratch {
     total: Vec<f32>,
     v2c: Vec<f32>,
     c2v: Vec<f32>,
+    /// Totals (`log(P(0) / P(1))`) of the iteration with the fewest unsatisfied checks.
+    pub(crate) best: Vec<f32>,
+    /// Buffers for ordered-statistics decoding.
+    pub(crate) osd: crate::osd::OsdScratch,
 }
 
 impl LdpcScratch {
     fn ensure(&mut self, graph: &ParityGraph) {
         self.l0.resize(graph.bits, 0.0);
         self.total.resize(graph.bits, 0.0);
+        self.best.resize(graph.bits, 0.0);
         self.v2c.resize(graph.edges(), 0.0);
         self.c2v.resize(graph.edges(), 0.0);
     }
@@ -267,9 +277,14 @@ fn run(
 
     let mut outcome = LdpcOutcome::default();
     let mut iteration = 0u32;
+    let mut fewest = usize::MAX;
     loop {
         hard_decision(&s.total, codeword);
         let unsatisfied = graph.unsatisfied(codeword);
+        if unsatisfied < fewest {
+            fewest = unsatisfied;
+            s.best.copy_from_slice(&s.total);
+        }
         outcome.unsatisfied = unsatisfied as u32;
         outcome.iterations = iteration;
         if unsatisfied == 0 {
