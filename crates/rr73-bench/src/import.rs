@@ -1,9 +1,11 @@
 //! `rr73-bench import`: score another decoder's text output on the corpus, so it can be
 //! compared with `rr73-bench compare`.
 //!
-//! Input is one text file holding, for each slot, a line `== <stem>` followed by decodes in
+//! Input is one text file holding, for each slot, a line `== <name>` followed by decodes in
 //! the WSJT-X layout `HHMMSS SNR DT FREQ ~ MESSAGE`, as printed by `jt9` and by ft8_lib's
-//! `decode_ft8`. Text after the message that is separated by two or more spaces (country
+//! `decode_ft8`. The name is the slot's path below the corpus without extension
+//! (`synthetic/noise/260101_000000_s0001`), any trailing part of it, or the stem when that
+//! is unique. Text after the message that is separated by two or more spaces (country
 //! names, AP markers) is dropped.
 
 use std::collections::BTreeMap;
@@ -75,6 +77,21 @@ pub fn parse_output(text: &str) -> BTreeMap<String, Vec<Entry>> {
     out
 }
 
+/// The section for a slot: the longest section name that equals the slot's path without
+/// extension or one of its trailing parts (`synthetic/noise/260101_000000_s0001`,
+/// `noise/260101_000000_s0001` or the bare stem).
+pub fn section_for<'a>(
+    lists: &'a BTreeMap<String, Vec<Entry>>,
+    wav: &std::path::Path,
+) -> Option<(&'a String, &'a Vec<Entry>)> {
+    let path = wav.with_extension("");
+    let parts: Vec<String> = path
+        .components()
+        .map(|c| c.as_os_str().to_string_lossy().into_owned())
+        .collect();
+    (0..parts.len()).find_map(|i| lists.get_key_value(&parts[i..].join("/")))
+}
+
 /// Scores the output against the corpus and writes a results file.
 pub fn import(opts: &ImportOptions) -> Result<Results, String> {
     let text =
@@ -83,12 +100,20 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
     let files = discover(&opts.paths).map_err(|e| e.to_string())?;
     let mut slots = Vec::new();
     let mut missing = Vec::new();
+    let mut stem_count: BTreeMap<String, usize> = BTreeMap::new();
     for f in &files {
-        let stem = f.stem();
-        let Some(list) = lists.get(&stem) else {
-            missing.push(stem);
+        *stem_count.entry(f.stem()).or_default() += 1;
+    }
+    for f in &files {
+        let Some((key, list)) = section_for(&lists, &f.wav) else {
+            missing.push(f.wav.display().to_string());
             continue;
         };
+        if !key.contains('/') && stem_count.get(key).copied().unwrap_or(0) > 1 {
+            return Err(format!(
+                "section \"== {key}\" matches several slots; name sections by path below the corpus"
+            ));
+        }
         let slot = read_slot(f).map_err(|e| e.to_string())?;
         let decoded: Vec<Entry> = list
             .iter()
@@ -205,5 +230,20 @@ mod tests {
         let lists = parse_output(text);
         assert_eq!(lists["a"].len(), 2);
         assert!(lists["b"].is_empty());
+    }
+
+    #[test]
+    fn sections_match_paths_and_stems() {
+        let lists = parse_output("== synthetic/noise/x\n== y\n000000 +1.0 +0.5 1000 ~  CQ K1ABC FN42\n");
+        let p = |s: &str| std::path::PathBuf::from(s);
+        assert_eq!(
+            section_for(&lists, &p("/work/corpus/synthetic/noise/x.wav")).map(|s| s.0.as_str()),
+            Some("synthetic/noise/x")
+        );
+        assert!(section_for(&lists, &p("corpus/synthetic/smoke/x.wav")).is_none());
+        assert_eq!(
+            section_for(&lists, &p("corpus/public/y.wav")).map(|s| s.1.len()),
+            Some(1)
+        );
     }
 }
