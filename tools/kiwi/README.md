@@ -73,7 +73,7 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 
 ## Audio and timing
 
-- The channel runs in IQ mode at the FT8 dial frequency with a 100 to 3000 Hz passband and the receiver's default AGC, with compression off. The SARTS Web-888 applies the passband to the IQ stream: in a 40 m capture the lower sideband sat 70 dB below the upper. The recorder also keeps only positive frequencies from 100 to 3000 Hz (50 Hz raised-cosine edges) and takes the real part, which is the USB audio.
+- The channel runs in IQ mode at the FT8 dial frequency with a 100 to 3000 Hz passband and the receiver's default AGC, with compression off. The SARTS Web-888 applies the passband to the IQ stream: in a 40m capture the lower sideband sat 70 dB below the upper. The recorder also keeps only positive frequencies from 100 to 3000 Hz (50 Hz raised-cosine edges) and takes the real part, which is the USB audio.
 - Audio is resampled to exactly 12000 Hz by Kaiser-windowed sinc interpolation (64 taps) at the exact output sample times. Against exact tones from 100 to 3000 Hz at input rates of 11998.7, 12000, 12001.135 and 20250 Hz the error is at most −91.6 dB. A slot takes about 0.9 s to process on one core.
 - Slots start on UTC multiples of 15 s and hold exactly 180000 samples. The first second after connecting or after a gap is not used. A slot is written only when the stream covers it, plus 0.25 s on each side, without a sequence gap. Partial slots are discarded.
 - GPS timing: in IQ mode each frame of 512 samples carries a GPS time of week and the number of frames since the last fix. When the fresh timestamps agree with each other to within 1 sample and with the host clock to within 10 s, a least-squares fit gives the true sample rate and the time of every sample, and the slot is written with `timing.reference = "gps"` and `offset_s = 0`. GPS time and UTC-based timestamps are both recognised; GPS minus UTC is taken as 18 s.
@@ -100,6 +100,21 @@ docker compose run --rm kiwi ruff format --check tools/kiwi tools/wsjtx
 ```
 
 The tests cover slot alignment (a pulse placed 1.000 s after each slot start lands on sample 12000 within 0.3 samples with GPS timing), exact sample counts, gaps, resampling accuracy, the GPS checks (including Web-888-style placeholders), NTP timing and its correction, sidecar contents, the status rules against a fake `/status` endpoint, receiver limits, the scheduler's waits with a simulated clock, and whole sessions against a fake KiwiSDR that speaks the WebSocket protocol to kiwiclient.
+
+## Test on the SARTS receiver
+
+Two sessions on 12 October 2026 (UTC) on 40m (7.074 MHz), at 05:49 and 05:59 local time in Singapore, with 9 of 13 channels in use before each. Both were followed by `reference.py`.
+
+| Session (UTC) | Length | Slots written | jt9 decodes | Decodes per slot | Median DT |
+| --- | --- | --- | --- | --- | --- |
+| 21:48:54 to 21:52:46 | 4 min | 15 (21:49:00 to 21:52:30) | 660 | 33 to 53, median 45 | 0.2 s |
+| 21:58:39 to 22:01:31 | 3 min | 11 (21:58:45 to 22:01:15) | 410 | 30 to 50, median 37 | 0.3 s |
+
+- Every slot is 12000 Hz, mono, 16-bit, 180000 samples. No sequence gaps and no clipped samples: peaks were 13328 to 14597 of 32767. One partial slot was discarded at the end of each session.
+- Timing: NTP, because the Web-888's GPS fields failed the checks ("GPS timestamps differ from the host clock by −2095 s"). The host clock was 3 ms from pool.ntp.org (round trip 7 ms), so `offset_s` is −0.003 s.
+- The median DT of 0.2 to 0.3 s includes the smallest network and receiver delay, which NTP timing cannot see, plus the stations' own timing. `latency_s` is left at 0 for the SARTS receiver until it is measured against a GPS-timed reference. Unverified.
+- Sample rate: the receiver reports 12000.000 Hz. The second session measured 11999.82 ± 0.21 Hz from arrival times over 3 minutes, consistent with 12000 Hz, so the reported rate was used. The first session used a measured 11999.51 Hz for its later slots, before the fix in commit 77035f6. That moves tones by up to 0.06 Hz and slot alignment by up to 9 ms.
+- The receiver's configuration reports a 90-minute inactivity timeout and no daily limit per address.
 
 ## Unverified
 

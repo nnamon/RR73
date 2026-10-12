@@ -41,7 +41,7 @@ docker compose run --rm wsjtx reference.py --print --mode FT8 corpus/public/ft8_
 <DecodeFinished>   0   5        0
 ```
 
-FT8 lines carry `~` and FT4 lines `+`. The message field is padded to a fixed width. A priori decodes add `aN` and low-confidence decodes add `?` after the padding. Both annotations are removed from `text`. The parser rejects output without `<DecodeFinished>`, output whose count differs from the decode lines, decode lines that do not parse, and lines with the other mode's marker. `-0.0` DT is stored as `0.0`.
+FT8 lines carry `~` and FT4 lines `+`. The message field is padded to a fixed width. A priori decodes add `aN` and low-confidence decodes add `?` after the padding. `a1` (CQ) appears without `-c`: 2 of 53 decodes in a 40m slot from the SARTS receiver carry it. Both annotations are removed from `text`. The parser rejects output without `<DecodeFinished>`, output whose count differs from the decode lines, decode lines that do not parse, and lines with the other mode's marker. `-0.0` DT is stored as `0.0`.
 
 ## Tests
 
@@ -49,7 +49,7 @@ FT8 lines carry `~` and FT4 lines `+`. The message field is padded to a fixed wi
 docker compose run --rm wsjtx python3 -m pytest tools/wsjtx
 ```
 
-The fixtures in `tests/fixtures/` are `jt9` 2.7.0-rc3 output captured from real runs: ft8_lib test WAVs at commit 9fec6ca (`191111_110130`, `191111_110615`, `191111_110645`, `websdr_test11`), an `ft8sim` signal at −23 dB decoded with `-c 9V1NE` to produce an `a1` annotation, an `ft8sim` signal at −35 dB with no decodes, and an FT4 slot synthesised from `ft4code` channel symbols. One test runs the real `jt9` on an `ft8sim` slot.
+The fixtures in `tests/fixtures/` are `jt9` 2.7.0-rc3 output captured from real runs: ft8_lib test WAVs at commit 9fec6ca (`191111_110130`, `191111_110615`, `191111_110645`, `websdr_test11`), an `ft8sim` signal at −23 dB decoded with `-c 9V1NE` to produce an `a1` annotation, an `ft8sim` signal at −35 dB with no decodes, an FT4 slot synthesised from `ft4code` channel symbols, and a 40m slot recorded by rr73-kiwi on the SARTS receiver (`261012_215130`, 53 decodes). One test runs the real `jt9` on an `ft8sim` slot.
 
 ## Check on ft8_lib test files
 

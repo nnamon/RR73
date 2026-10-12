@@ -33,6 +33,7 @@ def fixture(name: str) -> str:
         ("jt9-ft8-ap-annotation.txt", "FT8", 1),
         ("jt9-ft8-no-decodes.txt", "FT8", 0),
         ("jt9-ft4-synth.txt", "FT4", 3),
+        ("jt9-ft8-sarts-261012_215130.txt", "FT8", 53),
     ],
 )
 def test_fixture_decode_counts_match_decode_finished(name: str, mode: str, count: int) -> None:
@@ -63,6 +64,15 @@ def test_a_priori_annotation_is_removed_from_text() -> None:
     assert parse_jt9_output(fixture("jt9-ft8-ap-annotation.txt"), "FT8") == [
         Decode(text="CQ K1ABC FN42", freq_hz=1200, dt_s=0.0, snr_db=-22)
     ]
+
+
+def test_real_kiwi_slot_with_a_priori_decodes() -> None:
+    # 40m on the SARTS Web-888, recorded by rr73-kiwi; jt9 marks two CQ decodes "a1" without -c.
+    decodes = parse_jt9_output(fixture("jt9-ft8-sarts-261012_215130.txt"), "FT8")
+    assert Decode(text="CQ OM2WW JN88", freq_hz=1161, dt_s=0.2, snr_db=-12) in decodes
+    assert Decode(text="CQ RC1C KP50", freq_hz=1732, dt_s=1.0, snr_db=-19) in decodes
+    assert Decode(text="<...> E25XLD/M RR73", freq_hz=613, dt_s=0.2, snr_db=16) in decodes
+    assert not any(d.text.endswith(("a1", "?")) for d in decodes)
 
 
 def test_ft4_output() -> None:
