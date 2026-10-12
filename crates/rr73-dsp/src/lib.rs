@@ -11,7 +11,7 @@ pub mod resample;
 pub mod spectrogram;
 pub mod window;
 
-pub use fft::{Complex32, FftPlans};
+pub use fft::{Complex32, Complex64, FftPlans};
 pub use resample::Resampler;
 pub use spectrogram::{Scale, Spectrogram, SpectrogramConfig, SpectrogramPlan};
 pub use window::WindowKind;

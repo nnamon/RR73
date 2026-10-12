@@ -1,0 +1,673 @@
+//! Signal subtraction: rebuild each decoded signal and remove it from the slot audio, so the
+//! next pass sees what lies under it.
+//!
+//! The model is the complex form of the transmitted GFSK waveform, `c(k) = e^{jφ(k)}`, with
+//! the same phase as `rr73_ft8::synth::gfsk` (whose output is `sin φ(k)`): the frequency
+//! deviation is the sum of Gaussian-smoothed rectangular pulses, one per symbol, truncated to
+//! three symbols, with the first and last tones extended by one symbol (QEX 2020, section 5).
+//! A test checks the model against the codec sample by sample.
+//!
+//! For a received real signal `x = Re{A(t) c(t)} + rest`, the product `x · conj(c)` equals
+//! `A/2` plus a term at twice the carrier frequency plus everything else mixed down. A moving
+//! average over `smooth` samples keeps `A/2`, so `A(t)` follows fading and a small frequency
+//! error; `Re{A(t) c(t)}` is then subtracted.
+//!
+//! Subtraction is only as good as the model's timing and frequency. The decoder's grid puts
+//! the start within a quarter symbol (40 ms for FT8) and the frequency within a quarter tone
+//! spacing, so the optional refinement first searches the start on a 5 ms grid (interpolated
+//! to about 1 ms) by matching the known tones against the audio mixed down and decimated to
+//! 32 samples per symbol, then measures the frequency error from the phase drift of the
+//! per-symbol correlations.
+
+use std::sync::OnceLock;
+
+use rr73_dsp::Complex64;
+use rr73_ft8::Mode;
+
+use crate::layout::FrameLayout;
+use crate::report::Decode;
+use crate::stages::Subtractor;
+
+/// Sample rate of slot audio, in Hz.
+const FS: f64 = 12_000.0;
+
+/// Decimated samples per symbol used by the refinement search.
+const REFINE_SAMPLES_PER_SYMBOL: usize = 32;
+
+/// Buffers reused across subtractions. Sized on first use; the largest holds one sample per
+/// block of the refinement search (about 2500 values for FT8).
+#[derive(Clone, Debug, Default)]
+pub struct SubtractScratch {
+    products: Vec<Complex64>,
+    models: Vec<Complex64>,
+    blocks: Vec<Complex64>,
+    reference: Vec<Complex64>,
+    scores: Vec<f64>,
+}
+
+/// Subtracts decodes with the complex GFSK model.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ModelSubtract {
+    /// Length of the moving average that estimates the complex amplitude, in seconds.
+    pub smooth_s: f32,
+    /// Refine each signal's start and frequency from its known tones before subtracting.
+    pub refine: bool,
+}
+
+impl Subtractor for ModelSubtract {
+    fn name(&self) -> &'static str {
+        "model"
+    }
+
+    fn subtract(
+        &self,
+        layout: &FrameLayout,
+        audio: &mut [f32],
+        decodes: &[Decode],
+        scratch: &mut SubtractScratch,
+    ) {
+        let smooth = ((f64::from(self.smooth_s) * FS).round() as usize).max(1);
+        for d in decodes {
+            let tones = rr73_ft8::tones::from_payload(layout.mode, &d.payload);
+            let start = ((f64::from(d.dt_s) + f64::from(layout.start_offset_s)) * FS).round() as isize;
+            let mut signal = Placement {
+                start,
+                freq_hz: f64::from(d.freq_hz),
+            };
+            if self.refine {
+                signal = refine(layout, &tones, audio, signal, scratch);
+            }
+            remove(layout, &tones, audio, signal, smooth, scratch);
+        }
+    }
+}
+
+/// Where a signal sits in the slot.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Placement {
+    /// Sample of the start of symbol 0 (may be negative).
+    pub start: isize,
+    /// Base-tone frequency, in Hz.
+    pub freq_hz: f64,
+}
+
+/// The frequency pulse of `mode` at 12 kHz, over three symbols: `p[i]` for
+/// `t = i / n - 1.5` symbols, in tone spacings.
+fn pulse(mode: Mode, n: usize, bt: f64) -> &'static [f64] {
+    static FT8: OnceLock<Vec<f64>> = OnceLock::new();
+    static FT4: OnceLock<Vec<f64>> = OnceLock::new();
+    let build = || {
+        let k = std::f64::consts::PI * (2.0 / std::f64::consts::LN_2).sqrt();
+        (0..3 * n)
+            .map(|i| {
+                let t = i as f64 / n as f64 - 1.5;
+                (erf(k * bt * (t + 0.5)) - erf(k * bt * (t - 0.5))) / 2.0
+            })
+            .collect()
+    };
+    match mode {
+        Mode::Ft8 => FT8.get_or_init(build),
+        Mode::Ft4 => FT4.get_or_init(build),
+    }
+}
+
+/// Running sums of [`pulse`]: `cum[j]` is the sum of the first `j` values (`3n + 1` entries).
+fn pulse_sums(mode: Mode, n: usize, bt: f64) -> &'static [f64] {
+    static FT8: OnceLock<Vec<f64>> = OnceLock::new();
+    static FT4: OnceLock<Vec<f64>> = OnceLock::new();
+    let build = || {
+        let p = pulse(mode, n, bt);
+        let mut acc = 0.0;
+        let mut out = Vec::with_capacity(p.len() + 1);
+        out.push(0.0);
+        for v in p {
+            acc += v;
+            out.push(acc);
+        }
+        out
+    };
+    match mode {
+        Mode::Ft8 => FT8.get_or_init(build),
+        Mode::Ft4 => FT4.get_or_init(build),
+    }
+}
+
+/// Fills `out` with `θ(k)` at `k = d/2, d/2 + d, ...` (the centres of blocks of `d` samples)
+/// for every whole block of a transmission of `tones`. Uses the pulse's running sums, so the
+/// cost is one product per block and three per symbol.
+fn phase_at_block_centres(layout: &FrameLayout, tones: &[u8], d: usize, out: &mut Vec<f64>) {
+    out.clear();
+    let n = layout.samples_per_symbol;
+    let count = tones.len();
+    if count == 0 || n == 0 || d == 0 {
+        return;
+    }
+    let cum = pulse_sums(layout.mode, n, f64::from(layout.mode.params().gfsk_bt));
+    let step = std::f64::consts::TAU / n as f64;
+    let (s0, s1, s2) = (cum[n], cum[2 * n] - cum[n], cum[3 * n] - cum[2 * n]);
+    let tone = |i: isize| f64::from(tones[i.clamp(0, count as isize - 1) as usize]);
+    let blocks = count * n / d;
+    let mut theta = 0.0;
+    let mut k = d / 2;
+    for s in 0..count {
+        let (prev, here, next) = (tone(s as isize - 1), tone(s as isize), tone(s as isize + 1));
+        while k < (s + 1) * n && out.len() < blocks {
+            let r = k - s * n;
+            let within = prev * (cum[2 * n + r] - cum[2 * n]) + here * (cum[n + r] - cum[n]) + next * cum[r];
+            out.push(theta + step * within);
+            k += d;
+        }
+        theta += step * (prev * s2 + here * s1 + next * s0);
+    }
+}
+
+/// The modulation phase `θ(k)` of a transmission, sample by sample, without the carrier:
+/// `θ(0) = 0`, `θ(k + 1) = θ(k) + 2π dev(k) / n`, where `dev(k)` sums the pulses of the
+/// previous, current and next symbol (first and last tones extended).
+pub struct Phase<'a> {
+    tones: &'a [u8],
+    pulse: &'static [f64],
+    n: usize,
+    step: f64,
+    symbol: usize,
+    within: usize,
+    near: [f64; 3],
+    theta: f64,
+}
+
+impl<'a> Phase<'a> {
+    /// Starts at sample 0 of `tones` in `layout`'s mode.
+    pub fn new(layout: &FrameLayout, tones: &'a [u8]) -> Self {
+        let n = layout.samples_per_symbol.max(1);
+        let mut p = Self {
+            tones,
+            pulse: pulse(layout.mode, n, f64::from(layout.mode.params().gfsk_bt)),
+            n,
+            step: std::f64::consts::TAU / n as f64,
+            symbol: 0,
+            within: 0,
+            near: [0.0; 3],
+            theta: 0.0,
+        };
+        p.load();
+        p
+    }
+
+    /// Samples in the transmission.
+    pub fn len(&self) -> usize {
+        self.tones.len() * self.n
+    }
+
+    /// `true` for an empty tone list.
+    pub fn is_empty(&self) -> bool {
+        self.tones.is_empty()
+    }
+
+    fn load(&mut self) {
+        let count = self.tones.len() as isize;
+        if count == 0 {
+            return;
+        }
+        let tone = |i: isize| f64::from(self.tones[i.clamp(0, count - 1) as usize]);
+        let s = self.symbol as isize;
+        self.near = [tone(s - 1), tone(s), tone(s + 1)];
+    }
+
+    /// Returns `θ` at the current sample and the step to the next one, then advances.
+    #[inline]
+    pub fn advance(&mut self) -> (f64, f64) {
+        let n = self.n;
+        let r = self.within;
+        let dev = self.near[0] * self.pulse[2 * n + r]
+            + self.near[1] * self.pulse[n + r]
+            + self.near[2] * self.pulse[r];
+        let delta = self.step * dev;
+        let theta = self.theta;
+        self.theta += delta;
+        self.within += 1;
+        if self.within == n {
+            self.within = 0;
+            self.symbol += 1;
+            self.load();
+        }
+        (theta, delta)
+    }
+}
+
+/// The complex model `c(k) = e^{j(2π f k / fs + θ(k))}`, sample by sample. The phase advances
+/// by a rotation per sample (`e^{jδ}` by its Taylor series, exact to 1e-12 for the steps of
+/// FT8 and FT4) and is recomputed exactly every 1920 samples so rounding cannot drift.
+struct Model<'a> {
+    phase: Phase<'a>,
+    w: f64,
+    carrier_step: Complex64,
+    carrier: Complex64,
+    modulation: Complex64,
+    k: usize,
+    until_resync: usize,
+}
+
+impl<'a> Model<'a> {
+    fn new(layout: &FrameLayout, tones: &'a [u8], freq_hz: f64) -> Self {
+        let w = std::f64::consts::TAU * freq_hz / FS;
+        Self {
+            phase: Phase::new(layout, tones),
+            w,
+            carrier_step: Complex64::new(w.cos(), w.sin()),
+            carrier: Complex64::new(1.0, 0.0),
+            modulation: Complex64::new(1.0, 0.0),
+            k: 0,
+            until_resync: 0,
+        }
+    }
+
+    /// Returns `c(k)` and advances. Carrier and modulation rotate separately, which keeps
+    /// the two multiplication chains independent.
+    #[inline]
+    fn advance(&mut self) -> Complex64 {
+        let (theta, delta) = self.phase.advance();
+        if self.until_resync == 0 {
+            let a = (self.w * self.k as f64).rem_euclid(std::f64::consts::TAU);
+            self.carrier = Complex64::new(a.cos(), a.sin());
+            self.modulation = Complex64::new(theta.cos(), theta.sin());
+            self.until_resync = 1920;
+        }
+        self.until_resync -= 1;
+        let out = self.carrier * self.modulation;
+        let d2 = delta * delta;
+        let rot = Complex64::new(
+            1.0 - d2 / 2.0 + d2 * d2 / 24.0,
+            delta * (1.0 - d2 / 6.0 + d2 * d2 / 120.0),
+        );
+        self.modulation *= rot;
+        self.carrier *= self.carrier_step;
+        self.k += 1;
+        out
+    }
+}
+
+/// Estimates the complex amplitude of the model of `tones` at `at` in `audio` with a moving
+/// average of `smooth` samples and subtracts the rebuilt signal. Works in one pass with ring
+/// buffers of `smooth + 2` values: the window reads samples ahead of the one being
+/// subtracted, which are still unchanged.
+fn remove(
+    layout: &FrameLayout,
+    tones: &[u8],
+    audio: &mut [f32],
+    at: Placement,
+    smooth: usize,
+    scratch: &mut SubtractScratch,
+) {
+    let mut model = Model::new(layout, tones, at.freq_hz);
+    let total = model.phase.len() as isize;
+    let first = (-at.start).clamp(0, total) as usize;
+    let last = (audio.len() as isize - at.start).clamp(0, total) as usize;
+    if first >= last {
+        return;
+    }
+    for _ in 0..first {
+        model.advance();
+    }
+    let half = smooth / 2;
+    let ring = smooth + 2;
+    scratch.products.clear();
+    scratch.products.resize(ring, Complex64::new(0.0, 0.0));
+    scratch.models.clear();
+    scratch.models.resize(ring, Complex64::new(0.0, 0.0));
+    let offset = at.start + first as isize;
+    let span = last - first;
+    let audio = &mut audio[offset as usize..offset as usize + span];
+    // Ring positions of the window's ends and of the sample being subtracted.
+    let (mut lo, mut hi) = (0usize, 0usize);
+    let (mut lo_at, mut hi_at, mut k_at) = (0usize, 0usize, 0usize);
+    let wrap = |i: &mut usize| {
+        *i += 1;
+        if *i == ring {
+            *i = 0;
+        }
+    };
+    let mut sum = Complex64::new(0.0, 0.0);
+    let mut scale = 0.0;
+    let mut scale_for = usize::MAX;
+    for k in 0..span {
+        let want_hi = (k + half + 1).min(span);
+        while hi < want_hi {
+            let c = model.advance();
+            let p = c.conj() * f64::from(audio[hi]);
+            scratch.products[hi_at] = p;
+            scratch.models[hi_at] = c;
+            sum += p;
+            hi += 1;
+            wrap(&mut hi_at);
+        }
+        let want_lo = k.saturating_sub(half);
+        while lo < want_lo {
+            sum -= scratch.products[lo_at];
+            lo += 1;
+            wrap(&mut lo_at);
+        }
+        if hi - lo != scale_for {
+            scale_for = hi - lo;
+            scale = 2.0 / scale_for as f64;
+        }
+        let rebuilt = (sum * scratch.models[k_at]).re * scale;
+        audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
+        wrap(&mut k_at);
+    }
+}
+
+/// Refines the start and frequency of a signal whose modulation phase is in
+/// `scratch.theta`, by matching it against `audio`. Returns the input when the audio does
+/// not cover the signal.
+pub fn refine(
+    layout: &FrameLayout,
+    tones: &[u8],
+    audio: &[f32],
+    coarse: Placement,
+    scratch: &mut SubtractScratch,
+) -> Placement {
+    let n = layout.samples_per_symbol;
+    let d = (n / REFINE_SAMPLES_PER_SYMBOL).max(1);
+    let total = tones.len() * n;
+    if total == 0 || audio.is_empty() {
+        return coarse;
+    }
+    // Mix down around the middle of the signal's tones and sum blocks of d samples.
+    let centre = coarse.freq_hz + 0.5 * (layout.tones as f64 - 1.0) * f64::from(layout.tone_spacing_hz);
+    let radius = (n / 2) as isize;
+    let from_block = (coarse.start - radius).div_euclid(d as isize);
+    let to_block = (coarse.start + total as isize + radius).div_euclid(d as isize) + 1;
+    let w = -std::f64::consts::TAU * centre / FS;
+    // Oscillator over one block, and the block-to-block rotation (exact every 64 blocks).
+    scratch.models.clear();
+    scratch.models.extend((0..d).map(|i| {
+        let a = w * i as f64;
+        Complex64::new(a.cos(), a.sin())
+    }));
+    let block_step = Complex64::new((w * d as f64).cos(), (w * d as f64).sin());
+    let mut block_osc = Complex64::new(1.0, 0.0);
+    scratch.blocks.clear();
+    for (j, b) in (from_block..to_block).enumerate() {
+        let s0 = b * d as isize;
+        if j % 64 == 0 {
+            let a = (w * s0 as f64).rem_euclid(std::f64::consts::TAU);
+            block_osc = Complex64::new(a.cos(), a.sin());
+        }
+        let mut sum = Complex64::new(0.0, 0.0);
+        if s0 >= 0 && s0 as usize + d <= audio.len() {
+            let chunk = &audio[s0 as usize..s0 as usize + d];
+            for (x, o) in chunk.iter().zip(&scratch.models) {
+                sum += o * f64::from(*x);
+            }
+        } else {
+            for (i, o) in scratch.models.iter().enumerate() {
+                let idx = s0 + i as isize;
+                if idx >= 0
+                    && let Some(&x) = audio.get(idx as usize)
+                {
+                    sum += o * f64::from(x);
+                }
+            }
+        }
+        scratch.blocks.push(sum * block_osc);
+        block_osc *= block_step;
+    }
+    // The model at block centres, relative to the mixing frequency.
+    let offset = std::f64::consts::TAU * (coarse.freq_hz - centre) / FS;
+    phase_at_block_centres(layout, tones, d, &mut scratch.scores);
+    scratch.reference.clear();
+    for (m, theta) in scratch.scores.iter().enumerate() {
+        let phi = theta + offset * (m * d + d / 2) as f64;
+        scratch.reference.push(Complex64::new(phi.cos(), -phi.sin()));
+    }
+    let per_symbol = (n / d).max(1);
+    let metric = |shift: isize, blocks: &[Complex64], reference: &[Complex64]| -> f64 {
+        let mut energy = 0.0;
+        for (seg, chunk) in reference.chunks(per_symbol).enumerate() {
+            let mut s = Complex64::new(0.0, 0.0);
+            for (i, r) in chunk.iter().enumerate() {
+                let b = shift + (seg * per_symbol + i) as isize;
+                if let Some(y) = usize::try_from(b).ok().and_then(|b| blocks.get(b)) {
+                    s += y * r;
+                }
+            }
+            energy += s.norm_sqr();
+        }
+        energy
+    };
+    // Shifts are in blocks, relative to the first mixed-down block.
+    let nominal = coarse.start.div_euclid(d as isize) - from_block;
+    let span = radius / d as isize;
+    let mut best = (f64::NEG_INFINITY, nominal);
+    scratch.scores.clear();
+    for shift in (nominal - span)..=(nominal + span) {
+        let e = metric(shift, &scratch.blocks, &scratch.reference);
+        scratch.scores.push(e);
+        if e > best.0 {
+            best = (e, shift);
+        }
+    }
+    if !best.0.is_finite() || best.0 <= 0.0 {
+        return coarse;
+    }
+    let at = (best.1 - (nominal - span)) as usize;
+    let scores = &scratch.scores;
+    let frac = if at > 0 && at + 1 < scores.len() {
+        let (a, b, c) = (scores[at - 1], scores[at], scores[at + 1]);
+        let den = a - 2.0 * b + c;
+        if den < 0.0 {
+            (0.5 * (a - c) / den).clamp(-0.5, 0.5)
+        } else {
+            0.0
+        }
+    } else {
+        0.0
+    };
+    let start = ((from_block + best.1) as f64 + frac) * d as f64;
+
+    // Frequency error from the phase drift between consecutive symbols.
+    let mut drift = Complex64::new(0.0, 0.0);
+    let mut previous: Option<Complex64> = None;
+    for (seg, chunk) in scratch.reference.chunks(per_symbol).enumerate() {
+        let mut s = Complex64::new(0.0, 0.0);
+        for (i, r) in chunk.iter().enumerate() {
+            let b = best.1 + (seg * per_symbol + i) as isize;
+            if let Some(y) = usize::try_from(b).ok().and_then(|b| scratch.blocks.get(b)) {
+                s += y * r;
+            }
+        }
+        if let Some(p) = previous {
+            drift += s * p.conj();
+        }
+        previous = Some(s);
+    }
+    let symbol_s = n as f64 / FS;
+    let df = if drift.norm_sqr() > 0.0 {
+        drift.arg() / (std::f64::consts::TAU * symbol_s)
+    } else {
+        0.0
+    };
+    Placement {
+        start: start.round() as isize,
+        freq_hz: coarse.freq_hz + df,
+    }
+}
+
+/// The error function, to about 1e-15 absolute (series with positive terms).
+fn erf(x: f64) -> f64 {
+    let a = x.abs();
+    if a >= 6.0 {
+        return x.signum();
+    }
+    let a2 = a * a;
+    let mut term = a;
+    let mut sum = a;
+    let mut n = 0.0;
+    while term > sum * 1e-17 {
+        n += 1.0;
+        term *= 2.0 * a2 / (2.0 * n + 1.0);
+        sum += term;
+    }
+    (2.0 / std::f64::consts::PI.sqrt() * (-a2).exp() * sum).copysign(x)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::pipeline::layout;
+
+    fn tones_for(mode: Mode, text: &str) -> Vec<u8> {
+        let msg = rr73_ft8::Message::parse(text).expect("parse");
+        let payload = rr73_ft8::message::pack(&msg, &mut rr73_ft8::CallsignHashes::new()).expect("pack");
+        rr73_ft8::tones::from_payload(mode, &payload)
+    }
+
+    #[test]
+    fn block_centre_phase_matches_the_sample_by_sample_phase() {
+        for mode in [Mode::Ft8, Mode::Ft4] {
+            let l = layout(mode);
+            let tones = tones_for(mode, "W9XYZ K1ABC RR73");
+            let mut centres = Vec::new();
+            phase_at_block_centres(l, &tones, 60, &mut centres);
+            let mut phase = Phase::new(l, &tones);
+            let all: Vec<f64> = (0..phase.len()).map(|_| phase.advance().0).collect();
+            assert_eq!(centres.len(), all.len() / 60);
+            for (m, theta) in centres.iter().enumerate() {
+                assert!((theta - all[m * 60 + 30]).abs() < 1e-9, "{mode:?} block {m}");
+            }
+        }
+    }
+
+    #[test]
+    fn model_matches_the_codec_waveform() {
+        for mode in [Mode::Ft8, Mode::Ft4] {
+            let l = layout(mode);
+            let tones = tones_for(mode, "CQ K1ABC FN42");
+            let wave = rr73_ft8::synth::gfsk(mode, &tones, 1234.5, 12_000, 1.0);
+            let mut model = Model::new(l, &tones, 1234.5);
+            assert_eq!(model.phase.len(), wave.len());
+            let values: Vec<Complex64> = (0..wave.len()).map(|_| model.advance()).collect();
+            // Skip the amplitude ramps (one symbol for FT4, T/8 for FT8).
+            let skip = l.samples_per_symbol;
+            let worst = values[skip..values.len() - skip]
+                .iter()
+                .zip(&wave[skip..wave.len() - skip])
+                .map(|(c, &s)| (c.im - f64::from(s)).abs())
+                .fold(0.0f64, f64::max);
+            assert!(worst < 1e-4, "{mode:?}: {worst}");
+        }
+    }
+
+    fn rendered(snr_db: f64, noise: bool) -> (Vec<f32>, Vec<u8>) {
+        use rr73_chansim::{Noise, Scene, SimSignal, render};
+        let scene = Scene {
+            mode: Mode::Ft8,
+            signals: vec![SimSignal::new("CQ K1ABC FN42", 1500.3, 0.23, snr_db)],
+            noise: if noise { Noise::Awgn } else { Noise::None },
+        };
+        (
+            render(&scene, 3).expect("render").0,
+            tones_for(Mode::Ft8, "CQ K1ABC FN42"),
+        )
+    }
+
+    /// The rendered signal's start sample: (0.5 + 0.23) s at 12 kHz.
+    const START: isize = 8760;
+
+    fn power(x: &[f32]) -> f64 {
+        x.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>()
+    }
+
+    #[test]
+    fn exact_placement_removes_the_signal() {
+        let (mut audio, tones) = rendered(10.0, false);
+        let before = power(&audio);
+        let at = Placement {
+            start: START,
+            freq_hz: 1500.3,
+        };
+        remove(
+            layout(Mode::Ft8),
+            &tones,
+            &mut audio,
+            at,
+            1920,
+            &mut SubtractScratch::default(),
+        );
+        let after = power(&audio);
+        assert!(10.0 * (after / before).log10() < -30.0, "{before} {after}");
+    }
+
+    #[test]
+    fn refinement_recovers_start_and_frequency() {
+        let (audio, tones) = rendered(-5.0, true);
+        let mut s = SubtractScratch::default();
+        for (dstart, dfreq) in [(400isize, 1.4), (-450, -1.5), (0, 0.0), (37, 0.7)] {
+            let coarse = Placement {
+                start: START + dstart,
+                freq_hz: 1500.3 + dfreq,
+            };
+            let fine = refine(layout(Mode::Ft8), &tones, &audio, coarse, &mut s);
+            assert!(
+                (fine.start - START).abs() <= 48,
+                "start {} for offset {dstart}",
+                fine.start
+            );
+            assert!(
+                (fine.freq_hz - 1500.3).abs() <= 0.1,
+                "freq {} for offset {dfreq}",
+                fine.freq_hz
+            );
+        }
+    }
+
+    #[test]
+    fn refinement_makes_coarse_subtraction_deep() {
+        let l = layout(Mode::Ft8);
+        let mut depth = Vec::new();
+        for refine_first in [false, true] {
+            let (mut audio, tones) = rendered(10.0, false);
+            let before = power(&audio);
+            let mut s = SubtractScratch::default();
+            let mut at = Placement {
+                start: START + 300,
+                freq_hz: 1500.3 + 1.2,
+            };
+            if refine_first {
+                at = refine(l, &tones, &audio, at, &mut s);
+            }
+            remove(l, &tones, &mut audio, at, 1920, &mut s);
+            depth.push(10.0 * (power(&audio) / before).log10());
+        }
+        assert!(depth[1] < -25.0, "{depth:?}");
+        assert!(depth[1] < depth[0] - 6.0, "{depth:?}");
+    }
+
+    #[test]
+    fn edges_and_empty_inputs_are_safe() {
+        let l = layout(Mode::Ft8);
+        let mut s = SubtractScratch::default();
+        let tones = tones_for(Mode::Ft8, "CQ K1ABC FN42");
+        for start in [-200_000isize, -100_000, -5, 170_000, 1_000_000] {
+            let mut audio = vec![0.1f32; 180_000];
+            let at = Placement {
+                start,
+                freq_hz: 1000.0,
+            };
+            remove(l, &tones, &mut audio, at, 1920, &mut s);
+            assert!(audio.iter().all(|v| v.is_finite()));
+            assert!(refine(l, &tones, &audio, at, &mut s).freq_hz.is_finite());
+        }
+        let at = Placement {
+            start: 0,
+            freq_hz: 1000.0,
+        };
+        let mut empty: Vec<f32> = Vec::new();
+        remove(l, &tones, &mut empty, at, 1920, &mut s);
+        assert_eq!(refine(l, &tones, &empty, at, &mut s), at);
+        let mut audio = vec![0.1f32; 1000];
+        remove(l, &[], &mut audio, at, 1920, &mut s);
+        assert_eq!(refine(l, &[], &audio, at, &mut s), at);
+        assert!(audio.iter().all(|&v| v == 0.1));
+    }
+}

@@ -7,7 +7,7 @@
 use std::sync::Arc;
 
 pub use rustfft::Fft;
-pub use rustfft::num_complex::Complex32;
+pub use rustfft::num_complex::{Complex32, Complex64};
 use rustfft::{FftDirection, FftPlanner};
 
 /// A cache of forward and inverse complex FFT plans for `f32`.

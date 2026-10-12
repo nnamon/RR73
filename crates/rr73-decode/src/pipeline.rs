@@ -14,6 +14,7 @@ use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
 use crate::search::{CandidateSearch, CostasSearch};
 use crate::snr::SnrScale;
 use crate::stages::{NoRefine, NoSubtract, Subtractor, SyncRefine};
+use crate::subtract::{ModelSubtract, SubtractScratch};
 use crate::validate::{CrcUnpack, Rejection, Validator};
 use crate::view::{Candidate, SymbolView, frame_range};
 
@@ -86,6 +87,7 @@ struct Workspace {
     noise: Vec<f32>,
     audio: Vec<f32>,
     seen: Vec<Payload>,
+    subtract: SubtractScratch,
 }
 
 impl Default for Workspace {
@@ -101,6 +103,7 @@ impl Default for Workspace {
             noise: Vec::new(),
             audio: Vec::new(),
             seen: Vec::new(),
+            subtract: SubtractScratch::default(),
         }
     }
 }
@@ -165,6 +168,10 @@ impl Pipeline {
         };
         let subtractor: Box<dyn Subtractor> = match config.subtract.kind {
             SubtractKind::None => Box::new(NoSubtract),
+            SubtractKind::Model => Box::new(ModelSubtract {
+                smooth_s: config.subtract.smooth_s,
+                refine: config.subtract.refine,
+            }),
         };
         Self {
             search,
@@ -313,12 +320,14 @@ impl Pipeline {
                 timings.validate_s += sw.elapsed_s();
             }
 
-            if pass < passes {
-                let sw = Stopwatch::start();
-                self.subtractor
-                    .subtract(layout, &mut ws.audio, &decodes[pass_start..]);
-                timings.subtract_s += sw.elapsed_s();
+            // A pass that found nothing new leaves the residual as it was: stop.
+            if pass == passes || decodes.len() == pass_start {
+                break;
             }
+            let sw = Stopwatch::start();
+            self.subtractor
+                .subtract(layout, &mut ws.audio, &decodes[pass_start..], &mut ws.subtract);
+            timings.subtract_s += sw.elapsed_s();
         }
         timings.total_s = total.elapsed_s();
         DecodeReport {
@@ -446,9 +455,14 @@ mod tests {
             .expect("config");
         let r = run(&audio, &wide, &mut ctx);
         assert_eq!(ctx.ws.spec.bins(), bins_2x * 2);
-        // Without subtraction both passes see the same audio and find the same candidates.
+        // Pass 1 decodes nothing from noise, so pass 2 does not run.
+        let one = run(
+            &audio,
+            &wide.with_overrides(&["passes=1"]).expect("config"),
+            &mut ctx,
+        );
         assert!(r.stats.candidates > 0);
-        assert_eq!(r.stats.candidates % 2, 0);
+        assert_eq!(r.stats.candidates, one.stats.candidates);
         assert_eq!(r.stats.ldpc_attempts, r.stats.candidates);
     }
 }

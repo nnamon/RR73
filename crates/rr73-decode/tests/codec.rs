@@ -281,3 +281,51 @@ fn snr_estimate_is_calibrated_for_gfsk_signals() {
         assert!((mean - snr).abs() <= 1.0, "{snr} dB: mean estimate {mean:.2}");
     }
 }
+
+#[test]
+fn subtraction_uncovers_an_overlapped_signal() {
+    let signals = vec![
+        SimSignal::new("CQ K1ABC FN42", 1000.0, 0.0, 5.0),
+        SimSignal::new("W9XYZ K1ABC -15", 1012.0, 0.3, -12.0),
+    ];
+    let (audio, _) = rr73_chansim::render(&scene(Mode::Ft8, signals), 21).expect("render");
+    let texts = |preset: &str| {
+        let config = DecoderConfig::preset(preset).expect("preset");
+        let r = decode(
+            &SlotAudio::new(&audio, Mode::Ft8),
+            &config,
+            &mut DecodeContext::new(),
+        );
+        r.decodes
+            .iter()
+            .map(|d| (d.text.clone(), d.pass))
+            .collect::<Vec<_>>()
+    };
+    let base = texts("baseline");
+    assert_eq!(base, vec![("CQ K1ABC FN42".to_string(), 1)]);
+    let sub = texts("subtract-3");
+    assert_eq!(
+        sub,
+        vec![
+            ("CQ K1ABC FN42".to_string(), 1),
+            ("W9XYZ K1ABC -15".to_string(), 2)
+        ]
+    );
+}
+
+#[test]
+fn subtraction_stops_when_a_pass_finds_nothing() {
+    let (noise, _) = rr73_chansim::render(&rr73_chansim::noise_only(Mode::Ft8), 22).expect("render");
+    let run = |preset: &str| {
+        let config = DecoderConfig::preset(preset).expect("preset");
+        decode(
+            &SlotAudio::new(&noise, Mode::Ft8),
+            &config,
+            &mut DecodeContext::new(),
+        )
+    };
+    let (base, sub) = (run("baseline"), run("subtract-3"));
+    assert!(sub.decodes.is_empty());
+    assert_eq!(sub.stats.candidates, base.stats.candidates);
+    assert_eq!(sub.timings.subtract_s, 0.0);
+}

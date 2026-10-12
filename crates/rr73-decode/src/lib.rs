@@ -8,7 +8,7 @@
 //!           -> Demodulator       symbol energies to LLRs   -> [f32; 174]
 //!           -> LdpcDecoder       belief propagation        -> codeword
 //!           -> Validator         CRC, unpack, duplicates   -> message
-//!           -> Subtractor        (pass-through for now)
+//!           -> Subtractor        rebuild and remove decodes, next pass
 //!           -> DecodeReport
 //! ```
 //!
@@ -26,6 +26,7 @@ pub mod report;
 pub mod search;
 pub mod snr;
 pub mod stages;
+pub mod subtract;
 pub mod validate;
 pub mod view;
 

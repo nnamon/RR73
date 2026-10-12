@@ -8,13 +8,13 @@ use rr73_dsp::WindowKind;
 use serde::{Deserialize, Serialize};
 
 /// Names of the built-in presets.
-pub const PRESETS: &[&str] = &["baseline"];
+pub const PRESETS: &[&str] = &["baseline", "subtract-3"];
 
 /// Errors from building a configuration.
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ConfigError {
     /// No preset has this name.
-    #[error("unknown preset {0:?}; known presets: baseline")]
+    #[error("unknown preset {0:?}; known presets: baseline, subtract-3")]
     UnknownPreset(String),
     /// An override is not `key=value`.
     #[error("override {0:?} is not key=value")]
@@ -174,6 +174,9 @@ pub struct ValidateParams {
 pub enum SubtractKind {
     /// Leave the audio unchanged.
     None,
+    /// Rebuild each decode with a complex GFSK model, estimate its amplitude over time and
+    /// subtract it.
+    Model,
 }
 
 /// Subtractor parameters.
@@ -182,6 +185,11 @@ pub enum SubtractKind {
 pub struct SubtractParams {
     /// Implementation.
     pub kind: SubtractKind,
+    /// Moving-average length for the amplitude estimate, in seconds (used by `model`).
+    pub smooth_s: f32,
+    /// Refine start and frequency from the decoded tones before subtracting (used by
+    /// `model`).
+    pub refine: bool,
 }
 
 impl DecoderConfig {
@@ -225,15 +233,32 @@ impl DecoderConfig {
             },
             subtract: SubtractParams {
                 kind: SubtractKind::None,
+                smooth_s: 0.16,
+                refine: false,
             },
             passes: 1,
         }
+    }
+
+    /// The `subtract-3` preset: `baseline` plus up to 3 passes with model subtraction
+    /// between them (amplitude averaged over 0.16 s, start and frequency refined from the
+    /// decoded tones).
+    pub fn subtract_3() -> Self {
+        let mut c = Self::baseline();
+        c.passes = 3;
+        c.subtract = SubtractParams {
+            kind: SubtractKind::Model,
+            smooth_s: 0.16,
+            refine: true,
+        };
+        c
     }
 
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
             "baseline" => Ok(Self::baseline()),
+            "subtract-3" => Ok(Self::subtract_3()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }
@@ -292,6 +317,9 @@ impl DecoderConfig {
             || !(self.ldpc.min_sum_scale > 0.0 && self.ldpc.min_sum_scale <= 1.0)
         {
             return bad("max_iterations must be at most 10000 and min_sum_scale in (0, 1]");
+        }
+        if !(self.subtract.smooth_s > 0.0 && self.subtract.smooth_s <= 15.0) {
+            return bad("subtract.smooth_s must be in (0, 15] s");
         }
         if !(1..=8).contains(&self.passes) {
             return bad("passes must be 1 to 8");

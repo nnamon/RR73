@@ -141,6 +141,8 @@ CI (`.github/workflows/ci.yml`) runs the same fetch, synth and run, then the gat
 
 `baseline` is the ft8_lib method (`crates/rr73-decode`, `DecoderConfig::baseline`): a spectrogram with 2 frames per symbol and 2 bins per tone spacing (Hann window over 2 symbols, 200 to 3000 Hz), the Costas sync score over 60 time steps (DT -2.3 to 2.5 s for FT8), the 140 best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to variance 24, 25 iterations of sum-product belief propagation, CRC-14 check and unpack, one pass. `rr73-bench presets baseline` prints it.
 
+`subtract-3` is `baseline` with up to 3 passes. After each pass that finds new messages, each new decode is rebuilt with a complex GFSK model matched to `rr73_ft8::synth::gfsk`, its start and frequency are refined from its known tones, its complex amplitude is estimated with a 0.16 s moving average, and the rebuilt signal is subtracted; the next pass decodes the residual. A pass that finds nothing new ends decoding. `docs/experiments/0001-subtraction.md` has the measurements. Overrides: `subtract.smooth_s`, `subtract.refine`, `passes`.
+
 The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth.
 
 ## Baseline, 2026-10-13

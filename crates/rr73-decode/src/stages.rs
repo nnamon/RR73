@@ -1,8 +1,9 @@
-//! The refinement and subtraction stages. Both have only their pass-through
-//! implementations so far; subtraction is the next experiment.
+//! The refinement and subtraction stage traits and their pass-through implementations. The
+//! model-based subtractor is in [`crate::subtract`].
 
 use crate::layout::FrameLayout;
 use crate::report::Decode;
+use crate::subtract::SubtractScratch;
 use crate::view::{Candidate, SymbolView};
 
 /// Improves a candidate's time and frequency before demodulation.
@@ -32,8 +33,14 @@ pub trait Subtractor {
     fn name(&self) -> &'static str;
 
     /// Subtracts `decodes` (found by the pass that ended) from `audio` (12 kHz, slot start
-    /// at sample 0).
-    fn subtract(&self, layout: &FrameLayout, audio: &mut [f32], decodes: &[Decode]);
+    /// at sample 0), using `scratch` for working buffers.
+    fn subtract(
+        &self,
+        layout: &FrameLayout,
+        audio: &mut [f32],
+        decodes: &[Decode],
+        scratch: &mut SubtractScratch,
+    );
 }
 
 /// Leaves the audio unchanged.
@@ -45,5 +52,12 @@ impl Subtractor for NoSubtract {
         "none"
     }
 
-    fn subtract(&self, _layout: &FrameLayout, _audio: &mut [f32], _decodes: &[Decode]) {}
+    fn subtract(
+        &self,
+        _layout: &FrameLayout,
+        _audio: &mut [f32],
+        _decodes: &[Decode],
+        _scratch: &mut SubtractScratch,
+    ) {
+    }
 }
