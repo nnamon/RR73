@@ -118,7 +118,7 @@ def run_session(
     if ctx.ntp_server:
         offset = measure_offset(ctx.ntp_server)
         if offset is None:
-            log.warning("NTP server %s did not answer; using the host clock as it is", ctx.ntp_server)
+            log.warning("NTP server %s gave no usable reply; using the host clock as it is", ctx.ntp_server)
         else:
             correction_s += offset.offset_s
             host_offset_s = offset.offset_s
