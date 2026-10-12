@@ -1,13 +1,14 @@
 //! Callsigns and the fields that carry them.
 //!
-//! A standard callsign has a 1 or 2 character prefix containing a letter, one digit and a
-//! suffix of 1 to 3 letters (QEX, Appendix A). It fits the 28-bit field c28, optionally with
-//! a /R or /P flag. Other callsigns up to 11 characters fit the 58-bit field c58 of message
-//! type 4, or travel as a hash (see [`crate::hash`]).
+//! A standard callsign is a 1 or 2 character prefix, one digit and a suffix of up to 3
+//! letters, laid out in 6 positions with the digit third (QEX, Appendix A). It fits the
+//! 28-bit field c28, optionally with a /R or /P flag. Other callsigns up to 11 characters fit
+//! the 58-bit field c58 of message type 4, or travel as a hash (see [`crate::hash`]).
 //!
-//! The standard-callsign layout, including the 3DA0 (Eswatini) and 3X (Guinea) prefix rules,
-//! is ported from `pack_basecall()` and `unpack28()` in ft8_lib's `ft8/message.c`
-//! (Kārlis Goba, MIT licence).
+//! The layout is ported from `pack_basecall()` and `unpack28()` in ft8_lib's `ft8/message.c`
+//! (Kārlis Goba, MIT licence), without ft8_lib's 3DA0 and 3X prefix substitutions. WSJT-X
+//! 2.7.0-rc3 has none: it sends 3DA0XYZ as a nonstandard callsign and shows the c28 layout
+//! `3D0XYZ` as 3D0XYZ.
 
 use super::PackError;
 use crate::hash::{CallHash, HashWidth};
@@ -392,21 +393,15 @@ pub(crate) fn unpack_base(n: u32) -> Option<Callsign> {
     (encode_c6(call.as_str().as_bytes()) == Some(n)).then_some(call)
 }
 
-/// Lays a base callsign out in 6 positions so the digit lands in position 2, applies the
-/// 3DA0 → 3D0 and 3X → Q prefix rules, and returns its index.
+/// Lays a base callsign out in 6 positions so the digit lands in position 2 and returns its
+/// index.
 fn encode_c6(call: &[u8]) -> Option<u32> {
     let len = call.len();
     if len < 3 {
         return None;
     }
     let mut c6 = [b' '; 6];
-    if call.starts_with(b"3DA0") && len > 4 && len <= 7 {
-        c6[..3].copy_from_slice(b"3D0");
-        c6[3..len - 1].copy_from_slice(&call[4..]);
-    } else if call.starts_with(b"3X") && call[2].is_ascii_uppercase() && len <= 7 {
-        c6[0] = b'Q';
-        c6[1..len - 1].copy_from_slice(&call[2..]);
-    } else if call[2].is_ascii_digit() && len <= 6 {
+    if call[2].is_ascii_digit() && len <= 6 {
         c6[..len].copy_from_slice(call);
     } else if call[1].is_ascii_digit() && len <= 5 {
         c6[1..=len].copy_from_slice(call);
@@ -435,8 +430,9 @@ fn encode_c6(call: &[u8]) -> Option<u32> {
     Some(n)
 }
 
-/// Decodes a standard-callsign index. Accepts only layouts that a real callsign produces: a
-/// prefix containing a letter and a suffix of 1 to 3 letters followed by spaces.
+/// Decodes a standard-callsign index. The suffix positions must hold letters followed by
+/// spaces, and the text must be a [`Callsign`]; WSJT-X shows such values as they are, even
+/// those that are no real callsign, such as `KA1` or `01AB`.
 fn decode_c6(mut n: u32) -> Option<Callsign> {
     if n >= STANDARD_CALLS {
         return None;
@@ -456,29 +452,11 @@ fn decode_c6(mut n: u32) -> Option<Callsign> {
 
     let suffix = &c6[3..];
     let suffix_len = suffix.iter().take_while(|c| c.is_ascii_uppercase()).count();
-    if suffix_len == 0 || suffix[suffix_len..].iter().any(|&c| c != b' ') {
+    if suffix[suffix_len..].iter().any(|&c| c != b' ') {
         return None;
     }
-    let prefix_has_letter = c6[0].is_ascii_uppercase() || c6[1].is_ascii_uppercase();
-    if !prefix_has_letter || (c6[0] == b' ' && !c6[1].is_ascii_uppercase()) {
-        return None;
-    }
-    let end = 3 + suffix_len;
-    let mut text = [0u8; 8];
-    let len = if c6.starts_with(b"3D0") {
-        text[..4].copy_from_slice(b"3DA0");
-        text[4..4 + suffix_len].copy_from_slice(&c6[3..end]);
-        4 + suffix_len
-    } else if c6[0] == b'Q' && c6[1].is_ascii_uppercase() {
-        text[..2].copy_from_slice(b"3X");
-        text[2..end + 1].copy_from_slice(&c6[1..end]);
-        end + 1
-    } else {
-        let start = usize::from(c6[0] == b' ');
-        text[..end - start].copy_from_slice(&c6[start..end]);
-        end - start
-    };
-    Callsign::new(std::str::from_utf8(&text[..len]).ok()?).ok()
+    let start = usize::from(c6[0] == b' ');
+    Callsign::new(std::str::from_utf8(&c6[start..3 + suffix_len]).ok()?).ok()
 }
 
 /// 58-bit value of a callsign: 11 characters of [`ALPHABET38`], right-justified, as ft8_lib
@@ -561,9 +539,10 @@ mod tests {
 
     #[test]
     fn standard_callsigns() {
+        // As WSJT-X 2.7.0-rc3 packs and shows them (fixtures/ft8/wsjtx.json, wsjtx_decodes.json).
         for s in [
-            "K1A", "K1ABC", "KA1ABC", "W1AW", "9V1NE", "2E0ABC", "A61AB", "E71A", "3DA0XYZ", "3DA0X",
-            "3XA0XYZ", "3XZ0AB", "Q1ABC", "CQ1CQ", "DE6ABC",
+            "K1A", "K1ABC", "KA1ABC", "W1AW", "9V1NE", "2E0ABC", "A61AB", "E71A", "Q1ABC", "CQ1CQ", "DE6ABC",
+            "3D0XYZ", "QA0XYZ", "KA1", "01AB",
         ] {
             assert!(call(s).is_standard_base(), "{s}");
         }
@@ -571,11 +550,11 @@ mod tests {
             "PJ4/K1ABC",
             "YW18FIFA",
             "ZY50Y",
-            "KA1",
             "K1ABCD",
-            "QA0XYZ",
-            "3D0XYZ",
-            "01AB",
+            "3DA0XYZ",
+            "3DA0X",
+            "3XA0XYZ",
+            "3XZ0AB",
             "K1ABC/QRP",
             "AB1CDEF",
         ] {

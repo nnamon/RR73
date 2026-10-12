@@ -1,0 +1,99 @@
+# Signals for tools/wsjtx/decodes.sh: rr73-ft8 builds them, WSJT-X's jt9 decodes them.
+# `text <message>` is packed by rr73-ft8; `hex <payload>` is sent as given. A note follows "  # ".
+
+# Messages rr73-ft8 packs: jt9 must show the same text
+text CQ K1ABC FN42
+text CQ POTA W1AW FN31
+text K1ABC W9XYZ R-15
+text K1ABC W9XYZ RR73
+text K1ABC/R W9XYZ EN37
+text G4ABC/P PA9XYZ JO22
+text CQ PJ4/K1ABC  # type 4 CQ
+text <W9XYZ> PJ4/K1ABC RRR  # type 4, hash first
+text PJ4/K1ABC <W9XYZ> 73  # type 4, hash second
+text W9XYZ <PJ4/K1ABC> R-05  # 22-bit hash in type 1
+text K1ABC RR73; W9XYZ <KH1/KH7Z> -08
+text W9XYZ K1ABC R 17B EMA
+text TU; W9XYZ K1ABC R 589 MA
+text <G4ABC> <PA9XYZ> R 570007 JO22DB
+text 123456789ABCDEF012
+text TNX BOB 73 GL
+text K1ABC RR73; <YW18FIFA> <TX5S> +04  # hashed callsign in a DXpedition c28 field
+text K1ABC <PJ4/W9XYZ> 1B DX  # hashed callsign in Field Day
+text K1ABC <PJ4/W9XYZ> 599 1234  # hashed callsign in RTTY Roundup
+text R2RFE/P <EA8/G5LSI> R+12  # type 2 with a hashed callsign
+text <K1AB2> W9XYZ -05  # nonstandard callsign hashed in type 1
+text K1ABC W9XYZ -35  # report below -30
+text K1ABC W9XYZ R+50
+text K1ABC W9XYZ R RR73
+text CQ K1ABC RR73
+text QRZ <PJ4/K1ABC> FN42  # hashed callsign after QRZ
+text KA1 W9XYZ -05  # c28 layout without suffix
+text 3D0XYZ K1ABC -05
+text <3DA0XYZ> W9XYZ -05
+text CQ 3DA0XYZ
+text K1ABC W9XYZ 1G AB  # Field Day class G
+text K1ABC W9XYZ R 3F NB  # last section
+text <DL1ABC> <OK1XYZ> 520000 AA00AA  # serial 0 with report 52, which WSJT-X does not pack
+text CAFE  # one hex word is telemetry
+text 0  # telemetry 0
+
+# Payloads built by hand from WSJT-X's own (fixtures/ft8/wsjtx.json), one field changed
+hex 09bde3506149dc1fb988  # K1ABC W9XYZ, g15 report code 86
+hex 09bde3506149dc1fbe48  # K1ABC W9XYZ, g15 report code 105
+hex 09bde3506149dc1fbe88  # K1ABC W9XYZ, g15 report code 106
+hex 09bde3506149dc1fbf88  # K1ABC W9XYZ, g15 report code 110
+hex 09bde3506149dc1fc588  # K1ABC W9XYZ, g15 report code 134
+hex 09bde3506149dc1fffc8  # K1ABC W9XYZ, g15 report code 367
+hex 09bde3506149dc1fa4c8  # K1ABC W9XYZ RR73 as g15 32403 (ft8_lib, public description)
+hex 09bde3506149dc3fa4c8  # R + g15 32403
+hex 09bde3506149dc3fa488  # R + RRR
+hex 09bde3506149dc3fa448  # R + blank
+hex 09bde3506149dc1fa408  # g15 32400
+hex 000000204def1a9fa908  # CQ K1ABC -15
+hex 000000204def1aaa1988  # CQ K1ABC R FN42
+hex 000000204def1a9fa488  # CQ K1ABC RRR
+hex 000000204def1a9fa508  # CQ K1ABC 73
+hex 0000002018d89f0a1988  # CQ with a 22-bit hash as the caller
+hex 000000006149dc1fa908  # DE W9XYZ -15
+hex 000000106149dc3fa908  # QRZ W9XYZ R-15
+hex 09bde3500000011fa908  # K1ABC CQ -15 (word in the second field)
+hex 00003eb06149dc1fa908  # CQ with empty letter modifier (c28 1003)
+hex 09bde3506149dc1fa910  # type 2 without /P flag
+hex be5179106149dc1fa908  # c6 QA0XYZ (ft8_lib's form of 3XA0XYZ)
+hex 2374c2306149dc1fa908  # c6 3D0XYZ (ft8_lib's form of 3DA0XYZ)
+hex 0ade36906149dc1fa908  # c6 Q1ABC
+hex 95c620f06149dc1fa908  # c6 KA1 (no suffix)
+hex 05fccda06149dc1fa908  # c6 01AB (prefix without a letter)
+hex 04def1a84860b3380018  # K1ABC G4ABC 599, serial 0
+hex 04def1a84860b33fd018  # K1ABC G4ABC 599, s13 8000
+hex 00fd01684860b3380058  # RTTY Roundup with a hashed first callsign
+hex 09bde350c293b80000c0  # K1ABC W9XYZ 1A, S7 0
+hex 09bde350c293b800a8c0  # K1ABC W9XYZ 1A, S7 84
+hex 09bde350c293b800acc0  # K1ABC W9XYZ 1A, S7 86
+hex 09bde350c293b800aec0  # K1ABC W9XYZ 1A, S7 87
+hex 09bde350c293b800fec0  # K1ABC W9XYZ 1A, S7 127
+hex 09bde350c293b80602c0  # Field Day class code 6
+hex 09bde3501fa02d0002c0  # Field Day with a hashed second callsign
+hex 09bde3501fa02d325640  # DXpedition with a hashed second callsign
+hex 00000020c293b8325640  # DXpedition with CQ as first callsign
+hex 9489976fa0004730ffe8  # EU VHF R 520000
+hex 9489976fa7ffc7310028  # EU VHF locator code 18662400
+hex 3c020b018da062ca0000  # free text HELLO padded on the right (ft8_lib)
+hex 00000000000000000000  # free text of 13 spaces
+hex 8932f3c8b002d9400000  # free text value 42^13
+hex 00000000000000000140  # telemetry 0
+hex 000001a3a311caa00460  # CQ PJ4/K1ABC with h12 0 (ft8_lib)
+hex 56b001a3a311caa004e0  # CQ PJ4/K1ABC with r2 = RRR
+hex 56b001a3a311caa00660  # CQ PJ4/K1ABC with h1 set
+hex bfe7ff982f309913c060  # CQ LZ365BM, callsign left-justified (on air)
+hex 63edcee2a4ae07f50080  # type 0.2
+hex 63edcee2a4ae07f50180  # type 0.6
+hex 63edcee2a4ae07f501c0  # type 0.7
+hex 09bde3506149dc1fa930  # type 6
+hex 09bde3506149dc1fa938  # type 7
+hex 09bde3506149dc1fd288  # K1ABC W9XYZ, g15 report code 186
+hex 09bde3506149dc1fd2c8  # K1ABC W9XYZ, g15 report code 187
+hex 09bde3506149dc3fa508  # R + 73
+hex 000000204def1a9fa4c8  # CQ K1ABC with RR73 as g15 32403
+hex 000000204def1a9fa448  # CQ K1ABC with nothing after the callsign

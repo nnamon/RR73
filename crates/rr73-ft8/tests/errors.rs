@@ -26,7 +26,7 @@ fn parse_reports_the_specific_problem() {
         PackError::FreeTextTooLong(25)
     );
     assert_eq!(parse_err("HELLO_WORLD"), PackError::FreeTextCharacter('_'));
-    assert_eq!(parse_err("K1ABC W9XYZ -45"), PackError::ReportOutOfRange(-45));
+    assert_eq!(parse_err("K1ABC W9XYZ -55"), PackError::ReportOutOfRange(-55));
     // "R+100" is no report, so the text falls through to free text, which is too long.
     assert_eq!(parse_err("K1ABC W9XYZ R+100"), PackError::FreeTextTooLong(17));
     assert_eq!(
@@ -58,8 +58,12 @@ fn parse_reports_the_specific_problem() {
     assert_eq!(parse_err("K1ABC W9XYZ 33A EMA"), PackError::Transmitters(33));
     assert_eq!(parse_err("K1ABC W9XYZ 0A EMA"), PackError::Transmitters(0));
     assert_eq!(
-        parse_err("K1ABC W9XYZ 3G EMA"),
-        PackError::InvalidFieldDayClass('G')
+        parse_err("K1ABC W9XYZ 3J EMA"),
+        PackError::InvalidFieldDayClass('J')
+    );
+    assert_eq!(
+        parse_err("K1ABC W9XYZ 3A GTA"),
+        PackError::UnknownSection("GTA".into())
     );
     assert_eq!(
         parse_err("K1ABC W9XYZ 3A XYZ"),
@@ -74,13 +78,34 @@ fn parse_reports_the_specific_problem() {
         parse_err("K1ABC W9XYZ 579 8000"),
         PackError::SerialOutOfRange {
             serial: 8000,
+            min: 1,
             max: 7999
         }
     );
     assert_eq!(
+        parse_err("K1ABC W9XYZ 579 0"),
+        PackError::SerialOutOfRange {
+            serial: 0,
+            min: 1,
+            max: 7999
+        }
+    );
+    assert_eq!(parse_err("K1ABC W9XYZ -51"), PackError::ReportOutOfRange(-51));
+    assert_eq!(parse_err("K1ABC W9XYZ R+51"), PackError::ReportOutOfRange(51));
+    let r15 = rr73_ft8::message::Report::new(-15).expect("report");
+    assert_eq!(
+        parse_err("CQ DX K1ABC -15"),
+        PackError::CqExchange(Exchange::Report {
+            report: r15,
+            ack: false
+        })
+    );
+    assert_eq!(parse_err("CQ <PJ4/K1ABC> FN42"), PackError::HashedCq);
+    assert_eq!(
         parse_err("G4ABC PA9XYZ R 572048 JO22DB"),
         PackError::SerialOutOfRange {
             serial: 2048,
+            min: 0,
             max: 2047
         }
     );
@@ -98,16 +123,16 @@ fn parse_reports_the_specific_problem() {
 #[test]
 fn parse_falls_back_to_free_text_when_it_fits() {
     // A malformed report that still fits 13 characters is sent as free text.
-    let m = Message::parse("K1A W9X -45").expect("free text");
+    let m = Message::parse("K1A W9X -55").expect("free text");
     assert!(matches!(m, Message::FreeText { .. }), "{m:?}");
-    assert_eq!(m.to_string(), "K1A W9X -45");
+    assert_eq!(m.to_string(), "K1A W9X -55");
 }
 
 #[test]
 fn field_constructors_reject_bad_values() {
     assert_eq!(Callsign::new("K1"), Err(PackError::InvalidCallsign("K1".into())));
     assert!(Callsign::new("PJ4/K1ABC/QRP").is_err());
-    assert_eq!(Report::new(-31), Err(PackError::ReportOutOfRange(-31)));
+    assert_eq!(Report::new(-51), Err(PackError::ReportOutOfRange(-51)));
     assert_eq!(SignalStrength::new(10), Err(PackError::InvalidStrength(10)));
     assert_eq!(
         FieldDayClass::from_letter('Z'),
@@ -189,6 +214,7 @@ fn pack_rejects_messages_the_bits_cannot_carry() {
         pack(&m, &mut hashes),
         Err(PackError::SerialOutOfRange {
             serial: 3000,
+            min: 0,
             max: 2047
         })
     );
@@ -204,6 +230,7 @@ fn pack_rejects_messages_the_bits_cannot_carry() {
         pack(&m, &mut hashes),
         Err(PackError::SerialOutOfRange {
             serial: 9000,
+            min: 1,
             max: 7999
         })
     );
@@ -317,33 +344,82 @@ fn unpack_rejects_reserved_types_and_bad_fields() {
         unpack(&std_payload(call, 0, NTOKENS + 5, 1, 0, 32_401, 1), &empty),
         invalid(Field::SuffixFlag)
     );
-    // A standard-callsign value that is no real callsign: "00" + "0" + "A", prefix without letter.
-    let prefix_00 = NTOKENS + MAX22 + 36 * 10 * 27u128.pow(3) + 27 * 27;
+    // A standard-callsign value with a letter after a space in the suffix: " K1 A ".
+    let gap = NTOKENS + MAX22 + ((((20 * 10 + 1) * 27) * 27 + 1) * 27);
     assert_eq!(
-        unpack(&std_payload(prefix_00, 0, call, 0, 0, 1, 1), &empty),
+        unpack(&std_payload(gap, 0, call, 0, 0, 1, 1), &empty),
         invalid(Field::Callsign)
     );
+    // WSJT-X shows c28 layouts that are no real callsign as they are: "000A".
+    let prefix_00 = NTOKENS + MAX22 + 36 * 10 * 27u128.pow(3) + 27 * 27;
+    assert_eq!(
+        unpack(&std_payload(prefix_00, 0, call, 0, 0, 1, 1), &empty).map(|m| m.to_string()),
+        Ok("000A K1ABC AA01".to_string())
+    );
 
-    // g15: 32 400 is unused, R before a word, reports above +99 dB.
+    // g15: 32 400 is unused; R is ignored before RRR and refused before RR73 as 32 403;
+    // report codes above 186 are refused.
+    let show = |p: Payload| unpack(&p, &empty).map(|m| m.to_string());
     assert_eq!(
-        unpack(&std_payload(2, 0, call, 0, 0, 32_400, 1), &empty),
-        invalid(Field::Grid)
+        show(std_payload(call, 0, call, 0, 0, 32_400, 1)),
+        Err(UnpackError::InvalidField(Field::Grid))
     );
     assert_eq!(
-        unpack(&std_payload(2, 0, call, 0, 1, 32_402, 1), &empty),
-        invalid(Field::Acknowledgement)
+        show(std_payload(call, 0, call, 0, 1, 32_402, 1)),
+        Ok("K1ABC K1ABC RRR".into())
     );
     assert_eq!(
-        unpack(&std_payload(2, 0, call, 0, 1, 32_373, 1), &empty),
-        invalid(Field::Acknowledgement)
+        show(std_payload(call, 0, call, 0, 1, 32_401, 1)),
+        Ok("K1ABC K1ABC".into())
     );
     assert_eq!(
-        unpack(&std_payload(2, 0, call, 0, 0, 32_535, 1), &empty),
-        invalid(Field::Report)
+        show(std_payload(call, 0, call, 0, 1, 32_373, 1)),
+        Ok("K1ABC K1ABC R RR73".into())
     );
-    assert!(unpack(&std_payload(2, 0, call, 0, 0, 32_534, 1), &empty).is_ok());
+    assert_eq!(
+        show(std_payload(call, 0, call, 0, 1, 32_403, 1)),
+        Err(UnpackError::InvalidField(Field::Acknowledgement))
+    );
+    assert_eq!(
+        show(std_payload(call, 0, call, 0, 0, 32_587, 1)),
+        Err(UnpackError::InvalidField(Field::Report))
+    );
+    assert_eq!(
+        show(std_payload(call, 0, call, 0, 0, 32_586, 1)),
+        Ok("K1ABC K1ABC +50".into())
+    );
+    assert_eq!(
+        show(std_payload(call, 0, call, 0, 0, 32_486, 1)),
+        Ok("K1ABC K1ABC -50".into())
+    );
 
-    // Field Day class 6, section 84.
+    // CQ carries only a locator, RR73 or nothing, from a callsign in full.
+    assert_eq!(
+        show(std_payload(2, 0, call, 0, 0, 32_420, 1)),
+        Err(UnpackError::InvalidField(Field::Cq))
+    );
+    assert_eq!(
+        show(std_payload(2, 0, call, 0, 1, 1, 1)),
+        Err(UnpackError::InvalidField(Field::Cq))
+    );
+    assert_eq!(
+        show(std_payload(2, 0, call, 0, 0, 32_402, 1)),
+        Err(UnpackError::InvalidField(Field::Cq))
+    );
+    assert_eq!(
+        show(std_payload(2, 0, NTOKENS + 5, 0, 0, 1, 1)),
+        Err(UnpackError::InvalidField(Field::Cq))
+    );
+    assert_eq!(
+        show(std_payload(2, 0, call, 0, 0, 32_373, 1)),
+        Ok("CQ K1ABC RR73".into())
+    );
+    assert_eq!(
+        show(std_payload(1, 0, call, 0, 0, 32_420, 1)),
+        Ok("QRZ K1ABC -15".into())
+    );
+
+    // Field Day class 6 (G), sections 0 and 87.
     let fd = |class: u128, section: u128| {
         Bits::new()
             .put(call, 28)
@@ -356,11 +432,15 @@ fn unpack_rejects_reserved_types_and_bad_fields() {
             .put(0, 3)
             .payload()
     };
-    assert_eq!(unpack(&fd(6, 0), &empty), invalid(Field::FieldDayClass));
-    assert_eq!(unpack(&fd(0, 84), &empty), invalid(Field::Section));
-    assert!(unpack(&fd(5, 83), &empty).is_ok());
+    assert_eq!(
+        unpack(&fd(6, 1), &empty).map(|m| m.to_string()),
+        Ok("K1ABC K1ABC 1G AB".to_string())
+    );
+    assert_eq!(unpack(&fd(0, 0), &empty), invalid(Field::Section));
+    assert_eq!(unpack(&fd(0, 87), &empty), invalid(Field::Section));
+    assert!(unpack(&fd(7, 86), &empty).is_ok());
 
-    // RTTY Roundup exchange 8000 and 8066.
+    // RTTY Roundup exchange 0, 8000 and 8066.
     let rtty = |s13: u128| {
         Bits::new()
             .put(0, 1)
@@ -372,16 +452,17 @@ fn unpack_rejects_reserved_types_and_bad_fields() {
             .put(3, 3)
             .payload()
     };
+    assert_eq!(unpack(&rtty(0), &empty), invalid(Field::RoundupExchange));
     assert_eq!(unpack(&rtty(8000), &empty), invalid(Field::RoundupExchange));
     assert_eq!(unpack(&rtty(8066), &empty), invalid(Field::RoundupExchange));
     assert!(unpack(&rtty(8065), &empty).is_ok());
 
-    // Type 4: c58 beyond 38^11, RRR in a CQ.
-    let t4 = |c58: u128, r2: u128, c1: u128| {
+    // Type 4: c58 beyond 38^11, RRR or h1 in a CQ.
+    let t4 = |c58: u128, h1: u128, r2: u128, c1: u128| {
         Bits::new()
             .put(0, 12)
             .put(c58, 58)
-            .put(0, 1)
+            .put(h1, 1)
             .put(r2, 2)
             .put(c1, 1)
             .put(4, 3)
@@ -389,11 +470,12 @@ fn unpack_rejects_reserved_types_and_bad_fields() {
     };
     let c58 = 77_496_702_819; // OR18TRA
     assert_eq!(
-        unpack(&t4(38u128.pow(11), 0, 0), &empty),
+        unpack(&t4(38u128.pow(11), 0, 0, 0), &empty),
         invalid(Field::Callsign)
     );
-    assert_eq!(unpack(&t4(c58, 1, 1), &empty), invalid(Field::Reply));
-    assert!(unpack(&t4(c58, 0, 1), &empty).is_ok());
+    assert_eq!(unpack(&t4(c58, 0, 1, 1), &empty), invalid(Field::Cq));
+    assert_eq!(unpack(&t4(c58, 1, 0, 1), &empty), invalid(Field::Cq));
+    assert!(unpack(&t4(c58, 0, 0, 1), &empty).is_ok());
 
     // Type 5: locator beyond RR99XX.
     let t5 = |g25: u128| {

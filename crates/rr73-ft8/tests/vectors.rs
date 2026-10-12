@@ -3,13 +3,24 @@
 
 mod common;
 
-use common::{VectorFile, hex, payload, to_hex, tone_digits};
-use rr73_ft8::message::{ArrlSection, Exchange, Message, StateProvince, pack, unpack};
+use common::{Vector, VectorFile, hex, payload, to_hex, tone_digits};
+use rr73_ft8::message::{ArrlSection, Exchange, FreeText, Message, StateProvince, pack, unpack};
 use rr73_ft8::{CallsignHashes, Mode, crc, ldpc, tones};
 use std::collections::BTreeMap;
 
 fn vectors() -> VectorFile {
     common::load("vectors.json")
+}
+
+/// The message of a vector. Free text is built as free text: some of it (`A`, `1`) parses as
+/// telemetry, as in WSJT-X.
+fn message(v: &Vector) -> Message {
+    let parsed = if v.kind == "free" {
+        FreeText::new(&v.text).map(|text| Message::FreeText { text })
+    } else {
+        Message::parse(&v.text)
+    };
+    parsed.unwrap_or_else(|e| panic!("{}: {e}", v.text))
 }
 
 fn codeword_hex(codeword: &[u8; ldpc::N]) -> String {
@@ -41,7 +52,7 @@ fn the_vector_set_covers_every_message_type() {
 #[test]
 fn parse_and_pack_give_the_ft8lib_payload() {
     for v in vectors().vectors {
-        let message = Message::parse(&v.text).unwrap_or_else(|e| panic!("{}: {e}", v.text));
+        let message = message(&v);
         let packed = pack(&message, &mut CallsignHashes::new()).unwrap_or_else(|e| panic!("{}: {e}", v.text));
         assert_eq!(to_hex(&packed.0), v.payload, "{} ({})", v.text, v.packer);
         let (i3, n3) = message.i3_n3();
@@ -56,12 +67,19 @@ fn parse_and_pack_give_the_ft8lib_payload() {
 fn unpack_and_display_give_the_text() {
     for v in vectors().vectors {
         let mut hashes = CallsignHashes::new();
-        let message = Message::parse(&v.text).unwrap_or_else(|e| panic!("{}: {e}", v.text));
+        let message = message(&v);
         let packed = pack(&message, &mut hashes).unwrap_or_else(|e| panic!("{}: {e}", v.text));
         let unpacked = unpack(&payload(&v.payload), &hashes).unwrap_or_else(|e| panic!("{}: {e}", v.text));
         assert_eq!(unpacked, message, "{}", v.text);
         assert_eq!(unpacked.to_string(), v.text);
-        assert_eq!(Message::parse(&unpacked.to_string()), Ok(message));
+        let reparsed = Message::parse(&unpacked.to_string());
+        if v.kind == "free" && !matches!(reparsed, Ok(Message::FreeText { .. })) {
+            // Free text shaped like telemetry (`0123456789ABC`) or a standard message parses
+            // as that message, as in WSJT-X.
+            assert!(reparsed.is_ok(), "{}", v.text);
+        } else {
+            assert_eq!(reparsed, Ok(message));
+        }
         assert_eq!(packed, payload(&v.payload));
     }
 }
@@ -102,7 +120,7 @@ fn ft8lib_padding_variants_unpack_to_the_same_message() {
             continue;
         };
         let mut hashes = CallsignHashes::new();
-        let message = Message::parse(&v.text).unwrap_or_else(|e| panic!("{}: {e}", v.text));
+        let message = message(&v);
         pack(&message, &mut hashes).unwrap_or_else(|e| panic!("{}: {e}", v.text));
         let unpacked = unpack(&payload(alt), &hashes).unwrap_or_else(|e| panic!("{}: {e}", v.text));
         assert_eq!(unpacked, message, "{}", v.text);
@@ -121,7 +139,7 @@ fn ft8lib_padding_variants_unpack_to_the_same_message() {
 #[test]
 fn section_and_state_tables_match_the_public_lists() {
     let file = vectors();
-    assert_eq!(file.sections.len(), 84);
+    assert_eq!(file.sections.len(), 86);
     assert_eq!(file.states.len(), 65);
     for (code, name) in file.sections.iter().enumerate() {
         let section = ArrlSection::new(name).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -131,7 +149,8 @@ fn section_and_state_tables_match_the_public_lists() {
         let packed = pack(&message, &mut CallsignHashes::new()).unwrap_or_else(|e| panic!("{text}: {e}"));
         // S7 occupies bits 64 to 70.
         let s7 = (64..71).fold(0usize, |acc, i| (acc << 1) | usize::from(packed.bit(i)));
-        assert_eq!(s7, code, "{name}");
+        // WSJT-X numbers sections from 1.
+        assert_eq!(s7, code + 1, "{name}");
     }
     for (code, name) in file.states.iter().enumerate() {
         let state = StateProvince::new(name).unwrap_or_else(|e| panic!("{name}: {e}"));
@@ -149,7 +168,7 @@ fn section_and_state_tables_match_the_public_lists() {
 fn every_report_and_locator_edge_packs_like_ft8lib() {
     // The vectors pin the g15 encoding at both ends of each range; check the ranges between.
     let mut hashes = CallsignHashes::new();
-    for db in -30..=99 {
+    for db in -50..=50 {
         for ack in [false, true] {
             let text = format!("K1ABC W9XYZ {}{db:+03}", if ack { "R" } else { "" });
             let message = Message::parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
@@ -165,7 +184,8 @@ fn every_report_and_locator_edge_packs_like_ft8lib() {
             );
             let packed = pack(&message, &mut hashes).unwrap_or_else(|e| panic!("{text}: {e}"));
             let g15 = (59..74).fold(0i32, |acc, i| (acc << 1) | i32::from(packed.bit(i)));
-            assert_eq!(g15, 32_435 + db, "{text}");
+            // WSJT-X: code dB + 35 from -30 dB up, dB + 136 below.
+            assert_eq!(g15, 32_400 + if db >= -30 { db + 35 } else { db + 136 }, "{text}");
             assert_eq!(packed.bit(58) == 1, ack, "{text}");
             assert_eq!(unpack(&packed, &hashes).map(|m| m.to_string()), Ok(text));
         }
