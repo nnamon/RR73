@@ -11,7 +11,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -56,7 +56,7 @@ class Clock:
         return stop.wait(max(0.0, seconds))
 
 
-SessionRunner = Callable[[Receiver, str, float, ReceiverState, Callable[[float], None]], SessionResult]
+SessionRunner = Callable[[Receiver, str, float, ReceiverState], SessionResult]
 
 
 @dataclass(frozen=True)
@@ -89,9 +89,7 @@ def apply_outcome(receiver: Receiver, state: ReceiverState, result: SessionResul
         wait = receiver.break_s
     elif result.outcome == ENDED_BY_RECEIVER:
         state.failures += 1
-        limit_words = ("limit", "timeout", "kick")
-        wait = TIME_LIMIT_WAIT_S if any(w in result.detail.lower() for w in limit_words) else 0.0
-        wait = max(wait, receiver.break_s, backoff_s(rules, state.failures))
+        wait = max(receiver.break_s, backoff_s(rules, state.failures))
     elif result.outcome == BUSY:
         wait = rules.busy_wait_s
     elif result.outcome == NO_ALLOWANCE:
@@ -101,6 +99,11 @@ def apply_outcome(receiver: Receiver, state: ReceiverState, result: SessionResul
         wait = backoff_s(rules, state.failures)
     else:
         raise ValueError(f"unknown session outcome {result.outcome!r}")
+    if result.connected_s > 0:
+        # A session that held a channel is followed by the break, however it ended.
+        wait = max(wait, receiver.break_s)
+    if result.time_limited:
+        wait = max(wait, TIME_LIMIT_WAIT_S)
     state.next_attempt_unix = max(end + wait, state.last_attempt_unix + rules.min_attempt_gap_s)
 
 
@@ -116,16 +119,24 @@ def run_schedule(
     clock: Clock,
     stop: threading.Event,
 ) -> int:
-    """Run sessions until request.sessions have recorded, the deadline passes or stop is set."""
+    """Run sessions until request.sessions have recorded, the deadline passes or stop is set.
+
+    The state file is shared with any other rr73-kiwi process. It is read afresh before every
+    decision and again after taking the receiver's lock, and written only while holding the lock.
+    """
     started = clock.now()
     deadline = started + request.hours * 3600.0 if request.hours is not None else None
-    states = {r.id: ReceiverState.load(receiver_dir(corpus_root, r.id) / STATE_NAME) for r in receivers}
+    # Waits of this process alone, such as after finding the lock held. Never written to the state.
+    holdoff: dict[str, float] = {}
     recorded = 0
+
+    def state_path(receiver: Receiver) -> Path:
+        return receiver_dir(corpus_root, receiver.id) / STATE_NAME
+
     while request.sessions == 0 or recorded < request.sessions:
-        receiver = min(receivers, key=lambda r: ready_at(r, states[r.id]))
-        state = states[receiver.id]
-        state_path = receiver_dir(corpus_root, receiver.id) / STATE_NAME
-        when = ready_at(receiver, state)
+        ready = {r.id: max(ready_at(r, ReceiverState.load(state_path(r))), holdoff.get(r.id, 0.0)) for r in receivers}
+        receiver = min(receivers, key=lambda r: ready[r.id])
+        when = ready[receiver.id]
         if deadline is not None and when > deadline:
             log.info("Stopping: the next attempt (%s) is after the deadline", _utc_text(when))
             return EXIT_STOPPED
@@ -133,39 +144,43 @@ def run_schedule(
             log.info("%s: next attempt at %s", receiver.id, _utc_text(when))
             if clock.wait(when - clock.now(), stop):
                 return EXIT_STOPPED
+            continue  # read the state again: another process may have changed it
         if stop.is_set():
             return EXIT_STOPPED
         now = clock.now()
-        band = choose_band(receiver, request.bands, state, now)
-        length_s = request.length_s if request.length_s is not None else receiver.session_s
         lock = ReceiverLock(receiver_dir(corpus_root, receiver.id) / LOCK_NAME)
         try:
-            lock.acquire(now)
+            lock.acquire()
         except LockBusy as exc:
             log.warning("%s: %s; trying again later", receiver.id, exc)
-            state.last_attempt_unix = now
-            state.next_attempt_unix = now + rules_for(receiver.access).busy_wait_s
-            state.save(state_path)
+            holdoff[receiver.id] = now + rules_for(receiver.access).busy_wait_s
             continue
         try:
+            state = ReceiverState.load(state_path(receiver))
+            if ready_at(receiver, state) > now:
+                continue  # another process recorded between the check and the lock
+            band = choose_band(receiver, request.bands, state, now)
+            length_s = request.length_s if request.length_s is not None else receiver.session_s
             # Saved before connecting: if the process dies during the session, the next one still
-            # waits for a full session and a break.
+            # waits for a full session and a break, and the whole planned length counts towards
+            # the receiver's daily limit. The session itself sees the state without that entry.
             state.last_attempt_unix = now
             state.next_attempt_unix = now + length_s + receiver.break_s
-            state.save(state_path)
+            planned = replace(state, sessions=[*state.sessions, [now, now + length_s]])
+            planned.save(state_path(receiver))
             log.info("%s %s: session of up to %.0f s", receiver.id, band, length_s)
-            result = runner(receiver, band, length_s, state, lock.refresh)
+            result = runner(receiver, band, length_s, state)
+            apply_outcome(receiver, state, result)
+            state.save(state_path(receiver))
+            record = dict(result.record)
+            record.update(
+                started_utc=datetime.fromtimestamp(result.started_unix, tz=UTC).isoformat(),
+                ended_utc=datetime.fromtimestamp(result.ended_unix, tz=UTC).isoformat(),
+                next_attempt_utc=datetime.fromtimestamp(state.next_attempt_unix, tz=UTC).isoformat(),
+            )
+            append_log(receiver_dir(corpus_root, receiver.id) / LOG_NAME, record)
         finally:
             lock.release()
-        apply_outcome(receiver, state, result)
-        state.save(state_path)
-        record = dict(result.record)
-        record.update(
-            started_utc=datetime.fromtimestamp(result.started_unix, tz=UTC).isoformat(),
-            ended_utc=datetime.fromtimestamp(result.ended_unix, tz=UTC).isoformat(),
-            next_attempt_utc=datetime.fromtimestamp(state.next_attempt_unix, tz=UTC).isoformat(),
-        )
-        append_log(receiver_dir(corpus_root, receiver.id) / LOG_NAME, record)
         log.info("%s %s: %s, %s", receiver.id, band, result.outcome, result.detail)
         if result.outcome == RECORDED:
             recorded += 1

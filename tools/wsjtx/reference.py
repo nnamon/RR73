@@ -180,6 +180,11 @@ def load_sidecar(path: Path) -> dict:
         raise SlotError(f"{path}: format is not {SIDECAR_FORMAT}")
     if sidecar.get("mode") not in MODE_FLAGS:
         raise SlotError(f"{path}: mode {sidecar.get('mode')!r} is not FT8 or FT4")
+    reference = sidecar.get("reference")
+    if reference is not None and not isinstance(reference, dict):
+        raise SlotError(f"{path}: reference is not an object; fix or remove it")
+    if isinstance(reference, dict) and not isinstance(reference.get(REFERENCE_KEY, {}), dict):
+        raise SlotError(f"{path}: reference.{REFERENCE_KEY} is not an object; fix or remove it")
     return sidecar
 
 
@@ -310,7 +315,16 @@ def main(argv: list[str] | None = None) -> int:
                 record = {"file": str(job.wav), "tool": tool, "decodes": [asdict(d) for d in decodes]}
                 print(json.dumps(record, ensure_ascii=False), flush=True)
             else:
-                write_json_atomic(sidecar_path(job.wav), with_reference(job.sidecar, tool, decodes))
+                # Read the sidecar again: it may have changed while jt9 ran, and those changes stay.
+                try:
+                    current = load_sidecar(sidecar_path(job.wav))
+                except SlotError as exc:
+                    errors.append(str(exc))
+                    continue
+                if current["mode"] != job.mode:
+                    errors.append(f"{sidecar_path(job.wav)}: mode changed to {current['mode']} during decoding")
+                    continue
+                write_json_atomic(sidecar_path(job.wav), with_reference(current, tool, decodes))
             decoded += 1
     for error in sorted(errors):
         print(f"reference.py: {error}", file=sys.stderr)

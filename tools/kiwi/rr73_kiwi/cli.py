@@ -8,17 +8,23 @@ import signal
 import sys
 import threading
 import time
-from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
 from rr73_kiwi import IDENT
 from rr73_kiwi.bands import FT8_DIAL_HZ
 from rr73_kiwi.config import ConfigError, Receiver, load_receivers
-from rr73_kiwi.politeness import FREE_CHANNELS, MAX_SESSION_S, MIN_SESSION_S, admission, rules_for
+from rr73_kiwi.politeness import (
+    CLUB_FREE_CHANNELS,
+    MAX_SESSION_S,
+    MIN_SESSION_S,
+    PUBLIC_FREE_CHANNELS,
+    admission,
+    rules_for,
+)
 from rr73_kiwi.schedule import Clock, Request, ready_at, run_schedule
 from rr73_kiwi.session import SessionContext, SessionResult, run_session
-from rr73_kiwi.state import STATE_NAME, ReceiverState, receiver_dir
+from rr73_kiwi.state import STATE_NAME, LockError, ReceiverState, receiver_dir
 from rr73_kiwi.status import StatusError, fetch_status
 
 EXIT_CONFIG = 1
@@ -31,8 +37,9 @@ IQ mode with a 100 to 3000 Hz USB passband. The audio is resampled to exactly 12
 into UTC-aligned 15 s slots: corpus/kiwi/<receiver>/<YYYYMMDD>/<YYMMDD_HHMMSS>.wav and .json.
 Partial slots are discarded.
 
-Rules on every receiver: one channel at a time; no connection while users >= users_max - {FREE_CHANNELS}
-on /status; sessions of at most {MAX_SESSION_S // 60} minutes, then a break (club receivers at least
+Rules on every receiver: one channel at a time; no connection unless {CLUB_FREE_CHANNELS} channels
+(club receivers) or {PUBLIC_FREE_CHANNELS} channels (public receivers) stay free afterwards, per
+/status; sessions of at most {MAX_SESSION_S // 60} minutes, then a break (club receivers at least
 5 minutes, public receivers at least 30); the receiver's own time limits; a doubling backoff after
 errors. The user name is "{IDENT}".
 
@@ -100,7 +107,7 @@ def _check(receivers: list[Receiver], corpus: Path, bands: list[str]) -> int:
         rules = rules_for(receiver.access)
         try:
             status = fetch_status(receiver.host, receiver.port)
-            decision = admission(status)
+            decision = admission(status, rules)
             verdict = ("may connect: " if decision.allowed else "would wait: ") + decision.reason
         except StatusError as exc:
             verdict = f"status unavailable: {exc}"
@@ -151,10 +158,8 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, on_signal)
     ntp_server = None if args.ntp_server.lower() == "none" else args.ntp_server
 
-    def runner(
-        receiver: Receiver, band: str, length_s: float, state: ReceiverState, heartbeat: Callable[[float], None]
-    ) -> SessionResult:
-        ctx = SessionContext(corpus_root=args.corpus, stop=stop, ntp_server=ntp_server, heartbeat=heartbeat)
+    def runner(receiver: Receiver, band: str, length_s: float, state: ReceiverState) -> SessionResult:
+        ctx = SessionContext(corpus_root=args.corpus, stop=stop, ntp_server=ntp_server)
         return run_session(receiver, band, length_s, state, ctx)
 
     request = Request(
@@ -163,4 +168,8 @@ def main(argv: list[str] | None = None) -> int:
         bands=tuple(args.band),
         length_s=None if args.minutes is None else args.minutes * 60,
     )
-    return run_schedule(receivers, request, args.corpus, runner, Clock(), stop)
+    try:
+        return run_schedule(receivers, request, args.corpus, runner, Clock(), stop)
+    except LockError as exc:
+        log.error("%s", exc)
+        return EXIT_CONFIG

@@ -58,7 +58,7 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 | Rule | Club | Public |
 | --- | --- | --- |
 | Channels per receiver | 1 | 1 |
-| Read `/status` before connecting; skip when `users >= users_max - 3` | yes | yes |
+| Read `/status` before connecting; connect only if this many channels stay free afterwards | 2 | 3 |
 | Session length | at most 15 min | at most 15 min |
 | Break after a session | at least 5 min | at least 30 min |
 | Wait after finding the receiver busy | 10 min | 30 min |
@@ -68,8 +68,8 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 - The user name is `RR73 corpus 9V1NE` (sent URL-encoded as `SET ident_user=`), and `/status` requests carry it in the User-Agent.
 - During a session the recorder reads `/status` every 2 minutes and ends the session when other listeners leave 1 channel or fewer free.
 - The receiver's own limits come from its configuration after connecting (`inactivity_timeout_mins`, `ip_limit_mins`). Sessions end 1 minute before the inactivity timeout. With a per-address daily limit, the recorder counts its connected time over 24 hours and stops starting sessions when less than 2 minutes would remain. The SARTS receiver reports a 90-minute inactivity timeout and no daily limit.
-- A receiver that closes a running session counts as an error, and a close that mentions a limit, timeout or kick gives a 6-hour wait. `too_busy`, a redirect or a password refusal counts as busy.
-- The next allowed attempt is saved before every connection in `corpus/kiwi/<receiver>/.rr73-kiwi-state`, so restarts keep the waits. A lock file in the same directory keeps a second process off the receiver; a lock whose heartbeat is over 3 minutes old is taken over.
+- A receiver that closes a running session counts as an error. Any message from the receiver whose name or value mentions a limit, timeout, inactivity or kick (configuration messages aside), or kiwiclient's time-limit error, marks the session as time-limited and gives a 6-hour wait. The messages a real receiver sends at its limits have not been observed, so this match is broad on purpose. `too_busy`, a redirect or a password refusal counts as busy. The WebSocket opens with one HTTP handshake: a redirect ends the attempt, and rr73-kiwi never follows it to another host.
+- The next allowed attempt is saved before every connection in `corpus/kiwi/<receiver>/.rr73-kiwi-state`, so restarts keep the waits. An exclusive `flock` on `.rr73-kiwi-lock` in the same directory, held for the whole session, keeps a second process off the receiver. The kernel releases it when the holder exits, so a crash leaves no stale lock. Tested across two containers on a Docker Desktop bind mount; on a file system without `flock` the recorder stops with exit status 1.
 
 ## Audio and timing
 
@@ -77,7 +77,7 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 - Audio is resampled to exactly 12000 Hz by Kaiser-windowed sinc interpolation (64 taps) at the exact output sample times. Against exact tones from 100 to 3000 Hz at input rates of 11998.7, 12000, 12001.135 and 20250 Hz the error is at most −91.6 dB. A slot takes about 0.9 s to process on one core.
 - Slots start on UTC multiples of 15 s and hold exactly 180000 samples. The first second after connecting or after a gap is not used. A slot is written only when the stream covers it, plus 0.25 s on each side, without a sequence gap. Partial slots are discarded.
 - GPS timing: in IQ mode each frame of 512 samples carries a GPS time of week and the number of frames since the last fix. When the fresh timestamps agree with each other to within 1 sample and with the host clock to within 10 s, a least-squares fit gives the true sample rate and the time of every sample, and the slot is written with `timing.reference = "gps"` and `offset_s = 0`. GPS time and UTC-based timestamps are both recognised; GPS minus UTC is taken as 18 s.
-- NTP timing: otherwise the sample times come from the host clock at frame arrival. The lower envelope of arrival times gives the mapping, late by the smallest network and receiver delay. The envelope also gives a sample rate: the smallest delay in each 10 s stretch, fitted with a line. It replaces the receiver's reported rate only when its standard error is below 2 ppm, which with delays that vary by a few milliseconds takes tens of minutes of stream; otherwise the reported rate is used. Both are logged. `offset_s` records the correction added to every sample time: the measured host clock offset from NTP minus `latency_s`.
+- NTP timing: otherwise the sample times come from the host clock at frame arrival. The lower envelope of arrival times gives the mapping, late by the smallest network and receiver delay. The envelope also gives a sample rate: the smallest delay in each 10 s stretch, fitted with a line. It replaces the receiver's reported rate only when its standard error is below 2 ppm, which with delays that vary by a few milliseconds takes tens of minutes of stream; otherwise the reported rate is used. Both are logged. `offset_s` records the correction added to every sample time: the measured host clock offset from NTP minus `latency_s`. The offset comes from the best of 3 SNTP queries; replies from unsynchronised servers, replies that do not echo the request and offsets over 60 s are ignored, and the GPS check uses the corrected host clock.
 - The SARTS Web-888 sends placeholder GPS fields: every frame claims a fresh fix, the seconds step once per second with a constant nanosecond value, and the time is about 2078 s from GPS time. Its slots are therefore written with NTP timing. It reports a sample rate of exactly 12000 Hz.
 
 ## Files

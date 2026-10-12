@@ -13,8 +13,9 @@ from fake_kiwi import Behaviour, FakeKiwi
 from helpers import Stream
 
 from rr73_kiwi.config import BandWindow, Receiver
-from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, SessionContext, run_session
+from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, RECORDED, STOPPED, SessionContext, _CrowdWatch, run_session
 from rr73_kiwi.state import ReceiverState
+from rr73_kiwi.status import KiwiStatus, parse_status
 
 START = datetime(2026, 10, 13, 13, 14, 22, 300000, tzinfo=UTC).timestamp()
 
@@ -79,10 +80,11 @@ def test_session_records_aligned_slots_and_disconnects_cleanly(tmp_path: Path) -
 
 
 def test_busy_receiver_is_not_contacted(tmp_path: Path) -> None:
-    behaviour = Behaviour(status={"status": "active", "offline": "no", "users": "10", "users_max": "13"})
+    # A club receiver keeps 2 channels free: at 11 of 13 the recorder stays away.
+    behaviour = Behaviour(status={"status": "active", "offline": "no", "users": "11", "users_max": "13"})
     with FakeKiwi(Stream(start_unix=START), behaviour) as fake:
         result = session(fake, tmp_path)
-    assert result.outcome == BUSY and "10 of 13" in result.detail
+    assert result.outcome == BUSY and "11 of 13" in result.detail
     assert fake.ws_connections == 0
     assert "RR73 corpus 9V1NE" in fake.status_requests[0]["user-agent"]
 
@@ -129,3 +131,50 @@ def test_a_failure_to_write_slots_stops_the_session_and_propagates(tmp_path: Pat
     with FakeKiwi(Stream(start_unix=START, duration_s=70.0)) as fake, pytest.raises(OSError):
         session(fake, tmp_path)
     assert fake.close_codes == [1001]
+
+
+@pytest.mark.parametrize("message", ["MSG inactivity_timeout=1", "MSG ip_limit=60,10.8.0.1", "MSG kicked"])
+def test_a_receiver_time_limit_is_recognised(tmp_path: Path, message: str) -> None:
+    behaviour = Behaviour(limit_after_frames=700, limit_message=message)
+    with FakeKiwi(Stream(start_unix=START, duration_s=70.0), behaviour) as fake:
+        result = session(fake, tmp_path)
+    assert result.outcome == ENDED_BY_RECEIVER
+    assert result.time_limited
+    assert message.removeprefix("MSG ").split("=")[0] in result.detail
+    assert result.slots_written == 1
+
+
+def test_a_session_never_runs_past_its_length(tmp_path: Path) -> None:
+    # GPS-timed audio that arrives 9 s late: the last planned slot completes after the length.
+    stream = Stream(start_unix=START, duration_s=90.0, latency_s=9.0)
+    with FakeKiwi(stream) as fake:
+        result = session(fake, tmp_path, length_s=60.0)
+    assert result.outcome == RECORDED
+    # The fake's clock runs ahead of the client by the frames in the socket buffers, up to 3 s.
+    assert result.connected_s <= 60.0 + 3.0
+    assert "session length" in result.detail
+
+
+def test_a_stop_before_connecting_means_no_connection(tmp_path: Path) -> None:
+    with FakeKiwi(Stream(start_unix=START)) as fake:
+        ctx = SessionContext(corpus_root=tmp_path, stop=threading.Event(), ntp_server=None, now=fake.now)
+        ctx.stop.set()  # SIGTERM during the status check
+        result = run_session(receiver(fake.port), "20m", 60.0, ReceiverState(), ctx)
+    assert result.outcome == STOPPED
+    assert fake.ws_connections == 0
+
+
+def test_the_crowd_watch_survives_a_failing_status_read() -> None:
+    calls: list[int] = []
+
+    def read(host: str, port: int) -> KiwiStatus:
+        calls.append(1)
+        if len(calls) == 1:
+            raise RuntimeError("unexpected failure in the status reader")
+        return parse_status("users=12\nusers_max=13\n")
+
+    watch = _CrowdWatch(receiver(80), read, 0.01)
+    watch.start()
+    watch.join(2.0)
+    watch.done.set()
+    assert watch.crowded_by == "12 of 13 channels in use"

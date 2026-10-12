@@ -18,7 +18,7 @@ from rr73_kiwi.config import Receiver
 from rr73_kiwi.corpus import slot_stem, write_slot
 from rr73_kiwi.kiwi import IqConnection, StreamEnded
 from rr73_kiwi.ntp import measure_offset
-from rr73_kiwi.politeness import STATUS_POLL_S, admission, allowed_session_s, crowded
+from rr73_kiwi.politeness import STATUS_POLL_S, admission, allowed_session_s, crowded, rules_for
 from rr73_kiwi.slots import FT8_SLOT_S, Slot, SlotAssembler
 from rr73_kiwi.state import ReceiverState
 from rr73_kiwi.status import KiwiStatus, StatusError, fetch_status
@@ -27,7 +27,6 @@ log = logging.getLogger("rr73_kiwi")
 
 # Extra wall time allowed after the last planned slot for its audio to arrive.
 END_GRACE_S = 20.0
-LOCK_REFRESH_S = 60.0
 
 # Outcomes. "recorded" and "ended-by-receiver" held a channel; the others did not.
 RECORDED = "recorded"
@@ -48,6 +47,7 @@ class SessionResult:
     connected_s: float = 0.0
     slots_written: int = 0
     record: dict = field(default_factory=dict)
+    time_limited: bool = False  # the receiver announced or enforced a time limit or a kick
 
 
 @dataclass(frozen=True)
@@ -58,7 +58,6 @@ class SessionContext:
     stop: threading.Event
     ntp_server: str | None
     status_reader: Callable[[str, int], KiwiStatus] = fetch_status
-    heartbeat: Callable[[float], None] = lambda now: None
     now: Callable[[], float] = time.time
     status_poll_s: float = STATUS_POLL_S
 
@@ -80,6 +79,10 @@ class _CrowdWatch(threading.Thread):
                 status = self._read(self._receiver.host, self._receiver.port)
             except StatusError:
                 continue
+            except Exception:
+                # The watch must outlive any failure, or a full receiver would go unnoticed.
+                log.exception("%s: reading /status during the session failed", self._receiver.id)
+                continue
             if crowded(status):
                 self.crowded_by = f"{status.users} of {status.users_max} channels in use"
                 return
@@ -92,16 +95,18 @@ def run_session(
     started = ctx.now()
     record: dict = {"receiver": receiver.id, "band": band, "requested_s": length_s}
 
-    def result(outcome: str, detail: str, connected_s: float = 0.0, slots_written: int = 0) -> SessionResult:
-        record.update(outcome=outcome, detail=detail)
-        return SessionResult(outcome, detail, started, ctx.now(), connected_s, slots_written, record)
+    def result(
+        outcome: str, detail: str, connected_s: float = 0.0, slots_written: int = 0, time_limited: bool = False
+    ) -> SessionResult:
+        record.update(outcome=outcome, detail=detail, time_limited=time_limited)
+        return SessionResult(outcome, detail, started, ctx.now(), connected_s, slots_written, record, time_limited)
 
     try:
         status = ctx.status_reader(receiver.host, receiver.port)
     except StatusError as exc:
         return result(ERROR, str(exc))
     record["status_before"] = {"users": status.users, "users_max": status.users_max}
-    decision = admission(status)
+    decision = admission(status, rules_for(receiver.access))
     if not decision.allowed:
         return result(BUSY, decision.reason)
     length_s = allowed_session_s(length_s, state.server_limits, state.used_s(started))
@@ -109,12 +114,14 @@ def run_session(
         return result(NO_ALLOWANCE, "the receiver's daily time limit for this address is used up")
 
     correction_s = -receiver.latency_s
+    host_offset_s = 0.0
     if ctx.ntp_server:
         offset = measure_offset(ctx.ntp_server)
         if offset is None:
-            log.warning("NTP server %s did not answer; using the host clock as it is", ctx.ntp_server)
+            log.warning("NTP server %s gave no usable reply; using the host clock as it is", ctx.ntp_server)
         else:
             correction_s += offset.offset_s
+            host_offset_s = offset.offset_s
             record["ntp"] = {"server": offset.server, "offset_s": offset.offset_s, "rtt_s": offset.rtt_s}
     record["correction_s"] = correction_s
 
@@ -137,23 +144,28 @@ def run_session(
         if "assembler" in holder:
             holder["assembler"].set_rate(rate_hz)
         else:
-            holder["assembler"] = SlotAssembler(rate_hz, on_slot, correction_s=correction_s)
+            holder["assembler"] = SlotAssembler(
+                rate_hz, on_slot, correction_s=correction_s, host_offset_s=host_offset_s
+            )
 
     def on_frame(seq: int, samples: np.ndarray, gps: dict[str, int] | None, arrival: float) -> None:
         if "assembler" in holder:
             holder["assembler"].add(seq, samples, gps, arrival)
 
+    if ctx.stop.is_set():
+        return result(STOPPED, "stopped before connecting")
     connection = IqConnection(receiver.host, receiver.port, dial, IDENT, on_frame, on_rate, ctx.now)
     watch = _CrowdWatch(receiver, ctx.status_reader, ctx.status_poll_s)
     outcome, detail = RECORDED, ""
+    ended_by_limit = False
     connected_at = ctx.now()
-    # Stop after the last slot that ends within the session length.
+    # Stop after the last slot that ends within the session length, and never after the length.
     end_slot = math.floor((connected_at + length_s - 2.0) / FT8_SLOT_S) * FT8_SLOT_S
+    hard_end = connected_at + length_s
     limits_checked = False
     try:
         connection.open()
         watch.start()
-        last_heartbeat = connected_at
         while True:
             if ctx.stop.is_set():
                 outcome, detail = STOPPED, "stopped by signal"
@@ -164,6 +176,9 @@ def run_session(
             assembler = holder.get("assembler")
             now = ctx.now()
             if assembler is not None and assembler.last_slot_end is not None and assembler.last_slot_end >= end_slot:
+                break
+            if now >= hard_end:
+                detail = f"reached the session length of {hard_end - connected_at:.0f} s"
                 break
             if now >= end_slot + END_GRACE_S:
                 detail = "the last slot did not complete in time"
@@ -176,13 +191,13 @@ def run_session(
                     outcome, detail = NO_ALLOWANCE, "the receiver's daily time limit for this address is used up"
                     break
                 end_slot = min(end_slot, math.floor((connected_at + allowed - 2.0) / FT8_SLOT_S) * FT8_SLOT_S)
-            if now - last_heartbeat >= LOCK_REFRESH_S:
-                ctx.heartbeat(now)
-                last_heartbeat = now
+                hard_end = min(hard_end, connected_at + allowed)
             connection.poll()
     except StreamEnded as exc:
-        outcome = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER}.get(exc.kind, ERROR)
+        kinds = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER, "limit": ENDED_BY_RECEIVER}
+        outcome = kinds.get(exc.kind, ERROR)
         detail = str(exc)
+        ended_by_limit = exc.kind == "limit"
     finally:
         connection.close()
         watch.done.set()
@@ -192,6 +207,13 @@ def run_session(
     ended = ctx.now()
     if outcome in (BUSY, REFUSED) and written:
         outcome = ENDED_BY_RECEIVER
+    if not detail:
+        detail = f"wrote {len(written)} slots"
+    notices = connection.info.notices
+    time_limited = ended_by_limit or bool(notices)
+    if notices:
+        detail = f"{detail}; the receiver sent {', '.join(notices)}"
+    record["notices"] = notices
     connected_s = ended - connected_at
     record["connected_s"] = round(connected_s, 1)
     record["server"] = {
@@ -225,6 +247,4 @@ def run_session(
             },
         }
     record["slots"] = written
-    if not detail:
-        detail = f"wrote {len(written)} slots"
-    return result(outcome, detail, connected_s=connected_s, slots_written=len(written))
+    return result(outcome, detail, connected_s=connected_s, slots_written=len(written), time_limited=time_limited)

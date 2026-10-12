@@ -37,6 +37,10 @@ class Behaviour:
     crowd_after_frames: int | None = None  # status reports users_max - 1 users after this many frames
     gps: str = "fresh"
     frame_pause_s: float = 0.002
+    upgrade_reply: str | None = None  # an HTTP status such as "307 Temporary Redirect" instead of 101
+    limit_after_frames: int | None = None  # send limit_message after this many frames, then close
+    limit_message: str = "MSG inactivity_timeout=1"
+    status_raw: bytes | None = None  # sent verbatim in place of a /status response
 
 
 class FakeKiwi:
@@ -50,6 +54,8 @@ class FakeKiwi:
         self.close_codes: list[int] = []
         self.frames_sent = 0
         self.events: list[str] = []
+        self.upgrade_attempts = 0
+        self.rejected_closed: list[bool] = []  # per rejected upgrade: did the client close its socket
         self._lock = threading.Lock()
         fake = self
 
@@ -87,6 +93,9 @@ class FakeKiwi:
         lines = head.split("\r\n")
         path = lines[0].split()[1]
         headers = {k.strip().lower(): v.strip() for k, _, v in (line.partition(":") for line in lines[1:])}
+        if path == "/status" and self.behaviour.status_raw is not None:
+            sock.sendall(self.behaviour.status_raw)
+            return
         if path == "/status":
             with self._lock:
                 self.status_requests.append(headers)
@@ -98,9 +107,30 @@ class FakeKiwi:
             )
             return
         if headers.get("upgrade", "").lower() == "websocket" and path.endswith("/SND"):
+            if self.behaviour.upgrade_reply is not None:
+                self._reject_upgrade(sock)
+                return
             self._websocket(sock, headers["sec-websocket-key"])
             return
         sock.sendall(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
+
+    def _reject_upgrade(self, sock: socket.socket) -> None:
+        with self._lock:
+            self.upgrade_attempts += 1
+            self.events.append("upgrade-rejected")
+        reply = f"HTTP/1.1 {self.behaviour.upgrade_reply}\r\n"
+        if self.behaviour.upgrade_reply.startswith("3"):
+            reply += f"Location: http://127.0.0.1:{self.port}/\r\n"
+        sock.sendall((reply + "Content-Length: 0\r\n\r\n").encode())
+        sock.settimeout(3.0)
+        try:
+            closed = sock.recv(1) == b""
+        except ConnectionResetError:
+            closed = True  # a close with unread data in the client's buffer sends a reset
+        except OSError:
+            closed = False
+        with self._lock:
+            self.rejected_closed.append(closed)
 
     # WebSocket
 
@@ -132,6 +162,10 @@ class FakeKiwi:
                 if closed.is_set():
                     break
                 if self.behaviour.close_after_frames is not None and seq >= self.behaviour.close_after_frames:
+                    sock.shutdown(socket.SHUT_RDWR)
+                    break
+                if self.behaviour.limit_after_frames is not None and seq >= self.behaviour.limit_after_frames:
+                    self._send(sock, self.behaviour.limit_message.encode())
                     sock.shutdown(socket.SHUT_RDWR)
                     break
                 if self.behaviour.crowd_after_frames is not None and seq == self.behaviour.crowd_after_frames:

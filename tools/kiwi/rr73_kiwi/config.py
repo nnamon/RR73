@@ -172,4 +172,11 @@ def load_receivers(path: Path) -> tuple[Receiver, ...]:
     duplicates = sorted({i for i in ids if ids.count(i) > 1})
     if duplicates:
         raise ConfigError(f"{path}: duplicate receiver ids {duplicates}")
+    # One receiver under two ids would let the recorder hold two of its channels.
+    addresses: dict[tuple[str, int], str] = {}
+    for r in receivers:
+        address = (r.host.lower(), r.port)
+        if address in addresses:
+            raise ConfigError(f"{path}: {addresses[address]} and {r.id} are the same receiver, {r.host}:{r.port}")
+        addresses[address] = r.id
     return receivers

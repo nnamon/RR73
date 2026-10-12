@@ -1,16 +1,18 @@
 """Per-receiver state that survives restarts: waits, failures, band rotation and session history.
 
 The state lives next to the receiver's slots, in corpus/kiwi/<receiver>/.rr73-kiwi-state, so a
-new rr73-kiwi process honours the break and backoff of the previous one. A lock file in the
-same directory keeps two processes from recording the same receiver at once.
+new rr73-kiwi process honours the break and backoff of the previous one. An flock on a file in
+the same directory keeps two processes from recording the same receiver at once.
 """
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import socket
 import tempfile
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 
@@ -20,7 +22,6 @@ STATE_NAME = ".rr73-kiwi-state"
 LOCK_NAME = ".rr73-kiwi-lock"
 LOG_NAME = "sessions.jsonl"
 DAY_S = 86400.0
-LOCK_STALE_S = 180.0
 
 
 def receiver_dir(corpus_root: Path, receiver_id: str) -> Path:
@@ -75,61 +76,49 @@ class LockBusy(Exception):
     """Another rr73-kiwi process holds the receiver."""
 
 
-class ReceiverLock:
-    """A lock file holding the owner's host name, process id and a heartbeat time.
+class LockError(Exception):
+    """The lock file cannot be locked, for example on a file system without flock."""
 
-    A lock whose heartbeat is older than LOCK_STALE_S is treated as left behind by a process
-    that died, and is taken over.
+
+class ReceiverLock:
+    """An exclusive flock on the receiver's lock file, held on one descriptor for the session.
+
+    The kernel releases the lock when the holder exits, however it exits, so a lock is never
+    left behind and never taken over while its holder lives. The file stays in place and names
+    the last holder. Tested across containers on a Docker Desktop bind mount.
     """
 
     def __init__(self, path: Path) -> None:
         self._path = path
-        self._owner = f"{socket.gethostname()}:{os.getpid()}"
-        self._held = False
+        self._fd: int | None = None
 
-    def acquire(self, now: float) -> None:
+    def acquire(self) -> None:
         self._path.parent.mkdir(parents=True, exist_ok=True)
-        for _ in range(2):
-            try:
-                fd = os.open(self._path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
-            except FileExistsError:
-                if not self._stale(now):
-                    raise LockBusy(f"{self._path} is held by {self._read().get('owner', 'another process')}") from None
-                self._path.unlink(missing_ok=True)
-                continue
-            with os.fdopen(fd, "w", encoding="utf-8") as out:
-                json.dump({"owner": self._owner, "heartbeat": now}, out)
-            self._held = True
-            return
-        raise LockBusy(f"{self._path} could not be taken")
-
-    def refresh(self, now: float) -> None:
-        if self._held:
-            tmp = self._path.with_name(self._path.name + ".tmp")
-            tmp.write_text(json.dumps({"owner": self._owner, "heartbeat": now}), encoding="utf-8")
-            os.replace(tmp, self._path)
+        fd = os.open(self._path, os.O_RDWR | os.O_CREAT, 0o644)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            os.close(fd)
+            raise LockBusy(f"{self._path} is held by {self._holder()}") from None
+        except OSError as exc:
+            os.close(fd)
+            raise LockError(f"cannot lock {self._path}: {exc.strerror}. Keep the corpus on a local disk.") from None
+        os.ftruncate(fd, 0)
+        os.write(fd, json.dumps({"owner": f"{socket.gethostname()}:{os.getpid()}", "since": time.time()}).encode())
+        self._fd = fd
 
     def release(self) -> None:
-        if self._held:
-            if self._read().get("owner") == self._owner:
-                self._path.unlink(missing_ok=True)
-            self._held = False
+        if self._fd is not None:
+            fcntl.flock(self._fd, fcntl.LOCK_UN)
+            os.close(self._fd)
+            self._fd = None
 
-    def _read(self) -> dict:
+    def _holder(self) -> str:
         try:
             data = json.loads(self._path.read_text(encoding="utf-8"))
-            return data if isinstance(data, dict) else {}
         except (OSError, json.JSONDecodeError):
-            return {}
-
-    def _stale(self, now: float) -> bool:
-        heartbeat = self._read().get("heartbeat")
-        if not isinstance(heartbeat, int | float):
-            try:
-                heartbeat = self._path.stat().st_mtime
-            except FileNotFoundError:
-                return True
-        return now - heartbeat > LOCK_STALE_S
+            return "another process"
+        return str(data.get("owner", "another process")) if isinstance(data, dict) else "another process"
 
 
 def append_log(path: Path, record: dict) -> None:

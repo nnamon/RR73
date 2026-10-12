@@ -2,16 +2,23 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+import subprocess
+import sys
 import threading
 from dataclasses import replace
 from datetime import UTC, datetime
 from pathlib import Path
 
+import pytest
+
 from rr73_kiwi.config import BandWindow, Receiver
+from rr73_kiwi.politeness import TIME_LIMIT_WAIT_S
 from rr73_kiwi.schedule import EXIT_DONE, EXIT_STOPPED, Request, run_schedule
-from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, SessionResult
-from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, ReceiverState, receiver_dir
+from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, REFUSED, SessionResult
+from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, LockBusy, ReceiverLock, ReceiverState, receiver_dir
 
 T0 = datetime(2026, 10, 13, 21, 0, tzinfo=UTC).timestamp()
 CLUB = Receiver(
@@ -53,7 +60,7 @@ class Runner:
         self.outcomes = outcomes
         self.attempts: list[tuple[str, str, float]] = []
 
-    def __call__(self, receiver, band, length_s, state, heartbeat) -> SessionResult:
+    def __call__(self, receiver, band, length_s, state) -> SessionResult:
         start = self.clock.now()
         self.attempts.append((receiver.id, band, start))
         outcome = self.outcomes[min(len(self.attempts) - 1, len(self.outcomes) - 1)]
@@ -128,21 +135,43 @@ def test_two_receivers_alternate_during_breaks(tmp_path: Path) -> None:
     assert [r for r, _, _ in runner.attempts] == ["club-kiwi", "club-kiwi-2", "club-kiwi"]
 
 
+def hold_lock(path: Path) -> int:
+    """Take the receiver lock as another live process would. Its heartbeat is an hour old."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    os.write(fd, json.dumps({"owner": "other:1", "heartbeat": T0 - 3600}).encode())
+    return fd
+
+
 def test_a_receiver_held_by_another_process_is_not_used(tmp_path: Path) -> None:
-    lock = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
-    lock.parent.mkdir(parents=True)
-    lock.write_text(json.dumps({"owner": "other:1", "heartbeat": T0}))
-    code, runner, clock = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1)
+    fd = hold_lock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME)
+    try:
+        code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1)
+    finally:
+        os.close(fd)
     assert code == EXIT_STOPPED and runner.attempts == []
 
 
-def test_stale_lock_is_taken_over(tmp_path: Path) -> None:
+def test_two_holders_of_one_receiver_lock_are_impossible(tmp_path: Path) -> None:
+    path = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
+    first, second = ReceiverLock(path), ReceiverLock(path)
+    first.acquire()
+    with pytest.raises(LockBusy):
+        second.acquire()
+    first.release()
+    second.acquire()
+    second.release()
+
+
+def test_a_lock_left_by_a_dead_process_is_free(tmp_path: Path) -> None:
     lock = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
     lock.parent.mkdir(parents=True)
-    lock.write_text(json.dumps({"owner": "other:1", "heartbeat": T0 - 3600}))
+    script = "import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT); fcntl.flock(fd, fcntl.LOCK_EX)"
+    subprocess.run([sys.executable, "-c", script, str(lock)], check=True)
+    lock.write_text(json.dumps({"owner": "dead:1", "heartbeat": T0}))
     code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED])
-    assert code == EXIT_DONE and len(runner.attempts) == 1
-    assert not lock.exists()
+    assert code == EXIT_DONE and [t for *_, t in runner.attempts] == [T0]
 
 
 def test_attempts_are_never_closer_than_the_minimum_gap(tmp_path: Path) -> None:
@@ -167,4 +196,131 @@ def test_a_crash_during_a_session_leaves_a_full_session_and_break_before_the_nex
         raise AssertionError("the runner's exception should propagate")
     state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
     assert state.next_attempt_unix >= T0 + CLUB.session_s + CLUB.break_s
-    assert not (receiver_dir(tmp_path, CLUB.id) / LOCK_NAME).exists()
+    lock = ReceiverLock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME)
+    lock.acquire()  # released despite the crash
+    lock.release()
+
+
+@pytest.mark.parametrize("outcome", [ERROR, REFUSED, BUSY])
+def test_any_session_that_held_a_channel_is_followed_by_the_break(tmp_path: Path, outcome: str) -> None:
+    clock = SimClock()
+    attempts: list[float] = []
+
+    def runner(receiver, band, length_s, state) -> SessionResult:
+        attempts.append(clock.now())
+        start = clock.now()
+        clock.t += 300.0  # held the channel for 5 minutes, then the network failed
+        result = outcome if len(attempts) == 1 else RECORDED
+        return SessionResult(result, "network error", start, clock.now(), 300.0, 10, {"receiver": receiver.id})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
+    assert attempts[1] - attempts[0] >= 300.0 + CLUB.break_s
+
+
+class HookedClock(SimClock):
+    """A simulated clock that runs a callback, standing in for another process, during waits."""
+
+    def __init__(self, during_wait) -> None:
+        super().__init__()
+        self.during_wait = during_wait
+        self.waits = 0
+
+    def wait(self, seconds: float, stop: threading.Event) -> bool:
+        self.waits += 1
+        self.during_wait(self.waits, self.t)
+        return super().wait(seconds, stop)
+
+
+def write_state(tmp_path: Path, state: ReceiverState) -> None:
+    state.save(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+
+
+def test_a_wait_set_by_another_process_is_honoured(tmp_path: Path) -> None:
+    def other_process(n: int, now: float) -> None:
+        if n == 1:  # during the first break, another process records and sets a long backoff
+            write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 10_000, last_attempt_unix=now, failures=5))
+
+    clock = HookedClock(other_process)
+    _, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], sessions=2, clock=clock)
+    assert runner.attempts[1][2] >= T0 + 10_000
+
+
+def test_finding_the_lock_held_never_overwrites_the_holder_state(tmp_path: Path) -> None:
+    write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 100))
+    lock_fd: list[int] = []
+    theirs = ReceiverState(next_attempt_unix=T0 + 50, last_attempt_unix=T0 + 50, failures=3, rotation=7)
+    theirs.sessions = [[T0 - 900.0, T0 - 200.0]]
+
+    def other_process(n: int, now: float) -> None:
+        if n == 1:  # another process takes the receiver and writes its own state
+            lock_fd.append(hold_lock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME))
+            write_state(tmp_path, theirs)
+
+    clock = HookedClock(other_process)
+    try:
+        code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1, clock=clock)
+    finally:
+        os.close(lock_fd[0])
+    assert code == EXIT_STOPPED and runner.attempts == []
+    on_disk = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert on_disk == theirs
+
+
+def test_state_is_read_again_after_taking_the_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    acquire = ReceiverLock.acquire
+
+    def acquire_after_another_session(self: ReceiverLock) -> None:
+        # Another process finished a session between the ready check and the lock.
+        write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 5000, last_attempt_unix=T0))
+        monkeypatch.setattr(ReceiverLock, "acquire", acquire)
+        acquire(self)
+
+    monkeypatch.setattr(ReceiverLock, "acquire", acquire_after_another_session)
+    _, runner, _ = schedule(tmp_path, [CLUB], [RECORDED])
+    assert [t for *_, t in runner.attempts] == [T0 + 5000]
+
+
+def test_a_receiver_time_limit_gives_the_long_wait(tmp_path: Path) -> None:
+    clock = SimClock()
+    attempts: list[float] = []
+
+    def runner(receiver, band, length_s, state) -> SessionResult:
+        attempts.append(clock.now())
+        start = clock.now()
+        clock.t += 120.0
+        if len(attempts) == 1:
+            return SessionResult(
+                ENDED_BY_RECEIVER, "the receiver closed the connection", start, clock.now(), 120.0, 7, {}, True
+            )
+        return SessionResult(RECORDED, "scripted", start, clock.now(), 120.0, 8, {})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
+    assert attempts[1] - attempts[0] >= 120.0 + TIME_LIMIT_WAIT_S
+
+
+def test_a_crashed_session_counts_towards_the_daily_limit(tmp_path: Path) -> None:
+    def crash(*args: object) -> SessionResult:
+        raise OSError("disk full")
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    with pytest.raises(OSError):
+        run_schedule([CLUB], request, tmp_path, crash, SimClock(), threading.Event())
+    state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert state.sessions == [[T0, T0 + CLUB.session_s]]
+    assert state.used_s(T0 + CLUB.session_s) == CLUB.session_s
+
+
+def test_a_finished_session_is_counted_once_with_its_real_times(tmp_path: Path) -> None:
+    seen: list[float] = []
+
+    def runner(receiver, band, length_s, state) -> SessionResult:
+        seen.append(state.used_s(T0))  # the planned session is not counted against itself
+        return SessionResult(RECORDED, "scripted", T0, T0 + 200.0, 200.0, 13, {})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, SimClock(), threading.Event())
+    state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert seen == [0.0]
+    assert state.sessions == [[T0, T0 + 200.0]]

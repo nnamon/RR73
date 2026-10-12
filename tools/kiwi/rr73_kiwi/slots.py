@@ -57,10 +57,12 @@ class SlotAssembler:
         on_slot: Callable[[Slot], None],
         correction_s: float = 0.0,
         slot_s: int = FT8_SLOT_S,
+        host_offset_s: float = 0.0,
     ) -> None:
         self._rate_hz = rate_hz
         self._on_slot = on_slot
-        self._correction_s = correction_s
+        self._correction_s = correction_s  # added to NTP sample times: host offset minus latency
+        self._host_offset_s = host_offset_s  # true time minus host time, for the GPS check
         self._slot_s = slot_s
         self._out_count = slot_s * OUT_RATE_HZ
         self.stats = AssemblerStats(reported_rates={rate_hz})
@@ -129,7 +131,7 @@ class SlotAssembler:
             return None
         index, count, arrival, tow, fresh = (np.array(c) for c in zip(*self._frames, strict=True))
         log = FrameLog(index=index, count=count, arrival=arrival, gps_tow=tow, fresh=fresh.astype(bool))
-        gps = fit_gps(log, self._rate_hz)
+        gps = fit_gps(log, self._rate_hz, self._host_offset_s)
         if isinstance(gps, SampleClock):
             self.stats.gps_rejected = ""
             return gps

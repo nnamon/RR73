@@ -107,3 +107,13 @@ def test_arrival_rate_is_used_only_when_precise() -> None:
     assert clock.rate_source == "reported" and clock.rate_hz == 12000.0
     assert clock.measured_rate_se_hz > 0.024
     assert clock.rms_s > 0.003
+
+
+def test_gps_is_compared_with_the_ntp_corrected_host_clock() -> None:
+    # The host clock runs 12 s fast; NTP measured that, so the GPS timestamps are still accepted.
+    stream = Stream(start_unix=START, duration_s=40.0, latency_s=0.3)
+    log = frame_log(stream, "fresh")
+    fast = FrameLog(log.index, log.count, log.arrival + 12.0, log.gps_tow, log.fresh)
+    clock = fit_gps(fast, 12001.135, host_offset_s=-12.0)
+    assert isinstance(clock, SampleClock) and float(clock.time_at(0)) == pytest.approx(START, abs=1e-6)
+    assert "differ from the host clock" in fit_gps(fast, 12001.135, host_offset_s=0.0)

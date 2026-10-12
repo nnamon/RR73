@@ -11,9 +11,11 @@ from dataclasses import dataclass
 
 from rr73_kiwi.status import KiwiStatus
 
-# Connect only when at least this many channels stay free after the check: skip when
-# users >= users_max - FREE_CHANNELS.
-FREE_CHANNELS = 3
+# Channels that stay free after RR73 connects, by access class: skip when
+# users >= users_max - free_channels. Club members agreed to the recorder's use, so club
+# receivers keep 2 free for other members; strangers' receivers keep 3.
+CLUB_FREE_CHANNELS = 2
+PUBLIC_FREE_CHANNELS = 3
 # End a session early when other listeners leave this many channels or fewer free.
 CROWDED_FREE_CHANNELS = 1
 # Session length limits, in seconds. One session holds one channel.
@@ -42,6 +44,7 @@ class Rules:
     backoff_base_s: float
     backoff_cap_s: float
     min_attempt_gap_s: float
+    free_channels: int
 
 
 _CLUB = Rules(
@@ -52,6 +55,7 @@ _CLUB = Rules(
     backoff_base_s=2 * 60,
     backoff_cap_s=2 * 3600,
     min_attempt_gap_s=60,
+    free_channels=CLUB_FREE_CHANNELS,
 )
 _PUBLIC = Rules(
     access="public",
@@ -61,6 +65,7 @@ _PUBLIC = Rules(
     backoff_base_s=10 * 60,
     backoff_cap_s=6 * 3600,
     min_attempt_gap_s=5 * 60,
+    free_channels=PUBLIC_FREE_CHANNELS,
 )
 
 
@@ -79,15 +84,15 @@ class Admission:
     reason: str
 
 
-def admission(status: KiwiStatus) -> Admission:
+def admission(status: KiwiStatus, rules: Rules) -> Admission:
     """Whether a new connection may be opened, given the receiver's /status before connecting."""
     if status.offline or status.status.lower() in ("offline", "down"):
         return Admission(False, f"receiver reports offline={status.fields.get('offline', '')} status={status.status}")
-    if status.users >= status.users_max - FREE_CHANNELS:
+    if status.users >= status.users_max - rules.free_channels:
         return Admission(
             False,
             f"{status.users} of {status.users_max} channels in use; "
-            f"connecting needs at most {status.users_max - FREE_CHANNELS - 1}",
+            f"connecting needs at most {status.users_max - rules.free_channels - 1}",
         )
     return Admission(True, f"{status.users} of {status.users_max} channels in use")
 
