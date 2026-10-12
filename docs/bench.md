@@ -107,6 +107,10 @@ Set summary:
 
 `rr73-bench compare a.json b.json [--limit N]` prints, per set, recall, matched, false decodes, unmatched real decodes, SNR50 and the median and 90th percentile time per slot for a and b with the change; then time per slot over all slots; then every decode gained (present in b and missing from a) and lost (present in a and missing from b) with its slot path, SNR, frequency, DT and whether it matched an expected entry. Two decodes are the same signal when their text is equal and their frequencies are within 10 Hz. Slim files compare summaries only. Decoder commits carry this output (AGENTS.md).
 
+## Other decoders
+
+`rr73-bench import --decodes out.txt --label NAME [--dt-offset S] --out results/NAME.json <paths>` scores another decoder's text output on the same slots and writes a results file for `compare`. The output file holds a line `== <stem>` per slot followed by decode lines in the WSJT-X layout (`HHMMSS SNR DT FREQ ~ MESSAGE`), as `jt9` and ft8_lib's `decode_ft8` print them. `--dt-offset` is subtracted from every DT: `decode_ft8` prints the start of symbol 0 plus 0.16 s, which is DT + 0.66 s. Timing fields are zero.
+
 ## Gate
 
 `rr73-bench gate results.json --baseline bench/baseline.json [--thresholds bench/gate.toml]` exits with status 1 when any check fails, 2 on a usage or file error, and 0 otherwise. For each set present in both files:

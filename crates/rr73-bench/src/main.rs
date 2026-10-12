@@ -2,6 +2,7 @@
 
 mod compare;
 mod gate;
+mod import;
 mod results;
 mod run;
 mod synth;
@@ -86,6 +87,27 @@ enum Command {
         /// Threshold file.
         #[arg(long, default_value = "bench/gate.toml")]
         thresholds: PathBuf,
+    },
+    /// Score another decoder's text output (jt9, ft8_lib) on the corpus as a results file.
+    Import {
+        /// Output file: `== <stem>` lines, each followed by WSJT-X-style decode lines.
+        #[arg(long)]
+        decodes: PathBuf,
+        /// Name recorded as the preset.
+        #[arg(long)]
+        label: String,
+        /// Seconds subtracted from each DT (0.66 for ft8_lib's decode_ft8).
+        #[arg(long, default_value_t = 0.0, allow_negative_numbers = true)]
+        dt_offset: f64,
+        /// Reference key to score real slots against.
+        #[arg(long)]
+        reference: Option<String>,
+        /// Results file to write.
+        #[arg(long)]
+        out: PathBuf,
+        /// Corpus files or directories the output covers.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
     },
     /// Write a copy of a results file without per-slot decode and entry lists.
     Slim {
@@ -185,6 +207,26 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             } else {
                 ExitCode::from(1)
             })
+        }
+        Command::Import {
+            decodes,
+            label,
+            dt_offset,
+            reference,
+            out,
+            paths,
+        } => {
+            let r = import::import(&import::ImportOptions {
+                decodes,
+                label,
+                dt_offset_s: dt_offset,
+                paths,
+                reference,
+                out: out.clone(),
+            })?;
+            print!("{}", run::summary_table(&r));
+            println!("{} slots scored. Results: {}", r.slots.len(), out.display());
+            Ok(ExitCode::SUCCESS)
         }
         Command::Slim { results: path, out } => {
             let mut r = results::load(&path)?;
