@@ -384,6 +384,7 @@ dependencies = [
  "rr73-dsp",
  "rr73-ft8",
  "serde",
+ "serde_json",
  "thiserror",
 ]
 
