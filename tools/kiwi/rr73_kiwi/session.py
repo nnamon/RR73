@@ -18,7 +18,7 @@ from rr73_kiwi.config import Receiver
 from rr73_kiwi.corpus import slot_stem, write_slot
 from rr73_kiwi.kiwi import IqConnection, StreamEnded
 from rr73_kiwi.ntp import measure_offset
-from rr73_kiwi.politeness import STATUS_POLL_S, admission, allowed_session_s, crowded
+from rr73_kiwi.politeness import STATUS_POLL_S, admission, allowed_session_s, crowded, rules_for
 from rr73_kiwi.slots import FT8_SLOT_S, Slot, SlotAssembler
 from rr73_kiwi.state import ReceiverState
 from rr73_kiwi.status import KiwiStatus, StatusError, fetch_status
@@ -106,7 +106,7 @@ def run_session(
     except StatusError as exc:
         return result(ERROR, str(exc))
     record["status_before"] = {"users": status.users, "users_max": status.users_max}
-    decision = admission(status)
+    decision = admission(status, rules_for(receiver.access))
     if not decision.allowed:
         return result(BUSY, decision.reason)
     length_s = allowed_session_s(length_s, state.server_limits, state.used_s(started))

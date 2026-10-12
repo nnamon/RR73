@@ -58,7 +58,7 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 | Rule | Club | Public |
 | --- | --- | --- |
 | Channels per receiver | 1 | 1 |
-| Read `/status` before connecting; skip when `users >= users_max - 3` | yes | yes |
+| Read `/status` before connecting; connect only if this many channels stay free afterwards | 2 | 3 |
 | Session length | at most 15 min | at most 15 min |
 | Break after a session | at least 5 min | at least 30 min |
 | Wait after finding the receiver busy | 10 min | 30 min |

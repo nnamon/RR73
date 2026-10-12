@@ -80,10 +80,11 @@ def test_session_records_aligned_slots_and_disconnects_cleanly(tmp_path: Path) -
 
 
 def test_busy_receiver_is_not_contacted(tmp_path: Path) -> None:
-    behaviour = Behaviour(status={"status": "active", "offline": "no", "users": "10", "users_max": "13"})
+    # A club receiver keeps 2 channels free: at 11 of 13 the recorder stays away.
+    behaviour = Behaviour(status={"status": "active", "offline": "no", "users": "11", "users_max": "13"})
     with FakeKiwi(Stream(start_unix=START), behaviour) as fake:
         result = session(fake, tmp_path)
-    assert result.outcome == BUSY and "10 of 13" in result.detail
+    assert result.outcome == BUSY and "11 of 13" in result.detail
     assert fake.ws_connections == 0
     assert "RR73 corpus 9V1NE" in fake.status_requests[0]["user-agent"]
 

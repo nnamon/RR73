@@ -14,7 +14,14 @@ from pathlib import Path
 from rr73_kiwi import IDENT
 from rr73_kiwi.bands import FT8_DIAL_HZ
 from rr73_kiwi.config import ConfigError, Receiver, load_receivers
-from rr73_kiwi.politeness import FREE_CHANNELS, MAX_SESSION_S, MIN_SESSION_S, admission, rules_for
+from rr73_kiwi.politeness import (
+    CLUB_FREE_CHANNELS,
+    MAX_SESSION_S,
+    MIN_SESSION_S,
+    PUBLIC_FREE_CHANNELS,
+    admission,
+    rules_for,
+)
 from rr73_kiwi.schedule import Clock, Request, ready_at, run_schedule
 from rr73_kiwi.session import SessionContext, SessionResult, run_session
 from rr73_kiwi.state import STATE_NAME, LockError, ReceiverState, receiver_dir
@@ -30,8 +37,9 @@ IQ mode with a 100 to 3000 Hz USB passband. The audio is resampled to exactly 12
 into UTC-aligned 15 s slots: corpus/kiwi/<receiver>/<YYYYMMDD>/<YYMMDD_HHMMSS>.wav and .json.
 Partial slots are discarded.
 
-Rules on every receiver: one channel at a time; no connection while users >= users_max - {FREE_CHANNELS}
-on /status; sessions of at most {MAX_SESSION_S // 60} minutes, then a break (club receivers at least
+Rules on every receiver: one channel at a time; no connection unless {CLUB_FREE_CHANNELS} channels
+(club receivers) or {PUBLIC_FREE_CHANNELS} channels (public receivers) stay free afterwards, per
+/status; sessions of at most {MAX_SESSION_S // 60} minutes, then a break (club receivers at least
 5 minutes, public receivers at least 30); the receiver's own time limits; a doubling backoff after
 errors. The user name is "{IDENT}".
 
@@ -99,7 +107,7 @@ def _check(receivers: list[Receiver], corpus: Path, bands: list[str]) -> int:
         rules = rules_for(receiver.access)
         try:
             status = fetch_status(receiver.host, receiver.port)
-            decision = admission(status)
+            decision = admission(status, rules)
             verdict = ("may connect: " if decision.allowed else "would wait: ") + decision.reason
         except StatusError as exc:
             verdict = f"status unavailable: {exc}"
