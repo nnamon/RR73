@@ -9,14 +9,28 @@ import type { Decode } from './types';
 /** Why the decoder is not available. */
 export type DecoderFailure = 'missing' | 'load' | 'worker' | 'crashed';
 
+/** pack_message's answer for the Tx editor. */
+export interface Packed {
+  ok: boolean;
+  /** Canonical text when ok; the input otherwise. */
+  text: string;
+  /** Message type, such as "1.0". */
+  i3n3: string;
+  error: string | null;
+}
+
 export type ToDecoder =
   | { type: 'load' }
-  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array };
+  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array }
+  | { type: 'pack'; id: number; text: string; mode: Mode }
+  | { type: 'synth'; id: number; text: string; mode: Mode; f0Hz: number; sampleRate: number };
 
 export type FromDecoder =
   | { type: 'ready'; version: string; loadMs: number }
   | { type: 'failed'; reason: DecoderFailure; detail: string }
   | { type: 'decoded'; id: number; decodes: Decode[]; ms: number }
+  | { type: 'packed'; id: number; packed: Packed }
+  | { type: 'synthesized'; id: number; samples: Float32Array; ms: number }
   | { type: 'error'; id: number; detail: string };
 
 /**
