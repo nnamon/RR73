@@ -363,8 +363,10 @@ dependencies = [
  "rand",
  "rand_chacha",
  "rand_distr",
+ "rr73-dsp",
  "rr73-ft8",
  "serde",
+ "thiserror",
 ]
 
 [[package]]
