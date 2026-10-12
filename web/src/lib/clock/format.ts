@@ -54,8 +54,11 @@ export function dt(s: number): string {
   return signed(s, 1);
 }
 
-/** "14.074 MHz" for a dial frequency in Hz, with more decimals only where needed: "7.0475 MHz". */
+/**
+ * "14.074 MHz" for a dial frequency in Hz, with more decimals only where needed: "7.0475 MHz".
+ * A no-break space keeps the unit on the number's line.
+ */
 export function mhz(hz: number): string {
   const text = (hz / 1e6).toFixed(6).replace(/0{1,3}$/, '');
-  return `${text} MHz`;
+  return `${text}\u00a0MHz`;
 }

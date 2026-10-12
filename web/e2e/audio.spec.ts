@@ -79,18 +79,18 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   expect(jsonDownload.suggestedFilename()).toBe(wavDownload.suggestedFilename().replace('.wav', '.json'));
   expect(sidecar.start_utc).toMatch(/:(00|15|30|45)Z$/);
 
-  // The saved audio holds the tones at their true frequencies after resampling to 12 kHz.
+  // The saved audio holds the tones at their true frequencies and levels after resampling to
+  // 12 kHz. A loaded container can drop audio for a moment (the slot then has a zero-filled
+  // stretch), so each tone is measured in the cleanest 0.5 s window of the recorded part.
   const filled = sidecar.capture.filled_samples as number;
   expect(filled).toBeGreaterThan(12000);
-  const start = 180000 - filled + 600;
-  const len = Math.min(12000, filled - 1200);
-  for (const hz of TONES_HZ) {
-    const a = amplitudeAt(wav.samples, 12000, hz, start, len);
-    expect(20 * Math.log10(a / 0.05), `${hz} Hz in the WAV`).toBeGreaterThan(-3);
-  }
-  const levels = TONES_HZ.map((hz) => Math.round(20 * Math.log10(amplitudeAt(wav.samples, 12000, hz, start, len) / 0.05) * 10) / 10);
-  const alias = amplitudeAt(wav.samples, 12000, ALIAS_AT_HZ, start, len);
+  const windows: number[] = [];
+  for (let at = 180000 - filled + 600; at + 6000 <= 180000; at += 3000) windows.push(at);
+  const best = (hz: number) => Math.max(...windows.map((at) => amplitudeAt(wav.samples, 12000, hz, at, 6000)));
+  const levels = TONES_HZ.map((hz) => Math.round(20 * Math.log10(best(hz) / 0.05) * 100) / 100);
+  const alias = best(ALIAS_AT_HZ);
   test.info().annotations.push({ type: 'wav', description: JSON.stringify({ file: wavDownload.suggestedFilename(), filled, tonesDbRe50mFS: levels, aliasAmplitude: alias }) });
+  levels.forEach((db, i) => expect(Math.abs(db), `${TONES_HZ[i]} Hz in the WAV, dB from its input level`).toBeLessThan(1));
   expect(alias).toBeLessThan(0.05 / 100);
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-save-slot.png` });
 });

@@ -28,9 +28,9 @@ describe('formats', () => {
   it('writes signed numbers and frequencies', () => {
     expect(signed(-24)).toBe(`${MINUS}24`);
     expect(signed(7)).toBe('7');
-    expect(mhz(14074000)).toBe('14.074 MHz');
-    expect(mhz(7047500)).toBe('7.0475 MHz');
-    expect(mhz(1840000)).toBe('1.840 MHz');
-    expect(mhz(50313000)).toBe('50.313 MHz');
+    expect(mhz(14074000)).toBe('14.074\u00a0MHz');
+    expect(mhz(7047500)).toBe('7.0475\u00a0MHz');
+    expect(mhz(1840000)).toBe('1.840\u00a0MHz');
+    expect(mhz(50313000)).toBe('50.313\u00a0MHz');
   });
 });

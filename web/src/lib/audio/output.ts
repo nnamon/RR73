@@ -4,6 +4,10 @@
  *
  * Tone edges ramp over 5 ms so the transmitter does not splatter; Halt ramps over 3 ms and
  * stops the oscillator 1 ms later.
+ *
+ * The tone is scheduled on the audio clock and also guarded by a wall-clock watchdog 300 ms past
+ * its end, because an audio clock that runs slow (seen in headless Chrome under load) would
+ * otherwise stretch the transmission.
  */
 
 export interface TuneOptions {
@@ -27,11 +31,14 @@ export interface TuneHandle {
 export const TUNE: TuneOptions = { hz: 1500, seconds: 10, level: 0.5 };
 
 const RAMP_S = 0.005;
+/** Wall-clock margin after the scheduled end before the watchdog stops the tone, ms. */
+const WATCHDOG_MARGIN_MS = 300;
 
 export class TransmitOutput {
   private osc: OscillatorNode | null = null;
   private gain: GainNode | null = null;
   private finish: ((end: TuneEnd) => void) | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
   private listeners = new Set<(active: boolean) => void>();
 
   /** True while anything plays. */
@@ -70,12 +77,17 @@ export class TransmitOutput {
     osc.onended = () => {
       if (this.osc === osc) this.release('finished');
     };
+    this.watchdog = setTimeout(() => this.stop('finished'), o.seconds * 1000 + 20 + WATCHDOG_MARGIN_MS);
     this.emit();
     return { endsAtMs: performance.now() + (t1 - ctx.currentTime) * 1000, done };
   }
 
   /** Stops all output at once. Safe to call at any time. */
   halt() {
+    this.stop('halted');
+  }
+
+  private stop(end: TuneEnd) {
     const osc = this.osc;
     const gain = this.gain;
     if (!osc || !gain) return;
@@ -94,10 +106,12 @@ export class TransmitOutput {
       osc.disconnect();
       gain.disconnect();
     }, 50);
-    this.release('halted');
+    this.release(end);
   }
 
   private release(end: TuneEnd) {
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = null;
     const f = this.finish;
     this.osc = null;
     this.gain = null;
