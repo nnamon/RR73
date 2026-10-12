@@ -215,3 +215,66 @@ def test_any_session_that_held_a_channel_is_followed_by_the_break(tmp_path: Path
     request = Request(sessions=1, hours=None, bands=(), length_s=None)
     run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
     assert attempts[1] - attempts[0] >= 300.0 + CLUB.break_s
+
+
+class HookedClock(SimClock):
+    """A simulated clock that runs a callback, standing in for another process, during waits."""
+
+    def __init__(self, during_wait) -> None:
+        super().__init__()
+        self.during_wait = during_wait
+        self.waits = 0
+
+    def wait(self, seconds: float, stop: threading.Event) -> bool:
+        self.waits += 1
+        self.during_wait(self.waits, self.t)
+        return super().wait(seconds, stop)
+
+
+def write_state(tmp_path: Path, state: ReceiverState) -> None:
+    state.save(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+
+
+def test_a_wait_set_by_another_process_is_honoured(tmp_path: Path) -> None:
+    def other_process(n: int, now: float) -> None:
+        if n == 1:  # during the first break, another process records and sets a long backoff
+            write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 10_000, last_attempt_unix=now, failures=5))
+
+    clock = HookedClock(other_process)
+    _, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], sessions=2, clock=clock)
+    assert runner.attempts[1][2] >= T0 + 10_000
+
+
+def test_finding_the_lock_held_never_overwrites_the_holder_state(tmp_path: Path) -> None:
+    write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 100))
+    lock_fd: list[int] = []
+    theirs = ReceiverState(next_attempt_unix=T0 + 50, last_attempt_unix=T0 + 50, failures=3, rotation=7)
+    theirs.sessions = [[T0 - 900.0, T0 - 200.0]]
+
+    def other_process(n: int, now: float) -> None:
+        if n == 1:  # another process takes the receiver and writes its own state
+            lock_fd.append(hold_lock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME))
+            write_state(tmp_path, theirs)
+
+    clock = HookedClock(other_process)
+    try:
+        code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1, clock=clock)
+    finally:
+        os.close(lock_fd[0])
+    assert code == EXIT_STOPPED and runner.attempts == []
+    on_disk = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
+    assert on_disk == theirs
+
+
+def test_state_is_read_again_after_taking_the_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    acquire = ReceiverLock.acquire
+
+    def acquire_after_another_session(self: ReceiverLock) -> None:
+        # Another process finished a session between the ready check and the lock.
+        write_state(tmp_path, ReceiverState(next_attempt_unix=T0 + 5000, last_attempt_unix=T0))
+        monkeypatch.setattr(ReceiverLock, "acquire", acquire)
+        acquire(self)
+
+    monkeypatch.setattr(ReceiverLock, "acquire", acquire_after_another_session)
+    _, runner, _ = schedule(tmp_path, [CLUB], [RECORDED])
+    assert [t for *_, t in runner.attempts] == [T0 + 5000]
