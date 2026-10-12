@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+import fcntl
 import json
+import os
+import subprocess
+import sys
 import threading
 from dataclasses import replace
 from datetime import UTC, datetime
@@ -13,7 +17,7 @@ import pytest
 from rr73_kiwi.config import BandWindow, Receiver
 from rr73_kiwi.schedule import EXIT_DONE, EXIT_STOPPED, Request, run_schedule
 from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, REFUSED, SessionResult
-from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, ReceiverState, receiver_dir
+from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, LockBusy, ReceiverLock, ReceiverState, receiver_dir
 
 T0 = datetime(2026, 10, 13, 21, 0, tzinfo=UTC).timestamp()
 CLUB = Receiver(
@@ -55,7 +59,7 @@ class Runner:
         self.outcomes = outcomes
         self.attempts: list[tuple[str, str, float]] = []
 
-    def __call__(self, receiver, band, length_s, state, heartbeat) -> SessionResult:
+    def __call__(self, receiver, band, length_s, state) -> SessionResult:
         start = self.clock.now()
         self.attempts.append((receiver.id, band, start))
         outcome = self.outcomes[min(len(self.attempts) - 1, len(self.outcomes) - 1)]
@@ -130,21 +134,43 @@ def test_two_receivers_alternate_during_breaks(tmp_path: Path) -> None:
     assert [r for r, _, _ in runner.attempts] == ["club-kiwi", "club-kiwi-2", "club-kiwi"]
 
 
+def hold_lock(path: Path) -> int:
+    """Take the receiver lock as another live process would. Its heartbeat is an hour old."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(path, os.O_RDWR | os.O_CREAT, 0o644)
+    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    os.write(fd, json.dumps({"owner": "other:1", "heartbeat": T0 - 3600}).encode())
+    return fd
+
+
 def test_a_receiver_held_by_another_process_is_not_used(tmp_path: Path) -> None:
-    lock = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
-    lock.parent.mkdir(parents=True)
-    lock.write_text(json.dumps({"owner": "other:1", "heartbeat": T0}))
-    code, runner, clock = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1)
+    fd = hold_lock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME)
+    try:
+        code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED], hours=0.1)
+    finally:
+        os.close(fd)
     assert code == EXIT_STOPPED and runner.attempts == []
 
 
-def test_stale_lock_is_taken_over(tmp_path: Path) -> None:
+def test_two_holders_of_one_receiver_lock_are_impossible(tmp_path: Path) -> None:
+    path = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
+    first, second = ReceiverLock(path), ReceiverLock(path)
+    first.acquire()
+    with pytest.raises(LockBusy):
+        second.acquire()
+    first.release()
+    second.acquire()
+    second.release()
+
+
+def test_a_lock_left_by_a_dead_process_is_free(tmp_path: Path) -> None:
     lock = receiver_dir(tmp_path, CLUB.id) / LOCK_NAME
     lock.parent.mkdir(parents=True)
-    lock.write_text(json.dumps({"owner": "other:1", "heartbeat": T0 - 3600}))
+    script = "import fcntl, os, sys; fd = os.open(sys.argv[1], os.O_RDWR | os.O_CREAT); fcntl.flock(fd, fcntl.LOCK_EX)"
+    subprocess.run([sys.executable, "-c", script, str(lock)], check=True)
+    lock.write_text(json.dumps({"owner": "dead:1", "heartbeat": T0}))
     code, runner, _ = schedule(tmp_path, [CLUB], [RECORDED])
-    assert code == EXIT_DONE and len(runner.attempts) == 1
-    assert not lock.exists()
+    assert code == EXIT_DONE and [t for *_, t in runner.attempts] == [T0]
 
 
 def test_attempts_are_never_closer_than_the_minimum_gap(tmp_path: Path) -> None:
@@ -169,7 +195,9 @@ def test_a_crash_during_a_session_leaves_a_full_session_and_break_before_the_nex
         raise AssertionError("the runner's exception should propagate")
     state = ReceiverState.load(receiver_dir(tmp_path, CLUB.id) / STATE_NAME)
     assert state.next_attempt_unix >= T0 + CLUB.session_s + CLUB.break_s
-    assert not (receiver_dir(tmp_path, CLUB.id) / LOCK_NAME).exists()
+    lock = ReceiverLock(receiver_dir(tmp_path, CLUB.id) / LOCK_NAME)
+    lock.acquire()  # released despite the crash
+    lock.release()
 
 
 @pytest.mark.parametrize("outcome", [ERROR, REFUSED, BUSY])
@@ -177,7 +205,7 @@ def test_any_session_that_held_a_channel_is_followed_by_the_break(tmp_path: Path
     clock = SimClock()
     attempts: list[float] = []
 
-    def runner(receiver, band, length_s, state, *_) -> SessionResult:
+    def runner(receiver, band, length_s, state) -> SessionResult:
         attempts.append(clock.now())
         start = clock.now()
         clock.t += 300.0  # held the channel for 5 minutes, then the network failed

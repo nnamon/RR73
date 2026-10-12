@@ -27,7 +27,6 @@ log = logging.getLogger("rr73_kiwi")
 
 # Extra wall time allowed after the last planned slot for its audio to arrive.
 END_GRACE_S = 20.0
-LOCK_REFRESH_S = 60.0
 
 # Outcomes. "recorded" and "ended-by-receiver" held a channel; the others did not.
 RECORDED = "recorded"
@@ -58,7 +57,6 @@ class SessionContext:
     stop: threading.Event
     ntp_server: str | None
     status_reader: Callable[[str, int], KiwiStatus] = fetch_status
-    heartbeat: Callable[[float], None] = lambda now: None
     now: Callable[[], float] = time.time
     status_poll_s: float = STATUS_POLL_S
 
@@ -153,7 +151,6 @@ def run_session(
     try:
         connection.open()
         watch.start()
-        last_heartbeat = connected_at
         while True:
             if ctx.stop.is_set():
                 outcome, detail = STOPPED, "stopped by signal"
@@ -176,9 +173,6 @@ def run_session(
                     outcome, detail = NO_ALLOWANCE, "the receiver's daily time limit for this address is used up"
                     break
                 end_slot = min(end_slot, math.floor((connected_at + allowed - 2.0) / FT8_SLOT_S) * FT8_SLOT_S)
-            if now - last_heartbeat >= LOCK_REFRESH_S:
-                ctx.heartbeat(now)
-                last_heartbeat = now
             connection.poll()
     except StreamEnded as exc:
         outcome = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER}.get(exc.kind, ERROR)

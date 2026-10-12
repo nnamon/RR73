@@ -56,7 +56,7 @@ class Clock:
         return stop.wait(max(0.0, seconds))
 
 
-SessionRunner = Callable[[Receiver, str, float, ReceiverState, Callable[[float], None]], SessionResult]
+SessionRunner = Callable[[Receiver, str, float, ReceiverState], SessionResult]
 
 
 @dataclass(frozen=True)
@@ -143,7 +143,7 @@ def run_schedule(
         length_s = request.length_s if request.length_s is not None else receiver.session_s
         lock = ReceiverLock(receiver_dir(corpus_root, receiver.id) / LOCK_NAME)
         try:
-            lock.acquire(now)
+            lock.acquire()
         except LockBusy as exc:
             log.warning("%s: %s; trying again later", receiver.id, exc)
             state.last_attempt_unix = now
@@ -157,7 +157,7 @@ def run_schedule(
             state.next_attempt_unix = now + length_s + receiver.break_s
             state.save(state_path)
             log.info("%s %s: session of up to %.0f s", receiver.id, band, length_s)
-            result = runner(receiver, band, length_s, state, lock.refresh)
+            result = runner(receiver, band, length_s, state)
         finally:
             lock.release()
         apply_outcome(receiver, state, result)
