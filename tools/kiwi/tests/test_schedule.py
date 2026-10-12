@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from rr73_kiwi.config import BandWindow, Receiver
+from rr73_kiwi.politeness import TIME_LIMIT_WAIT_S
 from rr73_kiwi.schedule import EXIT_DONE, EXIT_STOPPED, Request, run_schedule
 from rr73_kiwi.session import BUSY, ENDED_BY_RECEIVER, ERROR, RECORDED, REFUSED, SessionResult
 from rr73_kiwi.state import LOCK_NAME, LOG_NAME, STATE_NAME, LockBusy, ReceiverLock, ReceiverState, receiver_dir
@@ -278,3 +279,22 @@ def test_state_is_read_again_after_taking_the_lock(tmp_path: Path, monkeypatch: 
     monkeypatch.setattr(ReceiverLock, "acquire", acquire_after_another_session)
     _, runner, _ = schedule(tmp_path, [CLUB], [RECORDED])
     assert [t for *_, t in runner.attempts] == [T0 + 5000]
+
+
+def test_a_receiver_time_limit_gives_the_long_wait(tmp_path: Path) -> None:
+    clock = SimClock()
+    attempts: list[float] = []
+
+    def runner(receiver, band, length_s, state) -> SessionResult:
+        attempts.append(clock.now())
+        start = clock.now()
+        clock.t += 120.0
+        if len(attempts) == 1:
+            return SessionResult(
+                ENDED_BY_RECEIVER, "the receiver closed the connection", start, clock.now(), 120.0, 7, {}, True
+            )
+        return SessionResult(RECORDED, "scripted", start, clock.now(), 120.0, 8, {})
+
+    request = Request(sessions=1, hours=None, bands=(), length_s=None)
+    run_schedule([CLUB], request, tmp_path, runner, clock, threading.Event())
+    assert attempts[1] - attempts[0] >= 120.0 + TIME_LIMIT_WAIT_S

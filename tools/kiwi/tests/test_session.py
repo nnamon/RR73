@@ -129,3 +129,14 @@ def test_a_failure_to_write_slots_stops_the_session_and_propagates(tmp_path: Pat
     with FakeKiwi(Stream(start_unix=START, duration_s=70.0)) as fake, pytest.raises(OSError):
         session(fake, tmp_path)
     assert fake.close_codes == [1001]
+
+
+@pytest.mark.parametrize("message", ["MSG inactivity_timeout=1", "MSG ip_limit=60,10.8.0.1", "MSG kicked"])
+def test_a_receiver_time_limit_is_recognised(tmp_path: Path, message: str) -> None:
+    behaviour = Behaviour(limit_after_frames=700, limit_message=message)
+    with FakeKiwi(Stream(start_unix=START, duration_s=70.0), behaviour) as fake:
+        result = session(fake, tmp_path)
+    assert result.outcome == ENDED_BY_RECEIVER
+    assert result.time_limited
+    assert message.removeprefix("MSG ").split("=")[0] in result.detail
+    assert result.slots_written == 1

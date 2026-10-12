@@ -8,6 +8,7 @@ in IQ mode, which is the only mode whose frames carry GPS timestamps.
 from __future__ import annotations
 
 import json
+import re
 import socket
 import time
 import types
@@ -24,6 +25,10 @@ from rr73_kiwi.politeness import ServerLimits
 
 SOCKET_TIMEOUT_S = 10.0
 MAX_MESSAGES = 200
+# MSG parameters whose name or value mentions a time limit or a kick. The configuration messages
+# are skipped: they carry the limit settings, which ServerLimits reads.
+_LIMIT_WORDS = re.compile(r"limit|timeout|inactiv|kick", re.IGNORECASE)
+_CONFIG_MESSAGES = frozenset({"load_cfg", "load_dxcfg", "load_dxcomm_cfg", "cfg_loaded"})
 
 FrameHandler = Callable[[int, np.ndarray, "dict[str, int] | None", float], None]
 
@@ -40,7 +45,8 @@ class StreamEnded(Exception):
     """The receiver refused or ended the connection, or the network failed.
 
     kind is "busy" (no channel for us), "refused" (the receiver turned us away), "closed"
-    (the receiver closed a running connection) or "error" (network or protocol failure).
+    (the receiver closed a running connection), "limit" (a time limit ended it) or "error"
+    (network or protocol failure).
     """
 
     def __init__(self, kind: str, message: str) -> None:
@@ -56,6 +62,7 @@ class ServerInfo:
     version: str = ""
     limits: ServerLimits | None = None
     messages: list[str] = field(default_factory=list)
+    notices: list[str] = field(default_factory=list)  # messages about time limits or kicks
 
 
 def _kiwiclient_options(host: str) -> types.SimpleNamespace:
@@ -179,6 +186,9 @@ class IqConnection:
     def message(self, name: str, value: str | None) -> None:
         if len(self.info.messages) < MAX_MESSAGES:
             self.info.messages.append(name)
+        text = name if value is None else f"{name}={value[:100]}"
+        if name not in _CONFIG_MESSAGES and _LIMIT_WORDS.search(text) and len(self.info.notices) < MAX_MESSAGES:
+            self.info.notices.append(text)
         if name == "load_cfg" and value:
             try:
                 config = json.loads(urllib.parse.unquote(value))
@@ -229,6 +239,8 @@ def _ended(exc: Exception) -> StreamEnded:
         return StreamEnded("busy" if "busy" in str(exc) else "refused", str(exc))
     if isinstance(exc, kc.KiwiDownError | kc.KiwiConnectionError):
         return StreamEnded("refused", str(exc))
+    if isinstance(exc, kc.KiwiTimeLimitError):
+        return StreamEnded("limit", f"the receiver's time limit ended the connection: {exc}")
     if isinstance(exc, kc.KiwiServerTerminatedConnection):
         return StreamEnded("closed", f"the receiver closed the connection: {exc}")
     if isinstance(exc, TimeoutError | socket.timeout):

@@ -47,6 +47,7 @@ class SessionResult:
     connected_s: float = 0.0
     slots_written: int = 0
     record: dict = field(default_factory=dict)
+    time_limited: bool = False  # the receiver announced or enforced a time limit or a kick
 
 
 @dataclass(frozen=True)
@@ -90,9 +91,11 @@ def run_session(
     started = ctx.now()
     record: dict = {"receiver": receiver.id, "band": band, "requested_s": length_s}
 
-    def result(outcome: str, detail: str, connected_s: float = 0.0, slots_written: int = 0) -> SessionResult:
-        record.update(outcome=outcome, detail=detail)
-        return SessionResult(outcome, detail, started, ctx.now(), connected_s, slots_written, record)
+    def result(
+        outcome: str, detail: str, connected_s: float = 0.0, slots_written: int = 0, time_limited: bool = False
+    ) -> SessionResult:
+        record.update(outcome=outcome, detail=detail, time_limited=time_limited)
+        return SessionResult(outcome, detail, started, ctx.now(), connected_s, slots_written, record, time_limited)
 
     try:
         status = ctx.status_reader(receiver.host, receiver.port)
@@ -144,6 +147,7 @@ def run_session(
     connection = IqConnection(receiver.host, receiver.port, dial, IDENT, on_frame, on_rate, ctx.now)
     watch = _CrowdWatch(receiver, ctx.status_reader, ctx.status_poll_s)
     outcome, detail = RECORDED, ""
+    ended_by_limit = False
     connected_at = ctx.now()
     # Stop after the last slot that ends within the session length.
     end_slot = math.floor((connected_at + length_s - 2.0) / FT8_SLOT_S) * FT8_SLOT_S
@@ -175,8 +179,10 @@ def run_session(
                 end_slot = min(end_slot, math.floor((connected_at + allowed - 2.0) / FT8_SLOT_S) * FT8_SLOT_S)
             connection.poll()
     except StreamEnded as exc:
-        outcome = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER}.get(exc.kind, ERROR)
+        kinds = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER, "limit": ENDED_BY_RECEIVER}
+        outcome = kinds.get(exc.kind, ERROR)
         detail = str(exc)
+        ended_by_limit = exc.kind == "limit"
     finally:
         connection.close()
         watch.done.set()
@@ -186,6 +192,13 @@ def run_session(
     ended = ctx.now()
     if outcome in (BUSY, REFUSED) and written:
         outcome = ENDED_BY_RECEIVER
+    if not detail:
+        detail = f"wrote {len(written)} slots"
+    notices = connection.info.notices
+    time_limited = ended_by_limit or bool(notices)
+    if notices:
+        detail = f"{detail}; the receiver sent {', '.join(notices)}"
+    record["notices"] = notices
     connected_s = ended - connected_at
     record["connected_s"] = round(connected_s, 1)
     record["server"] = {
@@ -219,6 +232,4 @@ def run_session(
             },
         }
     record["slots"] = written
-    if not detail:
-        detail = f"wrote {len(written)} slots"
-    return result(outcome, detail, connected_s=connected_s, slots_written=len(written))
+    return result(outcome, detail, connected_s=connected_s, slots_written=len(written), time_limited=time_limited)

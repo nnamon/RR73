@@ -89,9 +89,7 @@ def apply_outcome(receiver: Receiver, state: ReceiverState, result: SessionResul
         wait = receiver.break_s
     elif result.outcome == ENDED_BY_RECEIVER:
         state.failures += 1
-        limit_words = ("limit", "timeout", "kick")
-        wait = TIME_LIMIT_WAIT_S if any(w in result.detail.lower() for w in limit_words) else 0.0
-        wait = max(wait, receiver.break_s, backoff_s(rules, state.failures))
+        wait = max(receiver.break_s, backoff_s(rules, state.failures))
     elif result.outcome == BUSY:
         wait = rules.busy_wait_s
     elif result.outcome == NO_ALLOWANCE:
@@ -104,6 +102,8 @@ def apply_outcome(receiver: Receiver, state: ReceiverState, result: SessionResul
     if result.connected_s > 0:
         # A session that held a channel is followed by the break, however it ended.
         wait = max(wait, receiver.break_s)
+    if result.time_limited:
+        wait = max(wait, TIME_LIMIT_WAIT_S)
     state.next_attempt_unix = max(end + wait, state.last_attempt_unix + rules.min_attempt_gap_s)
 
 
