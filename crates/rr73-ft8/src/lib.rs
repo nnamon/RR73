@@ -4,6 +4,19 @@
 //! encodes with the (174,91) LDPC code, maps codewords to tones and synthesises GFSK
 //! audio. It contains no decoding logic; `rr73-decode` builds on the tables exported here.
 //!
+//! The transmit chain for one message:
+//!
+//! ```
+//! use rr73_ft8::{message, synth, tones, CallsignHashes, Message, Mode};
+//!
+//! let mut hashes = CallsignHashes::new();
+//! let msg = Message::parse("CQ K1ABC FN42").unwrap();
+//! let payload = message::pack(&msg, &mut hashes).unwrap();
+//! let symbols = tones::from_payload(Mode::Ft8, &payload);
+//! let audio = synth::gfsk(Mode::Ft8, &symbols, 1500.0, 12_000, 1.0);
+//! assert_eq!(audio.len(), 79 * 1920);
+//! ```
+//!
 //! A receiver runs the chain backwards: LDPC decoding (in `rr73-decode`) yields a codeword,
 //! [`ldpc::message_bits`] extracts the 91-bit message, [`crc::payload_from_message91`]
 //! checks the CRC and undoes the FT4 scrambling, and [`message::unpack`] gives the message.
@@ -25,8 +38,8 @@ pub mod mode;
 pub mod synth;
 pub mod tones;
 
-pub use hash::CallsignHashes;
-pub use message::Message;
+pub use hash::{CallHash, CallsignHashes, HashWidth};
+pub use message::{Callsign, Message};
 pub use mode::{Mode, ModeParams};
 
 /// Number of payload bits in every FT8 and FT4 message.
