@@ -82,7 +82,12 @@ jobs:
       - name: Install build tools
         run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl make gcc libc6-dev pkg-config
       - uses: actions/checkout@v4
+      - name: Check for a recorded baseline
+        id: ready
+        run: |
+          if [ -f bench/baseline.json ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else echo "No bench/baseline.json yet; the gate starts with the first recorded baseline."; fi
       - uses: actions/cache@v4
+        if: steps.ready.outputs.ready == 'true'
         with:
           path: |
             /usr/local/cargo/registry
@@ -90,14 +95,19 @@ jobs:
           key: bench-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: bench-
       - name: Fetch public test files
+        if: steps.ready.outputs.ready == 'true'
         run: sh tools/corpus/fetch-ft8lib.sh
       - name: Synthesise CI sets
+        if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- synth --set smoke --set noise-ci --out corpus/synthetic
       - name: Run the baseline preset
+        if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- run --preset baseline --out results/ci.json corpus/public corpus/synthetic
       - name: Gate against the recorded baseline
+        if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- gate results/ci.json --baseline bench/baseline.json
       - uses: actions/upload-artifact@v4
+        if: steps.ready.outputs.ready == 'true'
         with: { name: bench-results, path: results/ci.json }
 
   wasm:
@@ -140,10 +150,10 @@ jobs:
         run: npm --prefix web run lint:css
       - name: Unit tests
         run: npm --prefix web test
-      - name: Build
-        run: npm --prefix web run build
+      - name: Build for GitHub Pages
+        run: npm --prefix web run build:pages
         env:
-          BASE_PATH: /RR73/
+          GITHUB_SHA: ${{ github.sha }}
       - uses: actions/upload-pages-artifact@v3
         if: startsWith(github.ref, 'refs/tags/v')
         with: { path: web/dist }
@@ -160,7 +170,7 @@ jobs:
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
       - name: Playwright
-        run: npx --prefix web playwright test --config web/playwright.config.ts
+        run: npx --prefix web playwright test
         env:
           HOME: /root
       - uses: actions/upload-artifact@v4
