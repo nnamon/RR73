@@ -19,9 +19,9 @@ max_time_ratio = 0
 [sets."public/ft8_lib"]
 max_recall_drop = 0.002
 
-# 1 signal in either smoke set.
+# One signal in either smoke set (58 FT8 and 6 FT4 signals).
 [sets."synthetic/smoke/ft8"]
-max_recall_drop = 0.017
+max_recall_drop = 0.018
 max_snr50_rise_db = 1.5
 
 [sets."synthetic/smoke/ft4"]
