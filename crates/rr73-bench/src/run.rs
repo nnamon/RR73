@@ -65,7 +65,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         git_sha: git_sha.clone(),
         preset: opts.preset.clone(),
         overrides: opts.overrides.clone(),
-        config: serde_json::to_value(&config).map_err(|e| e.to_string())?,
+        config: config_json(&config)?,
         reference_key: opts.reference.clone(),
         environment: util::environment(threads),
         wall_s,
@@ -79,6 +79,13 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         .unwrap_or_else(|| default_path(&git_sha, &opts.preset, &opts.overrides));
     results::save(&results, &out)?;
     Ok((results, out))
+}
+
+/// The configuration as JSON. Going through text keeps `f32` values short (`-2.3`, where a
+/// direct conversion to a JSON value would widen them to `-2.299999952316284`).
+fn config_json(config: &DecoderConfig) -> Result<serde_json::Value, String> {
+    let text = serde_json::to_string(config).map_err(|e| e.to_string())?;
+    serde_json::from_str(&text).map_err(|e| e.to_string())
 }
 
 /// `results/<git-sha>-<preset>.json`, with `-<hash>` of the overrides when there are any.
@@ -235,6 +242,12 @@ pub fn summary_table(results: &Results) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn config_floats_stay_short() {
+        let v = config_json(&DecoderConfig::baseline()).expect("json");
+        assert_eq!(v["search"]["ft8_dt_min_s"].to_string(), "-2.3");
+    }
 
     #[test]
     fn default_paths_name_the_commit_preset_and_overrides() {
