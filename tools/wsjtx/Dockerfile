@@ -17,11 +17,13 @@ RUN apt-get update \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
       libfftw3-single3 libgfortran5 libgomp1 libqt5core5t64 python3 python3-pytest \
  && rm -rf /var/lib/apt/lists/*
-COPY --from=package /usr/bin/jt9 /usr/bin/ft8sim /usr/local/bin/
+COPY --from=package /usr/bin/jt9 /usr/local/libexec/wsjtx/jt9
+COPY --from=package /usr/bin/ft8sim /usr/local/bin/ft8sim
+COPY jt9.sh /usr/local/bin/jt9
 COPY --from=package /usr/share/doc/wsjtx/copyright /usr/share/doc/wsjtx/copyright
 COPY --from=package /wsjtx-version /usr/local/share/wsjtx/version
 RUN jt9 --help > /dev/null && ft8sim > /dev/null \
- && ! ldd /usr/local/bin/jt9 /usr/local/bin/ft8sim | grep "not found"
+ && ! ldd /usr/local/libexec/wsjtx/jt9 /usr/local/bin/ft8sim | grep "not found"
 LABEL org.opencontainers.image.description="WSJT-X ${WSJTX_DEB_VERSION} jt9 and ft8sim for RR73 reference decodes"
 # reference.py runs from the mounted workspace, like rr73-bench in the rust image.
 ENV PATH="/work/tools/wsjtx:${PATH}" PYTHONDONTWRITEBYTECODE=1

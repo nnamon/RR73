@@ -10,6 +10,8 @@ docker compose build wsjtx
 
 The image is built from `ubuntu:24.04` and the distribution's `wsjtx` package, version `2.7.0~rc3+repack-1build2`, which reports itself as WSJT-X 2.7.0-rc3. The final stage keeps `jt9`, `ft8sim` and the libraries they link (FFTW, Qt 5 Core, gfortran), plus Python 3 and pytest. It takes about 290 MB on disk, of which the Ubuntu base layers are shared.
 
+`jt9` on the PATH is a small wrapper (`jt9.sh`): unless `-a` or `-t` is given, it points both at a temporary directory that is removed afterwards, so `docker compose run --rm wsjtx jt9 -8 -d 3 <file.wav>` leaves no `decoded.txt`, `timer.out` or `jt9_wisdom.dat` in the repository. The binary itself is `/usr/local/libexec/wsjtx/jt9`.
+
 WSJT-X is GPL-3. RR73 runs the binaries as a reference and never reads, links or copies their source. The package's copyright file is in the image at `/usr/share/doc/wsjtx/copyright`.
 
 ## Reference decodes

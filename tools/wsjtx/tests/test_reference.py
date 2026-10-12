@@ -311,3 +311,17 @@ def test_rewritten_sidecar_keeps_its_file_mode(tmp_path: Path, fake_jt9: Path, v
     sidecar.chmod(0o644)
     assert reference.main(["--jt9", str(fake_jt9), str(wav)]) == 0
     assert sidecar.stat().st_mode & 0o777 == 0o644
+
+
+@pytest.mark.skipif(not Path("/usr/local/libexec/wsjtx/jt9").exists(), reason="needs the wsjtx image")
+def test_jt9_on_path_leaves_no_working_files_in_the_current_directory(tmp_path: Path) -> None:
+    subprocess.run(
+        ["ft8sim", "CQ 9V1NE OJ11", "1500", "0.0", "0.0", "0.0", "1", "-10"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    run = subprocess.run(["jt9", "-8", "-d", "3", "000000_000001.wav"], cwd=tmp_path, capture_output=True, text=True)
+    assert run.returncode == 0
+    assert parse_jt9_output(run.stdout, "FT8")[0].text == "CQ 9V1NE OJ11"
+    assert sorted(p.name for p in tmp_path.iterdir()) == ["000000_000001.wav"]
