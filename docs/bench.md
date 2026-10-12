@@ -123,19 +123,28 @@ Set summary:
 | SNR50 | The baseline has a fit and SNR50 rises more than `max_snr50_rise_db`; without a fit now, when recall also fell. |
 | time | `max_time_ratio` is above 0 and the median time per slot exceeds the baseline's by that factor. |
 
-Every set in `required_sets` must be in the results. `[default]` holds the limits for all sets and `[sets."<name>"]` overrides them for one set.
+Every set in `required_sets` must be in the results. `[default]` holds the limits for all sets and `[sets."<name>"]` overrides them for one set. The results must also come from the same preset and overrides as the recorded file; a `preset` check fails otherwise.
 
-`bench/baseline.json` is a slim results file (summaries and per-slot counts) from the baseline run below. To record a new one after an intended change: run the CI sets, slim the results and commit both the file and the numbers.
+### CI gate
+
+The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesises `smoke` and `noise-ci`, and gates two presets, each against its own recorded file with the thresholds in `bench/gate.toml`:
+
+| Preset | Recorded file | Why CI gates it |
+| --- | --- | --- |
+| `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, LDPC, validator) and the bench itself, apart from the subtraction code. |
+| `subtract-3` | `bench/subtract-3.json` | The preset the app ships from 0.3.0. Its numbers are what operators get. |
+
+The `subtract-3` steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 1.8 s (`subtract-3`) on 4 threads of the dev machine (Apple M4); on a 4-core x86_64 runner, estimated from typical per-core speed, 2 s and 5 s. The release build dominates the job.
+
+Each recorded file is a slim results file (summaries and per-slot counts) of its preset on the CI sets. To record a new one after an intended change, run the CI sets only (the shared corpus may hold other synthetic sets), slim the results and commit the file with the numbers:
 
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh
 docker compose run --rm rust rr73-bench synth --set smoke --set noise-ci
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) \
-  rust rr73-bench run --preset baseline --out results/ci.json corpus/public corpus/synthetic
-docker compose run --rm rust rr73-bench slim results/ci.json --out bench/baseline.json
+docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+  --preset subtract-3 --out results/ci-subtract-3.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
+docker compose run --rm rust rr73-bench slim results/ci-subtract-3.json --out bench/subtract-3.json
 ```
-
-CI (`.github/workflows/ci.yml`) runs the same fetch, synth and run, then the gate.
 
 ## Decoder presets
 

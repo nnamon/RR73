@@ -87,9 +87,26 @@ pub struct Check {
     pub pass: bool,
 }
 
-/// Compares every set present in both files, and requires the configured sets.
+/// Compares every set present in both files, and requires the configured sets. The two
+/// files must come from the same preset and overrides.
 pub fn gate(results: &Results, baseline: &Results, config: &GateConfig) -> Vec<Check> {
     let mut checks = Vec::new();
+    let describe = |r: &Results| {
+        if r.overrides.is_empty() {
+            r.preset.clone()
+        } else {
+            format!("{} [{}]", r.preset, r.overrides.join(", "))
+        }
+    };
+    let (want, have) = (describe(baseline), describe(results));
+    checks.push(Check {
+        set: "all".into(),
+        metric: "preset".into(),
+        pass: want == have,
+        baseline: want,
+        value: have,
+        limit: "equal".into(),
+    });
     for name in &config.required_sets {
         if !results.sets.contains_key(name) {
             checks.push(Check {
@@ -328,6 +345,14 @@ mod tests {
                 .iter()
                 .any(|k| !k.pass && k.metric == "present")
         );
+        let mut other = results(vec![("synthetic/smoke", summary(0.9, 0, Some(-19.0), 1.0))]);
+        other.preset = "subtract-3".into();
+        let failed: Vec<String> = gate(&other, &base, &c)
+            .into_iter()
+            .filter(|k| !k.pass)
+            .map(|k| k.metric)
+            .collect();
+        assert_eq!(failed, vec!["preset"]);
         let no_fit = results(vec![("synthetic/smoke", summary(0.85, 0, None, 1.0))]);
         assert!(
             gate(&no_fit, &base, &c)
@@ -361,6 +386,23 @@ mod repository_config {
                 config.required_sets.contains(name),
                 "{name} has limits but is not required"
             );
+        }
+    }
+}
+
+#[cfg(test)]
+mod recorded_baselines {
+    use crate::results::load;
+    use std::path::Path;
+
+    #[test]
+    fn each_committed_baseline_holds_its_preset() {
+        let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench");
+        for preset in ["baseline", "subtract-3"] {
+            let r = load(&dir.join(format!("{preset}.json"))).expect(preset);
+            assert_eq!(r.preset, preset);
+            assert!(r.overrides.is_empty(), "{preset}");
+            assert!(r.slim, "{preset}");
         }
     }
 }

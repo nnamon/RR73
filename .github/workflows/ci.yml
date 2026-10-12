@@ -100,15 +100,28 @@ jobs:
       - name: Synthesise CI sets
         if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- synth --set smoke --set noise-ci --out corpus/synthetic
+      # Two presets are gated: baseline (the ft8_lib method, the research reference) and
+      # subtract-3 (the preset the app ships); see "CI gate" in docs/bench.md. subtract-3 runs
+      # even when the baseline gate fails, so one CI run reports both.
       - name: Run the baseline preset
         if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- run --preset baseline --out results/ci.json corpus/public corpus/synthetic
-      - name: Gate against the recorded baseline
+      - name: Gate baseline against bench/baseline.json
         if: steps.ready.outputs.ready == 'true'
         run: cargo run --release -p rr73-bench -- gate results/ci.json --baseline bench/baseline.json
+      - name: Run the subtract-3 preset
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- run --preset subtract-3 --out results/ci-subtract-3.json corpus/public corpus/synthetic
+      - name: Gate subtract-3 against bench/subtract-3.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3.json --baseline bench/subtract-3.json
       - uses: actions/upload-artifact@v4
-        if: steps.ready.outputs.ready == 'true'
-        with: { name: bench-results, path: results/ci.json }
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        with:
+          name: bench-results
+          path: |
+            results/ci.json
+            results/ci-subtract-3.json
 
   wasm:
     name: WebAssembly
