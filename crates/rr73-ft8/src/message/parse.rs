@@ -1,7 +1,8 @@
 //! Operator text to messages.
 //!
 //! Text is upper-cased and split at whitespace. The contest and DXpedition layouts are tried
-//! first, then the standard and nonstandard-callsign layouts, then telemetry and free text.
+//! first, then the standard and nonstandard-callsign layouts, then telemetry (one word of
+//! hexadecimal digits) and free text.
 //! A layout that matches the shape of the text but holds an invalid value (an odd
 //! DXpedition report, an unknown section) produces an error unless the text also fits as
 //! free text.
@@ -35,9 +36,10 @@ pub(crate) fn parse(text: &str) -> Result<Message, PackError> {
             None => {}
         }
     }
+    // WSJT-X 2.7.0-rc3 sends any single word of hexadecimal digits as telemetry, except DE.
     if let [word] = words[..]
-        && word.len() > FreeText::MAX_LEN
         && word.len() <= 18
+        && word != "DE"
         && word.bytes().all(|c| c.is_ascii_hexdigit())
     {
         return Telemetry::from_hex(word).map(|data| Message::Telemetry { data });
@@ -175,9 +177,10 @@ fn rtty_roundup_fields(
         let serial = exch
             .parse::<u16>()
             .map_err(|_| PackError::Unsupported(exch.to_string()))?;
-        if serial > RoundupExchange::MAX_SERIAL {
+        if !(RoundupExchange::MIN_SERIAL..=RoundupExchange::MAX_SERIAL).contains(&serial) {
             return Err(PackError::SerialOutOfRange {
                 serial,
+                min: RoundupExchange::MIN_SERIAL,
                 max: RoundupExchange::MAX_SERIAL,
             });
         }
@@ -270,6 +273,7 @@ fn eu_vhf_fields(
     if serial > EU_VHF_MAX_SERIAL {
         return Err(PackError::SerialOutOfRange {
             serial,
+            min: 0,
             max: EU_VHF_MAX_SERIAL,
         });
     }
@@ -320,6 +324,7 @@ fn standard(words: &[&str]) -> Attempt {
             exchange = match exchange {
                 Exchange::Grid { grid, ack: false } => Exchange::Grid { grid, ack: true },
                 Exchange::Report { report, ack: false } => Exchange::Report { report, ack: true },
+                Exchange::Rr73 => Exchange::AckRr73,
                 _ => return None,
             };
             rest = &rest[..rest.len() - 1];
@@ -375,7 +380,7 @@ fn stations(
         Exchange::Rrr => Some(Some(Reply::Rrr)),
         Exchange::Rr73 => Some(Some(Reply::Rr73)),
         Exchange::SeventyThree => Some(Some(Reply::SeventyThree)),
-        Exchange::Grid { .. } | Exchange::Report { .. } => None,
+        Exchange::Grid { .. } | Exchange::Report { .. } | Exchange::AckRr73 => None,
     };
     if let Some(reply) = reply {
         if de.is_plain_nonstandard() {

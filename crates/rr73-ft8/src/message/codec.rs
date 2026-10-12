@@ -22,8 +22,8 @@ const G15_73: u32 = 32_404;
 /// `fixtures/ft8/onair.json` (66 of 66) uses this value; the public description and ft8_lib
 /// use [`G15_RR73`]. Packing writes this value and unpacking accepts both.
 const G15_RR73_AS_GRID: u32 = 32_373;
-/// g15 value of a 0 dB report. Reports are `32 435 + dB`, from −30 dB (32 405) up.
-const G15_REPORT_ZERO: i32 = 32_435;
+/// g15 values above the locators: report codes follow (see [`Report::code`]).
+const G15_CODES: u32 = 32_400;
 /// Highest serial number of the EU VHF contest message (11 bits).
 pub(crate) const EU_VHF_MAX_SERIAL: u16 = 2047;
 
@@ -81,6 +81,9 @@ pub(crate) fn encode(m: &Message) -> Result<Payload, PackError> {
             w.put(0, 3);
         }
         Message::Standard { to, de, exchange } => {
+            if let Addressee::Cq { .. } = to {
+                check_cq(de, exchange)?;
+            }
             let (a, flag_a, suffix_a) = match to {
                 Addressee::Cq { modifier } => (C28::Cq(*modifier).encode(), false, None),
                 Addressee::Qrz => (C28::Qrz.encode(), false, None),
@@ -114,10 +117,11 @@ pub(crate) fn encode(m: &Message) -> Result<Payload, PackError> {
             exchange,
         } => {
             if let RoundupExchange::Serial(n) = exchange
-                && *n > RoundupExchange::MAX_SERIAL
+                && !(RoundupExchange::MIN_SERIAL..=RoundupExchange::MAX_SERIAL).contains(n)
             {
                 return Err(PackError::SerialOutOfRange {
                     serial: *n,
+                    min: RoundupExchange::MIN_SERIAL,
                     max: RoundupExchange::MAX_SERIAL,
                 });
             }
@@ -163,6 +167,7 @@ pub(crate) fn encode(m: &Message) -> Result<Payload, PackError> {
             if *serial > EU_VHF_MAX_SERIAL {
                 return Err(PackError::SerialOutOfRange {
                     serial: *serial,
+                    min: 0,
                     max: EU_VHF_MAX_SERIAL,
                 });
             }
@@ -220,9 +225,23 @@ fn g15(exchange: &Exchange) -> (bool, u32) {
         Exchange::Blank => (false, G15_BLANK),
         Exchange::Rrr => (false, G15_RRR),
         Exchange::Rr73 => (false, G15_RR73_AS_GRID),
+        Exchange::AckRr73 => (true, G15_RR73_AS_GRID),
         Exchange::SeventyThree => (false, G15_73),
         Exchange::Grid { grid, ack } => (*ack, grid.index().into()),
-        Exchange::Report { report, ack } => (*ack, (G15_REPORT_ZERO + i32::from(report.db())) as u32),
+        Exchange::Report { report, ack } => (*ack, G15_CODES + u32::from(report.code())),
+    }
+}
+
+/// What may follow CQ in a standard message: a locator without R, RR73 or nothing, sent by a
+/// station in full. WSJT-X 2.7.0-rc3 does not pack anything else after CQ and shows no text for
+/// it (ft8sim and jt9, fixtures/ft8/wsjtx*.json).
+fn check_cq(de: &Station, exchange: &Exchange) -> Result<(), PackError> {
+    if let Station::Hashed(_) = de {
+        return Err(PackError::HashedCq);
+    }
+    match exchange {
+        Exchange::Blank | Exchange::Grid { ack: false, .. } | Exchange::Rr73 => Ok(()),
+        other => Err(PackError::CqExchange(*other)),
     }
 }
 
@@ -268,7 +287,7 @@ pub(crate) fn decode(payload: &Payload, hashes: &CallsignHashes) -> Result<Messa
             let ack = r.flag();
             let n4 = r.take_u32(4) as u8;
             let transmitters = if n3 == 3 { n4 + 1 } else { n4 + 17 };
-            let class = FieldDayClass::from_code(r.take_u32(3) as u8).ok_or(invalid(Field::FieldDayClass))?;
+            let class = FieldDayClass::from_code(r.take_u32(3) as u8);
             let section = ArrlSection::from_code(r.take_u32(7) as u8).ok_or(invalid(Field::Section))?;
             Ok(Message::FieldDay {
                 to,
@@ -311,6 +330,12 @@ pub(crate) fn decode(payload: &Payload, hashes: &CallsignHashes) -> Result<Messa
                 _ => return Err(invalid(Field::Callsign)),
             };
             let exchange = exchange(ack, g)?;
+            // WSJT-X shows nothing for CQ with RR73 sent as 32 403 (jt9, wsjtx_decodes.json).
+            if let Addressee::Cq { .. } = to
+                && (g == G15_RR73 || check_cq(&de, &exchange).is_err())
+            {
+                return Err(invalid(Field::Cq));
+            }
             Ok(Message::Standard { to, de, exchange })
         }
         (3, _) => {
@@ -337,9 +362,10 @@ pub(crate) fn decode(payload: &Payload, hashes: &CallsignHashes) -> Result<Messa
             let reply = r.take_u32(2) as u8;
             let cq = r.flag();
             if cq {
-                // QEX: h12 is ignored in a CQ. The h1 flag has no meaning there either.
-                if reply != 0 {
-                    return Err(invalid(Field::Reply));
+                // QEX: h12 is ignored in a CQ. WSJT-X 2.7.0-rc3 shows nothing for a CQ with a reply
+                // or with h1 set, so neither is accepted.
+                if reply != 0 || hashed_second {
+                    return Err(invalid(Field::Cq));
                 }
                 Ok(Message::NonStandardCq { call })
             } else {
@@ -383,21 +409,24 @@ fn with_suffix(call: super::Callsign, flag: bool, suffix: &str) -> Result<super:
 }
 
 /// The last word of a standard message from the R1 flag and g15.
+/// The last word of a standard message from the R1 flag and g15. As in WSJT-X 2.7.0-rc3, R is
+/// ignored before a blank, RRR and 73, and refused before RR73 sent as 32 403.
 fn exchange(ack: bool, g: u32) -> Result<Exchange, UnpackError> {
     let invalid = |field| UnpackError::InvalidField(field);
     match g {
-        G15_RR73_AS_GRID | G15_BLANK..=G15_73 if ack => Err(invalid(Field::Acknowledgement)),
+        G15_RR73_AS_GRID if ack => Ok(Exchange::AckRr73),
         G15_RR73_AS_GRID => Ok(Exchange::Rr73),
         0..=32_399 => {
             let grid = Grid::from_index(g as u16).ok_or(invalid(Field::Grid))?;
             Ok(Exchange::Grid { grid, ack })
         }
+        G15_RR73 if ack => Err(invalid(Field::Acknowledgement)),
         G15_BLANK => Ok(Exchange::Blank),
         G15_RRR => Ok(Exchange::Rrr),
         G15_RR73 => Ok(Exchange::Rr73),
         G15_73 => Ok(Exchange::SeventyThree),
         32_405.. => {
-            let report = Report::new(g as i32 - G15_REPORT_ZERO).map_err(|_| invalid(Field::Report))?;
+            let (report, _) = Report::from_code((g - G15_CODES) as u16).ok_or(invalid(Field::Report))?;
             Ok(Exchange::Report { report, ack })
         }
         _ => Err(invalid(Field::Grid)),

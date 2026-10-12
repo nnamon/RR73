@@ -532,7 +532,8 @@ static void pack_case(char* fields[], int n, int line_no, uint8_t payload[10], c
         put_bits(&w, (uint64_t)atoi(fields[3]), 1);
         put_bits(&w, (uint64_t)(ntx - (n3 == 3 ? 1 : 17)), 4);
         put_bits(&w, (uint64_t)(fields[5][0] - 'A'), 3);
-        put_bits(&w, (uint64_t)find_name(section_names, section_count, fields[6]), 7);
+        /* WSJT-X numbers sections from 1 (QEX, Appendix A says from 0). */
+        put_bits(&w, (uint64_t)find_name(section_names, section_count, fields[6]) + 1, 7);
         put_bits(&w, (uint64_t)n3, 3);
         put_bits(&w, 0, 3);
         record_call(fields[1]);
@@ -592,6 +593,13 @@ static int cmd_cases(const char* cases_path, const char* sections_path, const ch
     state_count = read_name_list(states_path, state_names);
     if (section_count != 84 || state_count != 65)
         die("expected 84 sections and 65 states, read %d and %d", section_count, state_count);
+    /* WSJT-X 2.7.0 packs a newer list (probed with ft8sim, fixtures/ft8/wsjtx.json): three
+       sections renamed in place and two added at the end. */
+    static const char* renamed[][2] = { { "GTA", "GH" }, { "MAR", "NS" }, { "NT", "TER" } };
+    for (size_t i = 0; i < sizeof(renamed) / sizeof(renamed[0]); ++i)
+        strcpy(section_names[find_name(section_names, section_count, renamed[i][0])], renamed[i][1]);
+    strcpy(section_names[section_count++], "PE");
+    strcpy(section_names[section_count++], "NB");
 
     FILE* f = fopen(cases_path, "r");
     if (f == NULL)
@@ -633,7 +641,12 @@ static int cmd_cases(const char* cases_path, const char* sections_path, const ch
             ftx_message_offsets_t offsets;
             if (ftx_message_decode(&msg, &hash_if, ft8lib_text, &offsets) != FTX_MESSAGE_RC_OK)
                 die("line %d: ft8_lib cannot unpack its own payload", line_no);
-            if (0 != strcmp(ft8lib_text, text))
+            /* ft8_lib shows telemetry with 18 digits; WSJT-X drops leading zeros. */
+            const char* shown = ft8lib_text;
+            if (0 == strcmp(fields[0], "telemetry"))
+                while (shown[0] == '0' && shown[1] != '\0')
+                    ++shown;
+            if (0 != strcmp(shown, text))
                 die("line %d: ft8_lib unpacks '%s', case expects '%s'", line_no, ft8lib_text, text);
         }
 

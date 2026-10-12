@@ -47,7 +47,7 @@ fn hashing_follows_the_fields() {
     assert_eq!(canonical("<PJ4/K1ABC> W9XYZ RR73"), "<PJ4/K1ABC> W9XYZ RR73");
     assert_eq!(canonical("<K1ABC> W9XYZ 73"), "<K1ABC> W9XYZ 73");
     assert_eq!(canonical("CQ PJ4/K1ABC"), "CQ PJ4/K1ABC");
-    assert_eq!(canonical("CQ <PJ4/K1ABC> FN42"), "CQ <PJ4/K1ABC> FN42");
+    assert_eq!(canonical("QRZ <PJ4/K1ABC> FN42"), "QRZ <PJ4/K1ABC> FN42");
     // Contest fields without suffix flags hash /P calls; EU VHF and the Fox call are always hashed.
     assert_eq!(canonical("K1ABC W9XYZ/P 579 MA"), "K1ABC <W9XYZ/P> 579 MA");
     assert_eq!(
@@ -71,7 +71,6 @@ fn contest_exchanges() {
 fn words_that_are_not_callsigns_make_free_text() {
     for text in [
         "TNX 73",
-        "73",
         "RR73",
         "QRT",
         "CQ",
@@ -86,6 +85,21 @@ fn words_that_are_not_callsigns_make_free_text() {
         assert!(matches!(m, Message::FreeText { .. }), "{text}: {m:?}");
         assert_eq!(m.to_string(), text);
     }
+}
+
+#[test]
+fn single_hex_words_are_telemetry_as_in_wsjtx() {
+    for (text, shown) in [
+        ("73", "73"),
+        ("cafe", "CAFE"),
+        ("0123456789ABC", "123456789ABC"),
+        ("0", "0"),
+    ] {
+        let m = Message::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert!(matches!(m, Message::Telemetry { .. }), "{text}: {m:?}");
+        assert_eq!(m.to_string(), shown);
+    }
+    assert!(matches!(Message::parse("DE"), Ok(Message::FreeText { .. })));
 }
 
 #[test]

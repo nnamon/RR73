@@ -179,8 +179,13 @@ pub fn noncanonical(p: &Payload) -> Option<&'static str> {
             text.ends_with(' ').then_some("free text not right-justified")
         }
         (1, _) | (2, _) => {
-            if field(p, 59, 74) == 32_403 {
+            let g15 = field(p, 59, 74);
+            if g15 == 32_403 {
                 Some("RR73 sent as g15 32403")
+            } else if p.bit(58) == 1 && [32_401, 32_402, 32_404].contains(&g15) {
+                Some("R before a blank, RRR or 73")
+            } else if (32_506..=32_586).contains(&g15) {
+                Some("report code 106 to 186")
             } else if p.i3() == 2 && p.bit(28) == 0 && p.bit(57) == 0 {
                 Some("type 2 without /P")
             } else {
@@ -197,9 +202,6 @@ pub fn noncanonical(p: &Payload) -> Option<&'static str> {
                 let h12 = rr73_ft8::CallHash::of(&c, rr73_ft8::HashWidth::Bits12).value();
                 if field(p, 0, 12) != u128::from(h12) {
                     return Some("CQ h12 not the callsign's hash");
-                }
-                if p.bit(70) == 1 {
-                    return Some("CQ with h1 set");
                 }
             }
             None
