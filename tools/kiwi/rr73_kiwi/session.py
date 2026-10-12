@@ -149,8 +149,9 @@ def run_session(
     outcome, detail = RECORDED, ""
     ended_by_limit = False
     connected_at = ctx.now()
-    # Stop after the last slot that ends within the session length.
+    # Stop after the last slot that ends within the session length, and never after the length.
     end_slot = math.floor((connected_at + length_s - 2.0) / FT8_SLOT_S) * FT8_SLOT_S
+    hard_end = connected_at + length_s
     limits_checked = False
     try:
         connection.open()
@@ -166,6 +167,9 @@ def run_session(
             now = ctx.now()
             if assembler is not None and assembler.last_slot_end is not None and assembler.last_slot_end >= end_slot:
                 break
+            if now >= hard_end:
+                detail = f"reached the session length of {hard_end - connected_at:.0f} s"
+                break
             if now >= end_slot + END_GRACE_S:
                 detail = "the last slot did not complete in time"
                 break
@@ -177,6 +181,7 @@ def run_session(
                     outcome, detail = NO_ALLOWANCE, "the receiver's daily time limit for this address is used up"
                     break
                 end_slot = min(end_slot, math.floor((connected_at + allowed - 2.0) / FT8_SLOT_S) * FT8_SLOT_S)
+                hard_end = min(hard_end, connected_at + allowed)
             connection.poll()
     except StreamEnded as exc:
         kinds = {"busy": BUSY, "refused": REFUSED, "closed": ENDED_BY_RECEIVER, "limit": ENDED_BY_RECEIVER}

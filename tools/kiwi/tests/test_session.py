@@ -140,3 +140,14 @@ def test_a_receiver_time_limit_is_recognised(tmp_path: Path, message: str) -> No
     assert result.time_limited
     assert message.removeprefix("MSG ").split("=")[0] in result.detail
     assert result.slots_written == 1
+
+
+def test_a_session_never_runs_past_its_length(tmp_path: Path) -> None:
+    # GPS-timed audio that arrives 9 s late: the last planned slot completes after the length.
+    stream = Stream(start_unix=START, duration_s=90.0, latency_s=9.0)
+    with FakeKiwi(stream) as fake:
+        result = session(fake, tmp_path, length_s=60.0)
+    assert result.outcome == RECORDED
+    # The fake's clock runs ahead of the client by the frames in the socket buffers, up to 3 s.
+    assert result.connected_s <= 60.0 + 3.0
+    assert "session length" in result.detail
