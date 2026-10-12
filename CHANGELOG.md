@@ -4,4 +4,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- Repository, architecture and working rules for Phase 0.
+- Live waterfall of the radio audio from 0 to 3000 Hz, with UTC slot boundaries and receive and transmit frequency markers.
+- UTC clock with slot progress and an input level meter on the Operate screen.
+- Save any of the recent slots as a 12 kHz WAV file with a sidecar, for the decoder corpus.
+- Band and mode picker. The chosen dial frequency is recorded with saved slots.
+- Radio and audio settings: what the phone applied to the microphone, the real sample rate and channels, a level target, the VOX checklist, and Tune with a confirmation and a 10 second countdown.
+- Audio stops are reported with the time, and Resume audio restarts capture.
+- Version history in Settings, and a notice after each update.
+- Works offline once added to the home screen.

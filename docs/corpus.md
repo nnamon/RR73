@@ -61,6 +61,8 @@ Stems follow WSJT-X naming, `YYMMDD_HHMMSS`, with the slot start time in UTC. Sy
 | `noise_only` | `true` for slots used to count false decodes. |
 | `truth` | Synthetic slots only: the exact signals, `{ text, freq_hz, dt_s, snr_db }`. |
 | `reference` | Decodes from reference tools, keyed by tool and depth. |
+| `source.input`, `source.capture_rate_hz`, `source.app` | App recordings only: the input device label, the capture sample rate before resampling, and the app version and build. |
+| `capture` | App recordings only: `filled_samples` (zero-filled after a gap), `late_start` and `gap` flags. |
 
 ## Scoring
 
