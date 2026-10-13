@@ -3,6 +3,7 @@
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { audio, band } from '../lib/state/station.svelte';
+  import { log } from '../lib/log/log.svelte';
 
   let callsign = $state(settings.callsign);
   $effect(() => {
@@ -28,6 +29,12 @@
     if (d.state === 'loading') return 'Loading';
     if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
     return 'Loads when audio starts';
+  });
+
+  const loggingSummary = $derived.by(() => {
+    const on = log.facts.filter((f) => f.active).map((f) => f.name);
+    if (!on.length) return 'Only on this phone';
+    return on.length > 2 ? `${on.length} destinations` : on.join(' and ');
   });
 
   const themes: { id: Theme; label: string }[] = [
@@ -71,6 +78,18 @@
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head">Log</h2>
+    <div class="group">
+      <a class="row link" href={href('settings', 'logging')}>
+        <span class="row-main"><span class="row-title">Logging</span></span>
+        <span class="row-value">{loggingSummary}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
+    <p class="section-foot">Wavelog and the POTA, SOTA and WWFF files.</p>
   </div>
 
   <div class="section">

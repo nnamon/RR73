@@ -11,7 +11,7 @@ async function axe(page: Page) {
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, async ({ page }) => {
-      await open(page, s.path, theme);
+      await open(page, s.path, theme, s.seed);
       expect(await axe(page)).toEqual([]);
     });
   }

@@ -52,7 +52,7 @@ async function smallTargets(page: Page, scope: string): Promise<string[]> {
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, async ({ page }, info) => {
-      await open(page, s.path, theme);
+      await open(page, s.path, theme, s.seed);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${s.name}.png` });

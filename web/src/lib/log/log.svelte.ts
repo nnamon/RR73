@@ -467,6 +467,17 @@ export async function markFileSubmitted(partKey: string): Promise<void> {
   await commit({ ledger });
 }
 
+/** The operator dealt with a file that changed after submission: corrected it, or removed the QSO there. */
+export async function markFileHandled(partKey: string): Promise<void> {
+  const ledger: LedgerEntry[] = [];
+  for (const e of log.ledger) {
+    if (e.state !== 'changed' || e.destinationId === 'wavelog' || !e.parts.some((p) => p.key === partKey)) continue;
+    const q = byId.get(e.qsoId);
+    if (q) ledger.push(markHandled(e, q, fileParts(e.destinationId, q, activationOf(q.activationId))));
+  }
+  await commit({ ledger });
+}
+
 /** Send now: every waiting QSO, whether or not RR73 sends by itself. */
 export function sendNow(): Promise<void> {
   return outbox.sendNow();

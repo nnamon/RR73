@@ -1,7 +1,21 @@
-// The app's screens, for the layout, accessibility and screenshot checks.
+// The app's screens, for the layout, accessibility and screenshot checks. Screens with a seed show
+// a log written into IndexedDB first (e2e/log-data.ts).
 import type { Page } from '@playwright/test';
+import { mockupLog, seed } from './log-data';
+import { FIXED_TIME } from './time';
 
-export const SCREENS = [
+export { FIXED_TIME };
+
+export type SeedName = 'log' | 'running';
+
+export interface Screen {
+  name: string;
+  path: string;
+  heading: string;
+  seed?: SeedName;
+}
+
+export const SCREENS: readonly Screen[] = [
   { name: 'operate', path: '#/operate', heading: 'Operate' },
   { name: 'log', path: '#/log', heading: 'Log' },
   { name: 'activate', path: '#/activate', heading: 'Activate' },
@@ -9,15 +23,22 @@ export const SCREENS = [
   { name: 'settings', path: '#/settings', heading: 'Settings' },
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
-] as const;
+  { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
+  { name: 'wavelog', path: '#/settings/logging/wavelog', heading: 'Wavelog' },
+  { name: 'log-all', path: '#/log', heading: 'Log', seed: 'log' },
+  { name: 'log-todo', path: '#/log/todo', heading: 'Log', seed: 'log' },
+  { name: 'log-activations', path: '#/log/activations', heading: 'Log', seed: 'log' },
+  { name: 'activate-last', path: '#/activate', heading: 'Activate', seed: 'log' },
+  { name: 'activate-running', path: '#/activate', heading: 'Activation', seed: 'running' },
+  { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log' },
+  { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
+];
 
-/** 13:14:52 UTC on 13 October 2026, as in the mockups. */
-export const FIXED_TIME = Date.UTC(2026, 9, 13, 13, 14, 52);
-
-export async function open(page: Page, path: string, theme: 'light' | 'dark') {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
+  if (withSeed) await seed(page, mockupLog({ running: withSeed === 'running' }));
   await page.waitForTimeout(300);
 }
