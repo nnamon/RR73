@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.6.1 · 2026-10-13
 
 - Send automatically is now off: QSOs stay in the Log as "not sent" until you tap Send to Wavelog. A phone that ran 0.5.0 switches it off once; turn it back on in Settings › Logging.
 - Send to Wavelog, at the top of the Log, sends every QSO not sent, oldest first, shows "Sending 2 of 4", then what happened: "3 delivered. 1 refused: see To do." The QSO sheet sends one QSO.
@@ -11,6 +11,9 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Log, Spots and Settings put their large titles in the same place, under the same 44 pt bar. Add QSO and Export ADIF are equal glyphs in the tint, 16 pt from the edge, and Export ADIF dims when there is nothing to export.
 - The QSO sheet takes the date and time as 24-hour UTC (2026-10-13, 13:14:52), and its report fields open a keyboard with a minus sign.
 - Station location lists mark the one in use with a checkmark.
+- The Wavelog switch in Settings › Logging › Wavelog is now called Use Wavelog.
+- The Logged notice leaves out signal reports that were not received.
+- Log badges share one shape: grey for not sent, green for delivered, red for refused.
 
 ## 0.6.0 · 2026-10-13
 
