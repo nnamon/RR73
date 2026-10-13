@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * One line above the tab bar when the app cannot work as usual until something changes: the
+   * One line at the bottom of the screen when the app cannot work as usual until something changes: the
    * database waits for an older copy of RR73 to close, a newer version owns it, or this build's
    * files are gone from the server. The line goes away by itself when the cause does.
    */

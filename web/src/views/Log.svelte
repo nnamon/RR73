@@ -6,10 +6,10 @@
    */
   import ActivationCard from '../ui/ActivationCard.svelte';
   import Icon from '../ui/Icon.svelte';
-  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
+  import BackLink from '../ui/BackLink.svelte';
   import QsoRow from '../ui/QsoRow.svelte';
   import StationSheet from '../ui/StationSheet.svelte';
-  import { go, route } from '../lib/app/router.svelte';
+  import { go, href, route } from '../lib/app/router.svelte';
   import { buildExport, shareFile } from '../lib/log/files';
   import SendBar from '../ui/SendBar.svelte';
   import { log, markQsoHandled, openEditor, retryQso } from '../lib/log/log.svelte';
@@ -74,12 +74,12 @@
 </script>
 
 <section class="screen" aria-labelledby="log-title">
-  <LargeTitleHeader title="Log" id="log-title">
+  <BackLink to={href('operate')} label="Operate" title="Log" id="log-title">
     {#snippet trailing()}
       <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
       <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
     {/snippet}
-  </LargeTitleHeader>
+  </BackLink>
 
   {#if log.storageError}
     <p class="banner" role="alert">{log.storageError}</p>

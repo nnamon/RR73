@@ -46,11 +46,13 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 
 ## Safety
 
-- **Enable Tx** and **Run** only start from an operator action.
-- **Halt** stops audio within the current audio render quantum, disables Tx and stops Run. It is always available and always the largest control in the dock.
+- **Tx on** and **Run** only start from an operator action: CQ, Run, Tx on, or a double-tap on a decode, which calls the station with Tx on.
+- **Halt** stops audio within the current audio render quantum, disables Tx and stops Run. It is red, always visible in the bottom bar, and takes one tap.
+- **End QSO**, in the ••• menu, stops Tx and Run and returns to idle without logging.
 - **Watchdog**, WSJT-X's rule: a counter of minutes since the operator last touched the screen or since the transmitted message last changed. At the limit (default 6 minutes) Tx and Run stop and a notice says why. WSPR beacon schedules are exempt; they are not QSOs.
 - **Audio interruption** (another app, a call, the screen locking): Tx and Run stop, the QSO keeps its state, and transmitting needs Resume audio first.
-- **Band change**: Tx stays off until the operator confirms the radio's dial in the band sheet.
+- **Band change**: choosing a band in the band sheet applies it, and Tx and the QSO keep their state; QSOs record the band chosen. A mode change (FT8, FT4) changes the slot length, so it stops Tx and ends the QSO.
+- **Own transmissions**: the receive audio of a slot RR73 transmitted in is not decoded or shown. The radio feeds RR73's own signal back at +40 dB or more, which decoded as a strong station; the list shows what was sent in its place.
 - Nothing else plays through the output while audio runs.
 
 ## Events and effects
@@ -58,7 +60,7 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 ```text
 events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | enableTx(on)
          | runMode(on) | halt | txStarted(slotStart) | txEnded(slotStart) | audioStopped
-         | bandConfirmed(band, dialHz) | touch(t) | tick(t) | editMessage(slot, text)
+         | endQso | configure(band, mode, dialHz, ...) | touch(t) | tick(t) | editMessage(slot, text)
 effects: scheduleTx(text, slotStart, startOffsetS) | cancelTx | logQso(record)
          | notice(kind, text) | queueChanged(callers)
 ```

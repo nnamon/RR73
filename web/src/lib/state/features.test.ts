@@ -20,7 +20,7 @@ describe('optional features', () => {
     expect(features.clusterSpots).toBe(false);
   });
 
-  it('show the Spots tab while activations or a spot source is on, and not for LoTW users alone', () => {
+  it('show Spots while activations or a spot source is on, and not for LoTW users alone', () => {
     expect(spotsShown(FEATURES_OFF)).toBe(false);
     expect(spotsShown({ ...FEATURES_OFF, lotw: true })).toBe(false);
     expect(spotsShown({ ...FEATURES_OFF, activations: true })).toBe(true);

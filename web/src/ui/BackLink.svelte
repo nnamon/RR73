@@ -1,13 +1,18 @@
 <script lang="ts">
-  /** iOS navigation bar for a sub-screen: a back link and the screen's title, centred. */
+  /**
+   * iOS navigation bar for a pushed screen: a back link, the screen's title, centred, and bar
+   * buttons in `trailing`, as `.bar-button`s (base.css).
+   */
+  import type { Snippet } from 'svelte';
   import Icon from './Icon.svelte';
 
-  let { to, label, title, id }: { to: string; label: string; title: string; id: string } = $props();
+  let { to, label, title, id, trailing }: { to: string; label: string; title: string; id: string; trailing?: Snippet } = $props();
 </script>
 
 <div class="bar">
   <a class="back" href={to}><Icon name="back" size={22} /><span>{label}</span></a>
   <h1 {id} class="title">{title}</h1>
+  {#if trailing}<div class="bar-buttons trailing">{@render trailing()}</div>{/if}
 </div>
 
 <style>
@@ -28,6 +33,13 @@
     padding-right: var(--rr-space-2);
     color: var(--rr-accent);
     font-size: var(--rr-text-body);
+  }
+
+  .trailing {
+    position: relative;
+    z-index: 1;
+    margin-left: auto;
+    margin-right: calc(-1 * var(--rr-space-2));
   }
 
   .title {

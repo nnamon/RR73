@@ -33,19 +33,14 @@ export function replace(...parts: string[]) {
   route.path = parts;
 }
 
-/** Paths from earlier versions that now open another tab: activations live under Spots. */
+/** Paths from earlier versions that now open another screen: activations live under Spots. */
 const MOVED: Record<string, Tab> = { activate: 'spots' };
 
-/** The tab a path belongs to. */
+/** The screen a path belongs to: Operate, or a screen pushed over it. */
 export function tabOf(path: string[]): Tab {
   const t = path[0] as Tab;
   if (TABS.includes(t)) return t;
   return MOVED[path[0]] ?? 'operate';
-}
-
-/** The tabs in the tab bar: Spots only while activations or a spot source is on. */
-export function visibleTabs(spots: boolean): Tab[] {
-  return TABS.filter((t) => spots || t !== 'spots');
 }
 
 /**

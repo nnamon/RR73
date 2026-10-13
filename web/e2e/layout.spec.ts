@@ -1,53 +1,12 @@
-// Layout on iPhone viewports in WebKit, light and dark: nothing overflows sideways, the tab bar
-// sits at the bottom, every control is at least 44 px, and each screen is captured.
+// Layout on iPhone viewports in WebKit, light and dark: nothing overflows sideways, Operate fits
+// with its top bar, waterfall, filters, list and bottom bar, every control is at least 44 px,
+// pushed screens start with a 44 pt back bar, and each screen is captured.
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
+import { checkLayout, smallTargets } from './layout-checks';
 import { LOG_SHEETS, SCREENS, open } from './screens';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens', import.meta.url));
-
-async function checkLayout(page: Page) {
-  const { innerWidth, innerHeight } = await page.evaluate(() => ({ innerWidth: window.innerWidth, innerHeight: window.innerHeight }));
-  // Nothing wider than the screen, in the page or in any element.
-  const wide = await page.evaluate(() => {
-    const w = document.documentElement.clientWidth;
-    const out: string[] = [];
-    if (document.documentElement.scrollWidth > w) out.push('document');
-    for (const el of document.querySelectorAll<HTMLElement>('main *, nav *')) {
-      const r = el.getBoundingClientRect();
-      if (r.width && (r.right > w + 0.5 || r.left < -0.5) && getComputedStyle(el).position !== 'fixed' && !el.closest('.visually-hidden') && !el.closest('[hidden]')) {
-        out.push(`${el.tagName.toLowerCase()}.${el.className}`);
-      }
-    }
-    return out;
-  });
-  expect(wide).toEqual([]);
-
-  const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
-  expect(bar.y + bar.height).toBeCloseTo(innerHeight, 0);
-  expect(bar.width).toBeCloseTo(innerWidth, 0);
-
-  expect(await smallTargets(page, 'main, nav')).toEqual([]);
-}
-
-/** Buttons, links and fields under `scope` smaller than 44 by 44 px (checkboxes and radios count their label). */
-async function smallTargets(page: Page, scope: string): Promise<string[]> {
-  return page.evaluate((scope) => {
-    const out: string[] = [];
-    const sel = ['button', 'a[href]', 'select', 'input:not([type=checkbox]):not([type=radio])', 'label:has(input)'];
-    const targets = scope
-      .split(',')
-      .flatMap((s) => sel.map((t) => `${s.trim()} ${t}`))
-      .join(', ');
-    for (const el of document.querySelectorAll<HTMLElement>(targets)) {
-      if (el.closest('[hidden]') || el.closest('dialog:not([open])') || el.classList.contains('visually-hidden')) continue;
-      const r = el.getBoundingClientRect();
-      if (!r.width) continue;
-      if (r.height < 43.5 || r.width < 43.5) out.push(`${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}" ${Math.round(r.width)}x${Math.round(r.height)}`);
-    }
-    return out;
-  }, scope);
-}
 
 /** Ink boxes of every bar button glyph in the visible pane: the drawn shapes plus half their stroke. */
 function barInks(page: Page) {
@@ -80,31 +39,23 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
-  test(`tab roots put the large title in one place and bar buttons follow iOS in ${theme}`, async ({ page }) => {
-    const titles: { path: string; top: number; left: number; fontSize: string }[] = [];
-    // Spots shows only with an optional feature on (all are off by default).
-    for (const path of ['#/log', '#/spots', '#/settings']) {
+  test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, async ({ page }) => {
+    const titles: { path: string; top: number; fontSize: string }[] = [];
+    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/versions']) {
       await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
       const pane = page.locator('main .pane:not([hidden])');
-      const h1 = (await pane.locator('h1').boundingBox())!;
-      const fontSize = await pane.locator('h1').evaluate((el) => getComputedStyle(el).fontSize);
-      titles.push({ path, top: Math.round(h1.y), left: Math.round(h1.x), fontSize });
-      const bar = (await pane.getByTestId('navbar').boundingBox())!;
-      expect(bar.y).toBeCloseTo(0, 0);
-      expect(bar.height).toBeCloseTo(44, 0);
-    }
-    expect(new Set(titles.map((t) => `${t.top},${t.left},${t.fontSize}`)).size, JSON.stringify(titles)).toBe(1);
-    expect(titles[0]).toMatchObject({ top: 44, left: 0, fontSize: '34px' });
-
-    // Sub-screens: a 44 pt BackLink bar in the same place as the tab roots' navigation bar.
-    for (const path of ['#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/versions']) {
-      await open(page, path, theme);
-      const back = (await page.locator('main .pane:not([hidden]) .bar').first().boundingBox())!;
+      const back = (await pane.locator('.bar').first().boundingBox())!;
       expect([Math.round(back.y), Math.round(back.height)], path).toEqual([0, 44]);
+      const h1 = pane.locator('h1');
+      titles.push({ path, top: Math.round((await h1.boundingBox())!.y), fontSize: await h1.evaluate((el) => getComputedStyle(el).fontSize) });
     }
+    // One title row for every screen: the centred 17 pt title in the bar.
+    expect(new Set(titles.map((t) => `${t.top},${t.fontSize}`)).size, JSON.stringify(titles)).toBe(1);
+    // Log, Spots and Settings go back to Operate.
+    await open(page, '#/log', theme);
+    await expect(page.getByRole('link', { name: 'Operate' })).toHaveAttribute('href', '#/operate');
 
     // The Log's bar buttons, Add QSO and Export ADIF (disabled: no QSOs yet).
-    await open(page, '#/log', theme);
     const width = await page.evaluate(() => document.documentElement.clientWidth);
     const buttons = page.locator('main .pane:not([hidden]) .bar-button');
     await expect(buttons).toHaveCount(2);
@@ -131,47 +82,31 @@ for (const theme of ['light', 'dark'] as const) {
   });
 
   for (const running of [false, true]) {
-    test(`operate fits without scrolling and keeps the decode list on screen${running ? ' with an activation running' : ''} in ${theme}`, async ({ page }) => {
+    test(`operate fits without scrolling, one bar at each end${running ? ' with an activation running' : ''} in ${theme}`, async ({ page }) => {
       await open(page, '#/operate', theme, running ? 'running' : undefined, running ? { activations: true } : undefined);
       if (running) await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 7 of 10\./ })).toBeVisible();
-      const vh = await page.evaluate(() => window.innerHeight);
+      const { vw, vh } = await page.evaluate(() => ({ vw: window.innerWidth, vh: window.innerHeight }));
+      const top = (await page.locator('.operate header.top').boundingBox())!;
       const wf = (await page.getByTestId('waterfall').boundingBox())!;
-      const list = (await page.locator('.operate .list').boundingBox())!;
-      const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
-      const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
-      expect(wf.height).toBeGreaterThanOrEqual(120);
-      expect(list.height).toBeGreaterThanOrEqual(120);
-      expect(list.y + list.height).toBeLessThanOrEqual(dock.y + 0.5);
-      expect(dock.y + dock.height).toBeLessThanOrEqual(bar.y + 0.5);
+      const filters = (await page.getByRole('radiogroup', { name: 'Show decodes' }).boundingBox())!;
+      const list = (await page.getByTestId('decode-list').boundingBox())!;
+      const bar = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
+      // The top bar is one 44 pt row; the waterfall is 130 pt at 393 x 852 and 110 pt at 375 x 667.
+      expect([Math.round(top.y), Math.round(top.height)]).toEqual([0, 44]);
+      expect(wf.height).toBeCloseTo(38 + 0.108 * vh, 0);
+      expect(filters.height).toBeLessThanOrEqual(44);
+      expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
+      // The bottom bar sits at the bottom, with Halt in it; no tab bar.
+      expect(bar.y + bar.height).toBeCloseTo(vh, 0);
+      expect(bar.height).toBeLessThanOrEqual(54);
+      await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
+      const halt = (await page.getByRole('button', { name: 'Halt' }).boundingBox())!;
+      expect(halt.height).toBeGreaterThanOrEqual(43.5);
+      expect(halt.x + halt.width).toBeLessThanOrEqual(vw);
       expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
+      await checkLayout(page);
     });
   }
-
-  test(`frequency bar in ${theme}`, async ({ page }, info) => {
-    await open(page, '#/operate', theme);
-    await expect(page.getByText('Tap the waterfall to set the receive or transmit frequency.')).toBeVisible();
-    const wf = (await page.getByTestId('waterfall').boundingBox())!;
-    await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
-    const bar = page.getByRole('group', { name: 'Set the frequency' });
-    await expect(bar).toBeVisible();
-    await expect(page.getByTestId('freq-guide')).toBeVisible();
-    const box = (await bar.boundingBox())!;
-    const vw = await page.evaluate(() => window.innerWidth);
-    expect(box.x).toBeGreaterThanOrEqual(0);
-    expect(box.x + box.width).toBeLessThanOrEqual(vw);
-    // Below the axis, clear of the dock.
-    expect(box.y).toBeGreaterThanOrEqual(wf.y + wf.height);
-    const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
-    expect(box.y + box.height).toBeLessThanOrEqual(dock.y);
-    expect(await smallTargets(page, '[data-testid=freq-bar]')).toEqual([]);
-    // Every label fits its button.
-    const clipped = await bar.evaluate((el) =>
-      [...el.querySelectorAll('button')].filter((b) => b.scrollWidth > b.clientWidth + 0.5).map((b) => b.textContent?.trim()),
-    );
-    expect(clipped).toEqual([]);
-    await checkLayout(page);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-freq-bar.png` });
-  });
 
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);
@@ -179,6 +114,8 @@ for (const theme of ['light', 'dark'] as const) {
     const sheet = page.getByRole('dialog', { name: 'Change band' });
     await expect(sheet).toBeVisible();
     await expect(sheet.getByText('14.074 MHz')).toBeVisible();
+    // No Use or Cancel step: a tap on a band applies it.
+    await expect(sheet.getByRole('button', { name: /^Use / })).toHaveCount(0);
     const box = (await sheet.boundingBox())!;
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
@@ -203,7 +140,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
-  test(`logged notice sits above the tab bar in ${theme}`, async ({ page }, info) => {
+  test(`logged notice sits inside the screen in ${theme}`, async ({ page }, info) => {
     await open(page, '#/log', theme);
     await page.getByRole('button', { name: 'Add QSO' }).click();
     const sheet = page.getByRole('dialog', { name: 'Add QSO' });
@@ -212,66 +149,51 @@ for (const theme of ['light', 'dark'] as const) {
     const notice = page.getByTestId('log-notice');
     await expect(notice).toBeVisible();
     const n = (await notice.boundingBox())!;
-    const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
-    expect(n.y + n.height).toBeLessThanOrEqual(bar.y + 0.5);
+    expect(n.y + n.height).toBeLessThanOrEqual(await page.evaluate(() => window.innerHeight));
     expect(n.x).toBeGreaterThanOrEqual(0);
     expect(n.x + n.width).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
     expect(await smallTargets(page, '[data-testid=log-notice]')).toEqual([]);
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-logged-notice.png` });
   });
 
-  test(`tune confirmation in ${theme}`, async ({ page }, info) => {
+  test(`tune sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/settings/radio', theme);
-    await page.getByRole('button', { name: /^Tune/ }).click();
-    const sheet = page.getByRole('dialog', { name: 'Transmit a tune tone?' });
+    await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+    const sheet = page.getByRole('dialog', { name: 'Tuning' });
     await expect(sheet).toBeVisible();
     expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-tune.png` });
-    await sheet.getByRole('button', { name: 'Cancel' }).click();
+    await sheet.getByRole('button', { name: 'Halt' }).click();
     await expect(sheet).toBeHidden();
   });
-}
 
-for (const theme of ['light', 'dark'] as const) {
-  test(`transmit dock and Run queue in ${theme}`, async ({ page }, info) => {
-    await open(page, '#/settings', theme);
-    for (const [name, value] of [
-      ['Callsign', '9V1NE'],
-      ['Grid', 'OJ11'],
-    ]) {
-      const field = page.getByRole('textbox', { name });
-      await field.fill(value);
-      await field.press('Enter');
+  test(`bottom bar controls in one row in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/operate', theme);
+    const bar = page.getByRole('region', { name: 'Transmit' });
+    const buttons = await bar.getByRole('button').all();
+    expect(buttons).toHaveLength(5);
+    const boxes = await Promise.all(buttons.map(async (b) => (await b.boundingBox())!));
+    // One row of 44 pt targets, side by side; Halt takes the rest of the row.
+    for (const b of boxes) {
+      expect(b.height).toBeGreaterThanOrEqual(43.5);
+      expect(b.width).toBeGreaterThanOrEqual(43.5);
+      expect(Math.abs(b.y - boxes[0].y)).toBeLessThan(1);
     }
-    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Operate' }).click();
-    const dock = page.getByRole('region', { name: 'Transmit' });
-    await dock.getByRole('button', { name: 'Confirm band' }).click();
-    await page.getByRole('dialog', { name: 'Change band' }).getByRole('button', { name: 'Use 20m FT8' }).click();
-    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-dock-idle.png` });
+    for (let i = 1; i < boxes.length; i++) expect(boxes[i].x).toBeGreaterThanOrEqual(boxes[i - 1].x + boxes[i - 1].width);
+    const halt = boxes.at(-1)!;
+    for (const b of boxes.slice(0, -1)) expect(halt.width).toBeGreaterThanOrEqual(b.width);
+    await expect(buttons.at(-1)!).toHaveText('Halt');
 
-    await dock.getByRole('button', { name: 'Run' }).click();
-    await expect(dock.getByRole('button', { name: 'Stop after this QSO' })).toBeVisible();
-    await expect(page.getByRole('list', { name: 'Callers' })).toBeVisible();
-    // Audio is off in WebKit here, so the dock says why nothing goes out.
-    await expect(dock.getByText('Resume audio to transmit.')).toBeVisible();
-    await checkLayout(page);
-    // The dock, and Halt in it, stays above the tab bar.
-    const dockBox = (await dock.boundingBox())!;
-    const tabs = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
-    expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(tabs.y + 0.5);
-    await expect(page.getByRole('list', { name: 'Callers' })).toBeInViewport();
-    // Halt is the largest control in the dock.
-    const halt = (await dock.getByRole('button', { name: 'Halt' }).boundingBox())!;
-    for (const b of await dock.getByRole('button').all()) {
-      const box = (await b.boundingBox())!;
-      expect(halt.width * halt.height).toBeGreaterThanOrEqual(box.width * box.height);
-      expect(halt.height).toBeGreaterThanOrEqual(box.height);
-    }
+    await bar.getByRole('button', { name: 'More' }).click();
+    const menu = page.getByRole('menu', { name: 'More' });
+    await expect(menu).toBeVisible();
+    expect(await smallTargets(page, '[role=menu]')).toEqual([]);
+    const m = (await menu.boundingBox())!;
+    expect(m.y).toBeGreaterThanOrEqual(0);
+    expect(m.y + m.height).toBeLessThanOrEqual(halt.y);
+    expect(m.x + m.width).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
     await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-run.png` });
-    await dock.getByRole('button', { name: 'Halt' }).click();
-    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-menu.png` });
   });
 }

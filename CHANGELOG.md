@@ -2,6 +2,19 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Operate is the main screen and gives the decodes the space: 15 decode rows show on a 393 × 852 iPhone while receiving and 12 in a QSO, up from 5; 12 on an iPhone SE.
+- One 44 pt top bar holds band, mode, dial, the slot ring, the UTC clock and the buttons for Log and Settings (and Spots while it is on). The audio level is a 2 pt line along its bottom edge. The tab bar is gone; Log, Spots and Settings open over Operate with a back link to it, and old links still work.
+- Drag along the waterfall to move Tx: the red line follows the finger with its frequency on a label, and lifting the finger sets it. A tap sets Tx where it lands, and a drag that starts on the green line moves Rx. The Receive here, Transmit here and Both bar is gone. A hint shows until the first drag or tap.
+- Decode rows are 30 pt in monospace: SNR, DT, Hz and the message. Each slot starts with a 22 pt bar with its time, the decode count and Even or Odd, slate for even slots and blue for odd ones. The summary line above the list is gone.
+- A slot RR73 transmits in is no longer decoded. RR73 decoded its own CQ from the radio's receive audio at +45 dB and marked it red as if addressed to you; the amber row shows what was sent.
+- The bottom bar replaces the calling card and the dock: one status line while calling or in a QSO ("Tx6 · CQ 9V1NE OJ11 · 1st · :30") with the watchdog, a step bar for the QSO, and one row with Tx on or off, CQ, Run, ••• and Halt. Halt is always there, takes one tap and turns solid red while Tx is on.
+- The ••• menu holds Edit messages, End QSO, Find clear Tx, Tune for 10 s, Stop after this QSO in Run, the answer order, the CQ slot (1st or 2nd) and Work dupes.
+- In Run, the callers show at the top of the list in answering order, tagged Working, Next and 3rd.
+- Every action takes effect on the first tap. Choosing a band applies it and Tx keeps its state; there is no band confirmation before transmitting. Tune starts on the tap. Reload app and Clear cached copy reload on the first tap. A double-tap on a decode calls the station with Tx on. End activation and Remove Wavelog still ask once, as they delete data.
+- A tap on the selected decode clears the selection.
+
 ## 0.6.2 · 2026-10-13
 
 - Updating no longer leaves RR73 blank or without its decoder. While an older copy of RR73 holds the log, the app opens, says "Close other copies of RR73 to finish updating" and finishes the update once that copy closes. A new version takes over at the next change of screen with audio off.

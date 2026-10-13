@@ -18,16 +18,16 @@ test('after a CQ and Halt, calling a station goes on air', async ({ page }) => {
   test.setTimeout(180_000);
   const dock = await prepare(page, undefined, { tap: false });
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.locator('.operate .state')).toHaveText('Receiving', { timeout: 20_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 20_000 });
   await page.waitForTimeout(5000);
   await expectOnUtc(page, 'before Tx');
 
   await waitForSlotPhase(page, 3, 12);
-  await dock.getByRole('button', { name: 'Call CQ' }).click();
+  await dock.getByRole('button', { name: 'CQ', exact: true }).click();
   await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
   await page.waitForTimeout(2000);
   await dock.getByRole('button', { name: 'Halt' }).click();
-  await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+  await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
   await page.waitForTimeout(3000);
   await expectOnUtc(page, 'after Halt');
 
@@ -36,7 +36,7 @@ test('after a CQ and Halt, calling a station goes on air', async ({ page }) => {
   await page.evaluate((s) => window.__rr73!.decoded(s, [{ text: 'CQ JA1ABC PM95', freq_hz: 1200, dt_s: 0.1, snr_db: -8 }]), slot);
   const row = page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: /^CQ JA1ABC PM95$/ }) });
   await row.first().dblclick();
-  await expect(dock.getByText('JA1ABC', { exact: true })).toBeVisible();
+  await expect(dock.getByText(/JA1ABC 9V1NE OJ11/)).toBeVisible();
   await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
   await expectOnUtc(page, 'on air again');
   await dock.getByRole('button', { name: 'Halt' }).click();

@@ -86,7 +86,7 @@ test('a page whose build the server replaced says so, and reloads at the next ch
   });
   const notice = page.getByTestId('status-notice');
   await expect(notice).toContainText('A new version of RR73 is ready.', { timeout: 15_000 });
-  await Promise.all([page.waitForEvent('load'), page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click()]);
+  await Promise.all([page.waitForEvent('load'), page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Log' }).click()]);
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
   await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeVisible();
 });
@@ -104,7 +104,7 @@ test('a failed load with the same build on the server changes nothing', async ({
   });
   await checked;
   await page.waitForTimeout(500);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Log' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeVisible();
   await page.waitForTimeout(1000);
   // No notice, and the same page: nothing reloaded.

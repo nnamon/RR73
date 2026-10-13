@@ -37,7 +37,7 @@ export function setFeature(id: FeatureId, on: boolean): Promise<void> {
   return updateSettings({ features: { ...settings.features, [id]: on } });
 }
 
-/** The Spots tab shows while activations or either spot source is on. */
+/** Spots shows in Operate's top bar while activations or either spot source is on. */
 export function spotsShown(f: Readonly<Features> = features): boolean {
   return f.activations || f.potaSpots || f.clusterSpots;
 }

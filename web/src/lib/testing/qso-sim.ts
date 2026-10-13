@@ -48,11 +48,9 @@ export class Sim {
   pending: { tx: TxNum; text: string; slotStartMs: number; startOffsetS: number } | null = null;
   readonly mode: Mode;
 
-  constructor(over: Partial<SeqConfig> = {}, confirmed = true) {
+  constructor(over: Partial<SeqConfig> = {}) {
     this.st = initialState(config(over));
     this.mode = this.st.config.mode;
-    if (confirmed) this.send({ type: 'bandConfirmed', band: '20m', dialHz: this.st.config.dialHz, mode: this.mode, nowMs: T0 - 60_000 });
-    this.effects = [];
   }
 
   get len() {

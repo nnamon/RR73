@@ -9,7 +9,7 @@
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, halt, inputDevices, startAudio, tx, useInput } from '../lib/state/station.svelte';
+  import { audio, halt, inputDevices, startAudio, startTune, tx, useInput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
@@ -133,10 +133,16 @@
           </span>
         </label>
       </div>
-      <button class="row tune" onclick={() => (tuneOpen = true)}>
+      <button
+        class="row tune"
+        onclick={() => {
+          startTune();
+          tuneOpen = true;
+        }}
+      >
         <span class="row-main">
-          <span class="row-title acc">Tune…</span>
-          <span class="row-sub">Asks first, then transmits at {settings.txHz} Hz for 10 s with a countdown.</span>
+          <span class="row-title acc">Tune for 10 s</span>
+          <span class="row-sub">Transmits at {settings.txHz} Hz for 10 s with a countdown. Halt stops it.</span>
         </span>
       </button>
     </div>

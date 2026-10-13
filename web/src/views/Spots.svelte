@@ -7,7 +7,8 @@
   import ActivationPanel from '../ui/ActivationPanel.svelte';
   import ActivationSheet from '../ui/ActivationSheet.svelte';
   import Icon from '../ui/Icon.svelte';
-  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
+  import BackLink from '../ui/BackLink.svelte';
+  import { href } from '../lib/app/router.svelte';
   import { log } from '../lib/log/log.svelte';
   import { features } from '../lib/state/features.svelte';
 
@@ -16,7 +17,7 @@
 </script>
 
 <section class="screen" aria-labelledby="spots-title">
-  <LargeTitleHeader title="Spots" id="spots-title" />
+  <BackLink to={href('operate')} label="Operate" title="Spots" id="spots-title" />
 
   {#if features.activations && log.ready && log.current}
     <ActivationPanel activation={log.current} />

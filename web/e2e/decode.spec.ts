@@ -51,7 +51,7 @@ async function setCallsign(page: Page) {
   await field.fill(MY_CALL);
   await field.press('Enter');
   await expect(field).toHaveValue(MY_CALL);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Operate' }).click();
+  await page.getByRole('link', { name: 'Operate' }).click();
 }
 
 /** Records the wall-clock time each slot header first appears. */
@@ -60,8 +60,8 @@ async function watchHeaders(page: Page) {
     const seen: Record<string, number> = {};
     (window as unknown as { __heads: Record<string, number> }).__heads = seen;
     new MutationObserver(() => {
-      for (const h of document.querySelectorAll('.slot-head')) {
-        const t = h.textContent ?? '';
+      for (const h of document.querySelectorAll<HTMLElement>('.slot-bar[data-ms]')) {
+        const t = `${h.querySelector('.visually-hidden')?.textContent ?? ''} · decoded in ${(Number(h.dataset.ms) / 1000).toFixed(2)} s`;
         if (!(t in seen)) seen[t] = Date.now();
       }
     }).observe(document.body, { subtree: true, childList: true, characterData: true });
@@ -88,7 +88,10 @@ async function listedSlots(page: Page): Promise<ListedSlot[]> {
     const slots: ListedSlot[] = [];
     for (const li of list.querySelectorAll('li')) {
       const cell = (c: string) => li.querySelector(c)?.textContent ?? '';
-      if (li.classList.contains('slot-head')) slots.push({ head: li.textContent ?? '', rows: [] });
+      if (li.classList.contains('slot-bar')) {
+        const ms = li.dataset.ms;
+        slots.push({ head: `${cell('.visually-hidden')}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, rows: [] });
+      }
       else if (li.querySelector('button.dr') && slots.length) {
         slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: Number(cell('.c-hz')), db: Number(cell('.c-db').replace('\u2212', '-')) });
       }
@@ -127,7 +130,7 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   await setCallsign(page);
   await watchHeaders(page);
   const slotEnd = await tapStartAudio(page);
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
 
   // Each message decodes from at least one copy within the first two decoded slots. The slot of
   // the tap counts when it holds half a slot of audio or more.
@@ -163,15 +166,16 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   await expect(row('JH1RRT YB0AZK RR73')).not.toHaveClass(/k-(cq|me)/);
   await expect(page.getByRole('button', { name: /9V1NE JA1KXM PM95, to you/ }).first()).toBeVisible();
 
-  // Rows are 40 px, and the list with decodes passes axe (WCAG 2.2 AA).
-  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(40, 0);
+  // Rows are 30 px, and the list with decodes passes axe (WCAG 2.2 AA).
+  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(30, 0);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   await page.screenshot({ path: fileURLToPath(new URL('../test-results/screens/decode-chromium-light-operate.png', import.meta.url)) });
 
-  // The slot header: "13:14:15 UTC · 4 decodes · decoded in 0.38 s".
-  const head = list.locator('.slot-head').first();
-  await expect(head).toHaveText(/^\d\d:\d\d:(00|15|30|45) UTC · \d+ decodes? · decoded in \d+\.\d\d s$/);
+  // The slot bar: "13:14:15", "4 decodes" and Even or Odd; screen readers hear "13:14:15 UTC · 4 decodes, odd slot".
+  const head = list.locator('.slot-bar[data-ms]').first();
+  await expect(head.locator('.visually-hidden')).toHaveText(/^\d\d:\d\d:(00|15|30|45) UTC · \d+ decodes?, (even|odd) slot$/);
+  await expect(head.locator('.par')).toHaveText(/^(Even|Odd)$/);
 
   // Measurements for the report and the changelog: time from slot end to the header, decode
   // time, and the decoder's load time.
@@ -195,7 +199,7 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await setCallsign(page);
   await tapStartAudio(page);
   const list = page.getByTestId('decode-list');
-  const heads = list.locator('.slot-head');
+  const heads = list.locator('.slot-bar .st');
   await expect(heads.first()).toBeVisible({ timeout: 45_000 });
   const firstSlot = (await heads.first().textContent())!.slice(0, 8);
 
@@ -216,11 +220,11 @@ test('without the decoder module, the list says so and receive carries on', asyn
   await page.route('**/*.wasm', (r) => r.abort());
   await page.goto('./');
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('No decodes: the decoder did not load', { timeout: 15_000 });
   await expect(alert).toContainText('Receive still works');
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/);
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
 });

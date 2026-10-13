@@ -112,7 +112,7 @@ export interface Sent {
   slotStartMs: number;
 }
 
-export type NoticeKind = 'watchdog' | 'audio' | 'band' | 'no-reply' | 'dropped' | 'incomplete' | 'not-ready' | 'cannot-call';
+export type NoticeKind = 'watchdog' | 'audio' | 'no-reply' | 'dropped' | 'incomplete' | 'not-ready' | 'cannot-call';
 
 export interface SeqState {
   config: SeqConfig;
@@ -135,7 +135,6 @@ export interface SeqState {
   seq: number;
   watchdogFromMs: number;
   lastTxText: string | null;
-  bandConfirmed: boolean;
   audioOk: boolean;
   worked: Worked[];
   /** QSOs completed with this state, newest last; the app keeps the records. */
@@ -150,13 +149,12 @@ export type SeqEvent =
   | { type: 'runMode'; on: boolean; nowMs: number }
   | { type: 'stopAfterQso'; on: boolean; nowMs: number }
   | { type: 'halt'; nowMs: number }
+  | { type: 'endQso'; nowMs: number }
   | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
   | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
   | { type: 'audioStopped'; nowMs: number }
   | { type: 'audioResumed'; nowMs: number }
-  | { type: 'bandChanged'; nowMs: number }
-  | { type: 'bandConfirmed'; band: string; dialHz: number; mode: Mode; nowMs: number }
   | { type: 'touch'; nowMs: number }
   | { type: 'tick'; nowMs: number }
   | { type: 'editMessage'; tx: TxNum; text: string; nowMs: number }
@@ -207,7 +205,6 @@ export function initialState(config: SeqConfig): SeqState {
     seq: 0,
     watchdogFromMs: 0,
     lastTxText: null,
-    bandConfirmed: false,
     audioOk: true,
     worked: [],
     completed: 0,
@@ -222,7 +219,6 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-
 export function notReady(st: SeqState): string | null {
   const c = st.config;
   if (!c.myCall.trim() || !isGrid(c.myGrid)) return 'Set your callsign and grid in Settings to transmit.';
-  if (!st.bandConfirmed) return 'Confirm the band in the band sheet to transmit.';
   if (!st.audioOk) return 'Resume audio to transmit.';
   return null;
 }
@@ -303,7 +299,7 @@ class Machine {
     }
   }
 
-  /** Stops everything at once: Halt, audio stops, band changes, the watchdog. */
+  /** Stops everything at once: Halt, End QSO, audio stops, a mode change, the watchdog. */
   stopAll(nowMs: number) {
     const st = this.st;
     st.txEnabled = false;
@@ -313,6 +309,22 @@ class Machine {
     if (st.next) st.next.scheduled = false;
     this.fx.push({ type: 'cancelTx', stopPlaying: true });
     void nowMs;
+  }
+
+  /** Back to idle: no partner, no plan, an empty queue. Operator edits other than Tx6 go. */
+  reset() {
+    const st = this.st;
+    st.partner = null;
+    st.phase = 'idle';
+    st.current = null;
+    st.next = null;
+    st.retries = 0;
+    const tx6 = st.edits[6];
+    st.edits = tx6 ? { 6: tx6 } : {};
+    if (st.queue.length) {
+      st.queue = [];
+      this.fx.push({ type: 'queueChanged', callers: [] });
+    }
   }
 
   resetWatchdog(nowMs: number) {
@@ -781,6 +793,12 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         st.queue = [];
       }
       break;
+    case 'endQso':
+      // The operator ends the QSO: Tx and Run stop and the sequencer goes back to idle. Nothing
+      // is logged; a QSO already logged stays in the log.
+      m.stopAll(e.nowMs);
+      m.reset();
+      break;
     case 'txStarted':
       m.txStarted(e);
       break;
@@ -803,24 +821,6 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
     case 'audioResumed':
       st.audioOk = true;
       break;
-    case 'bandChanged':
-      if (st.txEnabled || st.run) m.notice('band', 'Tx stopped for the band change. Confirm the band to transmit again.');
-      m.stopAll(e.nowMs);
-      st.bandConfirmed = false;
-      break;
-    case 'bandConfirmed': {
-      const modeChanged = e.mode !== st.config.mode;
-      Object.assign(st.config, { band: e.band, dialHz: e.dialHz, mode: e.mode });
-      st.bandConfirmed = true;
-      if (modeChanged) {
-        st.partner = null;
-        st.phase = 'idle';
-        st.current = null;
-        st.next = null;
-        st.queue = [];
-      }
-      break;
-    }
     case 'touch':
       m.resetWatchdog(e.nowMs);
       break;
@@ -849,6 +849,13 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       const was = { ...st.config };
       Object.assign(st.config, e.patch);
       const changed = (k: keyof SeqConfig) => e.patch[k] !== undefined && e.patch[k] !== was[k];
+      // Choosing a band applies it and Tx keeps its state. A new mode changes the slot length,
+      // so a QSO in progress cannot carry on: everything stops.
+      if (changed('mode')) {
+        m.stopAll(e.nowMs);
+        m.reset();
+        break;
+      }
       if (changed('order') || changed('workDupes')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
       // Only a change to the message text plans the transmission again; Settings sends every
       // value whenever one changes, and a new plan would replace a transmission about to start.

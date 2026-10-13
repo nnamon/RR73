@@ -1,12 +1,16 @@
 <script lang="ts">
-  /** Change band. RR73 cannot read the radio's dial, so the operator sets it and confirms here. */
+  /**
+   * Change band. RR73 cannot read the radio's dial, so the operator chooses the band here and
+   * sets the radio to the frequency shown. A tap on a band applies it and closes the sheet; a tap
+   * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
+   */
   import Sheet from './Sheet.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
   import type { Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
 
-  let { open = $bindable(false), onconfirm }: { open: boolean; onconfirm?: (band: BandId, mode: Mode) => void } = $props();
+  let { open = $bindable(false) }: { open: boolean } = $props();
 
   let band = $state<BandId>(settings.band);
   let mode = $state<Mode>(settings.mode);
@@ -18,17 +22,19 @@
     }
   });
 
-  // FT4 has no usual frequency on 160m and 60m.
-  $effect(() => {
-    if (dialHz(band, mode) === null) mode = 'FT8';
-  });
-
   const dial = $derived(dialHz(band, mode));
 
-  function confirm() {
+  // FT4 has no usual frequency on 160m and 60m.
+  function chooseBand(b: BandId) {
+    band = b;
+    if (dialHz(b, mode) === null) mode = 'FT8';
     void updateSettings({ band, mode });
-    onconfirm?.(band, mode);
     open = false;
+  }
+
+  function chooseMode(m: Mode) {
+    mode = m;
+    void updateSettings({ band, mode });
   }
 </script>
 
@@ -37,7 +43,7 @@
     <legend class="visually-hidden">Band</legend>
     {#each BAND_IDS as b (b)}
       <label class="tile" class:on={band === b}>
-        <input class="visually-hidden" type="radio" name="band" value={b} bind:group={band} />
+        <input class="visually-hidden" type="radio" name="band" value={b} checked={band === b} onclick={() => chooseBand(b)} />
         {b}
       </label>
     {/each}
@@ -46,7 +52,7 @@
     <legend class="visually-hidden">Mode</legend>
     {#each ['FT8', 'FT4'] as const as m (m)}
       <label class="seg-i" class:on={mode === m} class:off={dialHz(band, m) === null}>
-        <input class="visually-hidden" type="radio" name="mode" value={m} bind:group={mode} disabled={dialHz(band, m) === null} />
+        <input class="visually-hidden" type="radio" name="mode" value={m} checked={mode === m} disabled={dialHz(band, m) === null} onchange={() => chooseMode(m)} />
         {m}
       </label>
     {/each}
@@ -56,9 +62,7 @@
     <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
     <p class="m">USB</p>
   </div>
-  <p class="note">RR73 can’t read the radio’s dial. Tx stays off until you confirm, and saved slots and QSOs record the band you confirm here.</p>
-  <button class="btn primary confirm" onclick={confirm}>Use {band} {mode}</button>
-  <button class="btn cancel" onclick={() => (open = false)}>Cancel</button>
+  <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.</p>
 </Sheet>
 
 <style>
@@ -140,17 +144,5 @@
     font-size: var(--rr-text-foot);
     line-height: var(--rr-leading-row);
     color: var(--rr-label2);
-  }
-
-  .confirm,
-  .cancel {
-    width: 100%;
-    margin-top: var(--rr-space-3);
-  }
-
-  .cancel {
-    margin-top: var(--rr-space-2);
-    background: transparent;
-    color: var(--rr-accent);
   }
 </style>

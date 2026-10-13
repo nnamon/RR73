@@ -24,6 +24,8 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const iphone = (width: number, height: number, scale: number) => ({
+  // WebKit's mock microphone runs the audio.
+  permissions: ['microphone'],
   browserName: 'webkit' as const,
   viewport: { width, height },
   deviceScaleFactor: scale,
@@ -62,8 +64,8 @@ export default defineConfig({
     { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
-    { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
+    { name: 'webkit-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
+    { name: 'webkit-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
@@ -71,7 +73,7 @@ export default defineConfig({
     // (locally: --no-deps to run them alone), with 2 retries.
     { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
-    { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: { ...iphone(393, 852, 3), permissions: ['microphone'] } },
+    { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
     { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
   ],
 });

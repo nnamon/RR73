@@ -3,7 +3,6 @@
   import LogNotice from './ui/LogNotice.svelte';
   import QsoSheet from './ui/QsoSheet.svelte';
   import StatusNotice from './ui/StatusNotice.svelte';
-  import TabBar from './ui/TabBar.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
   import Log from './views/Log.svelte';
   import Logging from './views/Logging.svelte';
@@ -64,10 +63,11 @@
   });
 </script>
 
-<div class="app">
+<!-- Operate is the main screen. Log, Spots and Settings open over it with a back link to it. -->
+<div class="app" class:on-operate={tab === 'operate'}>
   <main class="main" id="main">
-    <!-- Operate stays mounted so the waterfall keeps its history while another tab is open. -->
-    <div class="pane" hidden={tab !== 'operate'}><Operate /></div>
+    <!-- Operate stays mounted so the waterfall keeps its history while another screen is open. -->
+    <div class="pane" hidden={tab !== 'operate'}><Operate active={tab === 'operate'} /></div>
     {#if tab === 'log'}
       <div class="pane scroll"><Log /></div>
     {:else if tab === 'spots'}
@@ -91,7 +91,6 @@
   {#if update.notice}<UpdateNotice version={update.notice} />{/if}
   <StatusNotice />
   <LogNotice />
-  <TabBar active={tab} />
 </div>
 
 <QsoSheet />
@@ -101,7 +100,13 @@
     display: flex;
     flex-direction: column;
     height: 100dvh;
+    padding-bottom: var(--rr-safe-bottom);
     background: var(--rr-bg);
+  }
+
+  /* Under the home indicator, Operate's bottom bar carries on. */
+  .app.on-operate {
+    background: var(--rr-dock);
   }
 
   .main {

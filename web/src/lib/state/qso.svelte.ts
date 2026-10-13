@@ -20,7 +20,7 @@ import { log, logQso } from '../log/log.svelte';
 import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
-import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
+import { audio, audioOut, codec, markTransmitted, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
 
 export interface SentRow {
   slotStartMs: number;
@@ -36,7 +36,7 @@ export interface Selected {
 }
 
 export interface Notice {
-  kind: NoticeKind | 'refused' | 'encode';
+  kind: NoticeKind | 'refused' | 'encode' | 'info';
   text: string;
   atMs: number;
 }
@@ -133,6 +133,8 @@ function onTxReport(r: TxReport) {
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
     const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
+    // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
+    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode);
     qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
   } else if (r.type === 'ended') {
     qso.onAir = null;
@@ -187,6 +189,11 @@ export function select(s: Selected | null) {
   qso.selected = s;
 }
 
+/** A tap on a decode row: selects it, or clears the selection when the row is already selected. */
+export function tapRow(s: Selected) {
+  qso.selected = qso.selected?.id === s.id ? null : s;
+}
+
 /**
  * iOS keeps Web Audio silent on the ring switch's silent setting until a media clip plays inside
  * a tap. Every tap that can lead to a transmission plays the silent clip first, before any await.
@@ -232,12 +239,14 @@ export function editMessage(tx: TxNum, text: string) {
   dispatch({ type: 'editMessage', tx, text, nowMs: Date.now() });
 }
 
-/** The band sheet confirmed the radio's dial. A different band or mode first stops Tx. */
-export function confirmBand(band: string, mode: 'FT8' | 'FT4') {
-  const c = qso.st.config;
-  const now = Date.now();
-  if (c.band !== band || c.mode !== mode) dispatch({ type: 'bandChanged', nowMs: now });
-  dispatch({ type: 'bandConfirmed', band, dialHz: dialHz(band as never, mode) ?? 0, mode, nowMs: now });
+/** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
+export function endQso() {
+  dispatch({ type: 'endQso', nowMs: Date.now() });
+}
+
+/** A notice in the status line, such as the result of Find clear Tx. */
+export function showNotice(text: string) {
+  qso.notice = { kind: 'info', text, atMs: Date.now() };
 }
 
 /** When a call to a decode heard in `slotStartMs` would start, and in which parity. */
@@ -298,11 +307,6 @@ export function startQso() {
     },
     { capture: true, passive: true },
   );
-  // The band and mode in Settings until the band sheet confirms them; Tx stays off until then.
-  {
-    const c = configNow();
-    dispatch({ type: 'configure', patch: { band: c.band, mode: c.mode, dialHz: c.dialHz }, nowMs: Date.now() });
-  }
   // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
   // its worked-before list, so dupes survive a reload.
   $effect.root(() => {
@@ -312,7 +316,7 @@ export function startQso() {
     });
     $effect(() => {
       const c = configNow();
-      const patch = { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
+      const patch = { myCall: c.myCall, myGrid: c.myGrid, band: c.band, mode: c.mode, dialHz: c.dialHz, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });

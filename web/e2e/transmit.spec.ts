@@ -25,7 +25,7 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
   await expect(cq).toBeVisible({ timeout: 115_000 });
   const tappedAt = await page.evaluate(() => Date.now());
   await cq.dblclick();
-  await expect(dock.getByText(DX.call, { exact: true })).toBeVisible();
+  await expect(dock.getByText(new RegExp(`${DX.call} 9V1NE OJ11`))).toBeVisible();
   let rpt = '';
 
   const wasm = (await loadWasm())!;
@@ -50,7 +50,7 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
     await expect(notice.getByRole('button', { name: `Undo the QSO with ${DX.call}` })).toBeVisible();
     // Then 73 goes out, and the QSO is over.
     await expect.poll(async () => { const t = (await captured(page)).at(-1); return t ? textOf(t) : ''; }, { timeout: 40_000, intervals: [1000] }).toBe(`${DX.call} 9V1NE 73`);
-    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+    await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
   } finally {
     test.info().annotations.push({ type: 'qso', description: JSON.stringify({ tappedAt: new Date(tappedAt).toISOString().slice(11, 23), sent: await describe() }) });
   }
@@ -73,7 +73,7 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
   // What we sent shows in the list as amber rows.
   for (const t of [`${DX.call} 9V1NE OJ11`, `${DX.call} 9V1NE R${rpt}`, `${DX.call} 9V1NE 73`]) await expect(row(t)).toHaveClass(/k-sent/);
   // In the Log with the band, grid and reports, not sent until the operator sends it.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Log' }).click();
   const entry = page.locator('li.lr', { has: page.getByText(DX.call, { exact: true }) });
   await expect(entry).toHaveCount(1);
   await expect(entry).toContainText(`20m FT8 · 14.076 · ${DX.grid} · −${rpt.slice(1)} / −12`);

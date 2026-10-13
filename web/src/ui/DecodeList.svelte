@@ -2,14 +2,19 @@
   import type { ListItem } from '../lib/decode/list';
 
   export type DecodeListItem = ListItem;
+
+  /** A second tap on the same row within this time is a double-tap, ms. */
+  export const DOUBLE_TAP_MS = 350;
 </script>
 
 <script lang="ts">
   /**
-   * Band activity: 40 px rows marked as in WSJT-X. CQ calls green, messages to you red, what
-   * you sent amber, each with a 4 px bar, a tint and the callsign in bold.
+   * Band activity: 30 pt monospace rows (SNR, DT, Hz, message) under a 22 pt bar per slot,
+   * marked as in WSJT-X. CQ calls green, messages to you red, what you sent amber, each with a
+   * 4 px bar, a tint and the callsign in bold. Slot bars alternate slate (even) and blue (odd).
    *
-   * A tap selects a row, a double-tap calls, and touch and hold opens the station's details.
+   * A tap selects a row (or clears the selection, on the selected row), a double-tap calls, and
+   * touch and hold opens the station's details.
    */
   import { dt, snr } from '../lib/clock/format';
   import { splitKey, type DecodeRowData } from '../lib/decode/marking';
@@ -34,7 +39,6 @@
 
   const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'you sent' } as const;
   const HOLD_MS = 500;
-  const DOUBLE_MS = 350;
 
   function spoken(r: DecodeRowData): string {
     const parts = [
@@ -77,7 +81,7 @@
     }
     press = null;
     const now = performance.now();
-    if (lastTap?.id === item.id && now - lastTap.at < DOUBLE_MS) {
+    if (lastTap?.id === item.id && now - lastTap.at < DOUBLE_TAP_MS) {
       lastTap = null;
       oncall?.(item);
       return;
@@ -90,7 +94,12 @@
 <ul class="list" aria-label={label}>
   {#each items as item (item.id)}
     {#if item.kind === 'header'}
-      <li class="slot-head">{item.text}</li>
+      <li class="slot-bar {item.parity}" data-ms={item.ms}>
+        <span class="visually-hidden">{item.text}, {item.parity} slot</span>
+        <span class="st" aria-hidden="true">{item.time}</span>
+        <span class="sd" aria-hidden="true">{item.detail}</span>
+        <span class="par" aria-hidden="true">{item.parity === 'even' ? 'Even' : 'Odd'}</span>
+      </li>
     {:else}
       {@const r = item.row}
       {@const t = splitKey(r.decode.text, r.key)}
@@ -112,8 +121,9 @@
           oncontextmenu={(e) => e.preventDefault()}
           onclick={(e) => click(e, item)}
         >
-          {#if r.time}
-            <span class="c-time" aria-hidden="true">{r.time}</span>
+          {#if r.mark === 'sent'}
+            <span class="c-db" aria-hidden="true">Tx</span>
+            <span class="c-dt" aria-hidden="true"></span>
           {:else}
             <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
             <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
@@ -137,15 +147,56 @@
     padding: 0;
   }
 
-  .slot-head {
+  .slot-bar {
     display: flex;
+    gap: var(--rr-space-2);
     align-items: center;
-    height: 26px;
-    padding: var(--rr-space-1) var(--rr-space-4) 0;
+    height: var(--rr-slot-bar);
+    padding: 0 var(--rr-space-3);
+    border-top: var(--rr-slot-rule) solid var(--rr-slot-even-rule);
+    background: var(--rr-slot-even);
+    color: var(--rr-slot-even-text);
     font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-semibold);
     line-height: var(--rr-leading-caption);
     letter-spacing: 0;
-    color: var(--rr-label3);
+    white-space: nowrap;
+  }
+
+  .slot-bar.odd {
+    border-top-color: var(--rr-slot-odd-rule);
+    background: var(--rr-slot-odd);
+    color: var(--rr-slot-odd-text);
+  }
+
+  .slot-bar .st,
+  .slot-bar .par {
+    color: var(--rr-slot-even-strong);
+  }
+
+  .slot-bar.odd .st,
+  .slot-bar.odd .par {
+    color: var(--rr-slot-odd-strong);
+  }
+
+  .slot-bar .st {
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-bold);
+  }
+
+  .slot-bar .sd {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .slot-bar .par {
+    margin-left: auto;
+    font-size: var(--rr-text-tag);
+    font-weight: var(--rr-weight-bold);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
   }
 
   .dr-item {
@@ -154,19 +205,22 @@
 
   .dr {
     position: relative;
-    display: flex;
+    display: grid;
+    grid-template-columns: 30px 28px 38px minmax(0, 1fr) auto;
+    column-gap: var(--rr-space-2);
     align-items: center;
     width: 100%;
     height: var(--rr-row-decode);
-    padding: 0 var(--rr-space-4);
-    font-size: var(--rr-text-row);
+    padding: 0 var(--rr-space-3);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-decode);
     line-height: var(--rr-leading-row);
     letter-spacing: 0;
     text-align: left;
+    white-space: nowrap;
     user-select: none;
     -webkit-touch-callout: none;
   }
-
 
   .dr::after {
     content: '';
@@ -182,7 +236,7 @@
     position: absolute;
     top: 0;
     right: 0;
-    left: var(--rr-space-4);
+    left: var(--rr-space-3);
     height: var(--rr-hairline);
     background: var(--rr-sep-strong);
     transform: scaleY(0.5);
@@ -222,40 +276,13 @@
   .c-db,
   .c-dt,
   .c-hz {
-    flex: none;
     color: var(--rr-label2);
     text-align: right;
   }
 
-  .c-db {
-    width: 28px;
-  }
-
-  .c-dt {
-    width: 25px;
-    margin-left: var(--rr-space-2);
-  }
-
-  .c-hz {
-    width: 36px;
-    margin-left: var(--rr-space-2);
-  }
-
-  .c-time {
-    flex: none;
-    width: 60px;
-    font-size: var(--rr-text-foot);
-    color: var(--rr-label2);
-  }
-
   .c-msg {
-    flex: 1;
     min-width: 0;
-    margin-left: var(--rr-space-3);
     overflow: hidden;
-    font-family: var(--rr-mono);
-    font-size: var(--rr-text-row);
-    letter-spacing: 0;
     white-space: pre;
     text-overflow: ellipsis;
   }
@@ -269,18 +296,17 @@
   }
 
   .c-meta {
-    flex: none;
-    margin-left: var(--rr-space-2);
+    font-family: var(--rr-sans);
     font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-semibold);
     line-height: var(--rr-leading-caption);
     letter-spacing: 0;
     color: var(--rr-label2);
   }
 
   .badge {
-    flex: none;
     height: 20px;
-    margin-left: var(--rr-space-2);
+    font-family: var(--rr-sans);
     padding: 0 var(--rr-space-1-5);
     border-radius: var(--rr-radius-s);
     font-size: var(--rr-text-caption);

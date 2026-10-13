@@ -45,14 +45,16 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Rust: stable toolchain from `rust-toolchain.toml`, `cargo fmt`, `clippy -D warnings`, no `unsafe`, no panics on input data. Public items carry doc comments that state units (Hz, s, dB, samples at 12 kHz).
 - TypeScript: strict mode, no `any` in exported signatures. Svelte 5 runes.
 - Colours, type sizes and spacing come only from `web/src/styles/tokens.css`.
-- Tap targets at least 44 px. Decode rows 40 px. Halt is the largest control in every transmit dock.
+- Tap targets at least 44 px. Decode rows are 30 px and act by tap, double-tap and touch and hold; slot bars are 22 px.
+- Halt is red, always visible in Operate's bottom bar and in every sheet that plays output, and takes one tap.
+- Actions take effect on the first tap. No confirmation steps; deleting stored data offers Undo or, failing that, one confirmation.
 - Layouts work from 375 x 667 points (iPhone SE) upward, in both light and dark themes.
 
 ### Visual review
 
 Check every UI change against these before it ships, and compare the screen side by side with its neighbours in both themes at 375 x 667 and 393 x 852.
 
-- Every tab root starts with `LargeTitleHeader` and every sub-screen with `BackLink`: one 44 pt bar, so titles and content line up across screens.
+- Operate is the main screen and starts with its 44 pt top bar. Log, Spots, Settings and their sub-screens open over it and start with `BackLink`: one 44 pt bar, so titles and content line up across screens.
 - Content sits 16 pt from the screen edges; text in groups, section headers and footers sits 32 pt in.
 - Bar buttons are 44 pt targets side by side, never overlapping, with glyphs of equal size and stroke weight; the last glyph ends 16 pt from the edge, and focus shows a rounded ring.
 - Disabled controls show the tint at reduced opacity, never a different grey.

@@ -1,24 +1,22 @@
-// The app shell: tabs, headings, settings stored in IndexedDB, version history and the update notice.
+// The app shell: Operate and the screens it opens, headings, settings stored in IndexedDB, version history and the update notice.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { emptySeed, seed, withFeatures } from './log-data';
 
 const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
-test('the tab bar moves between screens and marks the current one', async ({ page }) => {
+test('the top bar opens Log, Spots and Settings, and each goes back to Operate', async ({ page }) => {
   await page.goto('./');
-  const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link', { name: 'Operate' })).toHaveAttribute('aria-current', 'page');
   await seed(page, withFeatures(emptySeed(), { activations: true }));
-  for (const [name, heading] of [
-    ['Log', 'Log'],
-    ['Spots', 'Spots'],
-    ['Settings', 'Settings'],
-  ] as const) {
+  await page.reload();
+  const nav = page.getByRole('navigation', { name: 'Screens' });
+  for (const name of ['Log', 'Spots', 'Settings'] as const) {
     await nav.getByRole('link', { name }).click();
-    await expect(page.getByRole('heading', { level: 1, name: heading })).toBeFocused();
-    await expect(nav.getByRole('link', { name })).toHaveAttribute('aria-current', 'page');
-    await expect(page).toHaveTitle(`${heading} · RR73`);
+    await expect(page.getByRole('heading', { level: 1, name })).toBeFocused();
+    await expect(page).toHaveTitle(`${name} · RR73`);
+    await page.getByRole('link', { name: 'Operate' }).click();
+    await expect(page.getByRole('heading', { level: 1, name: 'Operate' })).toBeFocused();
+    await expect(page).toHaveURL(/#\/operate$/);
   }
 });
 
@@ -31,24 +29,23 @@ test('the empty tabs say what will appear', async ({ page }) => {
   await expect(page.getByText(/^No spots yet\. POTA spots on your bands/)).toBeVisible();
 });
 
-test('three tabs on a new install, and an old Activate link opens Optional features', async ({ page }) => {
+test('Log and Settings on a new install, and an old Activate link opens Optional features', async ({ page }) => {
   await page.goto('./#/activate');
-  const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Settings']);
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('The Spots tab shows while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
+  await expect(page.getByText("Spots shows in Operate's top bar while Activations, POTA spots or Cluster spots is on.", { exact: false })).toBeVisible();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link')).toHaveCount(2);
+  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toHaveCount(0);
 });
 
 test('with Activations on, an old Activate link opens Spots', async ({ page }) => {
   await page.goto('./');
   await seed(page, withFeatures(emptySeed(), { activations: true }));
   await page.goto('./#/activate');
-  const nav = page.getByRole('navigation', { name: 'Main' });
-  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Spots', 'Settings']);
   await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
-  await expect(nav.getByRole('link', { name: 'Spots' })).toHaveAttribute('aria-current', 'page');
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toBeVisible();
 });
 
 test('Operate shows the band, the frequency and the empty decode list', async ({ page }) => {
@@ -56,20 +53,23 @@ test('Operate shows the band, the frequency and the empty decode list', async ({
   const band = page.getByRole('button', { name: /^Change band/ });
   await expect(band).toContainText('20m');
   await expect(band).toContainText('FT8');
-  await expect(band).toContainText('14.074 MHz · USB');
+  await expect(band).toContainText('14.074');
+  await expect(band).toHaveAccessibleName('Change band. Now 20m FT8, 14.074 MHz USB.');
   await expect(page.getByText('No decodes yet')).toBeVisible();
 });
 
-test('changing band updates the header', async ({ page }) => {
+test('a tap on a band applies it at once', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: /^Change band/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Change band' });
-  await sheet.getByText('40m', { exact: true }).click();
+  // A mode applies and the sheet stays open; a band applies and closes it.
   await sheet.getByText('FT4', { exact: true }).click();
-  await expect(sheet.getByText('7.0475 MHz')).toBeVisible();
-  await sheet.getByRole('button', { name: 'Use 40m FT4' }).click();
+  await expect(sheet.getByText('14.080 MHz')).toBeVisible();
+  await sheet.getByText('40m', { exact: true }).click();
   await expect(sheet).toBeHidden();
-  await expect(page.getByRole('button', { name: /^Change band/ })).toContainText('7.0475 MHz · USB');
+  const band = page.getByRole('button', { name: /^Change band/ });
+  await expect(band).toHaveAccessibleName('Change band. Now 40m FT4, 7.0475 MHz USB.');
+  await expect(band).toContainText('7.0475');
 });
 
 test('the callsign is stored on the phone and marks nothing until set', async ({ page }) => {

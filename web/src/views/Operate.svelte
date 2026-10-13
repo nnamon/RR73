@@ -5,39 +5,41 @@
   import BandSheet from '../ui/BandSheet.svelte';
   import DecodeList from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
-  import LevelMeter from '../ui/LevelMeter.svelte';
   import SaveSlotSheet from '../ui/SaveSlotSheet.svelte';
-  import SlotRing from '../ui/SlotRing.svelte';
+  import TopBar from '../ui/TopBar.svelte';
+  import TxBar from '../ui/TxBar.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
-  import CallerQueue from '../ui/CallerQueue.svelte';
   import MessagesSheet from '../ui/MessagesSheet.svelte';
-  import QsoDock from '../ui/QsoDock.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
-  import { callStation, confirmBand, qso, select, setFrequencies, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
-  import { mhz, utcTime } from '../lib/clock/format';
-  import { SLOT_MS, parity, slotProgress } from '../lib/clock/slots';
+  import { utcTime } from '../lib/clock/format';
+  import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
-  import { buildList, filterCounts, type Filter } from '../lib/decode/list';
+  import { buildList, callerItems, filterCounts, type Filter } from '../lib/decode/list';
+  import { orderQueue } from '../lib/qso/sequencer';
   import { dialHz } from '../lib/radio/bands';
+  import { SIGNAL_HZ } from '../lib/waterfall/pick';
+  import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { audio, band, recent, resumeAudio, startAudio, tx, type DecodedSlot } from '../lib/state/station.svelte';
+
+  /** False while another screen is pushed over Operate: the list keeps its place for the return. */
+  let { active = true }: { active?: boolean } = $props();
 
   let bandOpen = $state(false);
   let saveOpen = $state(false);
   let messagesOpen = $state(false);
   let detailOpen = $state(false);
   let detail = $state<Selected | null>(null);
-  /** In Run mode the caller queue replaces the band activity unless asked for. */
-  let showBand = $state(false);
-  const queueView = $derived(qso.st.run && !showBand);
+  let wf = $state<ReturnType<typeof Waterfall>>();
 
   type RowItem = Extract<ListItem, { kind: 'row' }>;
   const asSelected = (i: RowItem): Selected => ({ decode: i.row.decode, slotStartMs: i.slotStartMs, id: i.id });
   // Our own rows say what we sent; selecting one selects the station we sent it to.
   function onselect(i: RowItem) {
-    select(asSelected(i));
+    tapRow(asSelected(i));
   }
   function oncall(i: RowItem) {
     callStation(i.row.decode, i.slotStartMs);
@@ -48,12 +50,10 @@
   }
   let filter = $state<Filter>('all');
 
-  const dial = $derived(dialHz(settings.band, settings.mode));
   const live = $derived(audio.status === 'running');
-  const progress = $derived(slotProgress(clock.ms, settings.mode));
-  const transmitting = $derived(!!qso.onAir);
+  const transmitting = $derived(!!qso.onAir || tx.tuning);
   const stateText = $derived(
-    transmitting
+    qso.onAir
       ? 'Transmitting'
       : tx.tuning
         ? 'Tuning'
@@ -66,6 +66,16 @@
               : 'Audio off',
   );
   const slotSeconds = $derived(SLOT_MS[settings.mode] / 1000);
+
+  async function findClear() {
+    const hz = (await wf?.quietest()) ?? null;
+    if (hz === null) {
+      showNotice('Finding a clear Tx frequency needs 2 slots of audio.');
+      return;
+    }
+    setFrequencies({ txHz: hz });
+    showNotice(`Tx ${hz} Hz: the quietest ${SIGNAL_HZ[settings.mode]} Hz in the last slots.`);
+  }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
   // scroll, new slots wait. When they go in above a list scrolled down, the rows in view stay put
@@ -120,6 +130,18 @@
     };
   });
 
+  // A hidden pane loses its scroll position in some engines: keep it across Log and Settings.
+  let kept = 0;
+  $effect(() => {
+    if (!active) {
+      kept = listEl?.scrollTop ?? 0;
+      return;
+    }
+    void tick().then(() => {
+      if (listEl && kept) listEl.scrollTop = kept;
+    });
+  });
+
   function down() {
     touching = true;
     freeze.down(performance.now());
@@ -143,7 +165,12 @@
     listEl?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  const items = $derived(buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent));
+  const callers = $derived.by(() => {
+    const st = qso.st;
+    if (!st.run || (filter !== 'all' && filter !== 'me')) return [];
+    return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes);
+  });
+  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode)]);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -160,28 +187,22 @@
   } as const;
 </script>
 
-<section class="operate" class:transmitting aria-labelledby="operate-title">
+<section class="operate" aria-labelledby="operate-title">
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
-  <header class="head">
-    <div class="band-col">
-      <button class="band" onclick={() => (bandOpen = true)} aria-label="Change band. Now {settings.band} {settings.mode}, {dial === null ? '' : mhz(dial)} USB.">
-        <span class="l1">
-          <span class="band-m">{settings.band}</span>
-          <span class="mode">{settings.mode}</span>
-          <Icon name="chevdown" size={14} class="chev" />
-        </span>
-        <span class="l2">{dial === null ? '' : mhz(dial)} · USB</span>
-      </button>
-      <LevelMeter rmsDb={audio.rmsDb} {live} />
-    </div>
-    <div class="clk" role="timer" aria-label="UTC time and slot progress">
-      <SlotRing progress={progress} tone={tx.tuning || transmitting ? 'tx' : live ? 'rx' : 'idle'} />
-      <div>
-        <p class="utc mono">{utcTime(clock.ms)}</p>
-        <p class="state" class:alert={tx.tuning || transmitting || audio.status === 'stopped'}>{stateText}</p>
-      </div>
-    </div>
-  </header>
+  <TopBar
+    band={settings.band}
+    mode={settings.mode}
+    dialHz={dialHz(settings.band, settings.mode)}
+    utc={utcTime(clock.ms)}
+    progress={slotProgress(clock.ms, settings.mode)}
+    tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
+    state={stateText}
+    onair={transmitting}
+    rmsDb={audio.rmsDb}
+    {live}
+    spots={spotsShown()}
+    onband={() => (bandOpen = true)}
+  />
   <ActivationChip />
 
   <AudioBanner
@@ -194,59 +215,47 @@
   />
 
   <Waterfall
+    bind:this={wf}
     mode={settings.mode}
     rxHz={settings.rxHz}
     txHz={settings.txHz}
+    txSlots={tx.slots}
     stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
     hint={!settings.freqPicked}
     onset={setFrequencies}
   />
 
-  <div class="list-wrap">
-    {#if band.decoder.state === 'failed'}
-      <div class="decoder-error" role="alert">
-        <p class="t">{band.decoder.reason === 'crashed' ? 'Decoding stopped' : 'No decodes: the decoder did not load'}</p>
-        <p class="s">{FAILED[band.decoder.reason]} Receive still works: the waterfall and Save slot carry on. Reload RR73 to try again.</p>
-      </div>
-    {/if}
-    <div class="toolbar">
-      {#if queueView}
-        <span class="info">Run · callers in answering order</span>
-      {:else if shown.length}
-        <div class="chips" role="radiogroup" aria-label="Show decodes">
-          {#each chips as c (c.id)}
-            <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
-              {c.label} <span class="n">{counts[c.id]}</span>
-            </button>
-          {/each}
-        </div>
-      {:else}
-        <p class="info">
-          {#if recent.slots.length}
-            {recent.slots.length} {recent.slots.length === 1 ? 'slot' : 'slots'} kept · {parity(clock.ms, settings.mode) === 'even' ? 'Even' : 'Odd'} slot now
-          {:else if live}
-            First slot kept at the next {slotSeconds} s boundary
-          {:else}
-            Slots are kept while audio runs
-          {/if}
-        </p>
-      {/if}
-      <button class="btn tint compact save" disabled={!recent.slots.length} onclick={() => (saveOpen = true)}>Save slot</button>
+  {#if band.decoder.state === 'failed'}
+    <div class="decoder-error" role="alert">
+      <p class="t">{band.decoder.reason === 'crashed' ? 'Decoding stopped' : 'No decodes: the decoder did not load'}</p>
+      <p class="s">{FAILED[band.decoder.reason]} Receive still works: the waterfall and Save slot carry on. Reload RR73 to try again.</p>
     </div>
+  {/if}
+  <div class="filters">
+    <div class="chips" role="radiogroup" aria-label="Show decodes">
+      {#each chips as c (c.id)}
+        <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
+          <span class="pill">{c.label} <span class="n">{counts[c.id]}</span></span>
+        </button>
+      {/each}
+    </div>
+    <button class="save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" size={22} /></button>
+  </div>
+  <div class="list-wrap">
     {#if unseen > 0}
       <button class="newpill" onclick={showNewest}><Icon name="chevdown" size={13} class="up" />{unseen} new {unseen === 1 ? 'decode' : 'decodes'}</button>
     {/if}
-    <div class="list" bind:this={listEl} role="region" aria-label={queueView ? 'Callers' : 'Decodes, newest slot first'} data-testid="decode-list">
-      {#if queueView}
-        <CallerQueue onbandactivity={() => (showBand = true)} />
-      {:else if shown.length || qso.sent.length}
-        {#if qso.st.run}<button class="back-queue" onclick={() => (showBand = false)}>Show the caller queue</button>{/if}
+    <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
+      {#if items.length}
         <DecodeList {items} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}
             <h2>Loading the decoder</h2>
             <p>Decodes appear here after each {slotSeconds} s slot ends.</p>
+          {:else if live}
+            <h2>No decodes yet</h2>
+            <p>Decodes appear here after each {slotSeconds} s slot ends. Double-tap one to call the station.</p>
           {:else}
             <h2>No decodes yet</h2>
             <p>Decodes appear here after each {slotSeconds} s slot ends, while audio runs.</p>
@@ -255,26 +264,19 @@
       {/if}
     </div>
   </div>
-  <QsoDock
-    onconfirmband={() => (bandOpen = true)}
-    onmessages={() => (messagesOpen = true)}
-    ondetail={() => {
-      detail = qso.selected;
-      detailOpen = !!detail;
-    }}
-  />
+  <TxBar onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} />
 </section>
 
 <svelte:window onpointerup={up} onpointercancel={up} />
 
-<BandSheet bind:open={bandOpen} onconfirm={confirmBand} />
+<BandSheet bind:open={bandOpen} />
 <SaveSlotSheet bind:open={saveOpen} />
 <MessagesSheet bind:open={messagesOpen} />
 <StationDetailSheet bind:open={detailOpen} item={detail} />
 
 <style>
-  /* On short screens with a banner and a tall dock, Operate scrolls; the dock stays at the
-     bottom, so Halt never leaves the screen. */
+  /* On short screens with a banner, Operate scrolls; the bottom bar stays at the bottom, so Halt
+     never leaves the screen. */
   .operate {
     display: flex;
     flex-direction: column;
@@ -282,142 +284,98 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-top: var(--rr-safe-top);
-    background: var(--rr-plain);
+    background: var(--rr-dock);
   }
 
-  .head {
+  .filters {
+    position: relative;
+    z-index: 1;
     display: flex;
     flex: none;
     align-items: center;
-    justify-content: space-between;
-    gap: var(--rr-space-2);
-    padding: var(--rr-space-1) calc(var(--rr-space-4) + var(--rr-safe-right)) var(--rr-space-1) calc(var(--rr-space-4) + var(--rr-safe-left));
+    height: var(--rr-filters);
+    padding: 0 var(--rr-safe-right) 0 calc(var(--rr-space-2) + var(--rr-safe-left));
+    background: var(--rr-bg);
+    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
 
-  .band-col {
-    min-width: 0;
-  }
-
-  .band {
+  .chips {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-height: var(--rr-tap);
-    text-align: left;
+    flex: 1;
+    min-width: 0;
+    align-items: center;
   }
 
-  .l1 {
+  /* 28 pt chips inside 44 pt targets that reach over the edges of the 36 pt row. */
+  .chip {
+    display: flex;
+    flex: none;
+    align-items: center;
+    min-width: var(--rr-tap);
+    height: var(--rr-tap);
+    margin: calc((var(--rr-filters) - var(--rr-tap)) / 2) 0;
+    padding: 0 var(--rr-space-half);
+  }
+
+  .chip .pill {
     display: flex;
     align-items: center;
-    height: var(--rr-leading-title);
+    height: var(--rr-chip);
+    padding: 0 var(--rr-space-3);
+    border-radius: 14px;
+    background: var(--rr-fill-bg);
+    font-size: var(--rr-text-row);
+    font-weight: var(--rr-weight-semibold);
+    white-space: nowrap;
   }
 
-  .band-m {
-    font-size: var(--rr-text-title);
-    font-weight: var(--rr-weight-bold);
-    line-height: var(--rr-leading-title);
-    letter-spacing: -0.012em;
-  }
-
-  .mode {
-    height: 19px;
-    margin-left: var(--rr-space-2);
-    padding: 0 var(--rr-space-1);
-    border-radius: var(--rr-radius-s);
-    background: var(--rr-accent-soft);
-    color: var(--rr-accent);
-    font-size: var(--rr-text-caption);
-    font-weight: var(--rr-weight-bold);
-    line-height: 19px;
-    letter-spacing: 0.01em;
-  }
-
-  .band :global(.chev) {
+  .chip .n {
     margin-left: var(--rr-space-1);
+    font-weight: var(--rr-weight-medium);
     color: var(--rr-label2);
   }
 
-  .l2 {
-    margin-top: var(--rr-space-px);
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-foot);
-    color: var(--rr-label2);
-    white-space: nowrap;
+  .chip.on .pill {
+    background: var(--rr-label);
+    color: var(--rr-on-strong);
   }
 
-  .clk {
+  .chip.on .n {
+    color: inherit;
+    opacity: 0.75;
+  }
+
+  .chip:focus-visible {
+    outline: none;
+  }
+
+  .chip:focus-visible .pill {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: 1px;
+  }
+
+  .save {
     display: flex;
     flex: none;
-    gap: var(--rr-space-2);
     align-items: center;
-  }
-
-  .utc {
-    font-size: var(--rr-text-clock);
-    font-weight: var(--rr-weight-semibold);
-    line-height: 23px;
-    letter-spacing: -0.01em;
-  }
-
-  .state {
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-foot);
-    color: var(--rr-label2);
-    white-space: nowrap;
-  }
-
-  .state.alert {
-    color: var(--rr-tx-text);
-    font-weight: var(--rr-weight-semibold);
-  }
-
-  .toolbar {
-    display: flex;
-    flex: none;
-    gap: var(--rr-space-2);
-    align-items: center;
-    min-height: var(--rr-tap);
-    padding-right: calc(var(--rr-space-4) + var(--rr-safe-right));
-  }
-
-  .toolbar .info {
-    flex: 1;
-    min-width: 0;
-    padding-left: calc(var(--rr-space-4) + var(--rr-safe-left));
-  }
-
-  .toolbar .save {
-    flex: none;
-  }
-
-  .back-queue {
-    display: block;
-    min-height: var(--rr-tap);
-    margin-left: auto;
-    padding: 0 var(--rr-space-4);
+    justify-content: center;
+    width: var(--rr-tap);
+    height: var(--rr-tap);
+    margin: calc((var(--rr-filters) - var(--rr-tap)) / 2) 0;
     color: var(--rr-accent);
-    font-size: var(--rr-text-sub);
-    font-weight: var(--rr-weight-semibold);
   }
 
-  .operate.transmitting {
-    box-shadow: inset 0 3px 0 var(--rr-tx);
-  }
-
-  .info {
-    flex: 1;
-    min-width: 0;
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-foot);
-    color: var(--rr-label2);
+  .save:disabled {
+    opacity: 0.35;
   }
 
   .list-wrap {
     position: relative;
+    background: var(--rr-plain);
     display: flex;
     flex: 1;
     flex-direction: column;
-    min-height: calc(3 * var(--rr-row-decode) + var(--rr-tap));
+    min-height: calc(3 * var(--rr-row-decode) + var(--rr-slot-bar));
   }
 
   .list {
@@ -429,27 +387,27 @@
 
   .decoder-error {
     flex: none;
-    margin: var(--rr-space-2) var(--rr-space-4) 0;
-    padding: var(--rr-space-2) var(--rr-space-3);
-    border-radius: var(--rr-radius-xl);
+    margin: var(--rr-space-1) var(--rr-space-2);
+    padding: var(--rr-space-1-5) var(--rr-space-3);
+    border-radius: var(--rr-radius-l);
     background: var(--rr-warn-soft);
   }
 
   .decoder-error .t {
-    font-size: var(--rr-text-sub);
+    font-size: var(--rr-text-foot);
     font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-sub);
+    line-height: var(--rr-leading-foot);
     color: var(--rr-warn);
   }
 
   .decoder-error .s {
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-foot);
+    font-size: var(--rr-text-caption);
+    line-height: var(--rr-leading-caption);
   }
 
   .newpill {
     position: absolute;
-    top: calc(var(--rr-tap) + var(--rr-space-1));
+    top: var(--rr-space-1);
     left: 50%;
     z-index: 2;
     display: inline-flex;
@@ -469,46 +427,7 @@
     transform: rotate(180deg);
   }
 
-  .chips {
-    display: flex;
-    flex: 1;
-    min-width: 0;
-    gap: var(--rr-space-2);
-    align-items: center;
-    height: var(--rr-tap);
-    padding: 0 var(--rr-space-4);
-    overflow-x: auto;
-  }
-
-  .chip {
-    display: flex;
-    flex: none;
-    align-items: center;
-    height: var(--rr-chip);
-    padding: 0 var(--rr-space-3);
-    border-radius: var(--rr-radius-m);
-    background: var(--rr-fill);
-    font-size: var(--rr-text-row);
-    font-weight: var(--rr-weight-semibold);
-    letter-spacing: -0.01em;
-  }
-
-  .chip .n {
-    margin-left: var(--rr-space-1);
-    font-weight: var(--rr-weight-medium);
-    color: var(--rr-label2);
-  }
-
-  .chip.on {
-    background: var(--rr-label);
-    color: var(--rr-on-strong);
-  }
-
-  .chip.on .n {
-    color: inherit;
-  }
-
   .empty {
-    margin-top: var(--rr-space-8);
+    margin-top: var(--rr-space-6);
   }
 </style>

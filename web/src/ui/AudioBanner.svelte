@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** What the audio is doing when it is not running, and the tap that starts or resumes it. */
+  /** What the audio is doing when it is not running, and the tap that starts or resumes it: one slim strip under the top bar. */
   import Icon from './Icon.svelte';
   import { utcTime } from '../lib/clock/format';
   import type { AudioStatus, StartError, StopReason } from '../lib/audio/engine';
@@ -40,14 +40,14 @@
 </script>
 
 {#if status === 'off'}
-  <div class="banner off compact" role="status">
-    <Icon name="mic" size={22} class="banner-icon" />
-    <p class="t">Audio is off</p>
-    <button class="btn primary start" onclick={onstart}>Start audio</button>
+  <div class="banner off" role="status">
+    <Icon name="mic" size={20} class="banner-icon" />
+    <p class="text t">Audio is off</p>
+    <button class="btn primary act" onclick={onstart}>Start audio</button>
   </div>
 {:else if status !== 'running'}
   <div class="banner {status}" role="status">
-    <Icon name={status === 'stopped' || status === 'failed' ? 'alert' : 'mic'} size={22} class="banner-icon" />
+    <Icon name={status === 'stopped' || status === 'failed' ? 'alert' : 'mic'} size={20} class="banner-icon" />
     <div class="text">
       {#if status === 'starting'}
         <p class="t">Starting audio</p>
@@ -59,12 +59,12 @@
         <p class="t">Audio did not start</p>
         <p class="s">{error ? FAILED[error] : FAILED.unknown}</p>
       {/if}
-      {#if status === 'stopped'}
-        <button class="btn primary" onclick={onresume}>Resume audio</button>
-      {:else if status !== 'starting'}
-        <button class="btn primary" onclick={onstart}>Start audio</button>
-      {/if}
     </div>
+    {#if status === 'stopped'}
+      <button class="btn primary act" onclick={onresume}>Resume audio</button>
+    {:else if status !== 'starting'}
+      <button class="btn primary act" onclick={onstart}>Start audio</button>
+    {/if}
   </div>
 {/if}
 
@@ -73,9 +73,10 @@
     display: flex;
     flex: none;
     gap: var(--rr-space-2);
-    margin: var(--rr-space-half) var(--rr-space-4) var(--rr-space-2);
-    padding: var(--rr-space-3) var(--rr-space-4);
-    border-radius: var(--rr-radius-xl);
+    align-items: center;
+    margin: var(--rr-space-1) var(--rr-space-2);
+    padding: var(--rr-space-1) var(--rr-space-1) var(--rr-space-1) var(--rr-space-3);
+    border-radius: var(--rr-radius-l);
     background: var(--rr-accent-soft);
   }
 
@@ -86,7 +87,6 @@
   }
 
   .banner :global(.banner-icon) {
-    margin-top: var(--rr-space-px);
     color: var(--rr-accent);
   }
 
@@ -100,31 +100,10 @@
     min-width: 0;
   }
 
-  .compact {
-    align-items: center;
-    padding: var(--rr-space-2) var(--rr-space-2) var(--rr-space-2) var(--rr-space-3);
-  }
-
-  .compact .t {
-    flex: 1;
-  }
-
-  .compact .start {
-    flex: none;
-    width: auto;
-    margin-top: 0;
-    padding: 0 var(--rr-space-4);
-  }
-
-  .compact :global(.banner-icon) {
-    margin-top: 0;
-  }
-
   .t {
-    font-size: var(--rr-text-body);
-    font-weight: var(--rr-weight-bold);
-    line-height: var(--rr-leading-body);
-    letter-spacing: -0.026em;
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-sub);
   }
 
   .stopped .t,
@@ -133,14 +112,15 @@
   }
 
   .s {
-    margin-top: var(--rr-space-half);
-    font-size: var(--rr-text-sub);
-    line-height: var(--rr-leading-sub);
-    letter-spacing: -0.015em;
+    font-size: var(--rr-text-foot);
+    line-height: var(--rr-leading-foot);
   }
 
-  .btn {
-    width: 100%;
-    margin-top: var(--rr-space-3);
+  .act {
+    flex: none;
+    min-height: var(--rr-tap);
+    padding: 0 var(--rr-space-3);
+    border-radius: var(--rr-radius-m);
+    font-size: var(--rr-text-sub);
   }
 </style>

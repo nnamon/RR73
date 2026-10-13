@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { redirectOf, TABS, tabOf, visibleTabs } from './router.svelte';
+import { redirectOf, TABS, tabOf } from './router.svelte';
 
 describe('tabOf', () => {
   it('has four tabs', () => {
@@ -16,12 +16,7 @@ describe('tabOf', () => {
   });
 });
 
-describe('the Spots tab', () => {
-  it('shows only while activations or a spot source is on', () => {
-    expect(visibleTabs(false)).toEqual(['operate', 'log', 'settings']);
-    expect(visibleTabs(true)).toEqual(['operate', 'log', 'spots', 'settings']);
-  });
-
+describe('the Spots screen', () => {
   it('sends Spots and the Activate path of earlier versions to Settings › Optional features while hidden', () => {
     expect(redirectOf(['spots'], false)).toEqual(['settings', 'features']);
     expect(redirectOf(['activate'], false)).toEqual(['settings', 'features']);

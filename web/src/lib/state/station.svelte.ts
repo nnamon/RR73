@@ -22,6 +22,7 @@ import { dialHz } from '../radio/bands';
 import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
+import { TransmittedSlots } from '../slots/transmitted';
 import { settings } from './settings.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
 
@@ -86,7 +87,19 @@ export const band = $state<{ slots: DecodedSlot[]; decoder: DecoderStatus }>({ s
 
 /** Slots kept in the decode list: 2 minutes of FT8. */
 const KEEP_SLOTS = 8;
-export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null });
+/** Tune, the keying check, and the slots RR73 transmitted in (UTC ms, oldest first). */
+export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null, slots: [] as number[] });
+const transmitted = new TransmittedSlots();
+
+/**
+ * Notes output from `fromUtcMs` to `toUtcMs`: the slots it overlaps hold RR73's own signal, so
+ * they are not decoded and their decodes are not shown.
+ */
+export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode = settings.mode) {
+  transmitted.mark(fromUtcMs, toUtcMs, mode);
+  tx.slots = transmitted.list();
+  if (band.slots.some((s) => transmitted.has(s.startUtcMs))) band.slots = band.slots.filter((s) => !transmitted.has(s.startUtcMs));
+}
 
 let engine: CaptureEngine | null = null;
 const output = new TransmitOutput();
@@ -166,7 +179,7 @@ function onSlot(slot: AssembledSlot) {
   recorder.add(slot);
   recent.slots = recorder.list().map(({ startUtcMs, mode, filled, lateStart, gap }) => ({ startUtcMs, mode, filled, lateStart, gap }));
   // A slot with less than half its audio cannot hold a whole FT8 or FT4 message.
-  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available) return;
+  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available || transmitted.has(slot.startUtcMs)) return;
   const t0 = performance.now();
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
   decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
@@ -186,6 +199,7 @@ function keepSlot(entry: DecodedSlot) {
  * path, and the screen-review build's (lib/testing/e2e-hooks.ts).
  */
 export function deliverDecodes(entry: DecodedSlot) {
+  if (transmitted.has(entry.startUtcMs)) return;
   keepSlot(entry);
   for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes);
 }
@@ -300,9 +314,10 @@ function median(xs: number[]): number | null {
   return s[s.length >> 1];
 }
 
-/** Plays the Tune tone at the Tx frequency for 10 s. Call from the confirming tap. */
+/** Plays the Tune tone at the Tx frequency for 10 s. Call from the tap. */
 export function startTune() {
   playClip(silentClipUri());
+  markTransmitted(Date.now(), Date.now() + TUNE.seconds * 1000);
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();

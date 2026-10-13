@@ -1,6 +1,6 @@
 <script lang="ts">
   import Icon from '../ui/Icon.svelte';
-  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
+  import BackLink from '../ui/BackLink.svelte';
   import LocateButton from '../ui/LocateButton.svelte';
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
@@ -89,11 +89,9 @@
   });
 
   type ReloadKind = 'reload' | 'clear';
-  /** A reload stops audio, so with audio running the first tap asks and a second tap within 5 s reloads. */
-  let confirming = $state<ReloadKind | null>(null);
+  /** A reload stops audio; it starts on the first tap. */
   let reloading = $state<ReloadKind | null>(null);
   let online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
-  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     const set = () => (online = navigator.onLine);
@@ -102,39 +100,23 @@
     return () => {
       window.removeEventListener('online', set);
       window.removeEventListener('offline', set);
-      clearTimeout(confirmTimer);
     };
   });
 
   function tapReload(kind: ReloadKind) {
     if (reloading) return;
-    if (busy() && confirming !== kind) {
-      confirming = kind;
-      clearTimeout(confirmTimer);
-      confirmTimer = setTimeout(() => (confirming = null), 5000);
-      return;
-    }
-    confirming = null;
     reloading = kind;
     void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
   }
 
-  const reloadSub = $derived(
-    reloading === 'reload'
-      ? 'Checking for a newer version.'
-      : confirming === 'reload'
-        ? 'Audio is running. Tap again to stop it and reload.'
-        : 'Checks for a newer version, installs it and reloads.',
-  );
+  const reloadSub = $derived(reloading === 'reload' ? 'Checking for a newer version.' : 'Checks for a newer version, installs it and reloads. Audio stops.');
 
   const clearSub = $derived(
     !online
       ? 'Needs a connection: the app loads fresh from the network.'
       : reloading === 'clear'
         ? 'Removing the stored copy.'
-        : confirming === 'clear'
-          ? 'Audio is running. Tap again to stop it and reload.'
-          : 'Removes the stored copy and loads the app fresh. Settings and saved data stay on this phone.',
+        : 'Removes the stored copy and loads the app fresh. Audio stops. Settings and saved data stay on this phone.',
   );
 
   const themes: { id: Theme; label: string }[] = [
@@ -145,7 +127,7 @@
 </script>
 
 <section class="screen" aria-labelledby="settings-title">
-  <LargeTitleHeader title="Settings" id="settings-title" />
+  <BackLink to={href('operate')} label="Operate" title="Settings" id="settings-title" />
 
   <div class="section">
     <h2 class="section-head">Station</h2>
@@ -250,7 +232,7 @@
         </label>
       {/each}
     </div>
-    <p class="section-foot">The Spots tab shows while Activations, POTA spots or Cluster spots is on. Each is off until you turn it on. Nothing downloads for a feature that is off, and turning one off keeps what it stored.</p>
+    <p class="section-foot">Spots shows in Operate's top bar while Activations, POTA spots or Cluster spots is on. Each is off until you turn it on. Nothing downloads for a feature that is off, and turning one off keeps what it stored.</p>
   </div>
 
   <div class="section">

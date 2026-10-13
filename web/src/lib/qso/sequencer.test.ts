@@ -525,24 +525,44 @@ describe('safety', () => {
     expect(texts(s).at(-1)).toBe('6:JA1KXM 9V1NE R-10');
   });
 
-  it('keeps Tx off after a band change until the band is confirmed', () => {
+  it('transmits without a band confirmation', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    s.send({ type: 'bandChanged', nowMs: s.at(0, 1) });
-    expect(s.st).toMatchObject({ txEnabled: false, bandConfirmed: false });
-    s.send({ type: 'enableTx', on: true, nowMs: s.at(1, 1) });
-    expect(s.pending).toBeNull();
-    s.send({ type: 'bandConfirmed', band: '40m', dialHz: 7074000, mode: 'FT8', nowMs: s.at(1, 2) });
-    s.send({ type: 'enableTx', on: true, nowMs: s.at(1, 3) });
-    s.run(2, 2);
-    expect(texts(s)).toEqual(['2:CQ 9V1NE OJ11']);
+    expect(notReady(s.st)).toBeNull();
+    s.run(0, 2);
+    expect(texts(s)).toEqual(['0:CQ 9V1NE OJ11', '2:CQ 9V1NE OJ11']);
+    expect(s.notices()).toEqual([]);
   });
 
-  it('starts with the band unconfirmed', () => {
-    const s = new Sim({}, false);
-    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    expect(s.pending).toBeNull();
-    expect(s.notices().at(-1)).toMatchObject({ kind: 'not-ready', text: 'Confirm the band in the band sheet to transmit.' });
+  it('keeps Tx and the QSO through a band change', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.send({ type: 'configure', patch: { band: '40m', dialHz: 7_074_000 }, nowMs: s.at(1, 14) });
+    expect(s.st).toMatchObject({ txEnabled: true, phase: 'answering', partner: { call: 'JA1KXM' } });
+    s.run(2, 6, { 3: ['9V1NE JA1KXM -09'], 5: ['9V1NE JA1KXM RR73'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE 73']);
+    expect(s.logged()[0]).toMatchObject({ band: '40m', dialHz: 7_074_000 });
+  });
+
+  it('stops Tx and ends the QSO on a mode change', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.effects = [];
+    s.send({ type: 'configure', patch: { mode: 'FT4' }, nowMs: s.at(1, 14) });
+    expect(s.st).toMatchObject({ txEnabled: false, phase: 'idle', partner: null, next: null });
+    expect(s.effects).toContainEqual({ type: 'cancelTx', stopPlaying: true });
+  });
+
+  it('ends a QSO by hand without logging it', () => {
+    const s = new Sim();
+    s.send({ type: 'editMessage', tx: 6, text: 'CQ POTA 9V1NE OJ11', nowMs: s.at(0, 1) });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'endQso', nowMs: s.at(3, 14) });
+    expect(s.st).toMatchObject({ txEnabled: false, run: false, phase: 'idle', partner: null, current: null, next: null, edits: { 6: 'CQ POTA 9V1NE OJ11' } });
+    s.run(4, 6, { 5: ['9V1NE JA1KXM RR73'] });
+    expect(s.logged()).toEqual([]);
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11']);
   });
 
   it('cannot transmit without a callsign and grid', () => {

@@ -33,7 +33,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   await expect(page.getByText('Audio is off')).toBeVisible();
 
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
 
   // The level meter moves off "No audio" and shows a level in dBFS.
   await expect(meter).toHaveAttribute('aria-valuetext', /^−\d+ dBFS$/, { timeout: 10_000 });
@@ -116,7 +116,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
 test('a hidden page stops audio, says when, and a tap resumes it', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(3000);
 
   // iOS stops the microphone in the background; RR73 stops capture when the page is hidden.
@@ -147,7 +147,7 @@ test('a hidden page stops audio, says when, and a tap resumes it', async ({ page
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-audio-stopped.png` });
 
   await banner.getByRole('button', { name: 'Resume audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/, { timeout: 10_000 });
 });
 
@@ -161,13 +161,12 @@ test('a decoder gone from the server says a new version is ready, waits for audi
   await page.goto('./');
   await page.evaluate(() => ((window as unknown as { marker: boolean }).marker = true));
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
   const notice = page.getByTestId('status-notice');
   await expect(notice).toContainText('A new version of RR73 is ready. It loads when audio stops.');
 
   // Audio runs: a change of screen does not reload.
-  const nav = page.getByRole('navigation', { name: 'Main' });
-  await nav.getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker)).toBe(true);
 
@@ -177,6 +176,6 @@ test('a decoder gone from the server says a new version is ready, waits for audi
     document.dispatchEvent(new Event('visibilitychange'));
   });
   await expect(notice).toHaveText(/^A new version of RR73 is ready\.\s*Reload$/);
-  await Promise.all([page.waitForEvent('load'), nav.getByRole('link', { name: 'Log' }).click()]);
+  await Promise.all([page.waitForEvent('load'), page.getByRole('link', { name: 'Operate' }).click()]);
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
 });

@@ -29,7 +29,7 @@ test('a slot played with 1 s of silence records at least 1 s of lost audio', asy
   await page.getByRole('button', { name: 'Start audio' }).click();
   const slot = new Date(next).toISOString().slice(11, 19);
   // The app keeps a slot when it ends; its header shows once it has been decoded.
-  await expect(page.getByTestId('decode-list').locator('.slot-head', { hasText: new RegExp(`^${slot} UTC`) })).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByTestId('decode-list').locator('.slot-bar', { hasText: new RegExp(`^${slot} UTC`) })).toBeVisible({ timeout: 45_000 });
   const [record] = await slotRecords(page, [slot]);
   test.info().annotations.push({ type: 'record', description: JSON.stringify(record) });
   expect(record.lostS).toBeGreaterThanOrEqual(HOLE_S[1] - HOLE_S[0] - 0.05);

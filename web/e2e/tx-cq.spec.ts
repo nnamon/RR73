@@ -11,17 +11,16 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt 
   test.setTimeout(150_000);
   const dock = await prepare(page);
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
-  // Tx at 1846 Hz, set on the waterfall.
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
+  // Tx near 1846 Hz, set by a tap on the waterfall.
   const wf = (await page.getByTestId('waterfall').boundingBox())!;
-  const x = Math.round(wf.x + (wf.width * 1846) / 3000);
-  const txHz = Math.round(((x - wf.x) / wf.width) * 3000);
-  await page.mouse.click(x, Math.round(wf.y + wf.height / 2));
-  await page.getByRole('button', { name: `Transmit here, ${txHz} Hz` }).click();
+  await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
+  const txHz = Number(await page.getByRole('slider', { name: 'Transmit frequency, Hz' }).inputValue());
+  expect(Math.abs(txHz - 1846)).toBeLessThanOrEqual(10);
   // Tapped in the first 1.5 s of an even slot, CQ would start late in it; this test wants a CQ
   // on time, so it taps 3 to 12 s into a slot.
   await waitForSlotPhase(page, 3, 12);
-  await dock.getByRole('button', { name: 'Call CQ' }).click();
+  await dock.getByRole('button', { name: 'CQ', exact: true }).click();
 
   const [first] = await waitForTransmissions(page, 1, 50_000);
   const wasm = (await loadWasm())!;
@@ -48,8 +47,8 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt 
   test.info().annotations.push({ type: 'halt', description: JSON.stringify({ heardEndAfterTapMs: Math.round(stopMs), sentMs: Math.round(sentMs) }) });
   expect(sentMs).toBeLessThan(4000);
   expect(stopMs).toBeLessThan(100);
-  // Halt ends the CQ: the dock offers Call CQ again.
-  await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+  // Halt ends the CQ and turns Tx off.
+  await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
   await page.waitForTimeout(16_000);
   expect(await page.evaluate(() => window.__tx.length)).toBe(2);
 });

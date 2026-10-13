@@ -56,7 +56,7 @@ for (const theme of ['light', 'dark'] as const) {
   test(`tune sheet in ${theme}`, async ({ page }) => {
     await open(page, '#/settings/radio', theme);
     await page.getByRole('button', { name: /^Tune/ }).click();
-    await expect(page.getByRole('dialog', { name: 'Transmit a tune tone?' })).toBeVisible();
+    await expect(page.getByRole('dialog', { name: 'Tuning' })).toBeVisible();
     expect(await axe(page)).toEqual([]);
   });
 }
