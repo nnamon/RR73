@@ -3,7 +3,7 @@
 // export with Mark submitted.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { API_KEY, mockupLog, mockWavelog, seed, wavelogOnly, WAVELOG_URL } from './log-data';
+import { API_KEY, mockupLog, mockWavelog, seed, wavelogOnly, WAVELOG_URL, type MockWavelog } from './log-data';
 import { FIXED_TIME } from './time';
 
 /** Opens a screen with the clock at FIXED_TIME, running, and optionally a seeded log. */
@@ -105,7 +105,7 @@ test('adds, edits, deletes and restores a QSO by hand', async ({ page }) => {
 
 /** The Send to Wavelog button at the top of the Log, by its count. */
 const sendButton = (page: Page) => page.getByRole('button', { name: /^Send \d+ QSOs? to Wavelog$/ });
-const posts = (mock: { requests: { path: string }[] }) => mock.requests.filter((r) => r.path === '/api/qso');
+const posts = (mock: MockWavelog) => mock.requests.filter((r) => r.path === '/api/qso');
 
 test('sets up Wavelog, keeps a new QSO not sent for 30 s, then sends it on Send to Wavelog', async ({ page }) => {
   const mock = await mockWavelog(page);
