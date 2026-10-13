@@ -2,6 +2,15 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Hound mode works DXpeditions in FT8 DXpedition mode. Turn it on per band in the band sheet or •••. Operate shows FT8 Hound next to the band.
+- In Hound mode, calls to the Fox go out at 1000 Hz or above. The R-report goes on the frequency the Fox sent your report on, and moves 300 Hz when repeated.
+- Hound mode reads your report inside the Fox's multi-call messages and logs the QSO on its RR73, with no 73. The Fox working other Hounds does not read as a lost station.
+- The status line names the stage with the Fox: Calling the Fox, Report received, Logged.
+- Practice scenario Fox (DXpedition): a Fox works 3 Hounds a slot and answers you after a few calls.
+- A multi-call message with a report below −30 dB is refused. It went out as a high report.
+
 ## 0.10.0 · 2026-10-13
 
 - Hunt, a new button in Operate, answers CQs one after another until you stop it. It calls a CQ from the slot just decoded, completes and logs the QSO, then picks the next.

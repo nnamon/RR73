@@ -78,9 +78,12 @@ fn a_hound_that_heard_the_fox_cq_reads_the_multi_call_message() {
     let file: File = common::load("wsjtx.json");
     // The Hound's decoder learns KH1/KH7Z from the Fox's CQ, which carries it in full.
     let mut heard = CallsignHashes::new();
-    heard.learn(&unpack(&payload(&case(&file, "CQ KH1/KH7Z").bits), &CallsignHashes::new()).unwrap());
+    heard.learn(
+        &unpack(&payload(&case(&file, "CQ KH1/KH7Z").bits), &CallsignHashes::new())
+            .expect("WSJT-X\'s bits unpack"),
+    );
     let input = "W9XYZ RR73; G4AAA <KH1/KH7Z> -10";
-    let m = unpack(&payload(&case(&file, input).bits), &heard).unwrap();
+    let m = unpack(&payload(&case(&file, input).bits), &heard).expect("WSJT-X\'s bits unpack");
     assert_eq!(m.to_string(), input);
     assert_eq!(
         m,
@@ -88,7 +91,7 @@ fn a_hound_that_heard_the_fox_cq_reads_the_multi_call_message() {
             rr73_to: Station::Call(call("W9XYZ")),
             report_to: Station::Call(call("G4AAA")),
             fox: HashedCallsign::Known(call("KH1/KH7Z")),
-            report: Report::new(-10).unwrap(),
+            report: Report::new(-10).expect("an even report"),
         }
     );
 }
@@ -100,7 +103,8 @@ fn a_hound_that_has_not_heard_the_fox_sees_a_hash_but_both_hounds_and_the_report
         ("W9XYZ RR73; G4AAA <KH1/KH7Z> -10", "W9XYZ RR73; G4AAA <...> -10"),
         ("K1ABC RR73; W9XYZ <KH7Z> -16", "K1ABC RR73; W9XYZ <...> -16"),
     ] {
-        let m = unpack(&payload(&case(&file, input).bits), &CallsignHashes::new()).unwrap();
+        let m = unpack(&payload(&case(&file, input).bits), &CallsignHashes::new())
+            .expect("WSJT-X\'s bits unpack");
         assert_eq!(m.to_string(), shown, "{input}");
         let Message::Dxpedition { fox, .. } = m else {
             panic!("{input} unpacks as {m:?}");
@@ -118,10 +122,10 @@ fn the_fox_hash_of_a_standard_callsign_resolves_from_its_cq() {
             &payload(&case(&file, "CQ KH7Z AJ10").bits),
             &CallsignHashes::new(),
         )
-        .unwrap(),
+        .expect("WSJT-X\'s bits unpack"),
     );
     let input = "K1ABC RR73; W9XYZ <KH7Z> -16";
-    let m = unpack(&payload(&case(&file, input).bits), &heard).unwrap();
+    let m = unpack(&payload(&case(&file, input).bits), &heard).expect("WSJT-X\'s bits unpack");
     assert_eq!(m.to_string(), input);
 }
 
@@ -134,10 +138,13 @@ fn multi_call_reports_are_even_from_minus_30_to_plus_32() {
             db.abs()
         );
         let m = Message::parse(&text).unwrap_or_else(|e| panic!("{text}: {e}"));
-        let p = pack(&m, &mut CallsignHashes::new()).unwrap();
+        let p = pack(&m, &mut CallsignHashes::new()).expect("an even report packs");
         let mut heard = CallsignHashes::new();
         heard.insert(&call("KH7Z"));
-        assert_eq!(unpack(&p, &heard).unwrap().to_string(), text);
+        assert_eq!(
+            unpack(&p, &heard).expect("WSJT-X\'s bits unpack").to_string(),
+            text
+        );
     }
     for text in [
         "K1ABC RR73; W9XYZ <KH7Z> -31",

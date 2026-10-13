@@ -26,6 +26,7 @@ Chosen from ••• in Operate while practice is on. A new scenario applies to
 | Practice: Station answers | A called station answers with a report and ends with RR73. |
 | Practice: Station works another | A called station answers another caller, works him to RR73 or 73, then answers the operator 60 % of the time if he is still calling. |
 | Practice: Station never answers | A called station keeps calling CQ. |
+| Practice: Fox (DXpedition) | A Fox works 3 Hounds a slot in FT8 DXpedition mode and answers the operator after 2 to 4 calls at 1000 Hz or above, with the report alone or in a multi-call message. It replaces the band while chosen (`practice/fox.ts`, `docs/design/hound.md`). |
 | Practice: CQ DX and CQ NA | The band carries CQ DX and CQ NA in every slot. CQ NA answers only North America; CQ DX answers only other continents. |
 
 ## Isolation

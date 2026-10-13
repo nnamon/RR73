@@ -7,8 +7,9 @@
  * 1000 Hz or above, one per stream: a report, then on their R-report RR73, alone or followed in
  * the same message by the next Hound's report (the operator's report comes either way, chosen
  * per band). A Hound gets 3 reports before the Fox drops it,
- * and RR73 again, up to 3 times, when it repeats its R-report. With nobody to work, the Fox
- * calls CQ.
+ * and RR73 again, up to 3 times, when it repeats its R-report. The Fox calls CQ alone in its
+ * first slot and every 8th after, as WSJT-X's Fox calls CQ at least every 5 min, and whenever
+ * it has nobody to work.
  *
  * Hounds call in odd slots between 1000 and 2850 Hz and send their R-report at the frequency
  * the Fox called them on. The operator is answered after 2 to 4 calls at 1000 Hz or above.
@@ -31,6 +32,8 @@ const HOUND_MIN_HZ = 1000;
 const HOUND_MAX_HZ = 2850;
 /** Reports a Hound gets without an R-report, and RR73s for a repeated R-report. */
 const STRIKES = 3;
+/** The Fox calls CQ alone once in this many of its slots. */
+const CQ_EVERY = 8;
 /** Hounds calling in each odd slot, besides the operator. */
 const HOUNDS = [3, 6] as const;
 
@@ -90,6 +93,7 @@ export class FoxBand {
   private readonly operatorAfter: number;
   /** The operator's report comes in a multi-call message, or alone on a free stream. */
   private readonly operatorInMulti: boolean;
+  private foxSlots = 0;
   private lastSlot: number | null = null;
   private lastSent: { call: string; text: string; freqHz: number }[] = [];
 
@@ -140,6 +144,7 @@ export class FoxBand {
       }
     }
 
+    if (this.foxSlots++ % CQ_EVERY === 0) return [this.signal(FOX_HZ, `CQ ${this.call} ${this.grid}`)];
     const out: SimSignal[] = [];
     this.streams.forEach((w, i) => {
       const hz = FOX_HZ + i * STREAM_HZ;
@@ -148,7 +153,9 @@ export class FoxBand {
         const alone = !this.operatorInMulti && this.queue[0] === this.myCall;
         const next = alone ? null : this.next();
         this.streams[i] = next;
+        // lint-copy: off
         out.push(this.signal(hz, next ? `${w.call} RR73; ${next.call} <${this.call}> ${formatReport(next.report)}` : `${w.call} ${this.call} RR73`));
+        // lint-copy: on
         return;
       }
       if (w && w.tries >= STRIKES) this.streams[i] = null;
