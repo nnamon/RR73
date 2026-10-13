@@ -121,7 +121,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: 'Start audio' }).click();
     await expect(page.getByRole('button', { name: 'Start audio' })).toBeHidden({ timeout: 20_000 });
 
-    // What I sent: a CQ in the current slot, so it shows above the decodes.
+    // Sent: a CQ in the current slot, so it shows above the decodes.
     await page.evaluate(() => window.__rr73!.sent(Math.floor(Date.now() / 15_000) * 15_000, 'CQ 9V1NE OJ11'));
     await expect(page.getByTestId('decode-list').locator('button.dr[data-hl="sent"]')).toHaveCount(1);
 

@@ -56,11 +56,6 @@
         </span>
       </label>
     </div>
-    <p class="foot">
-      {style === 'text'
-        ? 'The colour shows as the decode’s text, darkened in light and lightened in dark so it stays readable.'
-        : 'The colour shows as a tint behind the decode, mixed so its text stays readable in light and dark.'}
-    </p>
   {/if}
 </Sheet>
 
@@ -156,10 +151,4 @@
     cursor: pointer;
   }
 
-  .foot {
-    padding: var(--rr-space-1) var(--rr-space-4) 0;
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-row);
-    color: var(--rr-label2);
-  }
 </style>

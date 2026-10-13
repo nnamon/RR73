@@ -48,7 +48,6 @@ test('a new install shows three tabs, every feature off, and Spots opens Optiona
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
-  await expect(page.getByText('Operate shows a Spots button while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
   for (const name of ['Activations', 'POTA spots', 'Cluster spots', 'LoTW users']) await expect(feature(page, name)).not.toBeChecked();
 });
 
@@ -66,7 +65,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await openScreen(page, 'Log');
   await expect(views(page)).toHaveText(['All', 'To do', 'Activations']);
   await page.goto('./#/settings/logging');
-  await expect(page.getByText('A file per park and UTC day, to upload at pota.app')).toBeVisible();
+  await expect(page.getByText('File to upload at pota.app')).toBeVisible();
 
   // It survives a reload, then turns off again.
   await page.goto('./#/settings');
@@ -78,7 +77,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await expect(views(page)).toHaveText(['All', 'To do']);
   await page.goto('./#/settings/logging');
   await expect(page.getByRole('heading', { level: 1, name: 'Logging' })).toBeVisible();
-  await expect(page.getByText('A file per park and UTC day, to upload at pota.app')).toHaveCount(0);
+  await expect(page.getByText('File to upload at pota.app')).toHaveCount(0);
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
 });

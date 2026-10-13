@@ -94,16 +94,14 @@
     {#if addressError}
       <p class="section-foot bad" role="alert">{addressError}</p>
     {:else}
-      <p class="section-foot">Create a read-write API key on the API page in Wavelog. The key stays on this phone.</p>
+      <p class="section-foot">Create a read-write API key on the API page in Wavelog.</p>
     {/if}
   </div>
 
   <div class="section">
     <button class="btn primary wide" disabled={testing} onclick={() => void runTest()}>{testing ? 'Testing connection' : 'Test connection'}</button>
     <p class="result" class:ok={test?.ok} class:bad={test && !test.ok} role="status">
-      {#if testing}
-        Checking the key, the station locations and a test QSO that Wavelog does not store.
-      {:else if test}
+      {#if !testing && test}
         {test.ok ? `Connected${test.version ? ` to Wavelog ${test.version}` : ''} at ${utcHm(test.at)} UTC. The key can read and write.` : test.message}
       {/if}
     </p>
@@ -124,7 +122,7 @@
           </label>
         {/each}
       </div>
-      <p class="section-foot">For QSOs outside an activation, and the default for new activations. Wavelog refuses a QSO whose callsign on air differs from its station location’s callsign, so each activation can choose its own.</p>
+      <p class="section-foot">The callsign on air must match the station location’s callsign.</p>
     </div>
   {/if}
 
@@ -133,7 +131,6 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Use Wavelog</span>
-          <span class="row-sub">Off: RR73 sends nothing to Wavelog. QSOs not sent wait on this phone. QSOs already in Wavelog stay there.</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={w.enabled} onchange={(e) => void setWavelog({ enabled: e.currentTarget.checked })} />
       </label>
@@ -148,7 +145,7 @@
 </section>
 
 <Sheet bind:open={removing} title="Remove Wavelog?">
-  <p class="confirm-text">RR73 deletes the address and API key from this phone. QSOs stay in the log with their delivery history.</p>
+  <p class="confirm-text">Deletes the address and API key. QSOs stay in the log.</p>
   <button class="btn tx full" onclick={() => void remove()}>Remove Wavelog</button>
   <button class="btn full keep" onclick={() => (removing = false)}>Keep Wavelog</button>
 </Sheet>

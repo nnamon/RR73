@@ -18,6 +18,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Halt is a red outline in every state.
 - The buttons at the bottom of Operate are 36 pt high, inside 44 pt targets.
 
+## 0.9.1 · 2026-10-13
+
+- Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.
+- Decode colours has presets with Undo: WSJT-X, with every category on, and Quiet, which colours only My call, Sent, CQ and Ending a QSO. The WSJT-X preset replaces Restore WSJT-X colours. What I sent is now Sent.
+
 ## 0.9.0 · 2026-10-13
 
 - Settings › Practice band runs a simulated FT8 and FT4 band through the decoder, for practising CQ, answering and logging without a radio or microphone. Turning it on starts the band at once, and Operate shows Practice next to the band.

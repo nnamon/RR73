@@ -265,7 +265,6 @@ test('turning Send automatically on sends QSOs not sent, and new ones after the 
   await expect(toggle).not.toBeChecked();
   await page.getByText('Send automatically', { exact: true }).click();
   await expect(toggle).toBeChecked();
-  await expect(page.getByText('Each QSO 10 s after it is logged, while RR73 is open and online')).toBeVisible();
   await expect.poll(() => posts(mock).length).toBe(1);
 
   await addQso(page, 'VK4TMZ');

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, PALETTE, defaultHighlights, highlightDecode, isBackground, isDefault, moveBackground, moveEntry, normaliseHighlights, type HighlightEntry, type HighlightId } from './highlight';
+import { CATEGORIES, PALETTE, PRESETS, defaultHighlights, highlightDecode, isBackground, isDefault, moveBackground, moveEntry, normaliseHighlights, presetHighlights, presetLabel, presetOf, type HighlightEntry, type HighlightId } from './highlight';
 import { buildLogIndex, type IndexedQso } from '../log/worked';
 
 const qso = (call: string, gridsquare: string, band: string, mode = 'FT8', submode = ''): IndexedQso => ({ call, gridsquare, band, mode, submode });
@@ -113,7 +113,7 @@ describe('highlightDecode', () => {
     expect(highlightDecode({ text: 'JA1KXM VK3/9V1NE 73' }, ME, buildLogIndex([]), AT, on('newCall'))).toEqual(none);
   });
 
-  it('matches own transmissions as What I sent, and nothing else', () => {
+  it('matches own transmissions as Sent, and nothing else', () => {
     expect(hl('JA1KXM 9V1NE R-14', defaultHighlights(), { sent: true })).toBe('sent');
     expect(hl('CQ 9V1NE OJ11', order('cq', 'myCall', 'newCall', 'sent'), { sent: true })).toBe('sent');
     expect(hl('CQ 9V1NE OJ11', on('cq', 'myCall', 'newCall'), { sent: true })).toBeNull();
@@ -194,5 +194,45 @@ describe('buildLogIndex', () => {
     expect([...LOG.grids].sort()).toEqual(['OJ02', 'PK04', 'QM09', 'RF73']);
     expect([...(LOG.callsByBandMode.get('20m FT4') ?? [])]).toEqual(['4I1LCT']);
     expect([...(LOG.gridsByBand.get('40m') ?? [])]).toEqual(['QM09']);
+  });
+});
+
+describe('presets', () => {
+  it('WSJT-X turns every category on, in the WSJT-X order and colours', () => {
+    expect(presetHighlights('wsjtx')).toEqual(defaultHighlights());
+  });
+
+  it('Quiet keeps My call, Sent, CQ and Ending a QSO on, in the WSJT-X order and colours', () => {
+    const q = presetHighlights('quiet');
+    expect(q.filter((e) => e.on).map((e) => e.id)).toEqual(['myCall', 'ending', 'cq', 'sent']);
+    expect(q.filter((e) => !e.on).map((e) => e.id)).toEqual(['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked']);
+    expect(q.map(({ id, colour }) => ({ id, colour }))).toEqual(defaultHighlights().map(({ id, colour }) => ({ id, colour })));
+  });
+
+  it('names the preset the settings match, and Custom for anything else', () => {
+    expect(presetOf(defaultHighlights())).toBe('wsjtx');
+    expect(presetOf(presetHighlights('quiet'))).toBe('quiet');
+    // One switch, one colour or one move away from a preset is Custom.
+    expect(presetOf(presetHighlights('quiet').map((e) => (e.id === 'newCall' ? { ...e, on: true } : e)))).toBe('custom');
+    expect(presetOf(defaultHighlights().map((e) => (e.id === 'worked' ? { ...e, on: false } : e)))).toBe('custom');
+    expect(presetOf(defaultHighlights().map((e) => (e.id === 'cq' ? { ...e, colour: '#FF00FF' } : e)))).toBe('custom');
+    expect(presetOf(moveBackground(defaultHighlights(), 6, 5))).toBe('custom');
+    expect(presetOf(moveBackground(presetHighlights('quiet'), 6, 5))).toBe('custom');
+    expect(presetOf([])).toBe('custom');
+    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['WSJT-X', 'Quiet']);
+    expect(presetLabel('custom')).toBe('Custom');
+  });
+
+  it('under Quiet, a CQ from a new grid or a new call takes the CQ colour, and worked stations keep their text', () => {
+    const q = presetHighlights('quiet');
+    expect(hl('CQ A41ZZ LL93')).toBe('newGrid');
+    expect(hl('CQ A41ZZ LL93', q)).toBe('cq');
+    expect(hl('CQ 9M2TRX OJ02', q)).toBe('cq');
+    expect(ink('CQ 9M2TRX OJ02')).toBe('worked');
+    expect(ink('CQ 9M2TRX OJ02', q)).toBeNull();
+    expect(hl('JA8HCE VK2AXN RR73', q)).toBe('ending');
+    expect(hl('9V1NE JA1KXM PM95', q)).toBe('myCall');
+    expect(hl('JA1KXM 9V1NE R-14', q, { sent: true })).toBe('sent');
+    expect(hl('JA1KXM VK2AXN R-14', q)).toBeNull();
   });
 });

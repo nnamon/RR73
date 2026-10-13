@@ -29,7 +29,7 @@
           <span class="ic" aria-hidden="true"><Icon name="mountain" size={20} /></span>
           <span class="row-main">
             <span class="row-title">Start activation</span>
-            <span class="row-sub">An activation takes POTA, SOTA, WWFF and IOTA references. QSOs you log while it runs count towards it.</span>
+            <span class="row-sub">POTA, SOTA, WWFF and IOTA</span>
           </span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </button>

@@ -33,7 +33,7 @@ test('Log and Settings on a new install, and an old Activate link opens Optional
   await page.goto('./#/activate');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.getByText('Operate shows a Spots button while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
   await page.getByRole('link', { name: 'Operate' }).click();
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link')).toHaveCount(2);
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toHaveCount(0);
@@ -150,7 +150,6 @@ test('Settings shows the version, and it opens the version history', async ({ pa
   await expect(row).toBeVisible();
   await row.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Version history' })).toBeVisible();
-  await expect(page.getByText(`You are using version ${VERSION}`)).toBeVisible();
   const section = page.locator(`[id="v${VERSION}"]`);
   await expect(section).toContainText(VERSION);
   await expect(section).toContainText('This version');
@@ -190,7 +189,7 @@ test('Clear cached copy waits for a connection', async ({ page, context }) => {
   await page.goto('./#/settings');
   await context.setOffline(true);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeDisabled();
-  await expect(page.getByText('Needs a connection: the app loads fresh from the network.')).toBeVisible();
+  await expect(page.getByText('Needs a connection', { exact: true })).toBeVisible();
   await context.setOffline(false);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
 });
