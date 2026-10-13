@@ -36,7 +36,8 @@
   const activations = $derived(
     log.activations.filter((a) => !query.trim() || a.refs.some((r) => r.ref.includes(query.trim().toUpperCase())) || log.live.some((q) => q.activationId === a.id && matches(q, query))),
   );
-  const waiting = $derived(log.ledger.filter((e) => e.destinationId === 'wavelog' && e.state === 'waiting' && log.facts[0].active).length);
+  const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
+  const waiting = $derived(wavelogOn ? log.ledger.filter((e) => e.destinationId === 'wavelog' && e.state === 'waiting').length : 0);
   const wavelogStatus = $derived(log.outbox.wavelog);
 
   const views: { id: View; label: string }[] = [

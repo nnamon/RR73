@@ -99,6 +99,9 @@ describe('the log store', () => {
 
   it('queues every QSO for Wavelog once it is set up, and Test connection fills the station locations', async () => {
     await setWavelog({ url: 'https://log.example.test', apiKey: 'key-1' });
+    // No station location yet: nothing is queued for Wavelog.
+    expect(entry(log.qsos[0].id)).toBeUndefined();
+    expect(log.facts.find((f) => f.id === 'wavelog')?.active).toBe(false);
     const r = await testWavelog({ url: 'https://log.example.test', apiKey: 'key-1', stationId: null });
     expect(r.ok).toBe(true);
     expect(log.wavelog).toMatchObject({ stationId: '1', lastTest: { ok: true, rights: 'rw', version: '2.1' } });

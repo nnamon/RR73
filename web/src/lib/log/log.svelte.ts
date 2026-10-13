@@ -45,8 +45,12 @@ export const DESTINATION_NAMES: Record<DestinationId, string> = { wavelog: 'Wave
 
 const STORAGE_FAILED = 'This phone refused to store the log. QSOs stay only until RR73 closes: export them as ADIF before closing.';
 
+/**
+ * Wavelog takes QSOs once it has an address, a key and a station location, which a passing Test
+ * connection chooses. Until then QSOs get no Wavelog entry, and get one when it is ready.
+ */
 export function wavelogReady(w: WavelogConfig): boolean {
-  return w.enabled && !!w.url && !!w.apiKey;
+  return w.enabled && !!w.url && !!w.apiKey && !!w.stationId;
 }
 
 export interface LogNotice {
