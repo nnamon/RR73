@@ -20,6 +20,7 @@ import { log, logQso } from '../log/log.svelte';
 import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
+import { txLevel } from './practice.svelte';
 import { audio, audioOut, codec, markTransmitted, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
 
 export interface SentRow {
@@ -107,7 +108,7 @@ export function dispatch(e: SeqEvent) {
           slotStartMs: f.slotStartMs,
           startOffsetS: f.startOffsetS,
           f0Hz: settings.txHz,
-          level: settings.outputLevel,
+          level: txLevel(settings.outputLevel),
         });
         break;
       case 'cancelTx':
@@ -181,7 +182,7 @@ function retune() {
     slotStartMs: p.slotStartMs,
     startOffsetS: p.offsetS,
     f0Hz: settings.txHz,
-    level: settings.outputLevel,
+    level: txLevel(settings.outputLevel),
   });
 }
 

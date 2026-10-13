@@ -26,6 +26,16 @@
       {:else if n.qsoId && n.kind === 'deleted'}
         {@const id = n.qsoId}
         <button class="act" aria-label="Undo deleting the QSO with {call}" onclick={() => void restoreQso(id)}>Undo</button>
+      {:else if n.kind === 'cleared' && n.undo}
+        {@const undo = n.undo}
+        <button
+          class="act"
+          onclick={() => {
+            // Undo first: the notice and its values go with dismissNotice.
+            undo();
+            dismissNotice();
+          }}>Undo</button
+        >
       {:else if n.qsoId && n.kind === 'removed'}
         {@const id = n.qsoId}
         <button class="act" aria-label="Restore the QSO with {call}" onclick={() => void restoreQso(id)}>Restore</button>

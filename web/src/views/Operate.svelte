@@ -23,6 +23,7 @@
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
+  import { practice } from '../lib/state/practice.svelte';
   import { audio, band, recent, resumeAudio, startAudio, tx, type DecodedSlot } from '../lib/state/station.svelte';
 
   /** False while another screen is pushed over Operate: the list keeps its place for the return. */
@@ -201,6 +202,7 @@
     rmsDb={audio.rmsDb}
     {live}
     spots={spotsShown()}
+    practice={practice.on}
     onband={() => (bandOpen = true)}
   />
   <ActivationChip />

@@ -6,6 +6,7 @@
    */
   import ActivationCard from '../ui/ActivationCard.svelte';
   import Icon from '../ui/Icon.svelte';
+  import { practice } from '../lib/state/practice.svelte';
   import BackLink from '../ui/BackLink.svelte';
   import QsoRow from '../ui/QsoRow.svelte';
   import StationSheet from '../ui/StationSheet.svelte';
@@ -74,7 +75,7 @@
 </script>
 
 <section class="screen" aria-labelledby="log-title">
-  <BackLink to={href('operate')} label="Operate" title="Log" id="log-title">
+  <BackLink to={href('operate')} label="Operate" title={practice.on ? 'Practice log' : 'Log'} id="log-title">
     {#snippet trailing()}
       <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
       <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>

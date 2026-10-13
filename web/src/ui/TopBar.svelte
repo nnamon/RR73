@@ -23,6 +23,7 @@
     rmsDb,
     live,
     spots,
+    practice = false,
     onband,
   }: {
     band: string;
@@ -38,6 +39,8 @@
     live: boolean;
     /** Shows the Spots button. */
     spots: boolean;
+    /** The practice band runs in place of the radio. */
+    practice?: boolean;
     onband: () => void;
   } = $props();
 
@@ -51,6 +54,7 @@
     <Icon name="chevdown" size={12} class="chev" />
     <span class="dial">{dial}</span>
   </button>
+  {#if practice}<span class="practice">Practice</span>{/if}
   <span class="grow"></span>
   <div class="clk" role="timer" aria-label="UTC time and slot progress. {state}">
     <SlotRing {progress} {tone} />
@@ -134,6 +138,21 @@
 
   .grow {
     flex: 1;
+  }
+
+  /* A status badge: the warning tint, so practice never passes for the air. */
+  .practice {
+    flex: none;
+    height: 21px;
+    margin-left: var(--rr-space-1);
+    padding: 0 var(--rr-space-2);
+    border-radius: var(--rr-radius-pill);
+    background: var(--rr-warn-soft);
+    color: var(--rr-warn);
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-bold);
+    line-height: 21px;
+    white-space: nowrap;
   }
 
   .clk {

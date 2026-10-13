@@ -4,6 +4,12 @@ import App from './App.svelte';
 import { checkUpdated, noteLoadFailure, registerServiceWorker } from './lib/app/update.svelte';
 import { loadLog } from './lib/log/log.svelte';
 import { loadSettings } from './lib/state/settings.svelte';
+import { loadPractice, practice } from './lib/state/practice.svelte';
+import { initPractice } from './lib/practice/runtime.svelte';
+import { installNetworkGuard } from './lib/practice/guard';
+
+// While practice is on, nothing but the app's own files goes over the network.
+installNetworkGuard(() => practice.on);
 
 /** Longest wait for stored settings before the first render, ms. They take a few ms when storage answers. */
 const SETTINGS_WAIT_MS = 500;
@@ -24,9 +30,14 @@ window.addEventListener(
 // Settings load before the first render, so the theme and callsign never flash their defaults,
 // but the first render never waits on storage longer than SETTINGS_WAIT_MS: while an older copy
 // of RR73 holds the database, the app opens and says so. The log loads after the first render.
-void Promise.race([loadSettings(), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
+// With practice on, the practice log loads in place of the log.
+const practiceLoaded = loadPractice();
+void Promise.race([Promise.all([loadSettings(), practiceLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
   mount(App, { target: document.getElementById('app')! });
-  void loadLog();
+  void practiceLoaded
+    .then(() => initPractice())
+    .catch(() => undefined)
+    .finally(() => void loadLog());
 });
 
 // The Playwright screen review drives the app through these; other builds leave them out.

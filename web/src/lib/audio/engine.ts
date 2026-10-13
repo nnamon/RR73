@@ -12,16 +12,16 @@ import workletUrl from './capture.worklet.ts?worker&url';
 import { AudioClockMapper, plausibleTimestamp } from '../clock/mapping';
 import { FLOOR_DB } from './level';
 import { CAPTURE_PROCESSOR, type CaptureMessage } from './messages';
-import { RateMeter, captureConstraints, readReport, type CaptureReport } from './report';
+import { RateMeter, type CaptureReport } from './report';
 import { setAudioSession } from './session';
+import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
+
+export type { InputSource, StartError } from './input';
 
 export type AudioStatus = 'off' | 'starting' | 'running' | 'stopped' | 'failed';
 
 /** Why capture stopped. */
 export type StopReason = 'interrupted' | 'suspended' | 'input-ended' | 'input-muted' | 'hidden';
-
-/** Why capture could not start. */
-export type StartError = 'insecure' | 'unsupported' | 'denied' | 'no-device' | 'busy' | 'worklet' | 'unknown';
 
 export interface EngineState {
   status: AudioStatus;
@@ -92,8 +92,9 @@ export class CaptureEngine {
   readonly mapper = new AudioClockMapper();
   private readonly deps: EngineDeps;
   private ctx: AudioContext | null = null;
-  private stream: MediaStream | null = null;
-  private source: MediaStreamAudioSourceNode | null = null;
+  /** Where audio comes from: the microphone unless the practice band replaces it. */
+  private input: InputSource;
+  private opened: OpenedInput | null = null;
   private node: AudioWorkletNode | null = null;
   private deviceId: string | null = null;
   private lastUtcMs: number | null = null;
@@ -103,7 +104,6 @@ export class CaptureEngine {
   private readonly chunkListeners = new Set<(c: Chunk) => void>();
   private readonly stateListeners = new Set<(s: EngineState) => void>();
   private readonly reportListeners = new Set<(r: CaptureReport) => void>();
-  private trackCleanup: (() => void) | null = null;
   /** The mapper holds observations from currentTime, without output timestamps. */
   private fallbackClock = false;
   /** Output timestamps in a row that disagree with currentTime. */
@@ -111,8 +111,9 @@ export class CaptureEngine {
   /** The browser's output timestamps are wrong: the mapper uses currentTime until the next start or resume. */
   private distrustTimestamps = false;
 
-  constructor(deps: EngineDeps = browserDeps()) {
+  constructor(deps: EngineDeps = browserDeps(), input: InputSource | null = null) {
     this.deps = deps;
+    this.input = input ?? microphoneInput(deps);
     deps.doc.addEventListener('visibilitychange', () => {
       if (deps.doc.visibilityState === 'hidden') this.interrupt('hidden');
     });
@@ -166,7 +167,8 @@ export class CaptureEngine {
   }
 
   private async begin(deviceId: string | null): Promise<EngineState> {
-    if (!this.deps.secure()) return this.fail('insecure');
+    const unavailable = this.input.unavailable();
+    if (unavailable) return this.fail(unavailable);
     this.deviceId = deviceId;
     this.closeInput();
     // Context first, inside the tap: Safari allows resume() only during a user gesture.
@@ -196,7 +198,7 @@ export class CaptureEngine {
 
   /** Resumes after an interruption. Call from a tap. Opens the input again if it ended. */
   async resume(): Promise<EngineState> {
-    const usable = this.stream?.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false;
+    const usable = this.opened?.usable() ?? false;
     if (!usable) return this.begin(this.deviceId);
     const ctx = this.ensureContext();
     this.set({ status: 'starting', reason: null, stoppedAtUtcMs: null, error: null });
@@ -213,6 +215,21 @@ export class CaptureEngine {
     }
     this.set({ status: 'running', reason: null, stoppedAtUtcMs: null, error: null });
     return this.stateValue;
+  }
+
+  /**
+   * Switches the input source: null for the microphone. Capture from the old source ends at once
+   * and the status goes to off; start() opens the new one.
+   */
+  useSource(input: InputSource | null) {
+    this.input = input ?? microphoneInput(this.deps);
+    const was = this.stateValue.status;
+    this.closeInput();
+    if (was === 'running' || was === 'starting' || was === 'stopped') {
+      this.mapper.reset();
+      this.rate.reset();
+      this.set({ status: 'off', reason: null, stoppedAtUtcMs: null, error: null });
+    }
   }
 
   /** Switches to another input. Call from a tap. */
@@ -233,8 +250,7 @@ export class CaptureEngine {
   }
 
   private async openInput(ctx: AudioContext) {
-    const stream = await this.deps.getUserMedia(captureConstraints(this.deviceId));
-    this.stream = stream;
+    this.opened = await this.input.open(ctx, this.deviceId, { ended: () => this.interrupt('input-ended'), muted: () => this.interrupt('input-muted') });
     let node: AudioWorkletNode;
     try {
       node = await this.deps.createNode(ctx);
@@ -243,32 +259,17 @@ export class CaptureEngine {
     }
     this.node = node;
     node.port.onmessage = (e: MessageEvent<CaptureMessage>) => this.onMessage(e.data);
-    this.source = ctx.createMediaStreamSource(stream);
-    this.source.connect(node);
-    const track = stream.getAudioTracks()[0];
-    if (!track) throw new DOMException('No audio track.', 'NotFoundError');
-    const ended = () => this.interrupt('input-ended');
-    const muted = () => this.interrupt('input-muted');
-    track.addEventListener('ended', ended);
-    track.addEventListener('mute', muted);
-    this.trackCleanup = () => {
-      track.removeEventListener('ended', ended);
-      track.removeEventListener('mute', muted);
-    };
-    this.report = readReport(track, ctx.sampleRate, this.deps.setSession());
+    this.opened.node.connect(node);
+    this.report = this.opened.report;
     this.emitReport();
   }
 
   private closeInput() {
-    this.trackCleanup?.();
-    this.trackCleanup = null;
-    this.source?.disconnect();
+    this.opened?.close();
+    this.opened = null;
     this.node?.port.close();
     this.node?.disconnect();
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.source = null;
     this.node = null;
-    this.stream = null;
   }
 
   private onContextState() {

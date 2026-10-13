@@ -7,6 +7,7 @@
   import Log from './views/Log.svelte';
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
+  import PracticeSettings from './views/PracticeSettings.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
   import Settings from './views/Settings.svelte';
   import Spots from './views/Spots.svelte';
@@ -80,6 +81,8 @@
           <WavelogSettings />
         {:else if sub === 'logging'}
           <Logging />
+        {:else if sub === 'practice'}
+          <PracticeSettings />
         {:else if sub === 'versions'}
           <VersionHistory focus={route.path[2] ?? null} />
         {:else}

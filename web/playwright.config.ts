@@ -75,5 +75,8 @@ export default defineConfig({
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
     { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
+    // The practice band: synthesised in the page, decoded in real time, no microphone. It loads
+    // the machine as the transmit tests do, so it runs after them, with 2 retries.
+    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['tx-cq', 'webkit-tx', 'transmit'], use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
   ],
 });

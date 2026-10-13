@@ -10,6 +10,7 @@
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
   import { log } from '../lib/log/log.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
+  import { practice } from '../lib/state/practice.svelte';
 
   /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
   let { section = null }: { section?: string | null } = $props();
@@ -217,6 +218,17 @@
       </a>
     </div>
     {#if features.activations}<p class="section-foot">Wavelog and the POTA, SOTA and WWFF files.</p>{/if}
+  </div>
+
+  <div class="section">
+    <h2 class="section-head">Practice</h2>
+    <div class="group">
+      <a class="row link" href={href('settings', 'practice')}>
+        <span class="row-main"><span class="row-title">Practice band</span></span>
+        <span class="row-value">{practice.on ? 'On' : 'Off'}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
   </div>
 
   <div class="section">

@@ -7,7 +7,7 @@
  * or closed, and on Halt.
  */
 
-import { CaptureEngine, type Chunk, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
+import { CaptureEngine, type Chunk, type InputSource, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
 import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } from '../audio/unlock';
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
@@ -24,6 +24,7 @@ import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
 import { TransmittedSlots } from '../slots/transmitted';
 import { settings } from './settings.svelte';
+import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
 
 export interface SlotSummary {
@@ -102,6 +103,8 @@ export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode =
 }
 
 let engine: CaptureEngine | null = null;
+/** The practice band while it is on; null for the microphone. */
+let inputSource: InputSource | null = null;
 const output = new TransmitOutput();
 let wake: WakeLockKeeper | null = null;
 let assembler: SlotAssembler | null = null;
@@ -129,7 +132,7 @@ let peakHold: { db: number; at: number } = { db: FLOOR_DB, at: 0 };
 
 function getEngine(): CaptureEngine {
   if (engine) return engine;
-  engine = new CaptureEngine();
+  engine = new CaptureEngine(undefined, inputSource);
   wake = new WakeLockKeeper();
   wake.onChange = (s) => (audio.wake = s);
   engine.onState((s) => {
@@ -248,7 +251,7 @@ let startToneUri: { level: number; uri: string } | null = null;
  * Returns when the tone starts, as performance.now() ms, or null when no tone plays.
  */
 function playStartClip(): number | null {
-  if (!settings.startTone) {
+  if (!settings.startTone || txLevel(1) === 0) {
     playClip(silentClipUri());
     return null;
   }
@@ -274,8 +277,18 @@ export function startAudio() {
   const toneAt = playStartClip();
   decoder.load();
   const started = getEngine().start(settings.inputDeviceId);
-  if (toneAt !== null) checkKeyingAt(toneAt);
+  // The practice band has no radio to key.
+  if (toneAt !== null && !practice.on) checkKeyingAt(toneAt);
   return started;
+}
+
+/**
+ * Replaces the microphone with another input (the practice band), or null to go back to it.
+ * Capture from the old input stops at once; startAudio() opens the new one.
+ */
+export function setInputSource(src: InputSource | null) {
+  inputSource = src;
+  engine?.useSource(src);
 }
 
 /** Resumes audio after an interruption. Call from a tap. */
@@ -322,7 +335,7 @@ export function startTune() {
   const ctx = e.ensureContext();
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
-  const handle = output.tune(ctx, { ...TUNE, hz: settings.txHz, level: settings.outputLevel });
+  const handle = output.tune(ctx, { ...TUNE, hz: settings.txHz, level: txLevel(settings.outputLevel) });
   tx.tuning = true;
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);

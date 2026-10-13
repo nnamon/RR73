@@ -17,7 +17,7 @@ import { fileParts, markHandled, markSubmitted, reconcile, requeue, retry, UNDO_
 import { migrateLogging } from './migrations';
 import { Outbox, systemClock, type DestinationStatus, type SendingDestination } from './outbox';
 import { adifChanged, createQso, displayMode, newId, stampActivation } from './qso';
-import { loadSnapshot, saveChanges, saveLoggingSettings, saveMigrations, type Changes } from './store';
+import { loadSnapshot, saveChanges, saveLoggingSettings, saveMigrations, setLogStore, type Changes } from './store';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
 import { testConnection, type FetchLike, type TestResult } from './wavelog';
@@ -62,9 +62,11 @@ export function wavelogReady(w: WavelogConfig): boolean {
 export interface LogNotice {
   /** Changes with every notice, so a new one restarts its timer. */
   seq: number;
-  kind: 'logged' | 'deleted' | 'removed' | 'info';
+  kind: 'logged' | 'deleted' | 'removed' | 'info' | 'cleared';
   qsoId: string | null;
   text: string;
+  /** Undo for a 'cleared' notice. */
+  undo?: () => void;
 }
 
 class LogState {
@@ -126,11 +128,12 @@ export function destinationFacts(w: WavelogConfig, files: Record<FileDestination
 
 const byId = new Map<string, Qso>();
 const now = () => systemClock.now();
-let fetchFn: FetchLike = (input, init) => fetch(input, init);
+const pageFetch: FetchLike = (input, init) => fetch(input, init);
+let fetchFn: FetchLike = pageFetch;
 
-/** Tests replace fetch to talk to a fake Wavelog. */
-export function setFetch(f: FetchLike) {
-  fetchFn = f;
+/** Tests replace fetch to talk to a fake Wavelog, and the practice log to talk to its stand-in. Null restores the page's fetch. */
+export function setFetch(f: FetchLike | null) {
+  fetchFn = f ?? pageFetch;
 }
 
 function activationOf(id: string | null): Activation | null {
@@ -267,6 +270,41 @@ function watchNetwork() {
   });
 }
 
+let practiceLog = false;
+
+/**
+ * Switches between the log and the practice log (a database of its own, store.ts). The outbox
+ * stops, the copy in memory is dropped and the chosen log loads. Nothing is written to the
+ * log being left.
+ */
+export async function useLog(practice: boolean, again = false): Promise<void> {
+  if (!again && practice === practiceLog && loading) return loading;
+  practiceLog = practice;
+  outbox.stop();
+  await loading?.catch(() => undefined);
+  setLogStore(practice);
+  byId.clear();
+  log.ready = false;
+  log.qsos = [];
+  log.ledger = [];
+  log.activations = [];
+  log.wavelog = DEFAULT_WAVELOG;
+  log.files = DEFAULT_FILES;
+  log.settings = DEFAULT_LOGGING;
+  log.outbox = {};
+  log.sync = { running: false, total: 0, done: 0, summary: null };
+  log.storageError = null;
+  log.editor = { open: false, qsoId: null };
+  dismissNotice();
+  loading = null;
+  await loadLog();
+}
+
+/** Loads the current log again from storage, after Clear practice log or its Undo. */
+export function reloadLog(): Promise<void> {
+  return useLog(practiceLog, true);
+}
+
 let askedToPersist = false;
 /** Asks the browser not to evict the log under storage pressure. */
 function persistStorage() {
@@ -352,6 +390,11 @@ function show(n: Omit<LogNotice, 'seq'>, ms = UNDO_MS) {
   log.notice = { ...n, seq: ++seq };
   if (noticeTimer) clearTimeout(noticeTimer);
   noticeTimer = setTimeout(() => (log.notice = null), ms);
+}
+
+/** A notice from outside the log, such as Clear practice log with its Undo. */
+export function notify(n: Omit<LogNotice, 'seq'>) {
+  show(n);
 }
 
 /** "Logged ZL1TQK 20m FT8 −08 / −11" with Edit and Undo, for UNDO_MS. */

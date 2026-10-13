@@ -16,6 +16,8 @@ export interface Screen {
   seed?: SeedName;
   /** Optional features to turn on first; all are off on a new install. */
   features?: Partial<Features>;
+  /** Practice band on (Settings › Practice band), stored before the screen opens. */
+  practice?: boolean;
 }
 
 const ACTIVATIONS = { activations: true };
@@ -38,19 +40,24 @@ export const SCREENS: readonly Screen[] = [
   { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running', features: ACTIVATIONS },
   { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log', features: ACTIVATIONS },
   { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
+  { name: 'practice', path: '#/settings/practice', heading: 'Practice band' },
+  { name: 'practice-on', path: '#/settings/practice', heading: 'Practice band', practice: true },
+  { name: 'operate-practice', path: '#/operate', heading: 'Operate', practice: true },
+  { name: 'log-practice', path: '#/log', heading: 'Practice log', practice: true },
 ];
 
 /**
  * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>) {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
-  if (withSeed || features) {
+  if (withSeed || features || practice) {
     await page.goto('./');
     const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
-    await seed(page, features ? withFeatures(data, features) : data);
+    const all = features ? withFeatures(data, features) : data;
+    await seed(page, practice ? { ...all, kv: [...all.kv, { key: 'practice', value: { on: true } }] } : all);
   }
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });

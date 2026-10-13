@@ -102,13 +102,14 @@ SlotAudio (12 kHz f32, start time, mode)
 
 | Module | Responsibility |
 | --- | --- |
-| `lib/audio` | AudioContext lifecycle, iOS audio session, microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
+| `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
 | `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
+| `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |

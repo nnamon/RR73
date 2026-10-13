@@ -17,6 +17,9 @@
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { callCq, endQso, qso, runRate, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
+  import { practice } from '../lib/state/practice.svelte';
+  import { chooseScenario } from '../lib/practice/runtime.svelte';
+  import { SCENARIOS } from '../lib/practice/scenarios';
 
   let { onmessages, onfindclear }: { onmessages: () => void; onfindclear: () => void } = $props();
 
@@ -156,9 +159,16 @@
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ cqParity: settings.cqParity === 'even' ? 'odd' : 'even' })}>
         Transmit in <span class="v">{settings.cqParity === 'even' ? '1st' : '2nd'}</span>
       </button>
-      <button class="mi" role="menuitemcheckbox" aria-checked={settings.workDupes} onclick={() => void updateSettings({ workDupes: !settings.workDupes })}>
+      <button class="mi" class:gap={practice.on} role="menuitemcheckbox" aria-checked={settings.workDupes} onclick={() => void updateSettings({ workDupes: !settings.workDupes })}>
         Work dupes <span class="v">{settings.workDupes ? 'On' : 'Off'}</span>
       </button>
+      {#if practice.on}
+        {#each SCENARIOS as s (s.id)}
+          <button class="mi" role="menuitemradio" aria-checked={practice.scenario === s.id} onclick={act(() => chooseScenario(s.id))}>
+            Practice: {s.name}{#if practice.scenario === s.id}<Icon name="check" size={18} class="chk" />{/if}
+          </button>
+        {/each}
+      {/if}
     </div>
   {/if}
 </section>
@@ -362,7 +372,11 @@
     bottom: calc(100% + var(--rr-space-1));
     z-index: 5;
     width: min(268px, calc(100vw - 2 * var(--rr-space-3)));
-    overflow: hidden;
+
+    /* With the practice scenarios the menu is taller than a small screen: it scrolls. */
+    max-height: calc(100dvh - var(--rr-safe-top) - 180px);
+    overflow: hidden auto;
+    overscroll-behavior: contain;
     border-radius: var(--rr-radius-sheet);
     background: var(--rr-sheet-card);
     box-shadow: 0 12px 40px var(--rr-shadow-thumb);

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CaptureEngine, type EngineDeps } from './engine';
+import { CaptureEngine, type EngineDeps, type InputSource } from './engine';
+import { practiceReport } from '../practice/source';
 import type { CaptureMessage } from './messages';
 import recorded from '../../../../fixtures/clock/output-timestamps.json';
 
@@ -295,5 +296,46 @@ describe('CaptureEngine', () => {
     ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
     nodes[0].post(chunk(0, 1.5));
     expect(got[1]).toBe(T0 + 40 - 500);
+  });
+});
+
+describe('input sources', () => {
+  function fakeSource() {
+    const node = { connect: vi.fn(), disconnect: vi.fn() };
+    const close = vi.fn();
+    const source: InputSource = {
+      unavailable: () => null,
+      open: vi.fn(async () => ({ node: node as unknown as AudioNode, report: practiceReport(48000, null), usable: () => true, close })),
+    };
+    return { source, node, close };
+  }
+
+  it('captures from another source without asking for the microphone', async () => {
+    const { engine, deps, nodes } = setup({ secure: () => false });
+    const f = fakeSource();
+    engine.useSource(f.source);
+    expect((await engine.start()).status).toBe('running');
+    expect(deps.getUserMedia).not.toHaveBeenCalled();
+    expect(f.node.connect).toHaveBeenCalledWith(nodes[0]);
+    expect(engine.captureReport?.inputLabel).toBe('Practice band');
+  });
+
+  it('closes the old input on a switch and stays off until the next start', async () => {
+    const { engine, streams } = setup();
+    await engine.start();
+    const f = fakeSource();
+    const states: string[] = [];
+    engine.onState((s) => states.push(s.status));
+    engine.useSource(f.source);
+    expect(engine.state.status).toBe('off');
+    expect(streams[0].track.stopped).toBe(true);
+    await engine.start();
+    expect(engine.state.status).toBe('running');
+    engine.useSource(null);
+    expect(f.close).toHaveBeenCalledTimes(1);
+    expect(states).toEqual(['off', 'starting', 'running', 'off']);
+    // The microphone again: insecure pages cannot open it.
+    expect((await engine.start()).status).toBe('running');
+    expect(streams).toHaveLength(2);
   });
 });

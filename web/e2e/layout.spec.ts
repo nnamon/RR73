@@ -32,7 +32,7 @@ function barInks(page: Page) {
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, async ({ page }, info) => {
-      await open(page, s.path, theme, s.seed, s.features);
+      await open(page, s.path, theme, s.seed, s.features, s.practice);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${s.name}.png` });
@@ -41,7 +41,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, async ({ page }) => {
     const titles: { path: string; top: number; fontSize: string }[] = [];
-    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/versions']) {
+    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/versions', '#/settings/practice']) {
       await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
       const pane = page.locator('main .pane:not([hidden])');
       const back = (await pane.locator('.bar').first().boundingBox())!;
@@ -108,30 +108,62 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
-  test(`the top bar fits its buttons with Spots shown in ${theme}`, async ({ page }) => {
-    await open(page, '#/operate', theme, undefined, { activations: true });
-    const height = page.viewportSize()!.height;
-    // iOS fonts run wider than the test browser's, so the bar is checked down to 350 pt as well.
-    for (const vw of [393, 375, 360, 350]) {
-      await page.setViewportSize({ width: vw, height });
-      const band = (await page.getByRole('button', { name: /^Change band/ }).boundingBox())!;
-      const clock = (await page.getByRole('timer').boundingBox())!;
-      const screens = page.getByRole('navigation', { name: 'Screens' }).getByRole('link');
-      await expect(screens).toHaveCount(3);
-      const icons = await Promise.all([0, 1, 2].map(async (i) => (await screens.nth(i).boundingBox())!));
-      const at = `at ${vw} pt`;
-      // Left to right with no overlaps, all inside the screen.
-      expect(band.x + band.width, at).toBeLessThanOrEqual(clock.x + 0.5);
-      expect(clock.x + clock.width, at).toBeLessThanOrEqual(icons[0].x + 0.5);
-      for (let i = 1; i < 3; i++) expect(icons[i - 1].x + icons[i - 1].width, at).toBeLessThanOrEqual(icons[i].x + 0.5);
-      expect(icons[2].x + icons[2].width, at).toBeLessThanOrEqual(vw + 0.5);
-      for (const b of icons) expect(b.width, at).toBeGreaterThanOrEqual(43.5);
-      // The dial shows whole inside the band button or not at all (wrapped below its one line).
-      const dial = (await page.locator('header.top .dial').boundingBox())!;
-      const inside = dial.x >= band.x - 0.5 && dial.x + dial.width <= band.x + band.width + 0.5 && dial.y + dial.height <= band.y + band.height + 0.5;
-      const away = dial.y >= band.y + band.height - 0.5;
-      expect(inside || away, `${at}: ${JSON.stringify({ band, dial })}`).toBe(true);
-    }
+  for (const practice of [false, true]) {
+    test(`the top bar fits its buttons with Spots shown${practice ? ' and practice on' : ''} in ${theme}`, async ({ page }) => {
+      await open(page, '#/operate', theme, undefined, { activations: true }, practice);
+      const height = page.viewportSize()!.height;
+      // iOS fonts run wider than the test browser's, so the bar is checked down to 350 pt as well.
+      for (const vw of [393, 375, 360, 350]) {
+        await page.setViewportSize({ width: vw, height });
+        const band = (await page.getByRole('button', { name: /^Change band/ }).boundingBox())!;
+        const clock = (await page.getByRole('timer').boundingBox())!;
+        const screens = page.getByRole('navigation', { name: 'Screens' }).getByRole('link');
+        await expect(screens).toHaveCount(3);
+        const icons = await Promise.all([0, 1, 2].map(async (i) => (await screens.nth(i).boundingBox())!));
+        const at = `at ${vw} pt`;
+        // Left to right with no overlaps, all inside the screen.
+        expect(band.x + band.width, at).toBeLessThanOrEqual(clock.x + 0.5);
+        expect(clock.x + clock.width, at).toBeLessThanOrEqual(icons[0].x + 0.5);
+        for (let i = 1; i < 3; i++) expect(icons[i - 1].x + icons[i - 1].width, at).toBeLessThanOrEqual(icons[i].x + 0.5);
+        expect(icons[2].x + icons[2].width, at).toBeLessThanOrEqual(vw + 0.5);
+        for (const b of icons) expect(b.width, at).toBeGreaterThanOrEqual(43.5);
+        // The dial shows whole inside the band button or not at all (wrapped below its one line).
+        const dial = (await page.locator('header.top .dial').boundingBox())!;
+        const inside = dial.x >= band.x - 0.5 && dial.x + dial.width <= band.x + band.width + 0.5 && dial.y + dial.height <= band.y + band.height + 0.5;
+        const away = dial.y >= band.y + band.height - 0.5;
+        expect(inside || away, `${at}: ${JSON.stringify({ band, dial })}`).toBe(true);
+        if (!practice) continue;
+        // The Practice badge sits whole between the band button and the clock.
+        const tag = (await page.locator('header.top .practice').boundingBox())!;
+        expect(tag.x, at).toBeGreaterThanOrEqual(band.x + band.width - 0.5);
+        expect(tag.x + tag.width, at).toBeLessThanOrEqual(clock.x + 0.5);
+        await expect(page.locator('header.top .practice')).toHaveText('Practice');
+      }
+    });
+  }
+
+  test(`practice scenarios in the ••• menu in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/operate', theme, undefined, undefined, true);
+    const bar = page.getByRole('region', { name: 'Transmit' });
+    await bar.getByRole('button', { name: 'More' }).click();
+    const menu = page.getByRole('menu', { name: 'More' });
+    const items = menu.getByRole('menuitemradio');
+    await expect(items).toHaveCount(9);
+    await expect(items.first()).toHaveText('Practice: Random band');
+    await expect(items.first()).toHaveAttribute('aria-checked', 'true');
+    expect(await smallTargets(page, '[role=menu]')).toEqual([]);
+    // Taller than a small screen: the menu stays above the bar and scrolls to its last item.
+    const halt = (await bar.getByRole('button', { name: 'Halt' }).boundingBox())!;
+    const m = (await menu.boundingBox())!;
+    expect(m.y).toBeGreaterThanOrEqual(0);
+    expect(m.y + m.height).toBeLessThanOrEqual(halt.y);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu.png` });
+    await items.last().scrollIntoViewIfNeeded();
+    const last = (await items.last().boundingBox())!;
+    expect(last.y + last.height).toBeLessThanOrEqual(m.y + m.height + 0.5);
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu-end.png` });
   });
 
   test(`band sheet in ${theme}`, async ({ page }, info) => {

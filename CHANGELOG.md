@@ -2,6 +2,15 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Practice band runs a simulated FT8 and FT4 band through the decoder, for practising CQ, answering and logging without a radio or microphone. Turning it on starts the band at once, and Operate shows Practice next to the band.
+- The practice band carries 8 to 15 stations a slot from −24 dB to +5 dB, or 25 to 40 with Crowded band on. Stations call CQ, CQ DX and CQ NA, work each other through every step, and some fade.
+- ••• in Operate chooses a practice scenario: Random band, One caller, Pile-up, Caller goes quiet, Caller misses RR73, Station answers, Station works another, Station never answers, or CQ DX and CQ NA.
+- Practice QSOs go to a practice log of their own. The log returns unchanged when practice is off. Clear practice log empties it in one tap, with Undo.
+- In practice, Send to Wavelog goes to a stand-in on the phone that delivers most QSOs and refuses some as Wavelog does. RR73 sends nothing over the network while practice is on.
+- Play Tx audio in Settings › Practice band turns transmissions and Tune silent while practising.
+
 ## 0.7.2 · 2026-10-13
 
 - The wording on Operate, Messages, Save a slot, Spots, Settings, Radio and audio, Logging, Wavelog, Version history and the update notice now follows the style guide, as do the notes for 0.6.0 to 0.7.1. Settings › Operating is now called FT8 and FT4, as its settings apply only to those modes.
