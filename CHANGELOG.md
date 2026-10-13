@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.9.1 · 2026-10-13
 
 - Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.
 - Decode colours has presets with Undo: WSJT-X, with every category on, and Quiet, which colours only My call, Sent, CQ and Ending a QSO. The WSJT-X preset replaces Restore WSJT-X colours. What I sent is now Sent.
