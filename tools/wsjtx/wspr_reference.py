@@ -142,11 +142,16 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     jobs = []
     errors: list[str] = []
+    skipped = 0
     for wav in wavs:
         try:
             sidecar = load_wspr_sidecar(sidecar_path(wav))
         except SlotError as exc:
-            errors.append(str(exc))
+            # FT8 and FT4 slots in the same tree are left to reference.py.
+            if "is not WSPR" in str(exc):
+                skipped += 1
+            else:
+                errors.append(str(exc))
             continue
         jobs.append((wav, int(sidecar.get("dial_hz") or DEFAULT_DIAL_HZ)))
     results: dict[Path, list[Decode]] = {}
@@ -173,7 +178,11 @@ def main(argv: list[str] | None = None) -> int:
     for error in sorted(errors):
         print(f"wspr_reference.py: {error}", file=sys.stderr)
     total = sum(len(d) for d in results.values())
-    print(f"wspr_reference.py: {len(results)} slots decoded, {total} decodes, {len(errors)} failed", file=sys.stderr)
+    print(
+        f"wspr_reference.py: {len(results)} slots decoded, {total} decodes, {skipped} other modes skipped, "
+        f"{len(errors)} failed",
+        file=sys.stderr,
+    )
     return 1 if errors else 0
 
 

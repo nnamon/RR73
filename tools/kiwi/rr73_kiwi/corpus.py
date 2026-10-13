@@ -10,6 +10,7 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
+from rr73_kiwi.bands import slot_seconds
 from rr73_kiwi.config import Receiver
 from rr73_kiwi.slots import OUT_RATE_HZ, Slot
 
@@ -30,11 +31,11 @@ def slot_dir(corpus_root: Path, receiver_id: str, start_unix: int) -> Path:
     return corpus_root / "kiwi" / receiver_id / utc(start_unix).strftime("%Y%m%d")
 
 
-def sidecar(receiver: Receiver, dial_hz: int, slot: Slot) -> dict:
+def sidecar(receiver: Receiver, dial_hz: int, slot: Slot, mode: str = "FT8") -> dict:
     """Sidecar contents for a recorded slot. reference stays empty until reference.py runs."""
     return {
         "format": SIDECAR_FORMAT,
-        "mode": "FT8",
+        "mode": mode,
         "start_utc": utc(slot.start_unix).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "sample_rate": OUT_RATE_HZ,
         "dial_hz": dial_hz,
@@ -65,10 +66,11 @@ def _atomic_write(path: Path, write: Callable[[Path], None]) -> None:
         raise
 
 
-def write_slot(corpus_root: Path, receiver: Receiver, dial_hz: int, slot: Slot) -> Path | None:
+def write_slot(corpus_root: Path, receiver: Receiver, dial_hz: int, slot: Slot, mode: str = "FT8") -> Path | None:
     """Write the WAV, then the sidecar. Returns the WAV path, or None when the slot already exists."""
-    if len(slot.samples) != 15 * OUT_RATE_HZ:
-        raise ValueError(f"slot has {len(slot.samples)} samples; FT8 slots have {15 * OUT_RATE_HZ}")
+    want = slot_seconds(mode) * OUT_RATE_HZ
+    if len(slot.samples) != want:
+        raise ValueError(f"slot has {len(slot.samples)} samples; {mode} slots have {want}")
     directory = slot_dir(corpus_root, receiver.id, slot.start_unix)
     directory.mkdir(parents=True, exist_ok=True)
     stem = slot_stem(slot.start_unix)
@@ -84,7 +86,7 @@ def write_slot(corpus_root: Path, receiver: Receiver, dial_hz: int, slot: Slot) 
             out.writeframes(slot.samples.astype("<i2").tobytes())
 
     def write_json(path: Path) -> None:
-        path.write_text(json.dumps(sidecar(receiver, dial_hz, slot), indent=2) + "\n", encoding="utf-8")
+        path.write_text(json.dumps(sidecar(receiver, dial_hz, slot, mode), indent=2) + "\n", encoding="utf-8")
 
     _atomic_write(wav_path, write_wav)
     _atomic_write(json_path, write_json)
