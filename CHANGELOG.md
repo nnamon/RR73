@@ -5,6 +5,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - CQ rows name the calling station's country before the numbers: "Australia". When the row is short of room, the country ends in "…" or drops out, and the message stays whole.
+- Practice band stations get callsigns of their own country. In 0.10.2 an Australian station could get a VK9 call, which belongs to Norfolk Island, and a Russian one a UA9 call, from Asiatic Russia.
 
 ## 0.10.2 · 2026-10-13
 

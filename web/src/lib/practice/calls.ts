@@ -43,6 +43,8 @@ export class Rng {
 export type Continent = 'AF' | 'AS' | 'EU' | 'NA' | 'OC' | 'SA';
 
 interface Country {
+  /** The DXCC entity, as the country file names it. */
+  entity: string;
   /** Prefixes as issued; one is drawn for each callsign. */
   prefixes: readonly string[];
   /** The prefix carries its own digit (9M2, KH6). */
@@ -52,39 +54,44 @@ interface Country {
   fields: readonly string[];
   /** Relative share of stations on the band. */
   weight: number;
+  /**
+   * Callsigns the country file gives to another DXCC entity, drawn again: VK9 is Norfolk Island
+   * and its neighbours, LU1ZA Antarctica, UA9 Asiatic Russia.
+   */
+  avoid?: RegExp;
 }
 
 const COUNTRIES: readonly Country[] = [
-  { prefixes: ['K', 'W', 'N', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AI', 'AJ', 'AK'], digit: false, continent: 'NA', fields: ['FN', 'EN', 'EM', 'DM', 'CN', 'DN', 'EL'], weight: 14 },
-  { prefixes: ['VE', 'VA'], digit: false, continent: 'NA', fields: ['FN', 'EN', 'DO', 'CN'], weight: 3 },
-  { prefixes: ['XE'], digit: false, continent: 'NA', fields: ['EK', 'DL'], weight: 1 },
-  { prefixes: ['JA', 'JH', 'JR', 'JE', 'JF', 'JG', 'JI'], digit: false, continent: 'AS', fields: ['PM', 'QM'], weight: 10 },
-  { prefixes: ['BV'], digit: false, continent: 'AS', fields: ['PL'], weight: 1 },
-  { prefixes: ['HL', 'DS'], digit: false, continent: 'AS', fields: ['PM'], weight: 2 },
-  { prefixes: ['9M2'], digit: true, continent: 'AS', fields: ['OJ', 'NJ'], weight: 1 },
-  { prefixes: ['HS'], digit: false, continent: 'AS', fields: ['OK', 'NK'], weight: 1 },
-  { prefixes: ['VU'], digit: false, continent: 'AS', fields: ['MK', 'ML'], weight: 2 },
-  { prefixes: ['DL', 'DK', 'DJ', 'DO'], digit: false, continent: 'EU', fields: ['JO', 'JN'], weight: 8 },
-  { prefixes: ['G', 'M'], digit: false, continent: 'EU', fields: ['IO'], weight: 4 },
-  { prefixes: ['F'], digit: false, continent: 'EU', fields: ['JN', 'IN'], weight: 3 },
-  { prefixes: ['I', 'IZ', 'IK'], digit: false, continent: 'EU', fields: ['JN'], weight: 3 },
-  { prefixes: ['EA'], digit: false, continent: 'EU', fields: ['IN', 'IM'], weight: 3 },
-  { prefixes: ['SP', 'SQ'], digit: false, continent: 'EU', fields: ['JO', 'KO'], weight: 3 },
-  { prefixes: ['UA', 'RA', 'R'], digit: false, continent: 'EU', fields: ['KO', 'LO'], weight: 4 },
-  { prefixes: ['OH'], digit: false, continent: 'EU', fields: ['KP'], weight: 1 },
-  { prefixes: ['SM'], digit: false, continent: 'EU', fields: ['JO', 'JP'], weight: 1 },
-  { prefixes: ['OK'], digit: false, continent: 'EU', fields: ['JN', 'JO'], weight: 2 },
-  { prefixes: ['PA', 'PD'], digit: false, continent: 'EU', fields: ['JO'], weight: 2 },
-  { prefixes: ['YO'], digit: false, continent: 'EU', fields: ['KN'], weight: 1 },
-  { prefixes: ['PY'], digit: false, continent: 'SA', fields: ['GG', 'GH'], weight: 3 },
-  { prefixes: ['LU'], digit: false, continent: 'SA', fields: ['GF', 'FF'], weight: 2 },
-  { prefixes: ['CE'], digit: false, continent: 'SA', fields: ['FF'], weight: 1 },
-  { prefixes: ['ZS'], digit: false, continent: 'AF', fields: ['KG', 'JF'], weight: 1 },
-  { prefixes: ['5H'], digit: false, continent: 'AF', fields: ['KI'], weight: 1 },
-  { prefixes: ['VK'], digit: false, continent: 'OC', fields: ['QF', 'PF', 'QG'], weight: 4 },
-  { prefixes: ['ZL'], digit: false, continent: 'OC', fields: ['RF', 'RE'], weight: 1 },
-  { prefixes: ['DU'], digit: false, continent: 'OC', fields: ['PK'], weight: 1 },
-  { prefixes: ['YB'], digit: false, continent: 'OC', fields: ['OI', 'NI'], weight: 1 },
+  { entity: 'United States', prefixes: ['K', 'W', 'N', 'AA', 'AB', 'AC', 'AD', 'AE', 'AF', 'AG', 'AI', 'AJ', 'AK'], digit: false, continent: 'NA', fields: ['FN', 'EN', 'EM', 'DM', 'CN', 'DN', 'EL'], weight: 14 },
+  { entity: 'Canada', prefixes: ['VE', 'VA'], digit: false, continent: 'NA', fields: ['FN', 'EN', 'DO', 'CN'], weight: 3 },
+  { entity: 'Mexico', prefixes: ['XE'], digit: false, continent: 'NA', fields: ['EK', 'DL'], weight: 1, avoid: /^XE4/ },
+  { entity: 'Japan', prefixes: ['JA', 'JH', 'JR', 'JE', 'JF', 'JG', 'JI'], digit: false, continent: 'AS', fields: ['PM', 'QM'], weight: 10 },
+  { entity: 'Taiwan', prefixes: ['BV'], digit: false, continent: 'AS', fields: ['PL'], weight: 1, avoid: /^BV9/ },
+  { entity: 'Republic of Korea', prefixes: ['HL', 'DS'], digit: false, continent: 'AS', fields: ['PM'], weight: 2 },
+  { entity: 'West Malaysia', prefixes: ['9M2'], digit: true, continent: 'AS', fields: ['OJ', 'NJ'], weight: 1 },
+  { entity: 'Thailand', prefixes: ['HS'], digit: false, continent: 'AS', fields: ['OK', 'NK'], weight: 1 },
+  { entity: 'India', prefixes: ['VU'], digit: false, continent: 'AS', fields: ['MK', 'ML'], weight: 2, avoid: /^VU[47]/ },
+  { entity: 'Fed. Rep. of Germany', prefixes: ['DL', 'DK', 'DJ', 'DO'], digit: false, continent: 'EU', fields: ['JO', 'JN'], weight: 8 },
+  { entity: 'England', prefixes: ['G', 'M'], digit: false, continent: 'EU', fields: ['IO'], weight: 4 },
+  { entity: 'France', prefixes: ['F'], digit: false, continent: 'EU', fields: ['JN', 'IN'], weight: 3 },
+  { entity: 'Italy', prefixes: ['I', 'IZ', 'IK'], digit: false, continent: 'EU', fields: ['JN'], weight: 3 },
+  { entity: 'Spain', prefixes: ['EA'], digit: false, continent: 'EU', fields: ['IN', 'IM'], weight: 3, avoid: /^EA[689]/ },
+  { entity: 'Poland', prefixes: ['SP', 'SQ'], digit: false, continent: 'EU', fields: ['JO', 'KO'], weight: 3 },
+  { entity: 'European Russia', prefixes: ['UA', 'RA', 'R'], digit: false, continent: 'EU', fields: ['KO', 'LO'], weight: 4, avoid: /^(UA|RA|R)[0289]/ },
+  { entity: 'Finland', prefixes: ['OH'], digit: false, continent: 'EU', fields: ['KP'], weight: 1, avoid: /^OH0/ },
+  { entity: 'Sweden', prefixes: ['SM'], digit: false, continent: 'EU', fields: ['JO', 'JP'], weight: 1 },
+  { entity: 'Czech Republic', prefixes: ['OK'], digit: false, continent: 'EU', fields: ['JN', 'JO'], weight: 2 },
+  { entity: 'Netherlands', prefixes: ['PA', 'PD'], digit: false, continent: 'EU', fields: ['JO'], weight: 2 },
+  { entity: 'Romania', prefixes: ['YO'], digit: false, continent: 'EU', fields: ['KN'], weight: 1 },
+  { entity: 'Brazil', prefixes: ['PY'], digit: false, continent: 'SA', fields: ['GG', 'GH'], weight: 3, avoid: /^PY0/ },
+  { entity: 'Argentina', prefixes: ['LU'], digit: false, continent: 'SA', fields: ['GF', 'FF'], weight: 2, avoid: /^LU\dZ/ },
+  { entity: 'Chile', prefixes: ['CE'], digit: false, continent: 'SA', fields: ['FF'], weight: 1, avoid: /^CE[09]/ },
+  { entity: 'South Africa', prefixes: ['ZS'], digit: false, continent: 'AF', fields: ['KG', 'JF'], weight: 1, avoid: /^ZS[78]/ },
+  { entity: 'Tanzania', prefixes: ['5H'], digit: false, continent: 'AF', fields: ['KI'], weight: 1 },
+  { entity: 'Australia', prefixes: ['VK'], digit: false, continent: 'OC', fields: ['QF', 'PF', 'QG'], weight: 4, avoid: /^VK[09]/ },
+  { entity: 'New Zealand', prefixes: ['ZL'], digit: false, continent: 'OC', fields: ['RF', 'RE'], weight: 1, avoid: /^ZL[5789]/ },
+  { entity: 'Philippines', prefixes: ['DU'], digit: false, continent: 'OC', fields: ['PK'], weight: 1 },
+  { entity: 'Indonesia', prefixes: ['YB'], digit: false, continent: 'OC', fields: ['OI', 'NI'], weight: 1 },
 ];
 
 /** Prefixes not issued to practice stations, for reading the operator's continent. */
@@ -112,6 +119,8 @@ export interface Callsign {
   call: string;
   grid: string;
   continent: Continent;
+  /** The DXCC entity, as the country file names it: "Australia". */
+  entity: string;
 }
 
 function weightedCountry(rng: Rng, only: (c: Continent) => boolean): Country {
@@ -138,8 +147,8 @@ export function newCallsign(rng: Rng, taken: ReadonlySet<string>, only: (c: Cont
     let suffix = '';
     for (let i = 0; i < n; i++) suffix += LETTERS[rng.int(0, 25)];
     const call = `${prefix}${digit}${suffix}`;
-    if (taken.has(call)) continue;
-    return { call, grid: `${rng.pick(c.fields)}${rng.int(0, 9)}${rng.int(0, 9)}`, continent: c.continent };
+    if (taken.has(call) || c.avoid?.test(call)) continue;
+    return { call, grid: `${rng.pick(c.fields)}${rng.int(0, 9)}${rng.int(0, 9)}`, continent: c.continent, entity: c.entity };
   }
 }
 
