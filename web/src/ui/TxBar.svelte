@@ -2,7 +2,7 @@
   /**
    * The bottom bar. While calling or in a QSO, one status line says what is on air or goes next
    * and when, with the watchdog on the right, and a step bar shows the QSO's progress. Under it,
-   * one row of controls: Tx on or off, CQ, Run, the ••• menu and Halt. Every control acts on the
+   * one row of controls: Tx on or off, CQ, Hunt, the ••• menu and Halt. Every control acts on the
    * first tap. Halt is always there and always enabled, and turns solid red while Tx is on or
    * output plays.
    */
@@ -11,11 +11,11 @@
   import { signed } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
   import { pathBetween } from '../lib/qso/grid';
-  import { notReady, type QueueOrder } from '../lib/qso/sequencer';
-  import { barText, runTally, steps, watchdogText } from '../lib/qso/view';
+  import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
+  import { barText, huntText, runTally, steps, watchdogText } from '../lib/qso/view';
   import { clock } from '../lib/state/now.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
-  import { callCq, endQso, qso, runRate, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
+  import { callCq, endQso, qso, runRate, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { chooseScenario } from '../lib/practice/runtime.svelte';
@@ -27,14 +27,18 @@
   const onAir = $derived(qso.onAir);
   const hot = $derived(st.txEnabled || !!onAir || tx.tuning);
   const notice = $derived(qso.notice && clock.ms - qso.notice.atMs < 20_000 ? qso.notice : null);
-  const blocked = $derived(st.phase !== 'idle' ? notReady(st) : null);
+  const blocked = $derived(st.phase !== 'idle' || st.hunt ? notReady(st) : null);
   const text = $derived(barText(st));
+  const hunting = $derived(huntText(st));
+  /** CQ is on until a station is called by hand or Hunt starts. */
+  const cqOn = $derived(st.phase === 'cq' && !st.hunt);
+  const running = $derived(cqOn && st.config.run);
   const stepList = $derived(steps(st));
   const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
   const aside = $derived.by(() => {
     if (tx.tuning) return `${tuneLeft} s`;
     const wd = watchdogText(st, clock.ms);
-    const tally = st.run ? runTally(runRate(clock.ms)) : null;
+    const tally = running ? runTally(runRate(clock.ms)) : null;
     return tally ? `${tally} · ${wd.replace('Watchdog ', '')}` : wd;
   });
 
@@ -61,9 +65,10 @@
   const line = $derived.by((): { pill: { text: string; tone: 'tx' | 'run' } | null; text: string; aside: string; warn: boolean } | null => {
     if (tx.tuning) return { pill: { text: 'Tune', tone: 'tx' }, text: `${settings.txHz} Hz`, aside, warn: false };
     if (onAir) return { pill: { text: 'On air', tone: 'tx' }, text: `Tx${onAir.tx} · ${onAir.text}`, aside, warn: false };
-    if (notice) return { pill: null, text: notice.text, aside: st.phase === 'idle' ? '' : aside, warn: notice.kind !== 'info' };
+    if (notice) return { pill: null, text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside, warn: notice.kind !== 'info' };
     if (blocked) return { pill: null, text: blocked, aside, warn: true };
-    if (text) return { pill: st.run ? { text: 'Run', tone: 'run' } : null, text, aside, warn: false };
+    if (hunting) return { pill: null, text: hunting, aside, warn: false };
+    if (text) return { pill: running ? { text: 'Run', tone: 'run' } : null, text, aside, warn: false };
     if (selLine) return { pill: null, text: selLine, aside: 'Double-tap to call', warn: false };
     return null;
   });
@@ -79,6 +84,15 @@
     { id: 'new', label: 'New' },
   ];
   const order = $derived(ORDERS.find((o) => o.id === settings.queueOrder) ?? ORDERS[0]);
+
+  const HUNT_ORDERS: { id: HuntOrder; label: string }[] = [
+    { id: 'unworked', label: 'Not worked' },
+    { id: 'strongest', label: 'Strongest' },
+    { id: 'newest', label: 'Newest' },
+    { id: 'farthest', label: 'Farthest' },
+    { id: 'new', label: 'New call' },
+  ];
+  const huntOrder = $derived(HUNT_ORDERS.find((o) => o.id === settings.huntOrder) ?? HUNT_ORDERS[0]);
 
   async function openMenu() {
     menuOpen = true;
@@ -131,8 +145,8 @@
     <button class="b txb" class:on={st.txEnabled} aria-pressed={st.txEnabled} onclick={() => setTxEnabled(!st.txEnabled)}>
       <span class="dot" aria-hidden="true"></span>{st.txEnabled ? 'Tx on' : 'Tx off'}
     </button>
-    <button class="b" class:on={st.phase === 'cq' && !st.run} aria-pressed={st.phase === 'cq' && !st.run} onclick={callCq}>CQ</button>
-    <button class="b run" class:on={st.run} aria-pressed={st.run} onclick={() => setRun(!st.run)}>Run</button>
+    <button class="b" class:on={cqOn} aria-pressed={cqOn} onclick={callCq}>CQ</button>
+    <button class="b hunt" class:on={st.hunt} aria-pressed={st.hunt} onclick={() => setHunt(!st.hunt)}>Hunt</button>
     <button class="b icon" class:open={menuOpen} bind:this={moreBtn} aria-label="More" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen ? closeMenu() : void openMenu())}>
       <Icon name="more" size={22} />
     </button>
@@ -142,7 +156,7 @@
     <div class="scrim" aria-hidden="true" onclick={() => closeMenu(false)}></div>
     <!-- svelte-ignore a11y_interactive_supports_focus -->
     <div class="menu" role="menu" aria-label="More" tabindex="-1" bind:this={menuEl} onkeydown={menuKey}>
-      {#if st.run}
+      {#if running || st.hunt}
         <button class="mi" role="menuitemcheckbox" aria-checked={st.stopAfter} onclick={() => setStopAfter(!st.stopAfter)}>
           Stop after this QSO{#if st.stopAfter}<Icon name="check" size={18} class="chk" />{/if}
         </button>
@@ -153,14 +167,20 @@
       <button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
       <button class="mi gap" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
+      <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
+        Run <span class="v">{settings.run ? 'On' : 'Off'}</span>
+      </button>
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ queueOrder: ORDERS[(ORDERS.indexOf(order) + 1) % ORDERS.length].id })}>
         Answer order <span class="v">{order.label}</span>
+      </button>
+      <button class="mi" role="menuitemcheckbox" aria-checked={settings.workDupes} onclick={() => void updateSettings({ workDupes: !settings.workDupes })}>
+        Work dupes <span class="v">{settings.workDupes ? 'On' : 'Off'}</span>
       </button>
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ cqParity: settings.cqParity === 'even' ? 'odd' : 'even' })}>
         Transmit in <span class="v">{settings.cqParity === 'even' ? '1st' : '2nd'}</span>
       </button>
-      <button class="mi" class:gap={practice.on} role="menuitemcheckbox" aria-checked={settings.workDupes} onclick={() => void updateSettings({ workDupes: !settings.workDupes })}>
-        Work dupes <span class="v">{settings.workDupes ? 'On' : 'Off'}</span>
+      <button class="mi" class:gap={practice.on} role="menuitem" onclick={() => void updateSettings({ huntOrder: HUNT_ORDERS[(HUNT_ORDERS.indexOf(huntOrder) + 1) % HUNT_ORDERS.length].id })}>
+        Hunt order <span class="v">{huntOrder.label}</span>
       </button>
       {#if practice.on}
         {#each SCENARIOS as s (s.id)}
@@ -329,12 +349,12 @@
     background: var(--rr-on-fill);
   }
 
-  .b.on:not(.txb, .run) {
+  .b.on:not(.txb, .hunt) {
     background: var(--rr-accent-fill);
     color: var(--rr-on-fill);
   }
 
-  .run.on {
+  .hunt.on {
     background: var(--rr-run);
     color: var(--rr-on-strong);
     font-weight: var(--rr-weight-bold);

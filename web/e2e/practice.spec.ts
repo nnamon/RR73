@@ -151,6 +151,67 @@ test('the station in the lost-station scenario answers someone else', async ({ p
   await expect(row(page, new RegExp(`^${ME} ${call} `))).toHaveCount(0);
 });
 
+test('tail-ending works the station that answered someone else', async ({ page }) => {
+  test.setTimeout(300_000);
+  await practiceOn(page);
+  await scenario(page, 'Station works another');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  const cq = row(page, /^CQ [A-Z0-9]+ [A-R]{2}\d{2}$/).first();
+  await expect(cq).toBeVisible({ timeout: 50_000 });
+  const call = (await cq.locator('.c-msg').textContent())!.split(' ')[1];
+  await cq.dblclick();
+  await expect(bar.getByRole('status')).toContainText(`${call} answered `, { timeout: 75_000 });
+  // He answers the one more call after his QSO, and the QSO is logged.
+  await expect(row(page, new RegExp(`^${ME} ${call} [+-]\\d{2}$`)).first()).toBeVisible({ timeout: 120_000 });
+  await expect.poll(() => callsInLog(page, 'rr73-practice'), { timeout: 120_000, intervals: [3000] }).toEqual([call]);
+  const sent = await page.evaluate(() => window.__rr73!.transmitted());
+  expect(sent.filter((t) => t === `${call} ${ME} OJ11`)).toHaveLength(2);
+});
+
+test('a station called during CQ follows the answering path and CQ does not come back', async ({ page }) => {
+  test.setTimeout(300_000);
+  await practiceOn(page);
+  await scenario(page, 'Station never answers');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  const cqButton = bar.getByRole('button', { name: 'CQ', exact: true });
+  await cqButton.click();
+  await expect(cqButton).toHaveAttribute('aria-pressed', 'true');
+  // A CQ from another station: the list also shows our own CQ.
+  const cq = row(page, new RegExp(`^CQ (?!${ME} )[A-Z0-9]+ [A-R]{2}\\d{2}$`)).first();
+  await expect(cq).toBeVisible({ timeout: 50_000 });
+  const call = (await cq.locator('.c-msg').textContent())!.split(' ')[1];
+  await cq.dblclick();
+  await expect(cqButton).toHaveAttribute('aria-pressed', 'false');
+  // He never answers: the calls stop after the repeats (or after one more call, when he works
+  // another station), and CQ does not start again.
+  await expect(bar.getByRole('status')).toContainText(new RegExp(`No reply from ${call}|${call} is still working`), { timeout: 200_000 });
+  await page.waitForTimeout(16_000);
+  const sent = await page.evaluate(() => window.__rr73!.transmitted());
+  const first = sent.lastIndexOf(`${call} ${ME} OJ11`);
+  expect(first).toBeGreaterThanOrEqual(0);
+  expect(sent.slice(0, first).filter((t) => !t.startsWith(`${call} ${ME} `))).toEqual([]);
+  await expect(cqButton).toHaveAttribute('aria-pressed', 'false');
+});
+
+test('Hunt answers one CQ after another and logs 2 practice QSOs', async ({ page }) => {
+  test.setTimeout(480_000);
+  await practiceOn(page);
+  await scenario(page, 'Hunt: busy band');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  const hunt = bar.getByRole('button', { name: 'Hunt', exact: true });
+  await hunt.click();
+  await expect(hunt).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  // The scenario's notice shows for 20 s; then the line names what Hunt does.
+  await expect(bar.getByRole('status')).toContainText(/Hunt · (calling [A-Z0-9/]+ \([+−]?\d+ dB\)|working [A-Z0-9/]+)/, { timeout: 90_000 });
+  await expect.poll(async () => (await callsInLog(page, 'rr73-practice')).length, { timeout: 420_000, intervals: [5000] }).toBeGreaterThanOrEqual(2);
+  const calls = await callsInLog(page, 'rr73-practice');
+  expect(new Set(calls).size).toBe(calls.length);
+  await expect(bar.getByRole('status')).toContainText(/Hunt · .* · [2-9] QSOs/, { timeout: 60_000 });
+  await hunt.click();
+  await expect(hunt).toHaveAttribute('aria-pressed', 'false');
+});
+
 test('nothing leaves the phone: the guard refuses sends, Send to Wavelog goes to the stand-in, Clear practice log has Undo', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('./');

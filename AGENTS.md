@@ -29,7 +29,6 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Run the checks for the code you touched before committing, and state which checks ran. While iterating, run the affected tests and Playwright projects; run the full local suite once before pushing, and let CI do the rest.
 - `corpus/` holds recordings and is never committed. Small fixtures go in `fixtures/`.
 - GPL code (WSJT-X and its forks, JTDX, MSHV, Decodium, PyFT8, ft8ts, mfsk-core, webft8) is never read or copied. WSJT-X binaries may be run as a reference. ft8_lib (MIT) may be ported with attribution in the file header.
-- RR73 never allows unattended operation: Tx and Run start by hand, and the watchdog always runs for QSO modes.
 
 ## Branches and releases
 
@@ -122,7 +121,9 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 | callsign | One word. |
 | band, mode | 20m, 40m; FT8, FT4, WSPR. |
 | Tx, Rx | Transmit, receive. |
-| Run | Run mode: the CQ loop that answers callers and logs QSOs until stopped. |
+| Run | The switch that keeps CQ going after each QSO: the next caller, or CQ again. Off, Tx goes off after the QSO. |
+| Hunt | Answers CQs one after another, logging each QSO, until stopped. |
+| tail-end | Calling a station once more as it ends a QSO with another station. |
 | activation | Operating from a park, summit or island under one or more references. |
 | reference | A POTA, SOTA, WWFF or IOTA identifier, such as SG-0014. |
 | destination | Where a copy of the log goes: Wavelog, a file. |

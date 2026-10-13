@@ -182,7 +182,7 @@
 
   const callers = $derived.by(() => {
     const st = qso.st;
-    if (!st.run || (filter !== 'all' && filter !== 'me')) return [];
+    if (!st.config.run || st.phase !== 'cq' || (filter !== 'all' && filter !== 'me')) return [];
     return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes, classify);
   });
   const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify)]);

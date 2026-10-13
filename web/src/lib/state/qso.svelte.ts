@@ -70,7 +70,10 @@ export function configNow() {
     maxRetries: 3,
     order: settings.queueOrder,
     workDupes: settings.workDupes,
-    watchdogMs: 6 * 60_000,
+    run: settings.run,
+    tailEnd: settings.tailEnd,
+    huntOrder: settings.huntOrder,
+    watchdogMs: settings.watchdog ? Math.round(settings.watchdogMin * 60_000) : 0,
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
@@ -222,10 +225,15 @@ export function setTxEnabled(on: boolean) {
   dispatch({ type: 'enableTx', on, nowMs: Date.now() });
 }
 
-/** Turns Run on or off. Call from the tap. */
+/** Run on or off: what the CQ loop does after a QSO. It starts nothing by itself. */
 export function setRun(on: boolean) {
+  void updateSettings({ run: on });
+}
+
+/** Turns Hunt on or off. Call from the tap. */
+export function setHunt(on: boolean) {
   if (on) unmute();
-  dispatch({ type: 'runMode', on, nowMs: Date.now() });
+  dispatch({ type: 'hunt', on, nowMs: Date.now() });
 }
 
 export function setStopAfter(on: boolean) {
@@ -317,7 +325,22 @@ export function startQso() {
     });
     $effect(() => {
       const c = configNow();
-      const patch = { myCall: c.myCall, myGrid: c.myGrid, band: c.band, mode: c.mode, dialHz: c.dialHz, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
+      const patch = {
+        myCall: c.myCall,
+        myGrid: c.myGrid,
+        band: c.band,
+        mode: c.mode,
+        dialHz: c.dialHz,
+        txHz: c.txHz,
+        ack: c.ack,
+        order: c.order,
+        workDupes: c.workDupes,
+        cqParity: c.cqParity,
+        run: c.run,
+        tailEnd: c.tailEnd,
+        huntOrder: c.huntOrder,
+        watchdogMs: c.watchdogMs,
+      };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });

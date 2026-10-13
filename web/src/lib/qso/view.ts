@@ -3,7 +3,7 @@
  * the status line. Times are UTC.
  */
 
-import { MINUS, utcTime } from '../clock/format';
+import { MINUS, signed as signedNum, utcTime } from '../clock/format';
 import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
 import { messages, type SeqState } from './sequencer';
@@ -63,7 +63,8 @@ export function barText(st: SeqState): string | null {
   const m = messages(st);
   const p = st.partner;
   if (st.onAir) return `Tx${st.onAir.tx} · ${st.onAir.text}`;
-  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · no reply after ${st.config.maxRetries} repeats`;
+  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? `no reply after ${st.config.maxRetries} repeats`}`;
+  if (p && st.lost?.state === 'watching') return `${bare(p.call)} · working ${st.lost.other}`;
   if (st.next) {
     const n = st.next;
     const start = n.slotStartMs + n.offsetS * 1000;
@@ -75,9 +76,30 @@ export function barText(st: SeqState): string | null {
   return null;
 }
 
+/**
+ * Hunt's status line: "Hunt · calling VJ6X (−12 dB) · 2 QSOs". Null when Hunt is off.
+ */
+export function huntText(st: SeqState): string | null {
+  if (!st.hunt) return null;
+  const p = st.partner;
+  const n = st.huntQsos;
+  const tally = n ? ` · ${n} ${n === 1 ? 'QSO' : 'QSOs'}` : '';
+  let what = 'listening for CQs';
+  if (p) {
+    const call = bare(p.call);
+    const db = Math.round(p.snrDb);
+    if (st.lost?.state === 'watching') what = `${call} is working ${st.lost.other}`;
+    else if (p.logged) what = `${call} logged`;
+    else if (p.rcvdRpt || p.rcvdAck) what = `working ${call}`;
+    else what = `calling ${call} (${db > 0 ? '+' : ''}${signedNum(db)} dB)`;
+  }
+  return `Hunt · ${what}${tally}`;
+}
+
 /** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */
 export function watchdogText(st: SeqState, nowMs: number): string {
   if (!st.txEnabled) return 'Tx off';
+  if (st.config.watchdogMs <= 0) return 'Watchdog off';
   const left = Math.max(0, st.config.watchdogMs - (nowMs - st.watchdogFromMs));
   const m = Math.floor(left / 60000);
   const s = Math.floor((left % 60000) / 1000);
