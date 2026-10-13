@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Use GPS in Settings sets the grid from the phone's position: 6 characters when the fix is within 1 km, otherwise the 4-character square with the reason. RR73 keeps the grid, never the position. The activation form's Use GPS works the same way.
+
 ## 0.6.1 · 2026-10-13
 
 - Send automatically is now off: QSOs stay in the Log as "not sent" until you tap Send to Wavelog. A phone that ran 0.5.0 switches it off once; turn it back on in Settings › Logging.

@@ -4,10 +4,12 @@
    * Wavelog station location for an activation, in the start and edit sheet (ActivationSheet).
    */
   import Icon from './Icon.svelte';
-  import { checkRef, checkRefs, gridFromLatLon, refExample } from '../lib/log/activation';
+  import LocateButton from './LocateButton.svelte';
+  import { checkRef, checkRefs, refExample } from '../lib/log/activation';
   import { log, wavelogReady, type ActivationInput } from '../lib/log/log.svelte';
   import { isGrid, normaliseCall, normaliseGrid } from '../lib/log/qso';
   import { PROGRAMMES, type Activation, type Programme, type Reference } from '../lib/log/types';
+  import type { LocateResult } from '../lib/location/locate';
   import { settings } from '../lib/state/settings.svelte';
 
   let { initial = null, submitLabel, onsubmit, oncancel }: { initial?: Activation | null; submitLabel: string; onsubmit: (input: ActivationInput) => Promise<void>; oncancel?: () => void } = $props();
@@ -26,7 +28,8 @@
   let gridSource = $state<Activation['gridSource']>(initial?.gridSource ?? 'none');
   // svelte-ignore state_referenced_locally
   let station = $state<string>(initial?.wavelogStationId ?? log.wavelog.stationId ?? '');
-  let gps = $state<'idle' | 'finding' | string>('idle');
+  let gpsError = $state('');
+  let gpsNote = $state('');
   let errors = $state<string[]>([]);
   let busy = $state(false);
 
@@ -57,28 +60,12 @@
     refs = refs.filter((_, j) => j !== i);
   }
 
-  function useGps() {
-    if (typeof navigator === 'undefined' || !navigator.geolocation) {
-      gps = 'This browser gives RR73 no location. Type the grid.';
-      return;
-    }
-    gps = 'finding';
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        grid = gridFromLatLon(p.coords.latitude, p.coords.longitude);
-        gridSource = 'gps';
-        gps = 'idle';
-      },
-      (err) => {
-        gps =
-          err.code === err.PERMISSION_DENIED
-            ? 'Location is off for RR73. Allow it in iOS Settings › Privacy, or type the grid.'
-            : err.code === err.TIMEOUT
-              ? 'No position within 20 s. Type the grid, or try again in the open.'
-              : 'The phone could not find its position. Type the grid.';
-      },
-      { enableHighAccuracy: false, timeout: 20_000, maximumAge: 600_000 },
-    );
+  function useGps(r: LocateResult) {
+    gpsError = r.ok ? '' : r.message;
+    gpsNote = r.ok ? r.note : '';
+    if (!r.ok) return;
+    grid = r.grid;
+    gridSource = 'gps';
   }
 
   async function submit(e: SubmitEvent) {
@@ -168,10 +155,8 @@
       </label>
       <div class="row">
         <label class="row-title" for="act-grid">Grid</label>
-        <input id="act-grid" class="row-field mono" bind:value={grid} oninput={() => (gridSource = 'typed')} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8" placeholder="Optional" />
-        <button type="button" class="btn compact soft gps" disabled={gps === 'finding'} onclick={useGps}>
-          <Icon name="locate" size={18} /><span>{gps === 'finding' ? 'Finding' : 'Use GPS'}</span>
-        </button>
+        <input id="act-grid" class="row-field mono" bind:value={grid} oninput={() => ((gridSource = 'typed'), (gpsNote = ''))} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8" placeholder="Optional" />
+        <LocateButton chars={6} onresult={useGps} />
       </div>
       {#if stations.length}
         <label class="row">
@@ -182,7 +167,7 @@
         </label>
       {/if}
     </div>
-    {#if gps !== 'idle' && gps !== 'finding'}<p class="section-foot err" role="alert">{gps}</p>{/if}
+    {#if gpsError}<p class="section-foot err" role="alert">{gpsError}</p>{:else if gpsNote}<p class="section-foot" role="status">{gpsNote}</p>{/if}
     {#if mismatch}<p class="section-foot err">{mismatch}</p>{:else if stations.length}<p class="section-foot">QSOs of this activation go to this Wavelog station location.</p>{/if}
   </div>
 
@@ -298,11 +283,6 @@
   .soft {
     background: var(--rr-fill2);
     color: var(--rr-accent);
-  }
-
-  .gps {
-    gap: var(--rr-space-1);
-    padding: 0 var(--rr-space-2);
   }
 
   .err {

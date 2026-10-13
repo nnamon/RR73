@@ -70,6 +70,35 @@ test('the callsign is stored on the phone and marks nothing until set', async ({
   await expect(page.getByRole('textbox', { name: 'Callsign' })).toHaveValue('9V1NE');
 });
 
+test('Use GPS sets the 6-character grid from a fine fix', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 1.3521, longitude: 103.8198, accuracy: 30 });
+  await page.goto('./#/settings');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('textbox', { name: 'Grid' })).toHaveValue('OJ11vi');
+  await expect.poll(() => storedSettings(page)).toMatchObject({ value: { grid: 'OJ11vi' } });
+});
+
+test('Use GPS gives the 4-character square from a coarse fix and says why', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 1.3521, longitude: 103.8198, accuracy: 3200 });
+  await page.goto('./#/settings');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('textbox', { name: 'Grid' })).toHaveValue('OJ11');
+  await expect(page.getByRole('status').filter({ hasText: 'Position accurate to 3.2 km, so the grid has 4 characters.' })).toBeVisible();
+  await expect.poll(() => storedSettings(page)).toMatchObject({ value: { grid: 'OJ11' } });
+});
+
+test('Use GPS without location permission says what to do and keeps the grid', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Grid' });
+  await field.fill('OJ11');
+  await field.press('Enter');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Location is off for RR73. Allow it in iOS Settings › Privacy, or type the grid.');
+  await expect(field).toHaveValue('OJ11');
+});
+
 /** Reads the settings record straight from IndexedDB; null until the store exists. */
 function storedSettings(page: Page): Promise<unknown> {
   return page.evaluate(

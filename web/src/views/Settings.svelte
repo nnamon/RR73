@@ -1,6 +1,8 @@
 <script lang="ts">
   import Icon from '../ui/Icon.svelte';
   import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
+  import LocateButton from '../ui/LocateButton.svelte';
+  import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
@@ -15,6 +17,7 @@
 
   let grid = $state(settings.grid);
   let gridError = $state('');
+  let gridNote = $state('');
   $effect(() => {
     grid = settings.grid;
   });
@@ -28,6 +31,17 @@
     gridError = '';
     grid = g ? normaliseGrid(g) : '';
     if (grid !== settings.grid) void updateSettings({ grid });
+  }
+
+  function useGps(r: LocateResult) {
+    if (!r.ok) {
+      gridError = r.message;
+      gridNote = '';
+      return;
+    }
+    grid = r.grid;
+    saveGrid();
+    gridNote = r.note;
   }
 
   function saveCallsign() {
@@ -134,12 +148,14 @@
           maxlength="13"
         />
       </label>
-      <label class="row">
-        <span class="row-title">Grid</span>
+      <div class="row">
+        <label class="row-title" for="settings-grid">Grid</label>
         <input
+          id="settings-grid"
           class="field mono"
           type="text"
           bind:value={grid}
+          oninput={() => (gridNote = '')}
           onblur={saveGrid}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
           placeholder="Not set"
@@ -148,9 +164,10 @@
           spellcheck="false"
           maxlength="6"
         />
-      </label>
+        <LocateButton chars={6} onresult={useGps} />
+      </div>
     </div>
-    {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{/if}
+    {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
     <p class="section-foot">Decodes to this callsign are marked in red. Transmitting needs both the callsign and the grid. Stored on this phone.</p>
   </div>
 
