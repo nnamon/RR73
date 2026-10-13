@@ -94,6 +94,8 @@
  {"mode": "ft8", "source": "hex 09bde3506149dc3fa508", "note": "R + 73", "payload": "09bde3506149dc3fa508", "wsjtx_text": "K1ABC W9XYZ 73"},
  {"mode": "ft8", "source": "hex 000000204def1a9fa4c8", "note": "CQ K1ABC with RR73 as g15 32403", "payload": "000000204def1a9fa4c8", "wsjtx_text": null},
  {"mode": "ft8", "source": "hex 000000204def1a9fa448", "note": "CQ K1ABC with nothing after the callsign", "payload": "000000204def1a9fa448", "wsjtx_text": "CQ K1ABC"},
+ {"mode": "ft8", "source": "text K1ABC RR73; W9XYZ <KH7Z> -16", "note": "", "payload": "09bde350c293b819ce40", "wsjtx_text": "K1ABC RR73; W9XYZ <...> -16"},
+ {"mode": "ft8", "source": "text <KH7Z> W2/G4XYZ", "note": "", "payload": "19f0000dc79582d41820", "wsjtx_text": "<...> W2/G4XYZ"},
  {"mode": "ft4", "source": "text CQ K1ABC FN42", "note": "", "payload": "000000204def1a8a1988", "wsjtx_text": "CQ K1ABC FN42"},
  {"mode": "ft4", "source": "text CQ POTA W1AW FN31", "note": "", "payload": "004feef05ff5688a16c8", "wsjtx_text": "CQ POTA W1AW FN31"},
  {"mode": "ft4", "source": "text K1ABC W9XYZ R-15", "note": "", "payload": "09bde3506149dc3fa908", "wsjtx_text": "K1ABC W9XYZ R-15"},
@@ -186,6 +188,8 @@
  {"mode": "ft4", "source": "hex 09bde3506149dc1fd2c8", "note": "K1ABC W9XYZ, g15 report code 187", "payload": "09bde3506149dc1fd2c8", "wsjtx_text": "K1ABC W9XYZ +51"},
  {"mode": "ft4", "source": "hex 09bde3506149dc3fa508", "note": "R + 73", "payload": "09bde3506149dc3fa508", "wsjtx_text": "K1ABC W9XYZ 73"},
  {"mode": "ft4", "source": "hex 000000204def1a9fa4c8", "note": "CQ K1ABC with RR73 as g15 32403", "payload": "000000204def1a9fa4c8", "wsjtx_text": null},
- {"mode": "ft4", "source": "hex 000000204def1a9fa448", "note": "CQ K1ABC with nothing after the callsign", "payload": "000000204def1a9fa448", "wsjtx_text": "CQ K1ABC"}
+ {"mode": "ft4", "source": "hex 000000204def1a9fa448", "note": "CQ K1ABC with nothing after the callsign", "payload": "000000204def1a9fa448", "wsjtx_text": "CQ K1ABC"},
+ {"mode": "ft4", "source": "text K1ABC RR73; W9XYZ <KH7Z> -16", "note": "", "payload": "09bde350c293b819ce40", "wsjtx_text": "K1ABC RR73; W9XYZ <...> -16"},
+ {"mode": "ft4", "source": "text <KH7Z> W2/G4XYZ", "note": "", "payload": "19f0000dc79582d41820", "wsjtx_text": "<...> W2/G4XYZ"}
  ]
 }
