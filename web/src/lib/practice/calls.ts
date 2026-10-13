@@ -134,6 +134,22 @@ function weightedCountry(rng: Rng, only: (c: Continent) => boolean): Country {
   return list[list.length - 1];
 }
 
+/** The call area and suffix after a prefix: "2LAW" after VK. */
+function areaAndSuffix(rng: Rng, c: Country, prefix: string): string {
+  const digit = c.digit ? '' : String(rng.int(0, 9));
+  const n = prefix.length === 1 ? 3 : rng.int(2, 3);
+  let suffix = '';
+  for (let i = 0; i < n; i++) suffix += LETTERS[rng.int(0, 25)];
+  return `${digit}${suffix}`;
+}
+
+/** FNV-1a hash of the text, as a seed. */
+function hash(text: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193);
+  return h >>> 0;
+}
+
 /**
  * A new station's callsign and grid: "JA1KXM PM95". `only` limits the continents, for the
  * callers of a directed CQ; `taken` holds callsigns already on the band.
@@ -142,12 +158,11 @@ export function newCallsign(rng: Rng, taken: ReadonlySet<string>, only: (c: Cont
   for (;;) {
     const c = weightedCountry(rng, only);
     const prefix = rng.pick(c.prefixes);
-    const digit = c.digit ? '' : String(rng.int(0, 9));
-    const n = prefix.length === 1 ? 3 : rng.int(2, 3);
-    let suffix = '';
-    for (let i = 0; i < n; i++) suffix += LETTERS[rng.int(0, 25)];
-    const call = `${prefix}${digit}${suffix}`;
-    if (taken.has(call) || c.avoid?.test(call)) continue;
+    let call = `${prefix}${areaAndSuffix(rng, c, prefix)}`;
+    // A callsign of another entity is drawn again from a generator of its own, so the stations
+    // after it are the ones the seed has always given.
+    for (const again = new Rng(hash(call)); c.avoid?.test(call); ) call = `${prefix}${areaAndSuffix(again, c, prefix)}`;
+    if (taken.has(call)) continue;
     return { call, grid: `${rng.pick(c.fields)}${rng.int(0, 9)}${rng.int(0, 9)}`, continent: c.continent, entity: c.entity };
   }
 }
