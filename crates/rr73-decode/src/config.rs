@@ -193,8 +193,8 @@ pub struct ValidateParams {
 pub enum OsdMessages {
     /// Any message that unpacks.
     Any,
-    /// Standard messages (types 1 and 2) whose callsigns are sent in full and look valid:
-    /// not starting with Q, 0 or 1.
+    /// Standard messages (types 1 and 2) whose callsigns are sent in full and could have been
+    /// issued: not starting with Q or 0, and starting with 1 only as 1A or 1S.
     Standard,
     /// As `standard`, and at least one callsign already known from other decodes.
     StandardKnown,

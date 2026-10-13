@@ -73,10 +73,18 @@ impl Default for CrcUnpack {
     }
 }
 
-/// A callsign that could have been issued: not starting with Q (the ITU Q series is not
-/// allocated to stations) or with the digits 0 or 1.
+/// A callsign that could have been issued. The ITU allocates no call sign series starting
+/// with Q (the Q codes) or with the digits 0 or 1 (Radio Regulations, Appendix 42), so such
+/// callsigns are rejected, except the two DXCC entities that use an unallocated 1 prefix:
+/// 1A (Sovereign Military Order of Malta, 1A0KM) and 1S (Spratly Islands).
+/// `docs/experiments/0002-osd.md` records why other 0 and 1 prefixes stay rejected.
 pub fn plausible_callsign(call: &Callsign) -> bool {
-    !matches!(call.as_str().as_bytes().first(), None | Some(b'Q' | b'0' | b'1'))
+    match call.as_str().as_bytes() {
+        [] | [b'Q', ..] | [b'0', ..] => false,
+        [b'1', second, ..] => matches!(second, b'A' | b'S'),
+        [b'1'] => false,
+        _ => true,
+    }
 }
 
 /// `true` when `hashes` already holds `call`.
@@ -138,5 +146,26 @@ impl Validator for CrcUnpack {
 
     fn is_duplicate(&self, new: &Validated, seen: &[Payload]) -> bool {
         seen.contains(&new.payload)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn call(text: &str) -> Callsign {
+        Callsign::new(text).expect(text)
+    }
+
+    #[test]
+    fn callsign_plausibility_follows_the_itu_series_and_dxcc_exceptions() {
+        for ok in [
+            "K1ABC", "9V1NE", "2E0ABC", "1A0KM", "1S0XV", "3DA0XYZ", "A61AB", "E71A",
+        ] {
+            assert!(plausible_callsign(&call(ok)), "{ok}");
+        }
+        for bad in ["Q1ABC", "QA1XYZ", "0S1A", "1B1AB", "1Z9A", "0A1BC"] {
+            assert!(!plausible_callsign(&call(bad)), "{bad}");
+        }
     }
 }
