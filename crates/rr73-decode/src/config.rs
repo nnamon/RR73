@@ -65,6 +65,10 @@ pub struct SpectrogramParams {
     pub freq_min_hz: f32,
     /// Highest frequency analysed, in Hz. Candidates keep all tones at or below it.
     pub freq_max_hz: f32,
+    /// Window length in symbols (1 to `freq_osr`), centred in the FFT with zero padding
+    /// around it. `None` spans the whole FFT (`freq_osr` symbols), as ft8_lib does.
+    #[serde(default)]
+    pub window_symbols: Option<usize>,
 }
 
 /// Candidate search implementations.
@@ -241,6 +245,7 @@ impl DecoderConfig {
                 window: WindowKind::Hann,
                 freq_min_hz: 200.0,
                 freq_max_hz: 3000.0,
+                window_symbols: None,
             },
             search: SearchParams {
                 kind: SearchKind::Costas,
@@ -364,6 +369,9 @@ impl DecoderConfig {
         if !(1..=16).contains(&sp.time_osr) || !(1..=16).contains(&sp.freq_osr) {
             return bad("time_osr and freq_osr must be 1 to 16");
         }
+        if sp.window_symbols.is_some_and(|w| w == 0 || w > sp.freq_osr) {
+            return bad("window_symbols must be 1 to freq_osr");
+        }
         if !(sp.freq_min_hz >= 0.0 && sp.freq_max_hz > sp.freq_min_hz && sp.freq_max_hz <= 6000.0) {
             return bad("frequency range must satisfy 0 <= min < max <= 6000 Hz");
         }
@@ -461,5 +469,15 @@ mod tests {
             base.with_overrides(&["spectrogram.freq_osr=-1"]),
             Err(ConfigError::Invalid(_))
         ));
+        let padded = base
+            .with_overrides(&["spectrogram.freq_osr=4", "spectrogram.window_symbols=2"])
+            .expect("padded window");
+        assert_eq!(padded.spectrogram.window_symbols, Some(2));
+        for bad in ["spectrogram.window_symbols=0", "spectrogram.window_symbols=3"] {
+            assert!(
+                matches!(base.with_overrides(&[bad]), Err(ConfigError::Invalid(_))),
+                "{bad}"
+            );
+        }
     }
 }

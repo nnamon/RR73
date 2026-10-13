@@ -77,6 +77,8 @@ SlotAudio (12 kHz f32, start time, mode)
 
 - `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, later `osd-depth-3` and so on), so a bench run is reproducible from its name and overrides.
 - `decode(&SlotAudio, &DecoderConfig, &mut DecodeContext) -> DecodeReport`. `DecodeContext` carries callsign hashes and, later, a priori information.
+- `SlotAudio::partial` marks the start of a slot still being received (early decoding): symbols after the last sample count as erasures.
+- `DecodeSession` decodes one slot in stages, each a `DecoderConfig` run on the residual of every earlier decode and returning only new decodes. `step()` does one bounded unit of work (32 spectrogram frames, 8 search frames, 16 candidates or 2 subtractions), `next_stage()` runs a stage to its end. `decode` is a one-stage session.
 - `Decode` carries the message, text, frequency (base tone, Hz), DT (s), SNR (dB, 2500 Hz reference), pass number, LDPC statistics and candidate score.
 - `DecodeReport` carries decodes and per-stage timings.
 - No allocation in inner loops after setup. No `unsafe`. No threads inside the crate: callers parallelise across slots or candidate ranges.

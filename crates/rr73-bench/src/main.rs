@@ -70,6 +70,11 @@ enum Command {
         /// slot with silence.
         #[arg(long, value_enum, default_value_t = run::AudioFill::Absent)]
         audio_fill: run::AudioFill,
+        /// A later stage run on the residual: a preset name and `key=value` overrides in
+        /// one argument, such as "subtract-3-osd2 search.max_candidates=300". Repeat for
+        /// more stages.
+        #[arg(long, value_name = "STAGE")]
+        then: Vec<String>,
         /// Corpus files or directories.
         #[arg(required = true)]
         paths: Vec<PathBuf>,
@@ -174,6 +179,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             reference,
             audio_s,
             audio_fill,
+            then,
             paths,
         } => {
             let opts = run::RunOptions {
@@ -185,9 +191,13 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 reference,
                 audio_s,
                 audio_fill,
+                then,
             };
             let (results, path) = run::run(&opts)?;
             print!("{}", run::summary_table(&results));
+            if !results.then.is_empty() {
+                print!("{}", run::stage_table(&results));
+            }
             println!(
                 "{} slots in {:.1} s on {} thread(s). Results: {}",
                 results.slots.len(),

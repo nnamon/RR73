@@ -143,6 +143,9 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
             time_s: 0.0,
             stages: Default::default(),
             stats: Default::default(),
+            stage_s: Vec::new(),
+            step_max_s: 0.0,
+            step_max_by_kind: Default::default(),
             decodes: decoded
                 .iter()
                 .zip(&score.decode_match)
@@ -158,6 +161,7 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
                     matched: m.is_some(),
                     osd: false,
                     osd_distance: 0.0,
+                    stage: 0,
                 })
                 .collect(),
             entries: expected
@@ -197,6 +201,7 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
         reference_key: opts.reference.clone(),
         audio_s: None,
         audio_fill: None,
+        then: Vec::new(),
         environment: util::environment(0),
         wall_s: 0.0,
         slim: false,

@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use rayon::prelude::*;
 use rr73_corpus::{Entry, SlotFiles, SlotMode, Tolerance, discover, match_entries, read_slot};
-use rr73_decode::{DecodeContext, DecoderConfig, SlotAudio, decode};
+use rr73_decode::{DecodeContext, DecodeSession, DecoderConfig, SlotAudio, Stage};
 use rr73_ft8::{CallsignHashes, Mode};
 
 use crate::results::{
@@ -32,6 +32,9 @@ pub struct RunOptions {
     pub audio_s: Option<f64>,
     /// What stands in for the rest of the slot when `audio_s` is set.
     pub audio_fill: AudioFill,
+    /// Later stages, each `"<preset> [key=value ...]"`, run after the preset on the same
+    /// slot (see [`rr73_decode::DecodeSession`]).
+    pub then: Vec<String>,
 }
 
 /// The rest of a slot cut short by `--audio-s`.
@@ -52,6 +55,10 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let config = DecoderConfig::preset(&opts.preset)
         .and_then(|c| c.with_overrides(&opts.overrides))
         .map_err(|e| e.to_string())?;
+    let mut stages = vec![(opts.preset.clone(), config.clone())];
+    for spec in &opts.then {
+        stages.push(stage_spec(spec)?);
+    }
     let files = discover(&opts.paths).map_err(|e| e.to_string())?;
     if files.is_empty() {
         return Err("no slots found under the given paths".into());
@@ -70,7 +77,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         files
             .par_iter()
             .map_init(DecodeContext::new, |ctx, f| {
-                process(f, &config, ctx, reference, opts.audio_s, opts.audio_fill)
+                process(f, &stages, ctx, reference, opts.audio_s, opts.audio_fill)
             })
             .collect()
     });
@@ -88,18 +95,27 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         reference_key: opts.reference.clone(),
         audio_s: opts.audio_s,
         audio_fill: opts.audio_s.map(|_| opts.audio_fill),
+        then: opts.then.clone(),
         environment: util::environment(threads),
         wall_s,
         slim: false,
         sets: summarise(&slots),
         slots,
     };
-    let out = opts
-        .out
-        .clone()
-        .unwrap_or_else(|| default_path(&git_sha, &opts.preset, &opts.overrides));
+    let out = opts.out.clone().unwrap_or_else(|| {
+        let mut key = opts.overrides.clone();
+        key.extend(opts.then.iter().map(|t| format!("then {t}")));
+        default_path(&git_sha, &opts.preset, &key)
+    });
     results::save(&results, &out)?;
     Ok((results, out))
+}
+
+/// Parses a `--then` stage: a preset name followed by `key=value` overrides, separated by
+/// spaces.
+pub fn stage_spec(spec: &str) -> Result<(String, DecoderConfig), String> {
+    let Stage { name, config, .. } = Stage::parse(spec).map_err(|e| format!("--then {spec:?}: {e}"))?;
+    Ok((name, config))
 }
 
 /// The configuration as JSON. Going through text keeps `f32` values short (`-2.3`, where a
@@ -123,7 +139,7 @@ pub fn default_path(sha: &str, preset: &str, overrides: &[String]) -> PathBuf {
 
 fn process(
     files: &SlotFiles,
-    config: &DecoderConfig,
+    stages: &[(String, DecoderConfig)],
     ctx: &mut DecodeContext,
     reference: Option<&str>,
     audio_s: Option<f64>,
@@ -146,6 +162,9 @@ fn process(
                 time_s: 0.0,
                 stages: Default::default(),
                 stats: Default::default(),
+                stage_s: Vec::new(),
+                step_max_s: 0.0,
+                step_max_by_kind: Default::default(),
                 decodes: Vec::new(),
                 entries: Vec::new(),
                 error: Some(e.to_string()),
@@ -175,9 +194,32 @@ fn process(
     } else {
         SlotAudio::new(&samples, mode)
     };
+    let stages = stages
+        .iter()
+        .map(|(name, config)| Stage::new(name.clone(), config.clone()))
+        .collect();
     let started = Instant::now();
-    let report = decode(&audio, config, ctx);
+    let mut session = DecodeSession::with_context(&audio, stages, std::mem::take(ctx));
+    let mut step_max_s = 0.0f64;
+    let mut step_max_by_kind = std::collections::BTreeMap::<String, f64>::new();
+    while !session.is_done() {
+        let kind = session.next_step_kind();
+        let step = Instant::now();
+        session.step();
+        let t = step.elapsed().as_secs_f64();
+        step_max_s = step_max_s.max(t);
+        let max = step_max_by_kind.entry(kind.to_string()).or_default();
+        *max = max.max(t);
+    }
     let time_s = started.elapsed().as_secs_f64();
+    let report = session.report();
+    let decode_stages = session.decode_stages().to_vec();
+    let stage_s = if session.stage_count() > 1 {
+        session.stage_seconds().to_vec()
+    } else {
+        Vec::new()
+    };
+    *ctx = session.into_context();
 
     let decoded: Vec<Entry> = report
         .decodes
@@ -202,7 +244,8 @@ fn process(
         .decodes
         .iter()
         .zip(&score.decode_match)
-        .map(|(d, m)| DecodeRecord {
+        .zip(&decode_stages)
+        .map(|((d, m), &stage)| DecodeRecord {
             text: d.text.clone(),
             freq_hz: round(f64::from(d.freq_hz), 3),
             dt_s: round(f64::from(d.dt_s), 3),
@@ -214,6 +257,7 @@ fn process(
             matched: m.is_some(),
             osd: d.osd,
             osd_distance: round(f64::from(d.osd_distance), 4),
+            stage: stage as u32,
         })
         .collect();
     let entries = expected
@@ -239,6 +283,9 @@ fn process(
         time_s,
         stages: report.timings,
         stats: report.stats,
+        stage_s,
+        step_max_s,
+        step_max_by_kind,
         decodes,
         entries,
         error: None,
@@ -248,6 +295,54 @@ fn process(
 fn round(x: f64, digits: i32) -> f64 {
     let f = 10f64.powi(digits);
     (x * f).round() / f
+}
+
+/// Per-stage totals printed after a run with `--then`: decodes found by each stage (matched,
+/// false on synthetic and noise slots, unmatched on recordings) and its time per slot.
+pub fn stage_table(results: &Results) -> String {
+    let count = 1 + results.then.len();
+    let mut out = format!(
+        "{:<6} {:>8} {:>8} {:>6} {:>9} {:>9} {:>9} {:>9}\n",
+        "stage", "decodes", "matched", "false", "unmatched", "p50 ms", "p90 ms", "max ms"
+    );
+    for stage in 0..count {
+        let (mut decodes, mut matched, mut false_decodes, mut unmatched) = (0, 0, 0, 0);
+        let mut times = Vec::new();
+        for slot in &results.slots {
+            for d in slot.decodes.iter().filter(|d| d.stage as usize == stage) {
+                decodes += 1;
+                if d.matched {
+                    matched += 1;
+                } else if slot.kind == SlotKind::Real {
+                    unmatched += 1;
+                } else {
+                    false_decodes += 1;
+                }
+            }
+            if let Some(&t) = slot.stage_s.get(stage) {
+                times.push(t * 1000.0);
+            }
+        }
+        let p = |q: f64| {
+            rr73_corpus::stats::percentile(&times, q)
+                .map(|v| format!("{v:.1}"))
+                .unwrap_or_else(|| "-".into())
+        };
+        out.push_str(&format!(
+            "{:<6} {:>8} {:>8} {:>6} {:>9} {:>9} {:>9} {:>9}\n",
+            stage + 1,
+            decodes,
+            matched,
+            false_decodes,
+            unmatched,
+            p(50.0),
+            p(90.0),
+            p(100.0),
+        ));
+    }
+    let step_max = results.slots.iter().map(|s| s.step_max_s).fold(0.0, f64::max);
+    out.push_str(&format!("longest step: {:.1} ms\n", step_max * 1000.0));
+    out
 }
 
 /// The summary table printed after a run.
@@ -284,6 +379,17 @@ pub fn summary_table(results: &Results) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn stage_specs_name_a_preset_and_overrides() {
+        let (name, c) = stage_spec("  subtract-3-osd2 search.max_candidates=300 passes=2 ").expect("spec");
+        assert_eq!(name, "subtract-3-osd2 search.max_candidates=300 passes=2");
+        assert_eq!((c.search.max_candidates, c.passes), (300, 2));
+        assert!(c.ldpc.osd_erasures_as_errors);
+        assert!(stage_spec("").is_err());
+        assert!(stage_spec("no-such-preset").is_err());
+        assert!(stage_spec("baseline search.nothing=1").is_err());
+    }
 
     #[test]
     fn config_floats_stay_short() {

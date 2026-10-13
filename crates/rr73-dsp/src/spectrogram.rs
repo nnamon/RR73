@@ -301,6 +301,13 @@ impl SpectrogramPlan {
     /// samples read as zero and finite ones are clamped to [`SAMPLE_LIMIT`]. Frames whose window lies wholly outside the input hold the
     /// floor value (-120 dB or 0 power).
     pub fn compute(&mut self, samples: &[f32], frames: usize, out: &mut Spectrogram) {
+        self.begin(frames, out);
+        self.compute_frames(samples, 0..frames, out);
+    }
+
+    /// Sizes `out` for `frames` frames of this plan, all at zero power, so that
+    /// [`SpectrogramPlan::compute_frames`] can fill it in parts.
+    pub fn begin(&self, frames: usize, out: &mut Spectrogram) {
         let bins = self.config.max_bin - self.config.min_bin;
         out.frames = frames;
         out.bins = bins;
@@ -311,10 +318,16 @@ impl SpectrogramPlan {
         out.scale = self.config.scale;
         out.data.clear();
         out.data.resize(frames * bins, 0.0);
+    }
 
-        let mut t = 0;
-        while t < frames {
-            let pair = t + 1 < frames;
+    /// Computes frames `range` of `samples` into `out`, which [`SpectrogramPlan::begin`]
+    /// sized; frames beyond its size are skipped. Ranges that start at even frames give
+    /// values identical to [`SpectrogramPlan::compute`], which pairs frames from 0.
+    pub fn compute_frames(&mut self, samples: &[f32], range: std::ops::Range<usize>, out: &mut Spectrogram) {
+        let end = range.end.min(out.frames);
+        let mut t = range.start;
+        while t < end {
+            let pair = t + 1 < end;
             self.load(samples, t, pair);
             self.fft.process_with_scratch(&mut self.buf, &mut self.scratch);
             self.store(t, pair, out);
@@ -431,6 +444,30 @@ mod tests {
         // Hann sidelobes: 3 bins away the level is far below the peak.
         let far = s.get(t, b + 3).expect("cell");
         assert!(db - far > 30.0, "{db} {far}");
+    }
+
+    #[test]
+    fn frames_computed_in_even_parts_equal_one_pass() {
+        let samples: Vec<f32> = (0..180_000)
+            .map(|i| ((i * 7919) % 1000) as f32 / 1000.0 - 0.5)
+            .collect();
+        let config = ft8_config();
+        let whole = compute(config.clone(), &samples);
+        let mut plans = FftPlans::new();
+        let mut plan = SpectrogramPlan::new(config, &mut plans).expect("plan");
+        let mut parts = Spectrogram::new();
+        let frames = whole.frames();
+        plan.begin(frames, &mut parts);
+        let mut t = 0;
+        while t < frames {
+            plan.compute_frames(&samples, t..t + 32, &mut parts);
+            t += 32;
+        }
+        assert_eq!(parts.frames(), frames);
+        assert_eq!(parts.data(), whole.data());
+        // Ranges past the end are cut to the sized frames.
+        plan.compute_frames(&samples, frames..frames + 10, &mut parts);
+        assert_eq!(parts.data().len(), whole.data().len());
     }
 
     #[test]

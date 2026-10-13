@@ -174,3 +174,72 @@ fn session_returns_its_context_for_reuse() {
     assert!(empty.is_done());
     assert_eq!(empty.next_stage(), None);
 }
+
+#[test]
+fn finer_grids_and_padded_windows_decode_and_report_step_kinds() {
+    let audio = crowded();
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let shipped = decode(
+        &slot,
+        &DecoderConfig::preset("subtract-3-osd2").expect("preset"),
+        &mut DecodeContext::new(),
+    );
+    for overrides in [
+        "spectrogram.time_osr=4",
+        "spectrogram.freq_osr=4 spectrogram.window_symbols=2",
+        "spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2",
+    ] {
+        let stage = Stage::parse(&format!("subtract-3-osd2 {overrides}")).expect("stage");
+        let mut session = DecodeSession::new(&slot, vec![stage]);
+        let mut kinds = Vec::new();
+        while !session.is_done() {
+            kinds.push(session.next_step_kind());
+            session.step();
+        }
+        assert_eq!(session.next_step_kind(), "done");
+        for k in ["start-stage", "start-pass", "spectrogram", "search", "candidates"] {
+            assert!(kinds.contains(&k), "{overrides}: {k} missing");
+        }
+        // The same messages as the shipped grid; SNR estimates stay within 1.5 dB.
+        assert_eq!(texts(session.decodes()), texts(&shipped.decodes), "{overrides}");
+        for d in session.decodes() {
+            let s = shipped
+                .decodes
+                .iter()
+                .find(|s| s.text == d.text)
+                .expect("shipped");
+            assert!(
+                (d.snr_db - s.snr_db).abs() <= 1.5,
+                "{overrides}: {} {} {}",
+                d.text,
+                d.snr_db,
+                s.snr_db
+            );
+            assert!(
+                (d.freq_hz - s.freq_hz).abs() <= 3.2,
+                "{overrides}: {} {} {}",
+                d.text,
+                d.freq_hz,
+                s.freq_hz
+            );
+        }
+    }
+    // A padded window over partial audio stops at the last whole window.
+    let stage =
+        Stage::parse("subtract-3-osd2 spectrogram.freq_osr=4 spectrogram.window_symbols=2").expect("stage");
+    let early = &audio[..141_600];
+    let mut session = DecodeSession::new(&SlotAudio::partial(early, Mode::Ft8), vec![stage]);
+    session.run_to_end();
+    assert!(texts(session.decodes()).contains(&"CQ DL1ABC JO62".to_string()));
+}
+
+#[test]
+fn plans_parse_stage_specs() {
+    let stages = Stage::plan(" subtract-3-osd2 ; subtract-3-osd2 spectrogram.time_osr=4 ;").expect("plan");
+    assert_eq!(stages.len(), 2);
+    assert_eq!(stages[1].name, "subtract-3-osd2 spectrogram.time_osr=4");
+    assert_eq!(stages[1].config.spectrogram.time_osr, 4);
+    assert!(Stage::plan("").expect("empty").is_empty());
+    assert!(Stage::plan("baseline; nope").is_err());
+    assert!(Stage::parse("baseline passes").is_err());
+}

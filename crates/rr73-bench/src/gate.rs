@@ -263,6 +263,7 @@ mod tests {
             reference_key: None,
             audio_s: None,
             audio_fill: None,
+            then: Vec::new(),
             environment: Environment {
                 os: String::new(),
                 arch: String::new(),

@@ -33,6 +33,9 @@ pub struct Results {
     /// What stood in for the rest of a cut slot (`--audio-fill`).
     #[serde(default)]
     pub audio_fill: Option<crate::run::AudioFill>,
+    /// Later stages (`--then`), each a preset name followed by `key=value` overrides.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub then: Vec<String>,
     /// Machine and build.
     pub environment: Environment,
     /// Wall time of the whole run (reading, decoding, scoring), in seconds.
@@ -100,6 +103,17 @@ pub struct SlotResult {
     pub stages: StageTimings,
     /// Decoder counters.
     pub stats: DecodeStats,
+    /// Wall time of each stage, in seconds (runs with `--then`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub stage_s: Vec<f64>,
+    /// Longest single decoder step, in seconds: how long a caller waits at most before it
+    /// can stop the session.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub step_max_s: f64,
+    /// Longest step of each kind (`start-stage`, `start-pass`, `spectrogram`, `search`, `candidates`,
+    /// `subtract`), in seconds.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub step_max_by_kind: BTreeMap<String, f64>,
     /// The decodes (dropped in slim files).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub decodes: Vec<DecodeRecord>,
@@ -138,6 +152,13 @@ pub struct DecodeRecord {
     /// For OSD decodes, the weighted distance as a fraction of the total reliability.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub osd_distance: f64,
+    /// Index of the stage that found it (0 is the preset, 1 the first `--then` stage).
+    #[serde(default, skip_serializing_if = "is_zero_u32")]
+    pub stage: u32,
+}
+
+fn is_zero_u32(x: &u32) -> bool {
+    *x == 0
 }
 
 fn is_zero(x: &f64) -> bool {
@@ -371,6 +392,9 @@ mod tests {
             time_s: t,
             stages: StageTimings::default(),
             stats: DecodeStats::default(),
+            stage_s: Vec::new(),
+            step_max_s: 0.0,
+            step_max_by_kind: BTreeMap::new(),
             decodes: Vec::new(),
             entries: (0..expected)
                 .map(|i| EntryRecord {

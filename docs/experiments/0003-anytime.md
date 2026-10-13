@@ -1,6 +1,6 @@
 # Experiment 0003: anytime decoding
 
-Status: hypothesis recorded 2026-10-13, before implementation.
+Status: hypothesis recorded 2026-10-13, before implementation. Part 1 measured; part 2 partly measured and paused.
 
 ## Question
 
@@ -94,4 +94,34 @@ The session refactor that carries both parts changes no decode: `compare` agains
 
 ### Part 2: deeper passes after the deadline
 
-Pending.
+Status: partly measured, paused on 2026-10-13. Stress tests, SNR50, single-threaded time per stage and the chained stages are not measured yet; no stage is accepted.
+
+Each candidate stage ran alone after stage 1 (the shipped `subtract-3-osd2`) with `rr73-bench run --then`, over the public files, the 350 SARTS slots, `crowded` and the 5000 noise slots. A stage starts from the residual left by all stage 1 decodes and returns only new decodes. "Matched" and "unmatched" count the stage's new decodes against the reference lists; stage 1 alone has recall 0.8937 (public) and 0.7394 (SARTS).
+
+| Stage 2 (`subtract-3-osd2` plus) | Public: matched, unmatched, recall | SARTS: matched, unmatched, recall | `crowded` matched | False, 5000 noise slots and `crowded` |
+| --- | --- | --- | --- | --- |
+| nothing (3 more passes) | 1, 0, 0.8945 | 4, 0, 0.7404 | 1 | 0 |
+| `search.max_candidates=400` | 1, 0, 0.8945 | 4, 0, 0.7404 | 1 | 0 |
+| 400 candidates, `search.min_score_db=2` | 2, 5, 0.8952 | 25, 1, 0.7454 | 1 | 0 |
+| `ldpc.max_iterations=100` | 3, 1, 0.8960 | 13, 0, 0.7425 | 2 | 0 |
+| `ldpc.osd_window=91` | 10, 5, 0.9014 | 51, 2, 0.7515 | 3 | 0 |
+| `spectrogram.time_osr=4` | 32, 20, 0.9183 | 198, 5, 0.7865 | 14 | 0 |
+| `time_osr=4`, 280 candidates | 32, 20, 0.9183 | 201, 5, 0.7872 | 14 | 0 |
+| `time_osr=4`, 400 candidates, threshold 2 dB | 32, 22, 0.9183 | 214, 7, 0.7903 | 14 | 0 |
+| `time_osr=4`, `osd_window=91` | 37, 26, 0.9222 | 254, 7, 0.7998 | 16 | 0 |
+| `time_osr=8` | 40, 23, 0.9245 | 241, 5, 0.7967 | 16 | 0 |
+| `freq_osr=4`, `window_symbols=2` | 22, 6, 0.9106 | 121, 5, 0.7682 | 10 | 0 |
+| `time_osr=4`, `freq_osr=4`, `window_symbols=2` | 54, 27, 0.9353 | 299, 7, 0.8105 | 16 | 0 |
+| `time_osr=8`, `freq_osr=4`, `window_symbols=2` | 56, 32, 0.9368 | 332, 10, 0.8183 | 19 | 0 |
+| `time_osr=4`, `freq_osr=4`, `window_symbols=2`, `osd_window=91`, 400 candidates, threshold 2 dB | 62, 35, 0.9414 | 386, 18, 0.8311 | 19 | 0 |
+| `time_osr=8`, the same | 67, 42, 0.9453 | 420, 23, 0.8392 | 21 | 0 |
+
+The chain of `time_osr=4`, `freq_osr=4`, `window_symbols=2` (stage 2) and the deepest stage above with `time_osr=8` (stage 3) ends at the same recall as the deepest stage alone (0.9453 public, 0.8392 SARTS): stage 2 adds 54 matched and 27 unmatched on the public files and 299 and 7 on SARTS, stage 3 another 13 and 15, and 121 and 15. Neither made a false decode on the noise slots or `crowded`.
+
+`spectrogram.window_symbols=2` keeps the 2-symbol Hann window and zero-pads it to the 4-symbol FFT, so `freq_osr=4` gives bins a quarter of a tone spacing apart without smearing symbols together (new option; `None` keeps the ft8_lib layout).
+
+What the numbers say so far: the finer search grid gives most of the gain, as expected; extra passes, more candidates and more BP iterations give least. Time oversampling matters more than frequency oversampling, and the two add. On SARTS the deepest stage measured adds 0.100 recall, twice the top of the expected 0.02 to 0.05. No stage made a false decode on the 5000 noise slots or on `crowded`. On the recordings the unmatched decodes grow with depth (65 for the deepest stage, 43 of them OSD). Of the 34 unmatched decodes of the `time_osr=4`, `freq_osr=4` stage, 28 carry only callsigns that appear in some reference list or stage 1 decode; the other 6 are standard messages, 2 of them with a grid that fits the callsign's prefix (`CQ SM5MNB JO89`, `DF6WZ SV2OIT KN10`). That check is not yet done for the deeper stages.
+
+The times printed by these runs (10 threads, host load average 15 to 16) are not usable for the budget. Steps of the session now compute at most 32 spectrogram frames and subtract at most 2 earlier decodes each; the longest step has not been measured on a quiet host.
+
+Still to do, in order: stress test (threshold 0 dB on the 5000 noise slots) and SNR sweep for each stage (`results/p2_stress_next.sh`); check the unmatched decodes of the deeper stages; single-threaded time per stage and longest step, best of 3; time the chain per stage; choose the stages and record the decision.

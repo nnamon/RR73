@@ -7,9 +7,9 @@
 //! slot are dropped as duplicates, so a stage returns only new decodes. A session with one
 //! stage gives exactly what [`crate::decode`] gives for that configuration.
 //!
-//! [`DecodeSession::step`] does one bounded unit of work: set up a stage or pass and compute
-//! its spectrogram, search 8 frames of candidate positions, try 16 candidates, or subtract 2
-//! decodes. A caller that must stop for a new slot stops between steps; everything already
+//! [`DecodeSession::step`] does one bounded unit of work: set up a stage or a pass, compute
+//! 32 spectrogram frames, search 8 frames of candidate positions, try 16 candidates, or
+//! subtract 2 decodes. A caller that must stop for a new slot stops between steps; everything already
 //! returned stays valid.
 
 use rr73_dsp::{SpectrogramConfig, SpectrogramPlan};
@@ -25,6 +25,8 @@ use crate::snr::SnrScale;
 use crate::validate::Rejection;
 use crate::view::{Candidate, SymbolView, frame_range};
 
+/// Spectrogram frames computed per step (even, so frames pair as in one pass).
+const SPECTROGRAM_FRAMES_PER_STEP: usize = 32;
 /// Candidate positions searched per step, in spectrogram frames.
 const SEARCH_FRAMES_PER_STEP: i32 = 8;
 /// Candidates tried per step.
@@ -57,6 +59,27 @@ impl Stage {
     pub fn preset(name: &str) -> Result<Self, crate::ConfigError> {
         Ok(Self::new(name, DecoderConfig::preset(name)?))
     }
+
+    /// A stage from a preset name followed by `key=value` overrides, separated by spaces:
+    /// `"subtract-3-osd2 spectrogram.time_osr=4"`. The trimmed text names the stage.
+    pub fn parse(spec: &str) -> Result<Self, crate::ConfigError> {
+        let mut words = spec.split_whitespace();
+        let preset = words
+            .next()
+            .ok_or_else(|| crate::ConfigError::UnknownPreset(String::new()))?;
+        let overrides: Vec<&str> = words.collect();
+        let config = DecoderConfig::preset(preset)?.with_overrides(&overrides)?;
+        Ok(Self::new(spec.trim(), config))
+    }
+
+    /// The stages of a plan: stage specs (see [`Stage::parse`]) separated by `;`, such as
+    /// `"subtract-3-osd2; subtract-3-osd2 spectrogram.time_osr=4"`.
+    pub fn plan(plan: &str) -> Result<Vec<Self>, crate::ConfigError> {
+        plan.split(';')
+            .filter(|s| !s.trim().is_empty())
+            .map(Self::parse)
+            .collect()
+    }
 }
 
 /// What one step did.
@@ -76,8 +99,10 @@ pub struct StepOutcome {
 enum Phase {
     /// Subtract decodes left over from earlier stages, then start pass 1.
     StartStage,
-    /// Compute the spectrogram of the residual for a pass.
+    /// Start a pass on the residual.
     StartPass,
+    /// Compute spectrogram frames from this one onward.
+    Spectrogram(usize),
     /// Search candidate frames from this frame onward.
     Search(i32),
     /// Try candidates from this index onward.
@@ -195,6 +220,20 @@ impl DecodeSession {
         self.phase == Phase::Done
     }
 
+    /// The kind of work the next step does: `start-stage` (subtract earlier stages' decodes
+    /// and set up), `start-pass`, `spectrogram`, `search`, `candidates`, `subtract` or `done`.
+    pub fn next_step_kind(&self) -> &'static str {
+        match self.phase {
+            Phase::StartStage => "start-stage",
+            Phase::StartPass => "start-pass",
+            Phase::Spectrogram(_) => "spectrogram",
+            Phase::Search(_) => "search",
+            Phase::Candidates(_) => "candidates",
+            Phase::Subtract(_) => "subtract",
+            Phase::Done => "done",
+        }
+    }
+
     /// Index of the stage the next step works on (the stage count when done).
     pub fn stage(&self) -> usize {
         self.stage
@@ -279,6 +318,7 @@ impl DecodeSession {
         match self.phase {
             Phase::StartStage => self.start_stage(),
             Phase::StartPass => self.start_pass(),
+            Phase::Spectrogram(from) => self.spectrogram(from),
             Phase::Search(from) => self.search(from),
             Phase::Candidates(from) => self.candidates(from, &mut out.decodes),
             Phase::Subtract(from) => self.subtract(from),
@@ -302,23 +342,25 @@ impl DecodeSession {
         };
     }
 
-    /// Subtracts decodes that earlier stages left in the audio with this stage's subtractor,
-    /// then sets up the stage's spectrogram and search range.
+    /// Subtracts up to [`SUBTRACTIONS_PER_STEP`] decodes that earlier stages left in the
+    /// audio, with this stage's subtractor; once none are left, sets up the stage's
+    /// spectrogram and search range.
     fn start_stage(&mut self) {
         let from = self.subtracted;
         let stage = &self.stages[self.stage];
         if stage.config.subtract.kind != SubtractKind::None && from < self.decodes.len() {
+            // A bounded share per step; the phase stays until none are left.
+            let to = (from + SUBTRACTIONS_PER_STEP).min(self.decodes.len());
             let sw = Stopwatch::start();
-            for d in &self.decodes[from..] {
-                stage.pipeline.subtractor.subtract(
-                    self.layout,
-                    &mut self.audio,
-                    std::slice::from_ref(d),
-                    &mut self.ctx.ws.subtract,
-                );
-            }
+            stage.pipeline.subtractor.subtract(
+                self.layout,
+                &mut self.audio,
+                &self.decodes[from..to],
+                &mut self.ctx.ws.subtract,
+            );
             self.timings.subtract_s += sw.elapsed_s();
-            self.subtracted = self.decodes.len();
+            self.subtracted = to;
+            return;
         }
 
         let config = &self.stages[self.stage].config;
@@ -335,9 +377,17 @@ impl DecodeSession {
             return;
         };
         spec_config.window = sp.window;
+        if let Some(w) = sp.window_symbols {
+            spec_config.window_len = (w * self.layout.samples_per_symbol).min(spec_config.fft_size);
+        }
+        // The window sits in the middle of the frame with zero padding around it.
+        let pad = (spec_config.fft_size - spec_config.window_len) / 2;
         let ws = &mut self.ctx.ws;
         if ws.plan.as_ref().is_none_or(|(p, _)| *p.config() != spec_config) {
-            let window = spec_config.window.build(spec_config.fft_size);
+            let mut window = vec![0.0; spec_config.fft_size];
+            spec_config
+                .window
+                .fill(&mut window[pad..pad + spec_config.window_len]);
             let scale = SnrScale::new(self.layout, spec_config.fft_size, &window);
             ws.plan = SpectrogramPlan::new(spec_config.clone(), &mut ws.plans)
                 .ok()
@@ -357,8 +407,9 @@ impl DecodeSession {
         let last_needed =
             i64::from(*range.end()) + ((self.layout.symbols.saturating_sub(1)) * sp.time_osr) as i64;
         let available = if self.partial {
-            // Frame t covers samples up to t * hop + fft_size / 2.
-            match self.audio.len().checked_sub(spec_config.fft_size / 2) {
+            // The window of frame t ends at sample t * hop + reach.
+            let reach = (pad + spec_config.window_len).saturating_sub(spec_config.fft_size / 2);
+            match self.audio.len().checked_sub(reach) {
                 Some(room) => room / hop + 1,
                 None => 0,
             }
@@ -383,13 +434,31 @@ impl DecodeSession {
         self.pass += 1;
         self.pass_start = self.decodes.len();
         let ws = &mut self.ctx.ws;
+        if let Some((plan, _)) = ws.plan.as_ref() {
+            plan.begin(g.frames, &mut ws.spec);
+        }
+        ws.candidates.clear();
+        self.phase = Phase::Spectrogram(0);
+    }
+
+    /// Computes up to [`SPECTROGRAM_FRAMES_PER_STEP`] frames of the pass's spectrogram.
+    fn spectrogram(&mut self, from: usize) {
+        let Some(g) = self.geometry else {
+            self.finish_stage();
+            return;
+        };
+        let to = (from + SPECTROGRAM_FRAMES_PER_STEP).min(g.frames);
+        let ws = &mut self.ctx.ws;
         let sw = Stopwatch::start();
         if let Some((plan, _)) = ws.plan.as_mut() {
-            plan.compute(&self.audio, g.frames, &mut ws.spec);
+            plan.compute_frames(&self.audio, from..to, &mut ws.spec);
         }
         self.timings.spectrogram_s += sw.elapsed_s();
-        ws.candidates.clear();
-        self.phase = Phase::Search(g.first_frame);
+        self.phase = if to < g.frames {
+            Phase::Spectrogram(to)
+        } else {
+            Phase::Search(g.first_frame)
+        };
     }
 
     fn view(&self) -> SymbolView<'_> {

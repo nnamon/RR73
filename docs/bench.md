@@ -42,11 +42,12 @@ Signals are random standard QSO messages (CQ with a grid, call pairs with a grid
 
 ## Running
 
-`rr73-bench run --preset <name> [--set key=value ...] [--threads N] [--reference KEY] [--audio-s SECONDS [--audio-fill absent|zero]] [--out FILE] <paths>...`
+`rr73-bench run --preset <name> [--set key=value ...] [--then STAGE ...] [--threads N] [--reference KEY] [--audio-s SECONDS [--audio-fill absent|zero]] [--out FILE] <paths>...`
 
 - Finds every slot under the paths, decodes them in parallel (one decoder context per thread, callsign hashes cleared before each slot), and scores each slot.
 - `--set` overrides a preset value by dotted key: `--set ldpc.max_iterations=50`, `--set ldpc.kind=min-sum`. `rr73-bench presets baseline` prints every key.
 - `--threads 1` gives single-thread timing. The default uses every CPU.
+- `--then "<preset> key=value ..."` adds a later stage that runs on the residual after the preset (and after earlier `--then` stages) and keeps only new decodes; repeat it for more stages. Each decode records its `stage` (0 for the preset), each slot its `stage_s` times, and the run prints decodes, matches and time per stage. Every slot records `step_max_s` and `step_max_by_kind`, the longest single step of the session.
 - `--audio-s 11.8` decodes only the first 11.8 s of each slot (early decoding). With `--audio-fill absent` (the default) the audio ends there and the decoder treats the slot as partial: cut symbols become erasures. `--audio-fill zero` pads the slot with zeros instead.
 - Writes `results/<git-sha>-<preset>.json`; with overrides the name gains `-<hash>` of the override list. `--out` names the file instead.
 - The commit comes from `RR73_GIT_SHA` when set, else from `git` (with `-dirty` for uncommitted changes to tracked files), else `unknown`. Inside the container a worktree's git metadata is outside the mount, so pass the variable.
@@ -70,6 +71,7 @@ A decode matches an expected entry when the message text is equal after trimming
 | `config` | The full decoder configuration that ran. |
 | `reference_key` | `--reference`, or `null`. |
 | `audio_s`, `audio_fill` | `--audio-s` and `--audio-fill`, or `null` for whole slots. |
+| `then` | The `--then` stages, omitted when there are none. |
 | `environment` | `os`, `arch`, `cpus`, `threads` used, build `profile`, `bench_version`. |
 | `wall_s` | Wall time of the run, including reading files and scoring, in seconds. |
 | `slim` | `true` when per-slot lists were removed (`rr73-bench slim`). |
@@ -152,7 +154,7 @@ docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --o
 
 ## Decoder presets
 
-`baseline` is the ft8_lib method (`crates/rr73-decode`, `DecoderConfig::baseline`): a spectrogram with 2 frames per symbol and 2 bins per tone spacing (Hann window over 2 symbols, 200 to 3000 Hz), the Costas sync score over 60 time steps (DT -2.3 to 2.5 s for FT8), the 140 best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to variance 24, 25 iterations of sum-product belief propagation, CRC-14 check and unpack, one pass. `rr73-bench presets baseline` prints it.
+`baseline` is the ft8_lib method (`crates/rr73-decode`, `DecoderConfig::baseline`): a spectrogram with 2 frames per symbol and 2 bins per tone spacing (Hann window over 2 symbols, 200 to 3000 Hz), the Costas sync score over 60 time steps (DT -2.3 to 2.5 s for FT8), the 140 best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to variance 24, 25 iterations of sum-product belief propagation, CRC-14 check and unpack, one pass. `rr73-bench presets baseline` prints it. `spectrogram.time_osr` and `spectrogram.freq_osr` set the grid; the window spans the whole FFT (`freq_osr` symbols) unless `spectrogram.window_symbols` makes it shorter, with zero padding around it.
 
 `subtract-3` is `baseline` with up to 3 passes. After each pass that finds new messages, each new decode is rebuilt with a complex GFSK model matched to `rr73_ft8::synth::gfsk`, its start and frequency are refined from its known tones, its complex amplitude is estimated with a 0.16 s moving average, and the rebuilt signal is subtracted; the next pass decodes the residual. A pass that finds nothing new ends decoding. `docs/experiments/0001-subtraction.md` has the measurements. Overrides: `subtract.smooth_s`, `subtract.refine`, `passes`.
 
