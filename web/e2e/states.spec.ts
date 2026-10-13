@@ -139,12 +139,14 @@ for (const theme of ['light', 'dark'] as const) {
     await rowOf(page, 'CQ VJ6X OF78').dblclick();
     await expect(bar.getByRole('button', { name: 'Tx on' })).toBeVisible();
     await expect(bar.getByText('On air')).toBeVisible({ timeout: 20_000 });
+    // The slot RR73 transmits in, read as soon as it is on air: the screenshot below can run past
+    // the slot boundary on a loaded machine.
+    const ours = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
     await shot('3-calling');
     expect(counts['3-calling']).toBeGreaterThanOrEqual(TARGET[width].qso);
 
     // The radio hands RR73's own signal back in the slot it transmits in, at +45 dB: that slot is
     // not decoded or shown, and the amber row says what was sent.
-    const ours = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
     await inject(page, ours, [d('VJ6X 9V1NE OJ11', 45, 1500, -0.7)]);
     await page.waitForTimeout(300);
     await expect(page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: /^VJ6X 9V1NE OJ11$/ }) })).toHaveCount(1);
