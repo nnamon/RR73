@@ -270,7 +270,8 @@ test('Hound works the practice Fox: call, report, R-report, RR73, logged', async
   await expect(cq).toBeVisible({ timeout: 50_000 });
   const fox = (await cq.locator('.c-msg').textContent())!.split(' ')[1];
   await cq.dblclick();
-  await expect(bar.getByRole('status')).toContainText(`Calling the Fox · ${fox}`);
+  // Shown between calls; while Tx1 is on air the line says so.
+  await expect(bar.getByRole('status')).toContainText(`Calling the Fox · ${fox}`, { timeout: 30_000 });
   // The report, alone or in a multi-call message, after a few calls.
   const report = new RegExp(`^(${ME} ${fox} [+-]\\d{2}|[A-Z0-9/]+ RR73; ${ME} <(${fox}|\\.\\.\\.)> [+-]\\d{2})$`);
   await expect(row(page, report).first()).toBeVisible({ timeout: 180_000 });
