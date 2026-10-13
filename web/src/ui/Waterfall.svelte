@@ -9,7 +9,8 @@
    * Tx (red) and Rx (green) show as two lines at the signal's lowest and highest tone with a
    * light fill, through the picture and the ruler. Dragging sideways anywhere moves Tx, with the
    * lowest tone's frequency on a label, and lifting the finger sets it; a drag that starts on the
-   * green marker moves Rx. A tap sets Tx where it lands. A vertical movement is left to the page.
+   * green marker moves Rx. A tap sets Tx where it lands. A mostly vertical movement does nothing:
+   * the waterfall takes every touch, so a drag never scrolls the screen.
    * Without a pointer, two sliders (hidden until focused) set Tx and Rx.
    */
   import { onMount } from 'svelte';
@@ -242,8 +243,8 @@
     background: var(--rr-wf-bg);
     cursor: crosshair;
 
-    /* Vertical pans scroll the page; sideways moves drag the markers. */
-    touch-action: pan-y;
+    /* A drag surface: the browser pans or zooms nothing here, so a drag never moves the screen. */
+    touch-action: none;
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;

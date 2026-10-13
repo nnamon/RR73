@@ -13,6 +13,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The waterfall levels each frequency against its own noise floor, so the edges of the radio's passband read like the middle, and a signal 3 dB over the noise shows cyan.
 - Settings › Radio and audio › Waterfall contrast sets Low, Normal or High.
 - The waterfall leaves the slots RR73 transmitted in blank, where the radio's own audio showed as a band. The Tx marker stays.
+- A drag on the waterfall no longer moves the screen. In 0.9.1 a drag with a vertical movement slid Operate up by about 470 pt and left a blank area under it.
 - The waterfall shows no text before audio starts. After a break it shows when audio stopped.
 - The bar at the bottom of Operate keeps one height while receiving, calling CQ, calling a station and in a QSO, so the list stays put. Calling CQ has its own steps: CQ, Report, R-report, RR73 and Logged.
 - The Tx button shows the state: Tx off in grey, Tx on in a light blue tint, and On air in solid red with a blinking white dot, still with Reduce Motion on. The On air tag in the status line is removed.

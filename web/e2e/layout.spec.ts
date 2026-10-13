@@ -168,6 +168,27 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu-end.png` });
   });
 
+  test(`a drag on the waterfall never scrolls the screen in ${theme}`, async ({ page }) => {
+    await open(page, '#/operate', theme);
+    // 0.9.1 left vertical pans to the browser (touch-action: pan-y) and only body hid its
+    // overflow: on an iPhone a drag on the waterfall slid Operate up by 470 pt.
+    const area = page.getByTestId('waterfall-area');
+    expect(await area.evaluate((el) => getComputedStyle(el).touchAction)).toBe('none');
+    const root = await page.evaluate(() => {
+      const [h, b] = [getComputedStyle(document.documentElement), getComputedStyle(document.body)];
+      return { html: [h.overflowY, h.overscrollBehaviorY], body: [b.overflowY, b.position] };
+    });
+    expect(root).toEqual({ html: ['hidden', 'none'], body: ['hidden', 'fixed'] });
+    // A drag with a vertical part, then a scroll asked for outright: the document stays put.
+    const b = (await area.boundingBox())!;
+    await page.mouse.move(b.x + b.width * 0.3, b.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * 0.6, b.y + b.height + 300, { steps: 8 });
+    await page.mouse.up();
+    await page.evaluate(() => window.scrollTo(0, 470));
+    expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
+  });
+
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);
     await page.getByRole('button', { name: /^Change band/ }).click();

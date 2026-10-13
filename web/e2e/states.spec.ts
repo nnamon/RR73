@@ -101,6 +101,8 @@ for (const theme of ['light', 'dark'] as const) {
       expect(await smallTargets(page, 'main .pane:not([hidden])')).toEqual([]);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(wide).toBeLessThanOrEqual(0);
+      // The document never scrolls in any state: only the list does.
+      expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${name}.png` });
     };
     await page.addInitScript((i) => {

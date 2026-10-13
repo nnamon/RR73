@@ -102,9 +102,11 @@
 <QsoSheet />
 
 <style>
+  /* Border-box (base.css): the safe-area padding is inside the 100dvh, so the app is never taller than the screen. */
   .app {
     display: flex;
     flex-direction: column;
+    box-sizing: border-box;
     height: 100dvh;
     padding-bottom: var(--rr-safe-bottom);
     background: var(--rr-bg);
