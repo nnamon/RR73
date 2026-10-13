@@ -24,7 +24,8 @@ test('the empty tabs say what will appear', async ({ page }) => {
   await page.goto('./#/log');
   await expect(page.getByText('No QSOs yet')).toBeVisible();
   await page.goto('./#/spots');
-  await expect(page.getByText('No spots or activation yet')).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Start activation/ })).toBeVisible();
+  await expect(page.getByText(/^No spots yet\./)).toBeVisible();
 });
 
 test('four tabs, and an old Activate link opens Spots', async ({ page }) => {

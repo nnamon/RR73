@@ -308,3 +308,72 @@ a {
   outline: 2px solid var(--rr-accent);
   outline-offset: 2px;
 }
+
+/* Switch: a native checkbox with role="switch", drawn as an iOS toggle. Its row is the tap target. */
+.switch {
+  position: relative;
+  flex: none;
+  width: 51px;
+  height: 31px;
+  margin: 0;
+  border-radius: var(--rr-radius-pill);
+  background: var(--rr-fill2);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color var(--rr-transition);
+}
+
+.switch::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 27px;
+  height: 27px;
+  border-radius: var(--rr-radius-pill);
+  background: var(--rr-thumb);
+  box-shadow: 0 2px 4px var(--rr-shadow-thumb);
+  transition: transform var(--rr-transition);
+}
+
+.switch:checked {
+  background: var(--rr-accent-fill);
+}
+
+.switch:checked::before {
+  transform: translateX(20px);
+}
+
+.switch:disabled {
+  opacity: 0.45;
+}
+
+/* A text field filling the rest of a settings row. */
+.row-field {
+  flex: 1;
+  min-width: 0;
+  height: var(--rr-tap);
+  border: 0;
+  background: transparent;
+  color: var(--rr-label);
+  font-size: var(--rr-text-body);
+  text-align: right;
+}
+
+.row-field::placeholder {
+  color: var(--rr-label3);
+}
+
+.row-field:focus {
+  outline: none;
+}
+
+.row:has(.row-field:focus-visible) {
+  box-shadow: inset 0 0 0 2px var(--rr-accent);
+}
+
+/* Row and sheet buttons that delete, end or remove. */
+.text-button.danger {
+  color: var(--rr-tx-text);
+  font-weight: var(--rr-weight-semibold);
+}

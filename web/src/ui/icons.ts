@@ -27,6 +27,10 @@ export interface IconShape {
   rings?: [number, number, number, number][];
   /** Stroke width. */
   width?: number;
+  /** Strokes and dots knocked out of a filled shape, drawn in the colour on a fill. */
+  inner?: string[];
+  innerDots?: [number, number, number][];
+  innerWidth?: number;
 }
 
 export const ICONS = {
@@ -50,6 +54,15 @@ export const ICONS = {
   chevright: { stroke: ['M9 5L16 12L9 19'], width: 2.3 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
   share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.6 10.3H7.2A2.2 2.2 0 0 0 5 12.5V18.8A2.2 2.2 0 0 0 7.2 21H16.8A2.2 2.2 0 0 0 19 18.8V12.5A2.2 2.2 0 0 0 16.8 10.3H15.4'], width: 1.8 },
+  // Log, activations and destinations.
+  search: { stroke: ['M15.4 15.4L20.2 20.2'], rings: [[10.6, 10.6, 6.4, 6.4]], width: 2.1 },
+  plus: { stroke: ['M12 5V19M5 12H19'], width: 2.2 },
+  checkcircle: { dots: [[12, 12, 10]], inner: ['M7.4 12.4L10.6 15.5L16.7 9'], innerWidth: 2.3 },
+  warncircle: { fill: ['M10.3 3.6a2 2 0 0 1 3.4 0l8 14a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3Z'], inner: ['M12 9.2V13.4'], innerDots: [[12, 16.8, 1.25]], innerWidth: 2.2 },
+  cloudoff: { stroke: ['M21.2 16.4A4.4 4.4 0 0 0 17.6 9.6H16.5A7 7 0 0 0 9.9 4.4M5.6 6.9A7 7 0 0 0 8.7 19.6H17.4A4.6 4.6 0 0 0 18.8 19.4', 'M3 3L21 21'], width: 1.9 },
+  tree: { stroke: ['M12 3.2L7.2 9.8H9.6L5.8 15.4H18.2L14.4 9.8H16.8Z', 'M12 15.4V20.6'], width: 1.9 },
+  mountain: { stroke: ['M2.8 19.4L9.2 8.6L12.9 14.4L15.3 11L21.2 19.4Z'], width: 1.9 },
+  locate: { stroke: ['M12 2.5V5.5M12 18.5V21.5M2.5 12H5.5M18.5 12H21.5'], rings: [[12, 12, 6.5, 6.5]], dots: [[12, 12, 2]], width: 1.8 },
   xmark: { stroke: ['M7.5 7.5L16.5 16.5M16.5 7.5L7.5 16.5'], width: 2.4 },
   check: { stroke: ['M5 12.6L9.8 17.2L19 7.4'], width: 2.6 },
   alert: { stroke: ['M10.3 3.9a2 2 0 0 1 3.4 0l7.8 13.6a2 2 0 0 1-1.7 3H4.2a2 2 0 0 1-1.7-3Z', 'M12 9.3V13.4'], dots: [[12, 16.7, 1.15]], width: 1.9 },

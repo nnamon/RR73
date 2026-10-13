@@ -1,12 +1,17 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
+  import LogNotice from './ui/LogNotice.svelte';
+  import QsoSheet from './ui/QsoSheet.svelte';
   import TabBar from './ui/TabBar.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
+  import Log from './views/Log.svelte';
+  import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
-  import Placeholder from './views/Placeholder.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
   import Settings from './views/Settings.svelte';
+  import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
+  import WavelogSettings from './views/WavelogSettings.svelte';
   import { route, tabOf } from './lib/app/router.svelte';
   import { reloadIfIdle, update } from './lib/app/update.svelte';
   import { startClock } from './lib/state/now.svelte';
@@ -56,21 +61,17 @@
     <!-- Operate stays mounted so the waterfall keeps its history while another tab is open. -->
     <div class="pane" hidden={tab !== 'operate'}><Operate /></div>
     {#if tab === 'log'}
-      <div class="pane scroll">
-        <Placeholder title="Log" heading="No QSOs yet" text="QSOs you log on Operate will appear here, newest first. Logging arrives in a later version." />
-      </div>
+      <div class="pane scroll"><Log /></div>
     {:else if tab === 'spots'}
-      <div class="pane scroll">
-        <Placeholder
-          title="Spots"
-          heading="No spots or activation yet"
-          text="POTA, SOTA and WWFF spots on your bands will appear here, refreshed every minute while online. The activation you are running sits at the top, with its progress and what is left to submit. Both arrive in a later version."
-        />
-      </div>
+      <div class="pane scroll"><Spots /></div>
     {:else if tab === 'settings'}
       <div class="pane scroll">
         {#if sub === 'radio'}
           <RadioAudio />
+        {:else if sub === 'logging' && route.path[2] === 'wavelog'}
+          <WavelogSettings />
+        {:else if sub === 'logging'}
+          <Logging />
         {:else if sub === 'versions'}
           <VersionHistory focus={route.path[2] ?? null} />
         {:else}
@@ -80,8 +81,11 @@
     {/if}
   </main>
   {#if update.notice}<UpdateNotice version={update.notice} />{/if}
+  <LogNotice />
   <TabBar active={tab} />
 </div>
+
+<QsoSheet />
 
 <style>
   .app {

@@ -1,103 +1,104 @@
 <script lang="ts">
-  /** Station detail, from touch and hold: Call first, then the facts. */
+  /**
+   * Fix for a QSO Wavelog refused for its station location: choose the station location for the
+   * QSO's activation, or the default for QSOs outside one. Refused QSOs go again at once.
+   */
   import Sheet from './Sheet.svelte';
-  import { dt, signed, utcTime } from '../lib/clock/format';
-  import { bare, parseExchange } from '../lib/qso/messages';
-  import { pathBetween } from '../lib/qso/grid';
-  import { clock } from '../lib/state/now.svelte';
-  import { settings } from '../lib/state/settings.svelte';
-  import { callStart, callStation, liveRecords, qso, type Selected } from '../lib/state/qso.svelte';
+  import { href } from '../lib/app/router.svelte';
+  import { refsLabel } from '../lib/log/activation';
+  import { chooseStation, log, stationFor } from '../lib/log/log.svelte';
+  import type { Qso } from '../lib/log/types';
 
-  let { open = $bindable(false), item }: { open: boolean; item: Selected | null } = $props();
+  let { open = $bindable(false), qso }: { open: boolean; qso: Qso | null } = $props();
 
-  const ex = $derived(item ? parseExchange(item.decode.text) : null);
-  const me = $derived(settings.callsign.toUpperCase());
-  const call = $derived.by(() => {
-    if (!ex) return null;
-    if (ex.kind === 'cq') return ex.from;
-    if (ex.to && bare(ex.to) === me) return ex.from;
-    if (ex.from && bare(ex.from) === me) return ex.to;
-    return ex.from ?? ex.to;
-  });
-  const grid = $derived(ex?.grid ?? null);
-  const path = $derived(grid && settings.grid ? pathBetween(settings.grid, grid) : null);
-  const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
-  const worked = $derived(call ? liveRecords().filter((r) => r.CALL === bare(call)) : []);
-  const ord = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
+  const activation = $derived(qso?.activationId ? log.activations.find((a) => a.id === qso.activationId) : undefined);
+  const current = $derived(qso ? stationFor(qso) : null);
+  const call = $derived(qso?.stationCallsign ?? '');
+  const matching = $derived(log.wavelog.stations.filter((s) => s.callsign === call));
 
-  function doCall() {
-    if (!item) return;
-    callStation(item.decode, item.slotStartMs);
+  async function pick(id: string) {
+    if (!qso) return;
     open = false;
+    await chooseStation(id, activation?.id ?? null);
   }
 </script>
 
-<Sheet bind:open title={call ? bare(call) : 'Station'}>
-  {#if item && call && start}
-    <p class="sub">{[grid, path ? `${Math.round(path.km).toLocaleString('en-GB')} km` : null, path ? `${Math.round(path.bearing)}°` : null].filter(Boolean).join(' · ') || 'No grid received'}</p>
-    {#if ex?.kind === 'cq'}<p class="tags"><span class="tag cq">CQ{ex.modifier ? ` ${ex.modifier}` : ''}</span></p>{/if}
-    <button class="btn primary big" onclick={doCall} disabled={!!qso.st.partner && bare(qso.st.partner.call) === bare(call)}>
-      <b>Call {bare(call)}</b>
-      <span>Starts {utcTime(start.startMs)} ({ord(start.parity)})</span>
-    </button>
-    <ul class="group facts">
-      <li class="row">
-        <span class="row-main"><span class="row-title">Last decode</span><span class="row-sub">{utcTime(item.slotStartMs)} · {signed(Math.round(item.decode.snr_db))} dB · DT {dt(item.decode.dt_s)} · {Math.round(item.decode.freq_hz)} Hz</span></span>
-      </li>
-      <li class="row">
-        <span class="row-main"><span class="row-title">Message</span><span class="row-sub mono">{item.decode.text}</span></span>
-      </li>
-      <li class="row">
-        <span class="row-main">
-          <span class="row-title">Worked in this session</span>
-          <span class="row-sub">{worked.length ? worked.map((r) => `${r.BAND} ${r.SUBMODE ?? r.MODE} at ${r.TIME_ON.slice(0, 2)}:${r.TIME_ON.slice(2, 4)}`).join(', ') : 'Not yet'}</span>
-        </span>
-      </li>
-    </ul>
+<Sheet bind:open title="Choose a station location">
+  {#if qso}
+    <p class="lead">
+      The QSO with {qso.call} was made as <b class="mono">{call}</b>. Wavelog takes it only under a station location for {call}.
+      {activation ? `The choice applies to the activation ${refsLabel(activation.refs)}.` : 'The choice applies to QSOs outside an activation.'}
+    </p>
+    {#if log.wavelog.stations.length}
+      <ul class="card">
+        {#each log.wavelog.stations as s (s.id)}
+          <li>
+            <button class="row pick" aria-pressed={s.id === current} onclick={() => void pick(s.id)}>
+              <span class="row-main">
+                <span class="row-title">{s.name}</span>
+                <span class="row-sub">{s.callsign}{s.grid ? ` · ${s.grid}` : ''}{s.id === current ? ' · in use' : ''}</span>
+              </span>
+              {#if s.callsign === call}<span class="match">For {call}</span>{/if}
+            </button>
+          </li>
+        {/each}
+      </ul>
+    {/if}
+    {#if !matching.length}
+      <p class="lead">No station location in Wavelog is for {call}. Create one in Wavelog, then run Test connection.</p>
+      <a class="text-button open-settings" href={href('settings', 'logging', 'wavelog')} onclick={() => (open = false)}>Open Wavelog settings</a>
+    {/if}
   {/if}
+  <button class="btn cancel" onclick={() => (open = false)}>Cancel</button>
 </Sheet>
 
 <style>
-  .sub {
-    margin-top: var(--rr-space-1);
+  .lead {
+    margin: var(--rr-space-3) var(--rr-space-1) 0;
     font-size: var(--rr-text-sub);
+    line-height: var(--rr-leading-sub);
     color: var(--rr-label2);
-    text-align: center;
   }
 
-  .tags {
+  .lead b {
+    color: var(--rr-label);
+  }
+
+  .card {
+    margin-top: var(--rr-space-3);
+    overflow: hidden;
+    border-radius: var(--rr-radius-xl);
+    background: var(--rr-sheet-card);
+  }
+
+  .pick {
+    color: var(--rr-label);
+  }
+
+  .pick[aria-pressed='true'] .row-title {
+    font-weight: var(--rr-weight-semibold);
+  }
+
+  .match {
+    flex: none;
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    color: var(--rr-ok);
+  }
+
+  .open-settings {
     display: flex;
     justify-content: center;
-    margin-top: var(--rr-space-2);
   }
 
-  .tag {
-    padding: 0 var(--rr-space-2);
-    border-radius: var(--rr-radius-s);
-    font-size: var(--rr-text-foot);
-    font-weight: var(--rr-weight-bold);
-    line-height: 26px;
+  li + li {
+    box-shadow: inset 0 var(--rr-hairline) 0 var(--rr-sep);
   }
 
-  .tag.cq {
-    background: var(--rr-ok);
-    color: var(--rr-on-strong);
-  }
-
-  .big {
-    flex-direction: column;
+  .cancel {
     width: 100%;
-    min-height: var(--rr-button-large);
     margin-top: var(--rr-space-3);
-  }
-
-  .big span {
-    font-size: var(--rr-text-foot);
-    font-weight: var(--rr-weight-medium);
-  }
-
-  .facts {
-    margin-top: var(--rr-space-3);
-    background: var(--rr-sheet-card);
+    background: transparent;
+    color: var(--rr-accent);
   }
 </style>

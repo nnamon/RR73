@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import ActivationChip from '../ui/ActivationChip.svelte';
   import AudioBanner from '../ui/AudioBanner.svelte';
   import BandSheet from '../ui/BandSheet.svelte';
   import DecodeList from '../ui/DecodeList.svelte';
@@ -13,7 +14,7 @@
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import QsoDock from '../ui/QsoDock.svelte';
   import QsoEditSheet from '../ui/QsoEditSheet.svelte';
-  import StationSheet from '../ui/StationSheet.svelte';
+  import StationDetailSheet from '../ui/StationDetailSheet.svelte';
   import { callStation, confirmBand, qso, select, setFrequencies, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import type { QsoRecord } from '../lib/qso/record';
@@ -195,6 +196,7 @@
       </div>
     </div>
   </header>
+  <ActivationChip />
 
   <AudioBanner
     status={audio.status}
@@ -291,7 +293,7 @@
 <BandSheet bind:open={bandOpen} onconfirm={confirmBand} />
 <SaveSlotSheet bind:open={saveOpen} />
 <MessagesSheet bind:open={messagesOpen} />
-<StationSheet bind:open={detailOpen} item={detail} />
+<StationDetailSheet bind:open={detailOpen} item={detail} />
 <QsoEditSheet bind:open={editOpen} record={editing} />
 
 <style>

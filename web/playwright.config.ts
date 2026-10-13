@@ -56,7 +56,7 @@ export default defineConfig({
     // loaded host the capture can start late enough to put the signals outside the decoder's DT
     // window. Retries bound that; a decoding regression still fails all three attempts.
     { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,

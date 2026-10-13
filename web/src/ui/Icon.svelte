@@ -12,6 +12,12 @@
   </g>
   {#each shape.fill ?? [] as d, i (i)}<path {d} fill="currentColor" />{/each}
   {#each shape.dots ?? [] as [cx, cy, r], i (i)}<circle {cx} {cy} {r} fill="currentColor" />{/each}
+  {#if shape.inner || shape.innerDots}
+    <g class="inner" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width={shape.innerWidth ?? 2}>
+      {#each shape.inner ?? [] as d, i (i)}<path {d} />{/each}
+    </g>
+    {#each shape.innerDots ?? [] as [cx, cy, r], i (i)}<circle class="inner-dot" {cx} {cy} {r} />{/each}
+  {/if}
 </svg>
 
 <style>
@@ -19,5 +25,13 @@
     display: block;
     flex: none;
     overflow: visible;
+  }
+
+  .inner {
+    stroke: var(--rr-on-fill);
+  }
+
+  .inner-dot {
+    fill: var(--rr-on-fill);
   }
 </style>
