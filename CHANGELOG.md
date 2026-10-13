@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Slots and transmissions stay on UTC when the browser's output timestamps disagree with its audio clock. In Playwright's WebKit they gained 1 s every second, so slots drifted and no call went on air. Not tested on an iPhone.
+
 ## 0.6.1 · 2026-10-13
 
 - Send automatically is now off: QSOs stay in the Log as "not sent" until you tap Send to Wavelog. A phone that ran 0.5.0 switches it off once; turn it back on in Settings › Logging.

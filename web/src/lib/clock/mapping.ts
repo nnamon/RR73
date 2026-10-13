@@ -9,6 +9,10 @@
  *
  * Input latency is unknown on iOS, so captured audio may be stamped late by a fixed amount.
  * `offsetS` carries the correction measured from decode DTs; it is 0 until that exists.
+ *
+ * An output timestamp is only as good as the browser's. `outputLatencyMs` checks one against
+ * currentTime and performance.now(): in Playwright's WebKit on Linux, performanceTime advances
+ * 2 s per second, and a mapping built on it runs ahead of UTC by the time audio has run.
  */
 
 export interface OutputTimestamp {
@@ -16,6 +20,27 @@ export interface OutputTimestamp {
   contextTime: number;
   /** performance.now() time at which that audio-clock time is heard, ms. */
   performanceTime: number;
+}
+
+/**
+ * Output latencies outside this range, ms, mean the timestamp is wrong. The upper bound is above
+ * the latency of wired and Bluetooth headsets; no output plays a frame before it is rendered,
+ * and the lower bound leaves room for timestamps rounded to 1 ms and render quanta of 2.7 ms.
+ */
+export const LATENCY_RANGE_MS = { min: -200, max: 500 } as const;
+
+/**
+ * Output latency an output timestamp implies, ms: how long after `perfNow` the frame rendered at
+ * `currentTime` (s) is heard. A correct timestamp gives a few ms to a few hundred.
+ */
+export function outputLatencyMs(ts: OutputTimestamp, currentTime: number, perfNow: number): number {
+  return ts.performanceTime + (currentTime - ts.contextTime) * 1000 - perfNow;
+}
+
+/** True when an output timestamp agrees with currentTime and performance.now() read with it. */
+export function plausibleTimestamp(ts: OutputTimestamp, currentTime: number, perfNow: number): boolean {
+  const ms = outputLatencyMs(ts, currentTime, perfNow);
+  return ms >= LATENCY_RANGE_MS.min && ms <= LATENCY_RANGE_MS.max;
 }
 
 export class AudioClockMapper {
