@@ -76,6 +76,8 @@ export interface Settings {
   watchdog: boolean;
   /** Watchdog limit, min: any positive number. */
   watchdogMin: number;
+  /** Bands where FT8 runs in Hound mode (FT8 DXpedition mode). */
+  houndBands: BandId[];
   features: Features;
   /** Decode colours in priority order: the first enabled match colours a decode. */
   highlights: HighlightEntry[];
@@ -104,6 +106,7 @@ export const DEFAULTS: Settings = {
   huntOrder: 'unworked',
   watchdog: true,
   watchdogMin: 6,
+  houndBands: [],
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
 };
@@ -193,6 +196,7 @@ export function validate(raw: unknown): Settings {
     const m = normaliseMinutes(r.watchdogMin);
     if (m !== null) s.watchdogMin = m;
   }
+  if (Array.isArray(r.houndBands)) s.houndBands = [...new Set(r.houndBands.filter(isBand))];
   for (const k of ['rxHz', 'txHz'] as const) {
     const v = r[k];
     if (typeof v === 'number' && v >= 100 && v <= 2900) s[k] = Math.round(v);

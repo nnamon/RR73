@@ -26,7 +26,7 @@ class Session {
   /** Slot i: the band transmits, ours plays, and the slot's decodes arrive unless we transmitted. */
   step(i: number): SimSignal[] {
     const ours = this.sim.sent.find((t) => t.slot === i - 1);
-    const signals = this.band.slot(this.sim.at(i), ours ? { text: ours.text, freqHz: 1500 } : null);
+    const signals = this.band.slot(this.sim.at(i), ours ? { text: ours.text, freqHz: ours.freqHz ?? this.sim.st.config.txHz } : null);
     this.slots[i] = signals;
     this.sim.play(i);
     if (!this.sim.sent.some((t) => t.slot === i)) this.sim.hear(i, signals.filter((s) => s.snrDb >= -21).map((s) => decode(s.text, Math.round(s.snrDb), s.freqHz, s.dtS)));
@@ -350,5 +350,66 @@ describe('the band', () => {
       for (const x of s.slots.flat()) texts.add(x.text);
     }
     for (const t of texts) expect(JSON.parse(wasm.pack_message(t, 'FT8')), t).toMatchObject({ ok: true, text: t });
+  });
+});
+
+describe('Fox (DXpedition)', () => {
+  /** Hound on, the Fox's first message (its CQ) double-tapped, then `slots` slots of the band. */
+  function workFox(seed: number, slots = 30, over: Partial<SeqConfig> = { hound: true }) {
+    const s = new Session('fox', seed, over);
+    s.step(0);
+    const first = s.slots[0][0];
+    s.sim.call(0, decode(first.text, Math.round(first.snrDb), first.freqHz, first.dtS));
+    s.run(1, slots);
+    return { s, fox: first.call };
+  }
+
+  it('calls CQ first, then works up to 3 Hounds a slot from 300 Hz, 60 Hz apart, in even slots', () => {
+    const { s, fox } = workFox(1, 20);
+    expect(s.slots[0].map((x) => x.text)).toEqual([expect.stringMatching(new RegExp(`^CQ ${fox} [A-R]{2}\\d{2}$`))]);
+    const foxSlots = s.slots.map((xs) => xs.filter((x) => x.call === fox));
+    expect(foxSlots.filter((xs, i) => i % 2 === 1 && xs.length)).toEqual([]);
+    expect(Math.max(...foxSlots.map((xs) => xs.length))).toBe(3);
+    for (const x of foxSlots.flat()) expect([300, 360, 420]).toContain(x.freqHz);
+    expect(foxSlots.flat().some((x) => / RR73; /.test(x.text))).toBe(true);
+    // The Hounds call between 1000 and 2850 Hz and answer on the Fox's stream.
+    for (const x of s.slots.filter((_, i) => i % 2 === 1).flat()) {
+      if (/ [A-R]{2}\d{2}$/.test(x.text)) expect(x.freqHz).toBeGreaterThanOrEqual(1000);
+      else expect([300, 360, 420]).toContain(x.freqHz);
+    }
+  });
+
+  it('answers us after 2 to 4 calls; the R-report goes on its frequency and RR73 logs the QSO', () => {
+    const multi: boolean[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { s, fox } = workFox(seed);
+      const calls = s.sim.sent.filter((t) => t.tx === 1).length;
+      expect(calls, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      expect(calls, `seed ${seed}`).toBeLessThanOrEqual(5);
+      const toMe = s.slots.flatMap((xs, i) => xs.filter((x) => x.call === fox && x.text.includes(`${ME} <${fox}>`) || x.text.startsWith(`${ME} ${fox} -`) || x.text.startsWith(`${ME} ${fox} +`)).map((x) => ({ ...x, slot: i })));
+      expect(toMe.length, `seed ${seed}`).toBeGreaterThan(0);
+      multi.push(toMe[0].text.includes(';'));
+      const r = s.sim.sent.find((t) => t.tx === 3)!;
+      expect(r.slot, `seed ${seed}`).toBe(toMe[0].slot + 1);
+      expect(r.freqHz, `seed ${seed}`).toBe(Math.round(toMe[0].freqHz));
+      expect(s.sim.logged().map((q) => q.call), `seed ${seed}`).toEqual([fox]);
+      expect(s.sim.notices().map((n) => n.kind), `seed ${seed}`).toEqual([]);
+    }
+    // Sometimes the report comes inside a multi-call message, sometimes alone.
+    expect(multi).toContain(true);
+    expect(multi).toContain(false);
+  });
+
+  it('never answers a call below 1000 Hz', () => {
+    const { s } = workFox(1, 20, { hound: false, txHz: 600 });
+    expect(s.sim.sent.every((t) => t.tx === 1)).toBe(true);
+    expect(s.sim.logged()).toEqual([]);
+  });
+
+  it('sends only messages that encode', async () => {
+    const wasm = await loadWasm();
+    if (!wasm) return;
+    const { s } = workFox(9, 40);
+    for (const t of new Set(s.slots.flat().map((x) => x.text))) expect(JSON.parse(wasm.pack_message(t, 'FT8')), t).toMatchObject({ ok: true, text: t });
   });
 });

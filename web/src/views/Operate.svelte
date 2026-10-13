@@ -11,7 +11,7 @@
   import Waterfall from '../ui/Waterfall.svelte';
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
-  import { callStation, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, houndOn, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
@@ -206,7 +206,7 @@
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   <TopBar
     band={settings.band}
-    mode={settings.mode}
+    mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
     dialHz={dialHz(settings.band, settings.mode)}
     utc={utcTime(clock.ms)}
     progress={slotProgress(clock.ms, settings.mode)}

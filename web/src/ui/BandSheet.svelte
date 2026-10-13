@@ -9,6 +9,7 @@
   import type { Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
+  import { setHound } from '../lib/state/qso.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -23,6 +24,7 @@
   });
 
   const dial = $derived(dialHz(band, mode));
+  const hound = $derived(settings.houndBands.includes(band));
 
   // FT4 has no usual frequency on 160m and 60m.
   function chooseBand(b: BandId) {
@@ -57,6 +59,14 @@
       </label>
     {/each}
   </fieldset>
+  {#if mode === 'FT8'}
+    <div class="group hound">
+      <label class="row">
+        <span class="row-main"><span class="row-title">Hound</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={hound} onchange={(e) => setHound(e.currentTarget.checked)} />
+      </label>
+    </div>
+  {/if}
   <div class="setblock">
     <p class="k">Set the radio to</p>
     <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
@@ -109,6 +119,11 @@
   .seg-i.off {
     color: var(--rr-label3);
     cursor: default;
+  }
+
+  .hound {
+    margin-top: var(--rr-space-3);
+    background: var(--rr-sheet-card);
   }
 
   .setblock {

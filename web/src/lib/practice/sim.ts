@@ -14,6 +14,7 @@ import { SLOT_MS, type Mode } from '../clock/slots';
 import { formatReport, parseExchange, sameCall, type Exchange } from '../qso/messages';
 import { Rng, continentOf, newCallsign, type Continent } from './calls';
 import type { ScenarioId } from './scenarios';
+import { FoxBand } from './fox';
 
 /** Slow fading (QSB): the level swings `depthDb` peak to peak with a period of `periodS`. */
 export interface Fading {
@@ -126,6 +127,8 @@ export class PracticeBand {
   private lastHeard: Heard[] = [];
   private readonly target: [number, number];
   private readonly myContinent: Continent | null;
+  /** The Fox scenario's DXpedition and Hounds, which replace the band while it runs. */
+  private fox: FoxBand | null = null;
 
   constructor(options: BandOptions) {
     this.options = { ...options, myCall: options.myCall.toUpperCase() };
@@ -159,6 +162,10 @@ export class PracticeBand {
    * sent in the slot before it (null when nothing went out).
    */
   slot(slotStartMs: number, operator: OperatorTx | null): SimSignal[] {
+    if (this.options.scenario === 'fox') {
+      this.fox ??= new FoxBand(this.rng.fork(), this.options);
+      return this.fox.slot(slotStartMs, operator);
+    }
     const k = Math.round(slotStartMs / SLOT_MS[this.options.mode]);
     const parity = (((k % 2) + 2) % 2) as 0 | 1;
     const inbox: Heard[] = this.lastSlot === k - 1 ? [...this.lastHeard] : [];

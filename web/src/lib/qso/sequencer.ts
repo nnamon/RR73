@@ -12,7 +12,7 @@
 import { SLOT_MS, parity as parityOf, slotStart, type Mode, type Parity } from '../clock/slots';
 import type { Decode } from '../decode/types';
 import { pathBetween } from './grid';
-import { buildMessages, formatReport, isGrid, parseExchange, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
+import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
 
 export type QueueOrder = 'first' | 'strongest' | 'farthest' | 'new';
@@ -35,6 +35,22 @@ const STALE_SLOTS = 4;
 export const IGNORE_MS = 10 * 60_000;
 /** Slots to wait for a lost station to end its QSO before giving up. */
 export const TAIL_WATCH_SLOTS = 8;
+/** Hound: the lowest Tx1 frequency; a Fox does not answer calls below it, Hz. */
+export const HOUND_MIN_HZ = 1000;
+/** Hound: a repeated R-report moves this far from where the Fox called us, Hz. */
+export const HOUND_SHIFT_HZ = 300;
+/** Hound: the top of the Fox's range, which repeated R-reports stay within, Hz. */
+const FOX_TOP_HZ = 900;
+
+/** Hound: where Tx1 goes out for the operator's Tx frequency `hz`: 1000 Hz or above. */
+export function houndCallHz(hz: number): number {
+  return Math.max(hz, HOUND_MIN_HZ);
+}
+
+/** Hound: where a repeated R-report goes, 300 Hz above `foxHz` within the Fox's range, else below. */
+export function houndRepeatHz(foxHz: number): number {
+  return foxHz + HOUND_SHIFT_HZ <= FOX_TOP_HZ ? foxHz + HOUND_SHIFT_HZ : foxHz - HOUND_SHIFT_HZ;
+}
 
 export interface SeqConfig {
   myCall: string;
@@ -61,6 +77,11 @@ export interface SeqConfig {
   cqModifier: string | null;
   /** Decoder preset, recorded with each QSO. */
   preset: string;
+  /**
+   * FT8 DXpedition mode as a Hound (docs/design/hound.md): Tx1 at 1000 Hz or above, the
+   * R-report at the frequency the Fox sent our report on, logged on the Fox's RR73.
+   */
+  hound: boolean;
 }
 
 export interface Worked {
@@ -132,6 +153,8 @@ export interface Partner {
   /** Start of our first transmission to them, UTC ms. */
   startMs: number | null;
   logged: boolean;
+  /** Hound: the frequency the Fox sent our report on, where our R-report goes, Hz. */
+  foxHz: number | null;
 }
 
 export interface Planned {
@@ -144,6 +167,8 @@ export interface Planned {
   /** A slot of our parity that came too late for this decision, UTC ms. */
   tooLateFor: number | null;
   scheduled: boolean;
+  /** Tx audio frequency the sequencer sets (Hound), Hz; null for the operator's Tx frequency. */
+  freqHz: number | null;
 }
 
 export interface Sent {
@@ -191,6 +216,8 @@ export interface SeqState {
   worked: Worked[];
   /** QSOs completed with this state, newest last; the app keeps the records. */
   completed: number;
+  /** Hound: the Fox last logged, for the status line until the next call. */
+  houndLogged: string | null;
 }
 
 export type SeqEvent =
@@ -215,7 +242,7 @@ export type SeqEvent =
   | { type: 'setWorked'; worked: Worked[]; nowMs: number };
 
 export type SeqEffect =
-  | { type: 'scheduleTx'; tx: TxNum; text: string; slotStartMs: number; startOffsetS: number }
+  | { type: 'scheduleTx'; tx: TxNum; text: string; slotStartMs: number; startOffsetS: number; freqHz: number | null }
   | { type: 'cancelTx'; stopPlaying: boolean }
   | { type: 'logQso'; record: LogQsoRecord }
   | { type: 'notice'; kind: NoticeKind; text: string }
@@ -266,6 +293,7 @@ export function initialState(config: SeqConfig): SeqState {
     audioOk: true,
     worked: [],
     completed: 0,
+    houndLogged: null,
   };
 }
 
@@ -284,7 +312,8 @@ export function notReady(st: SeqState): string | null {
 export function messages(st: SeqState): Record<TxNum, string> {
   const p = st.partner;
   const generated = buildMessages({
-    dx: p?.call ?? null,
+    // A Hound calls a Fox with a compound callsign by its base callsign (K1JT's guide).
+    dx: p ? (st.config.hound ? foxCall(p.call) : p.call) : null,
     me: st.config.myCall,
     grid: st.config.myGrid,
     report: p ? (p.reportSent ?? p.snrDb) : null,
@@ -386,8 +415,19 @@ class Machine {
       st.next = null;
       return;
     }
-    st.next = { tx, text, ...ourSlot(st, nowMs), scheduled: false };
+    st.next = { tx, text, ...ourSlot(st, nowMs), scheduled: false, freqHz: this.txFreq(tx) };
     this.flush();
+  }
+
+  /**
+   * Hound: the R-report goes where the Fox sent our report, and a repeat 300 Hz away; anything
+   * else at the operator's Tx frequency, raised to 1000 Hz. Null outside Hound mode.
+   */
+  txFreq(tx: TxNum): number | null {
+    if (!this.cfg.hound) return null;
+    const p = this.st.partner;
+    if (tx === 3 && p?.foxHz != null) return this.st.retries > 0 ? houndRepeatHz(p.foxHz) : p.foxHz;
+    return this.cfg.txHz < HOUND_MIN_HZ ? houndCallHz(this.cfg.txHz) : null;
   }
 
   /** Withdraws the planned transmission. */
@@ -402,7 +442,7 @@ class Machine {
     const n = this.st.next;
     if (!n) return;
     if (!n.scheduled && this.canTransmit()) {
-      this.fx.push({ type: 'scheduleTx', tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, startOffsetS: n.offsetS });
+      this.fx.push({ type: 'scheduleTx', tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, startOffsetS: n.offsetS, freqHz: n.freqHz });
       n.scheduled = true;
     } else if (n.scheduled && !this.canTransmit()) {
       this.fx.push({ type: 'cancelTx', stopPlaying: false });
@@ -473,7 +513,9 @@ class Machine {
       rcvdAck: false,
       startMs: null,
       logged: false,
+      foxHz: null,
     };
+    this.st.houndLogged = null;
   }
 
   /**
@@ -611,6 +653,11 @@ class Machine {
     const st = this.st;
     const call = bare(st.partner?.call ?? '');
     const n = this.cfg.maxRetries;
+    if (this.cfg.hound && st.partner?.rcvdRpt) {
+      this.notice('no-reply', `No RR73 from ${call} after ${n} repeats. Not logged.`);
+      this.afterQso(nowMs, false);
+      return;
+    }
     if (st.phase === 'answering') {
       if (st.hunt) {
         this.ignore(call, nowMs);
@@ -830,7 +877,7 @@ class Machine {
     const st = this.st;
     // Keep the partner's latest signal for the report and the log.
     if (st.partner) {
-      const heard = e.decodes.filter((d) => sameCall(parseExchange(d.text).from, st.partner!.call));
+      const heard = e.decodes.filter((d) => parseParts(d.text).some((x) => sameCall(x.from, st.partner!.call)));
       const last = heard[heard.length - 1];
       if (last) Object.assign(st.partner, { snrDb: last.snr_db, dtS: last.dt_s, freqHz: last.freq_hz });
     }
@@ -852,6 +899,10 @@ class Machine {
     if (st.parity && parityOf(e.slotStartMs, this.cfg.mode) === st.parity) return;
     const sentLastSlot = st.lastSent?.slotStartMs === e.slotStartMs - this.len;
 
+    if (this.cfg.hound && st.phase === 'answering' && st.partner && !st.partner.logged) {
+      this.houndDecide(e, sentLastSlot);
+      return;
+    }
     if (st.phase === 'cq') this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
 
     if (st.partner) {
@@ -909,15 +960,62 @@ class Machine {
     }
   }
 
+  /**
+   * Hound (FT8 DXpedition mode): the Fox works several Hounds in each slot, in standard messages
+   * and multi-call messages, so only the parts addressed to us count and the Fox working others
+   * never reads as a lost station. A report gets the R-report at the frequency it came on; RR73
+   * after our report logs the QSO and Tx goes off. Tx1 repeats until the Fox answers or the
+   * watchdog stops it; the R-report repeats up to the retry limit, 300 Hz away.
+   */
+  houndDecide(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean) {
+    const st = this.st;
+    const p = st.partner!;
+    const me = this.cfg.myCall;
+    const toUs = e.decodes.flatMap((d) => parseParts(d.text).flatMap((x) => (sameCall(x.to, me) && fromFox(x, p.call) ? [{ x, d }] : [])));
+    // The Fox sends RR73 only after hearing our R-report, so an RR73 without a report to us is
+    // another Hound's.
+    if (p.rcvdRpt && toUs.some(({ x }) => ENDS.includes(x.kind))) {
+      p.rcvdAck = true;
+      this.complete(e.nowMs);
+      st.houndLogged = bare(p.call);
+      this.afterQso(e.nowMs, true);
+      return;
+    }
+    const rpt = toUs.filter(({ x }) => x.kind === 'report' || x.kind === 'rreport').at(-1);
+    if (rpt) {
+      p.reportRcvd = rpt.x.report;
+      p.rcvdRpt = true;
+      p.foxHz = Math.round(rpt.d.freq_hz);
+      Object.assign(p, { snrDb: rpt.d.snr_db, dtS: rpt.d.dt_s });
+      st.paused = false;
+      st.pausedWhy = null;
+      this.goTo(3, e.nowMs);
+      return;
+    }
+    if (sentLastSlot && st.current && !st.paused) {
+      // Tx1 repeats with no limit, as WSJT-X's Hound does; the watchdog ends it.
+      if (st.current === 1) this.plan(1, e.nowMs);
+      else this.goTo(st.current, e.nowMs);
+      return;
+    }
+    if (st.next && !st.next.scheduled && st.current) this.plan(st.current, e.nowMs);
+  }
+
   callStation(e: Extract<SeqEvent, { type: 'callStation' }>) {
     const st = this.st;
     const me = this.cfg.myCall;
-    const ex = parseExchange(e.decode.text);
+    const parts = parseParts(e.decode.text);
+    const ex = parts.find((x) => sameCall(x.to, me)) ?? parts[0];
     let dx: string | null;
     if (ex.kind === 'cq') dx = ex.from;
     else if (sameCall(ex.to, me)) dx = ex.from;
     else if (sameCall(ex.from, me)) dx = ex.to;
     else dx = ex.from ?? ex.to;
+    if (ex.multi && dx === '<...>') {
+      this.notice('cannot-call', 'This message shows the Fox as <...>. Call it from a message with its callsign.');
+      return;
+    }
+    if (ex.multi && dx) dx = bare(dx);
     if (!dx || sameCall(dx, me)) {
       this.notice('cannot-call', 'There is no other callsign in this message to call.');
       return;
@@ -942,6 +1040,7 @@ class Machine {
     st.txEnabled = true;
     st.lastSent = null;
     const addressed = sameCall(ex.to, me) ? this.reply(ex, e.nowMs) : null;
+    if (this.cfg.hound && st.partner && (addressed === 3 || addressed === 4)) st.partner.foxHz = Math.round(e.decode.freq_hz);
     if (addressed === 'complete') {
       this.complete(e.nowMs);
       this.goTo(5, e.nowMs);
@@ -1170,8 +1269,10 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       Object.assign(st.config, e.patch);
       const changed = (k: keyof SeqConfig) => e.patch[k] !== undefined && e.patch[k] !== was[k];
       // Choosing a band applies it and Tx keeps its state. A new mode changes the slot length,
-      // so a QSO in progress cannot carry on: everything stops.
-      if (changed('mode')) {
+      // and Hound changes the frequencies and the exchange, so a QSO in progress cannot carry
+      // on: everything stops.
+      if (changed('mode') || changed('hound')) {
+        st.houndLogged = null;
         m.stopAll();
         m.reset();
         break;

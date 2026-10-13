@@ -41,7 +41,8 @@ export function steps(st: SeqState): Step[] {
         [rcvd ?? 'Report', p.rcvdRpt],
         [sent ? `R${sent}` : 'R-report', p.sentRRpt],
         [st.config.ack, p.rcvdAck],
-        ['73', p.logged && !st.onAir && st.current !== 5],
+        // A Hound logs on the Fox's RR73 and sends no 73.
+        st.config.hound ? ['Logged', p.logged] : ['73', p.logged && !st.onAir && st.current !== 5],
       ];
   let marked = false;
   return list.map(([label, done]) => {
@@ -94,6 +95,22 @@ export function huntText(st: SeqState): string | null {
     else what = `calling ${call} (${db > 0 ? '+' : ''}${signedNum(db)} dB)`;
   }
   return `Hunt · ${what}${tally}`;
+}
+
+/**
+ * Hound's status line, the stage of the QSO with the Fox: "Calling the Fox · KH7Z",
+ * "Report received · −13 dB from KH7Z", "Logged · KH7Z". Null outside Hound mode, with no Fox
+ * called, or when answering has given up.
+ */
+export function houndText(st: SeqState): string | null {
+  if (!st.config.hound) return null;
+  const p = st.partner;
+  if (!p) return st.houndLogged ? `Logged · ${st.houndLogged}` : null;
+  const call = bare(p.call);
+  if (p.logged) return `Logged · ${call}`;
+  if (st.paused) return null;
+  if (p.rcvdRpt && p.reportRcvd !== null) return `Report received · ${signed(formatReport(p.reportRcvd))} dB from ${call}`;
+  return `Calling the Fox · ${call}`;
 }
 
 /** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */
