@@ -51,6 +51,15 @@ services:
       - .:/work
       - ${RR73_CORPUS:-./corpus}:/work/corpus
 
+  minimodem:
+    build: { context: tools/minimodem }
+    image: rr73-minimodem:latest
+    network_mode: bridge
+    working_dir: /work
+    volumes:
+      - .:/work
+      - ${RR73_CORPUS:-./corpus}:/work/corpus
+
   kiwi:
     build: { context: tools/kiwi }
     image: rr73-kiwi:latest

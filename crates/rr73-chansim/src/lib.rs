@@ -6,6 +6,7 @@
 //! same scene and seed give the same samples.
 
 pub mod channel;
+pub mod continuous;
 pub mod messages;
 pub mod scene;
 
