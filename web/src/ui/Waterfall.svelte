@@ -3,8 +3,8 @@
    * The live waterfall: newest time at the top, 0 to 3000 Hz across, slot lines labelled with
    * their UTC start, and a ruler strip under it with a tick every 100 Hz, a taller one every
    * 500 Hz and labels from 500 to 3000. Drawing happens in the waterfall worker; this component
-   * sizes the canvas, feeds it audio and places the overlays. Slots RR73 transmitted in are drawn
-   * blank and labelled Tx.
+   * sizes the canvas, feeds it audio and places the overlays. Slots RR73 transmitted in show
+   * the transmitted audio and are labelled Tx.
    *
    * Tx (red) and Rx (green) show as two lines at the signal's lowest and highest tone with a
    * light fill, through the picture and the ruler. Dragging sideways anywhere moves Tx, with the
@@ -23,7 +23,7 @@
   import type { Contrast } from '../lib/waterfall/levels';
   import { utcTime } from '../lib/clock/format';
   import type { Mode } from '../lib/clock/slots';
-  import { onAudioChunk } from '../lib/state/station.svelte';
+  import { onAudioChunk, onTxWave, recentTxWaves } from '../lib/state/station.svelte';
 
   let {
     mode,
@@ -38,7 +38,7 @@
     mode: Mode;
     rxHz: number;
     txHz: number;
-    /** Starts of the slots RR73 transmitted in, UTC ms: drawn blank. */
+    /** Starts of the slots RR73 transmitted in, UTC ms: drawn from the transmitted audio. */
     txSlots?: number[];
     contrast?: Contrast;
     stoppedAtUtcMs?: number | null;
@@ -59,8 +59,11 @@
 
   const marks = $derived((frame?.boundaries ?? []).map((b) => ({ utcMs: b.utcMs, y: b.y / dpr })));
   const sent = $derived(new Set(txSlots));
-  // Each label sits 14 px above its line; a label that would cross the top edge is dropped.
-  const labels = $derived(marks.map((b) => ({ key: b.utcMs, text: `${utcTime(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0));
+  let rulerH = $state(0);
+  // Each label sits 14 px above its line; a label that would cross the top edge or reach the ruler is dropped.
+  const labels = $derived(
+    marks.map((b) => ({ key: b.utcMs, text: `${utcTime(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0 && l.top + 13 <= height - rulerH),
+  );
   const TICKS = ticks();
   const LABELS = rulerLabels();
 
@@ -158,6 +161,7 @@
         client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
         client.setContrast(contrast);
         client.setTxSlots(txSlots);
+        for (const w of recentTxWaves()) client.setTxWave(w);
       } else client.resize(w, h);
     };
     const ro = new ResizeObserver(measure);
@@ -166,8 +170,10 @@
     const off = onAudioChunk((c) => {
       client?.push(c.samples, c.utcMs, c.index);
     });
+    const offTx = onTxWave((w) => client?.setTxWave(w));
     return () => {
       off();
+      offTx();
       ro.disconnect();
       client?.destroy();
       client = null;
@@ -190,7 +196,7 @@
         <span class="hint" data-testid="drag-hint">Drag to move Tx. Drag the green marker to move Rx.</span>
       {/if}
     </div>
-    <div class="ruler" aria-hidden="true">
+    <div class="ruler" aria-hidden="true" bind:clientHeight={rulerH}>
       {#each TICKS as t (t.hz)}
         <i class="tick" class:major={t.major} style:left="{t.x * 100}%"></i>
       {/each}
@@ -254,9 +260,10 @@
     cursor: ew-resize;
   }
 
+  /* The picture fills the waterfall; the ruler lies over its bottom edge. */
   .pic {
     position: absolute;
-    inset: 0 0 var(--rr-ruler) 0;
+    inset: 0;
   }
 
   canvas {
@@ -283,20 +290,23 @@
     color: var(--rr-wf-text);
   }
 
-  /* The ruler: a tick every 100 Hz, a taller one every 500 Hz, labels under the tall ones. */
+  /* The ruler over the bottom of the picture: ticks on the bottom edge, a tick every 100 Hz and a
+     taller one every 500 Hz, labels over the tall ones. It sits above the Tx and Rx markers, so
+     their lines pass behind the numbers. */
   .ruler {
     position: absolute;
     right: 0;
     bottom: 0;
     left: 0;
+    z-index: 2;
     height: var(--rr-ruler);
-    background: var(--rr-wf-ruler);
-    box-shadow: inset 0 var(--rr-hairline) 0 var(--rr-wf-ruler-rule);
+    background: var(--rr-wf-ruler-veil);
+    pointer-events: none;
   }
 
   .tick {
     position: absolute;
-    top: 0;
+    bottom: 0;
     width: var(--rr-hairline);
     height: 4px;
     background: var(--rr-wf-tick);
@@ -308,8 +318,11 @@
   }
 
   .rl {
-    top: 8px;
+    bottom: 7px;
     color: var(--rr-wf-ruler-text);
+    text-shadow:
+      0 0 2px var(--rr-wf-bg),
+      0 0 2px var(--rr-wf-bg);
     transform: translateX(-50%);
   }
 
@@ -333,7 +346,7 @@
   /* A small pill at the bottom left of the picture, above the ruler. */
   .hint {
     position: absolute;
-    bottom: var(--rr-space-1-5);
+    bottom: calc(var(--rr-ruler) + var(--rr-space-1-5));
     left: var(--rr-space-1-5);
     max-width: calc(100% - 2 * var(--rr-space-1-5));
     padding: var(--rr-space-half) var(--rr-space-2);
@@ -352,6 +365,7 @@
     position: absolute;
     top: 0;
     bottom: 0;
+    z-index: 1;
     border-right: 2px solid;
     border-left: 2px solid;
     pointer-events: none;
@@ -382,6 +396,7 @@
   .tag {
     position: absolute;
     top: var(--rr-space-4);
+    z-index: 3;
     padding: var(--rr-space-half) var(--rr-space-1-5);
     border-radius: var(--rr-radius-s);
     background: var(--rr-tx-fill);

@@ -11,6 +11,21 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Practice scenario Fox (DXpedition): a Fox works 3 Hounds a slot and answers you after a few calls.
 - A multi-call message with a report below −30 dB is refused. It went out as a high report.
 
+## 0.10.3 · 2026-10-13
+
+- Hunt moves on to the next CQ as soon as the station it calls answers another station. It used to wait for that QSO to end and call once more, as Tail-end does for a call by hand.
+- The frequency ruler lies over the bottom edge of the waterfall, with its ticks on the edge and the numbers above them, so the picture is 22 pt taller. The Tx and Rx markers pass behind the numbers.
+
+## 0.10.2 · 2026-10-13
+
+- The Logged notice and the notices about updates float above Operate's buttons. In 0.10.1 they pushed the buttons up.
+- Every line in Operate's status line has one style, and its notices are shorter: "Tx set to 908 Hz", "No reply from VK2LAW", "Watchdog stopped Tx after 6 min".
+- Run in ••• is now Repeat CQ. The Run tag in the status line is removed.
+- Work dupes in Run, in Settings, is now Work dupes.
+- Choosing a practice scenario shows its name in the status line: "Practice · Pile-up".
+- While transmitting, the waterfall shows the transmitted tones in their slot over an even floor, and Tune shows its tone. Halt ends them where the audio stopped. In 0.10.1 those slots were blank.
+- About in Settings has one Version history row with the version, and the reload rows. The Licence row is removed, and the Decoder row moves to Settings › Radio and audio › Timing.
+
 ## 0.10.1 · 2026-10-13
 
 - Decode rows are 32 pt and lead with the message in 16 pt proportional type, with the calling station of a CQ in bold. SNR and audio frequency follow on the right in grey: "−12 dB · 766 Hz".

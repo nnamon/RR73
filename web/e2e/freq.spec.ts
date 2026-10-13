@@ -60,6 +60,26 @@ test('a drag moves Tx with a live label, sets it on release, and the hint goes f
   await expect(page.getByRole('switch', { name: 'Hold Tx frequency' })).toBeChecked();
 });
 
+test('the ruler lies over the bottom of the picture, and the markers pass behind its numbers', async ({ page }) => {
+  await page.goto('./#/operate');
+  const b = await area(page);
+  const bottom = b.y + b.height;
+  // The picture reaches the bottom edge. In 0.10.2 it stopped 22 pt above it, over a ruler strip.
+  const pic = (await page.getByTestId('waterfall').boundingBox())!;
+  expect(Math.abs(pic.y + pic.height - bottom)).toBeLessThan(1);
+  // Ticks stand on the bottom edge, with the labels above them.
+  const tick = (await page.locator('.wf .tick.major').first().boundingBox())!;
+  expect(Math.abs(tick.y + tick.height - bottom)).toBeLessThan(1);
+  const label = (await page.locator('.wf .rl').first().boundingBox())!;
+  expect(label.y + label.height).toBeLessThanOrEqual(tick.y + 0.5);
+  // The ruler stacks above the Tx and Rx markers, so their lines pass behind the numbers.
+  const [ruler, tx, rx] = await page.evaluate(() =>
+    ['.wf .ruler', '.wf .mark.tx', '.wf .mark.rx'].map((q) => Number(getComputedStyle(document.querySelector(q)!).zIndex)),
+  );
+  expect(ruler).toBeGreaterThan(tx);
+  expect(ruler).toBeGreaterThan(rx);
+});
+
 test('a tap sets Tx where it lands, and a drag from the green line moves Rx', async ({ page }) => {
   await page.goto('./#/operate');
   const b = await area(page);
@@ -127,6 +147,6 @@ test('Find clear Tx in the ••• menu says when there is not enough audio', 
   await bar.getByRole('button', { name: 'More' }).click();
   await page.getByRole('menuitem', { name: 'Find clear Tx' }).click();
   await expect(page.getByRole('menu')).toBeHidden();
-  await expect(bar.getByRole('status')).toHaveText('Finding a clear Tx frequency needs 2 slots of audio.');
+  await expect(bar.getByRole('status')).toHaveText('Not enough audio yet');
   await expect(slider(page, 'Transmit')).toHaveValue('1500');
 });

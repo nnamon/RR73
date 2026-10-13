@@ -8,6 +8,7 @@
 import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
+import { STATUS } from '../qso/status';
 import { parity as parityOf, type Parity } from '../clock/slots';
 import { dialHz } from '../radio/bands';
 import type { Decode } from '../decode/types';
@@ -21,7 +22,7 @@ import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
-import { audio, audioOut, codec, markTransmitted, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
+import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
 
 export interface SentRow {
   slotStartMs: number;
@@ -101,7 +102,7 @@ const scheduler = new TxScheduler({
     return out ? webAudioOut(out.ctx, out.mapper) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
-  gate: () => (audio.status !== 'running' ? 'Resume audio to transmit.' : notReady(qso.st)),
+  gate: () => (audio.status !== 'running' ? STATUS.audioOff : notReady(qso.st)),
   report: onTxReport,
 });
 
@@ -159,11 +160,13 @@ function onTxReport(r: TxReport) {
     // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
     markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: hz });
     qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: hz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
+    void showTx(r.startUtcMs, r.text, qso.st.config.mode, hz);
   } else if (r.type === 'ended') {
     qso.onAir = null;
+    if (!r.complete) cutTx(now);
     dispatch({ type: 'txEnded', slotStartMs: r.slotStartMs, text: r.text, complete: r.complete, nowMs: now });
   } else if (r.type === 'missed') {
-    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: 'The message could not be encoded. Check it in Messages.', atMs: now };
+    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: STATUS.encode, atMs: now };
     dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
   } else {
     qso.notice = { kind: 'refused', text: r.reason, atMs: now };

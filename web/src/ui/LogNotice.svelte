@@ -47,7 +47,8 @@
 
 <style>
   .wrap {
-    flex: none;
+    width: 100%;
+    max-width: var(--rr-reading);
   }
 
   .toast {
@@ -55,7 +56,9 @@
     align-items: center;
     gap: var(--rr-space-1);
     min-height: var(--rr-tap);
-    margin: 0 var(--rr-space-4) var(--rr-space-1);
+    margin-top: var(--rr-space-2);
+    box-shadow: 0 var(--rr-space-1) var(--rr-space-4) var(--rr-shadow-thumb);
+    pointer-events: auto;
     padding-left: var(--rr-space-4);
     border-radius: var(--rr-radius-l);
     background: var(--rr-toast);

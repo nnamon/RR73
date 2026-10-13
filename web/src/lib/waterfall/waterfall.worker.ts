@@ -38,5 +38,6 @@ scope.onmessage = (e) => {
   else if (m.type === 'clear') renderer.clear();
   else if (m.type === 'contrast') renderer.setContrast(m.contrast);
   else if (m.type === 'txSlots') renderer.setTxSlots(m.starts);
+  else if (m.type === 'txWave') renderer.setTxWave(m.wave);
   scope.postMessage({ type: 'frame', info: renderer.info() });
 };

@@ -146,7 +146,7 @@ test('the theme setting overrides the system', async ({ page }) => {
 
 test('Settings shows the version, and it opens the version history', async ({ page }) => {
   await page.goto('./#/settings');
-  const row = page.getByRole('link', { name: new RegExp(`^Version ${VERSION.replace(/\./g, '\\.')} \\(\\w+\\)`) });
+  const row = page.getByRole('link', { name: `Version history ${VERSION}` });
   await expect(row).toBeVisible();
   await row.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Version history' })).toBeVisible();
@@ -199,7 +199,7 @@ test('a screen opened from Settings starts at the top, and Back returns to the s
   await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
   const down = await pane.evaluate((el) => el.scrollTop);
   expect(down).toBeGreaterThan(100);
-  await page.getByRole('link', { name: /^Version / }).click();
+  await page.getByRole('link', { name: /^Version history/ }).click();
   await expect(page).toHaveURL(/#\/settings\/versions$/);
   await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBe(0);
   await page.goBack();

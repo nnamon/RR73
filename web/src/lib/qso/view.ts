@@ -7,6 +7,7 @@ import { MINUS, signed as signedNum, utcTime } from '../clock/format';
 import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
 import { messages, type SeqState } from './sequencer';
+import { PAUSED, STATUS } from './status';
 
 export type StepState = 'done' | 'now' | 'next' | 'todo';
 
@@ -64,7 +65,7 @@ export function barText(st: SeqState): string | null {
   const m = messages(st);
   const p = st.partner;
   if (st.onAir) return `Tx${st.onAir.tx} · ${st.onAir.text}`;
-  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? `no reply after ${st.config.maxRetries} repeats`}`;
+  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? PAUSED.noReply}`;
   if (p && st.lost?.state === 'watching') return `${bare(p.call)} · working ${st.lost.other}`;
   if (st.next) {
     const n = st.next;
@@ -105,12 +106,12 @@ export function huntText(st: SeqState): string | null {
 export function houndText(st: SeqState): string | null {
   if (!st.config.hound) return null;
   const p = st.partner;
-  if (!p) return st.houndLogged ? `Logged · ${st.houndLogged}` : null;
+  if (!p) return st.houndLogged ? STATUS.houndLogged(st.houndLogged) : null;
   const call = bare(p.call);
-  if (p.logged) return `Logged · ${call}`;
+  if (p.logged) return STATUS.houndLogged(call);
   if (st.paused) return null;
-  if (p.rcvdRpt && p.reportRcvd !== null) return `Report received · ${signed(formatReport(p.reportRcvd))} dB from ${call}`;
-  return `Calling the Fox · ${call}`;
+  if (p.rcvdRpt && p.reportRcvd !== null) return STATUS.houndReport(signed(formatReport(p.reportRcvd)), call);
+  return STATUS.houndCalling(call);
 }
 
 /** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */

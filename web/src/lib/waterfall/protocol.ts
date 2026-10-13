@@ -1,5 +1,5 @@
 import type { WaterfallPalette } from './colormap';
-import type { FrameInfo } from './renderer';
+import type { FrameInfo, TxWave } from './renderer';
 import type { Mode } from '../clock/slots';
 import type { Contrast } from './levels';
 
@@ -10,6 +10,7 @@ export type ToWaterfall =
   | { type: 'mode'; mode: Mode }
   | { type: 'contrast'; contrast: Contrast }
   | { type: 'txSlots'; starts: number[] }
+  | { type: 'txWave'; wave: TxWave }
   | { type: 'clear' }
   | { type: 'quietest'; id: number; nowMs: number; nearHz: number };
 

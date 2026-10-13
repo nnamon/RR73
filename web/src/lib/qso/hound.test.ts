@@ -122,7 +122,7 @@ describe('Hound', () => {
     const s = calling();
     s.run(1, 12, { 2: [decode('9V1NE KH7Z -10', -12, 360)] });
     expect(texts(s)).toEqual(['1:KH7Z 9V1NE OJ11', '3:KH7Z 9V1NE R-12 @360', '5:KH7Z 9V1NE R-12 @660', '7:KH7Z 9V1NE R-12 @660', '9:KH7Z 9V1NE R-12 @660']);
-    expect(s.notices().at(-1)!.text).toBe('No RR73 from KH1/KH7Z after 3 repeats. Not logged.');
+    expect(s.notices().at(-1)!.text).toBe('No reply from KH1/KH7Z · not logged');
     expect(s.logged()).toEqual([]);
     expect(s.st.txEnabled).toBe(false);
   });
@@ -157,7 +157,7 @@ describe('Hound', () => {
     const s = new Sim({ hound: true });
     s.call(0, decode('K1ABC RR73; W9XYZ <...> -08', -11, 480));
     expect(s.st.partner).toBeNull();
-    expect(s.notices().map((n) => n.text)).toEqual(['This message shows the Fox as <...>. Call it from a message with its callsign.']);
+    expect(s.notices().map((n) => n.text)).toEqual(['Fox callsign not in this message']);
   });
 
   it('shows the stage in the status line and ends the steps with Logged', () => {

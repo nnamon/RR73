@@ -10,6 +10,7 @@
  */
 
 import { SLOT_MS, parity as parityOf, slotStart, type Mode, type Parity } from '../clock/slots';
+import { PAUSED, STATUS } from './status';
 import type { Decode } from '../decode/types';
 import { pathBetween } from './grid';
 import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
@@ -304,8 +305,8 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-
 /** Why transmitting is not possible now, or null. */
 export function notReady(st: SeqState): string | null {
   const c = st.config;
-  if (!c.myCall.trim() || !isGrid(c.myGrid)) return 'Set your callsign and grid in Settings to transmit.';
-  if (!st.audioOk) return 'Resume audio to transmit.';
+  if (!c.myCall.trim() || !isGrid(c.myGrid)) return STATUS.setUp;
+  if (!st.audioOk) return STATUS.audioOff;
   return null;
 }
 
@@ -652,24 +653,23 @@ class Machine {
   giveUp(nowMs: number) {
     const st = this.st;
     const call = bare(st.partner?.call ?? '');
-    const n = this.cfg.maxRetries;
     if (this.cfg.hound && st.partner?.rcvdRpt) {
-      this.notice('no-reply', `No RR73 from ${call} after ${n} repeats. Not logged.`);
+      this.notice('no-reply', STATUS.noReplyNotLogged(call));
       this.afterQso(nowMs, false);
       return;
     }
     if (st.phase === 'answering') {
       if (st.hunt) {
         this.ignore(call, nowMs);
-        this.notice('no-reply', `No reply from ${call} after ${n} repeats.`);
+        this.notice('no-reply', STATUS.noReply(call));
         this.afterQso(nowMs, false);
         return;
       }
-      this.pause(`no reply after ${n} repeats`);
-      this.notice('no-reply', `No reply from ${call} after ${n} repeats. Tap Call to try again.`);
+      this.pause(PAUSED.noReply);
+      this.notice('no-reply', STATUS.noReply(call));
       return;
     }
-    this.notice('dropped', `${call} went quiet after ${n} repeats. RR73 did not log the QSO.`);
+    this.notice('dropped', STATUS.noReplyNotLogged(call));
     this.afterQso(nowMs, false);
   }
 
@@ -803,9 +803,9 @@ class Machine {
 
   /**
    * The station we call, before it has answered us, sends a report, an R-report, RR73 or 73 to
-   * another station: calling stops. With tail-ending on, one more call goes out in the next slot
-   * of our parity once they send RR73 or 73 to that station (or call CQ). Returns true when this
-   * decides the slot.
+   * another station: calling stops. Hunt moves on to the next CQ at once. Called by hand with
+   * tail-ending on, one more call goes out in the next slot of our parity once they send RR73 or
+   * 73 to that station (or call CQ). Returns true when this decides the slot.
    */
   lostStation(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean): boolean {
     const st = this.st;
@@ -821,12 +821,13 @@ class Machine {
       const other = bare(toOther.to!);
       st.lost = { other, state: 'watching', sinceMs: e.slotStartMs };
       this.unplan();
-      if (!this.cfg.tailEnd) {
-        this.notice('lost', `${call} answered ${other}.`);
-        this.drop(`${call} answered ${other}`, e.nowMs, false);
+      // Hunt never waits for a lost station: another CQ is worth more than a tail-end call.
+      if (!this.cfg.tailEnd || st.hunt) {
+        this.notice('lost', STATUS.answered(call, other));
+        this.drop(PAUSED.answered(other), e.nowMs, false);
         return true;
       }
-      this.notice('lost', `${call} answered ${other}. Calling once more when they finish.`);
+      this.notice('lost', STATUS.answered(call, other));
       if (ENDS.includes(toOther.kind)) this.tailCall(e);
       return true;
     }
@@ -837,15 +838,15 @@ class Machine {
         return true;
       }
       if (e.slotStartMs - lost.sinceMs > TAIL_WATCH_SLOTS * this.len) {
-        this.notice('lost', `${call} is still working ${lost.other}.`);
-        this.drop(`${call} is working ${lost.other}`, e.nowMs, false);
+        this.notice('lost', STATUS.stillWorking(call, lost.other));
+        this.drop(PAUSED.working(lost.other), e.nowMs, false);
       }
       return true;
     }
     // One more call went out: an answer goes on as usual, anything else ends it.
     if (sentLastSlot || toOther) {
-      this.notice('no-reply', `No reply from ${call} after one more call.`);
-      this.drop('no reply after one more call', e.nowMs, true);
+      this.notice('no-reply', STATUS.noReply(call));
+      this.drop(PAUSED.noReply, e.nowMs, true);
       return true;
     }
     return false;
@@ -928,7 +929,7 @@ class Machine {
         return;
       }
       if (r === 'incomplete') {
-        this.notice('incomplete', `${bare(p.call)} ended the QSO before the report exchange finished. RR73 did not log it.`);
+        this.notice('incomplete', STATUS.endedEarly(bare(p.call)));
         this.afterQso(e.nowMs, false);
         return;
       }
@@ -1012,12 +1013,12 @@ class Machine {
     else if (sameCall(ex.from, me)) dx = ex.to;
     else dx = ex.from ?? ex.to;
     if (ex.multi && dx === '<...>') {
-      this.notice('cannot-call', 'This message shows the Fox as <...>. Call it from a message with its callsign.');
+      this.notice('cannot-call', STATUS.foxUnknown);
       return;
     }
     if (ex.multi && dx) dx = bare(dx);
     if (!dx || sameCall(dx, me)) {
-      this.notice('cannot-call', 'There is no other callsign in this message to call.');
+      this.notice('cannot-call', STATUS.noCall);
       return;
     }
     this.resetWatchdog(e.nowMs);
@@ -1157,7 +1158,7 @@ class Machine {
     if (st.txEnabled && limit > 0 && nowMs - st.watchdogFromMs >= limit) {
       const min = Math.round((limit / 60000) * 10) / 10;
       this.stopAll();
-      this.notice('watchdog', `Tx stopped: ${min} min without a touch or a new message. Enable Tx to carry on.`);
+      this.notice('watchdog', STATUS.watchdog(min));
       return;
     }
     const n = st.next;
@@ -1232,7 +1233,7 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       }
       break;
     case 'audioStopped':
-      if (st.txEnabled || st.hunt) m.notice('audio', 'Tx stopped because the audio stopped. The QSO keeps its place. Resume audio, then enable Tx.');
+      if (st.txEnabled || st.hunt) m.notice('audio', STATUS.audioStopped);
       m.stopAll();
       st.audioOk = false;
       break;
