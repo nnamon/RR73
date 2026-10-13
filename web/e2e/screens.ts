@@ -1,22 +1,63 @@
-// The app's screens, for the layout, accessibility and screenshot checks.
+// The app's screens, for the layout, accessibility and screenshot checks. Screens with a seed show
+// a log written into IndexedDB first (e2e/log-data.ts).
 import type { Page } from '@playwright/test';
+import { mockupLog, seed } from './log-data';
+import { FIXED_TIME } from './time';
 
-export const SCREENS = [
+export { FIXED_TIME };
+
+export type SeedName = 'log' | 'running' | 'station';
+
+export interface Screen {
+  name: string;
+  path: string;
+  heading: string;
+  seed?: SeedName;
+}
+
+export const SCREENS: readonly Screen[] = [
   { name: 'operate', path: '#/operate', heading: 'Operate' },
   { name: 'log', path: '#/log', heading: 'Log' },
   { name: 'spots', path: '#/spots', heading: 'Spots' },
   { name: 'settings', path: '#/settings', heading: 'Settings' },
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
-] as const;
+  { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
+  { name: 'wavelog', path: '#/settings/logging/wavelog', heading: 'Wavelog' },
+  { name: 'log-all', path: '#/log', heading: 'Log', seed: 'log' },
+  { name: 'log-todo', path: '#/log/todo', heading: 'Log', seed: 'log' },
+  { name: 'log-activations', path: '#/log/activations', heading: 'Log', seed: 'log' },
+  { name: 'spots-running', path: '#/spots', heading: 'Spots', seed: 'running' },
+  { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running' },
+  { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log' },
+  { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
+];
 
-/** 13:14:52 UTC on 13 October 2026, as in the mockups. */
-export const FIXED_TIME = Date.UTC(2026, 9, 13, 13, 14, 52);
-
-export async function open(page: Page, path: string, theme: 'light' | 'dark') {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
+  if (withSeed) await seed(page, mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }));
   await page.waitForTimeout(300);
 }
+
+export interface SheetCase {
+  name: string;
+  path: string;
+  seed?: SeedName;
+  title: string;
+  /** Opens the sheet from the screen at `path`. */
+  open(page: Page): Promise<void>;
+}
+
+/** The log's sheets, opened as an operator would. */
+export const LOG_SHEETS: readonly SheetCase[] = [
+  { name: 'add-qso', path: '#/log', title: 'Add QSO', open: (page) => page.getByRole('button', { name: 'Add QSO' }).click() },
+  { name: 'edit-qso', path: '#/log', seed: 'log', title: 'Edit QSO', open: (page) => page.getByRole('button', { name: /^VK2ESN/ }).first().click() },
+  { name: 'start-activation', path: '#/spots', title: 'Start activation', open: (page) => page.getByRole('button', { name: /^Start activation/ }).click() },
+  { name: 'edit-activation', path: '#/spots', seed: 'running', title: 'Edit activation', open: (page) => page.getByRole('button', { name: 'Edit activation' }).click() },
+  { name: 'end-activation', path: '#/spots', seed: 'running', title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
+  { name: 'station', path: '#/log', seed: 'station', title: 'Choose a station location', open: (page) => page.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click() },
+  { name: 'remove-wavelog', path: '#/settings/logging/wavelog', seed: 'log', title: 'Remove Wavelog?', open: (page) => page.getByRole('button', { name: 'Remove Wavelog…' }).click() },
+];

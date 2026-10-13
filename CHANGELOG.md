@@ -2,6 +2,39 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## 0.6.0 · 2026-10-13
+
+- Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.
+- In loopback tests in desktop Chromium, CQ started 20 to 40 ms after slot + 0.5 s and Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
+- The sequencer sends Tx1 to Tx6 as WSJT-X does and logs the QSO when it completes. The dock shows the steps, the next message and when it starts.
+- A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and the dock says which.
+- Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Stations already in the Log for this UTC day, band and mode are marked as dupes and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
+- Touch and hold a decode for the station's details: distance, bearing, SNR and Call.
+- Messages edits Tx1 to Tx6. Text that cannot be encoded is refused before it is sent.
+- What you send appears in the decode list as amber rows. While transmitting, Operate shows a red edge and "On air" with the message.
+- Each completed QSO goes to the Log with the Logged notice, Edit and Undo, and on to Wavelog and the activation files.
+- While an activation runs, RR73 transmits its callsign and grid.
+- The watchdog stops Tx after 6 min without a touch or a new message.
+- Transmitting needs your callsign and grid in Settings, the band confirmed in the band sheet, and audio running.
+- Tap the waterfall to set the receive or transmit frequency: a bar offers Receive here, Transmit here and Both. Find clear Tx moves Tx to the quietest 50 Hz in the last 2 to 4 slots.
+- Calling a station moves Rx to its frequency. Turn off Hold Tx frequency in Settings to move Tx as well.
+- Tune transmits at the Tx frequency, and the Tune sheet says which.
+- On iOS, every tap that can start a transmission plays a 0.1 s silent clip, so output works with the ring switch on silent. Not tested on a device.
+
+## 0.5.0 · 2026-10-13
+
+- The Log lists every QSO on this phone by UTC day with where each copy went: Wavelog waiting, delivered, refused or changed. Search by callsign, grid or park.
+- After each QSO a notice shows it with its band and reports, with Edit and Undo for 10 s. Nothing is sent before the 10 s are up.
+- Add, edit and delete QSOs by hand. Delete offers Undo.
+- To do lists QSOs waiting for Wavelog, refused or changed after delivery, and activation files not yet submitted. A refused QSO says why in plain words and has Fix.
+- Wavelog as a destination: its address and API key, Test connection (the key's rights, the station locations and a test QSO that Wavelog does not store) and the station location. The key stays on this phone.
+- QSOs go to Wavelog while RR73 is open and online, one at a time and oldest first, retrying after 30 s and then less often, up to every 30 min. Send now sends at once.
+- Start activation, at the top of Spots, takes POTA, SOTA, WWFF and IOTA references, the callsign used on air, the grid (typed or from GPS) and a Wavelog station location of its own.
+- While an activation runs, Spots shows it at the top: progress towards each programme's rule (POTA 10 QSOs in a UTC day, SOTA 4 stations, WWFF 44 QSOs over all activations), the time left in the UTC day, recent QSOs and QSOs per band, with End activation. Operate shows one line with the progress and the time left.
+- POTA, SOTA and WWFF files for each activation, shared or downloaded from the Log, with Mark submitted. Sharing files from the home-screen app is not tested on a device.
+- Export ADIF in the Log shares the QSOs it shows.
+- Settings › Logging holds the destinations, Send automatically and Send edits to QSOs already sent.
+
 ## 0.4.3 · 2026-10-13
 
 - The start sound is now a soft rising chime, E5 then A5 (659 and 880 Hz, 0.45 s), in place of the 1500 Hz beep. It still keys the radio for the keying check. The setting is now called Start chime.

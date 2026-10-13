@@ -12,6 +12,8 @@ const micPlaying = (file: string) => ({
 const fakeMic = micPlaying('./e2e/.fixtures/tones.wav');
 // One FT8 slot with 4 known messages (e2e/fixtures/ft8-four-signals.json).
 const ft8Mic = micPlaying('./e2e/fixtures/ft8-four-signals.wav');
+// The other station of a QSO, written by e2e/global-setup.ts (e2e/qso-script.ts).
+const qsoMic = micPlaying('./e2e/.fixtures/qso-script.wav');
 
 // Paths are absolute so the suite runs the same from web/ (npm --prefix web run e2e) and from the
 // repository root (npx --prefix web playwright test, through the root playwright.config.ts).
@@ -27,6 +29,9 @@ const iphone = (width: number, height: number, scale: number) => ({
   hasTouch: true,
   userAgent: IPHONE_UA,
 });
+
+/** Projects that finish before the transmit timing tests start. */
+const QUIET = ['mic', 'decode', 'chromium', 'webkit-375x667', 'webkit-393x852'];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -51,8 +56,15 @@ export default defineConfig({
     // loaded host the capture can start late enough to put the signals outside the decoder's DT
     // window. Retries bound that; a decoding regression still fails all three attempts.
     { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
+    // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
+    // need the looped fake microphone to start near a slot boundary. On a loaded machine
+    // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
+    // after the other projects, so the rest of the suite does not load the machine meanwhile
+    // (locally: --no-deps to run them alone), with 2 retries, as for decode.
+    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
   ],
 });
