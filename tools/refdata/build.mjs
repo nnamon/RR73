@@ -12,10 +12,12 @@
 //   docker compose run --rm node node tools/refdata/build.mjs
 //
 // Options: --out DIR (default web/public/data), --cache DIR (default .refdata-cache),
-// --only cty,lotw,pota,sota, --offline (no requests: build from what the cache holds), --strict
-// (exit 1 when a source is stale or missing).
+// --only cty,lotw,pota,sota, --ask cty,lotw (the sources that may be requested; the others build
+// from the cache; CI chooses them with ci-plan.mjs), --offline (no requests: build from what the
+// cache holds), --strict (exit 1 when a source is stale or missing).
 //
-// Each source is requested at most once per UTC day, with one attempt and no retries. The cache
+// Each source is requested at most once per UTC day, with one attempt and no retries. The
+// attempt is recorded in the cache before the request goes out. The cache
 // keeps each source's download, its HTTP validators and the converted files, stamped with a hash
 // of the converter code. A later day's request can come back 304 Not Modified, and a changed
 // converter converts the kept download again without a request. When a download fails, the build
@@ -157,7 +159,7 @@ function convertEntry(id, src, entry, converter, log) {
 }
 
 /** Brings one source's cache entry up to date and returns it with whether it has files to ship. */
-async function refresh(id, src, { cacheDir, now, fetch, offline, converter, log }) {
+async function refresh(id, src, { cacheDir, now, fetch, offline, ask, converter, log }) {
   const entry = new Entry(cacheDir, id);
   const m = entry.meta;
   const today = now.toISOString().slice(0, 10);
@@ -166,12 +168,17 @@ async function refresh(id, src, { cacheDir, now, fetch, offline, converter, log 
   if (offline) {
     log(`${id}: offline build, no request made`);
     request = false;
+  } else if (!ask.includes(id)) {
+    log(`${id}: not asked in this build; built from the cache`);
+    request = false;
   } else if (day(m.attemptedAt) === today) {
     log(`${id}: already requested today (${m.attemptedAt}); next request on a later UTC day`);
     request = false;
   }
   if (request) {
     m.attemptedAt = now.toISOString();
+    // Recorded first: a build stopped during the download still counts as today's request.
+    entry.save();
     try {
       const get = (url, opts = {}) => {
         const validated = opts.conditional && entry.hasRaw;
@@ -252,16 +259,17 @@ function prepareOut(outDir) {
 
 /**
  * Builds the sources named in only into outDir and writes manifest.json. Returns the manifest.
- * fetch, now and converter are injectable for tests.
+ * Only the sources named in ask may be requested. fetch, now and converter are injectable for
+ * tests.
  */
-export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, offline = false, now = new Date(), fetch = globalThis.fetch, converter = CONVERTER, log = () => {} }) {
-  const unknown = only.filter((id) => !SOURCES[id]);
+export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, ask = SOURCE_IDS, offline = false, now = new Date(), fetch = globalThis.fetch, converter = CONVERTER, log = () => {} }) {
+  const unknown = [...only, ...ask].filter((id) => !SOURCES[id]);
   if (unknown.length) throw new Error(`unknown source ${unknown.join(', ')}; sources are ${SOURCE_IDS.join(', ')}`);
   prepareOut(outDir);
   const manifest = { format: 1, generatedAt: now.toISOString(), sources: {} };
   for (const id of only) {
     const src = SOURCES[id];
-    const { meta, hasFiles, dir } = await refresh(id, src, { cacheDir, now, fetch, offline, converter, log });
+    const { meta, hasFiles, dir } = await refresh(id, src, { cacheDir, now, fetch, offline, ask, converter, log });
     if (hasFiles) for (const f of meta.files) cpSync(join(dir, 'files', f), join(outDir, f));
     manifest.sources[id] = manifestEntry(src, meta, hasFiles, outDir);
   }
@@ -270,12 +278,13 @@ export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, offline = 
 }
 
 function parseArgs(argv) {
-  const opts = { outDir: 'web/public/data', cacheDir: '.refdata-cache', only: SOURCE_IDS, offline: false, strict: false };
+  const opts = { outDir: 'web/public/data', cacheDir: '.refdata-cache', only: SOURCE_IDS, ask: SOURCE_IDS, offline: false, strict: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--out') opts.outDir = argv[++i];
     else if (a === '--cache') opts.cacheDir = argv[++i];
     else if (a === '--only') opts.only = argv[++i].split(',').filter(Boolean);
+    else if (a === '--ask') opts.ask = (argv[++i] ?? '').split(',').filter(Boolean);
     else if (a === '--offline') opts.offline = true;
     else if (a === '--strict') opts.strict = true;
     else throw new Error(`unknown option ${a}`);

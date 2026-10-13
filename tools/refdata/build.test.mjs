@@ -153,6 +153,37 @@ test('offline builds make no requests; --only limits the sources', async () => {
   assert.ok(existsSync(join(d.outDir, 'manifest.json')));
 });
 
+test('only the sources in ask are requested; the others build from the cache', async () => {
+  const d = dirs();
+  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['cty', 'sota'] });
+  const some = fakeFetch(network());
+  const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: some, ask: ['lotw', 'pota'] }));
+  assert.deepEqual(
+    some.calls.map((c) => c.url),
+    [LOTW_URL, POTA_URL],
+  );
+  assert.equal(manifest.sources.sota.status, 'ok');
+  assert.equal(manifest.sources.sota.fetchedAt, DAY1.toISOString());
+  await assert.rejects(buildAll({ ...d, now: DAY2, fetch: some, ask: ['iota'] }), /unknown source iota/);
+});
+
+test('a request is recorded before it goes out, so a stopped build does not ask again that day', async () => {
+  const d = dirs();
+  let seen = null;
+  const watching = async (url) => {
+    if (url === SOTA_URL) seen = JSON.parse(readFileSync(join(d.cacheDir, 'sota', 'meta.json'), 'utf8')).attemptedAt;
+    // The process stops here, mid-download.
+    if (url === SOTA_URL) await new Promise(() => {});
+    return fakeFetch(network())(url);
+  };
+  void buildAll({ ...d, now: DAY1, fetch: watching, only: ['sota'] });
+  await new Promise((r) => setTimeout(r, 50));
+  assert.equal(seen, DAY1.toISOString());
+  const again = fakeFetch(network());
+  await buildAll({ ...d, now: DAY1_LATER, fetch: again, only: ['sota'] });
+  assert.deepEqual(again.calls, []);
+});
+
 test('a converter change converts the cached download again without a request', async () => {
   const d = dirs();
   await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), converter: 'old' });

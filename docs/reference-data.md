@@ -61,7 +61,14 @@ Tested in Chromium through Playwright: lookups online, then offline with the cou
 
 `build.mjs` asks each source at most once per UTC day, with one attempt and no retries. It keeps each source's download, HTTP validators and converted files in `.refdata-cache/`, stamped with a hash of the converter code: a later day's request can come back 304 Not Modified, and a changed converter converts the kept download again without a request. When a download fails, the build ships the older copy (status `stale`) or goes on without the source (status `missing`), and the app reports the source as unavailable. `manifest.json` records each source's status, download and check times, the publisher's data date, sizes and terms.
 
-In CI the "Reference data" job runs the build with `.refdata-cache` in `actions/cache` keyed by the UTC date, so every run after the first on a given day makes no requests. The web and end-to-end jobs take its output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. Each release ships the data its build fetched.
+In CI the "Reference data" job keeps `.refdata-cache` in the Actions cache under the UTC date and chooses what to ask with `tools/refdata/ci-plan.mjs`:
+
+- Runs on main may ask every source, and the build asks each at most once per UTC day.
+- Branches, tags and pull requests restore the newest cache they can read, their own or main's, and build from it with no requests. A run that restores no cache at all asks, so a build before main has a cache still gets the country file.
+- The SOTA list is asked at most once per UTC day across the repository. Actions caches belong to one branch each, so the job lists the repository's caches through the GitHub API (`actions: read`) for an entry `sota-asked-<date>`, and asks only when there is none. It saves that entry before the request goes out. A failed listing counts as asked.
+- The build records each attempt in the cache before its request, and the job saves the cache after a failed or cancelled build too, so a second run that day does not ask again.
+
+The web and end-to-end jobs take the output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. A release ships the data in main's newest cache.
 
 Locally, in the node container from the repository root:
 
@@ -80,5 +87,7 @@ Without `web/public/data` the app builds and runs; every lookup reports its sour
 
 - The LoTW list changes each week, so a phone with "LoTW users" on downloads about 1 MB again after each app update that carries a new list.
 - Building the indexes runs on the main thread: 7 to 37 ms for the country file (50 to 205 ms before alias overrides were read on first match) and 110 to 280 ms for the LoTW list, measured in Node on the build machine under load. `warm()` runs them when the page is idle. Not measured on a phone; a worker would take them off the main thread.
+- Two runs allowed to ask SOTA that list the caches within the same few seconds both ask: the entry is saved after the listing. Only main and runs without any cache may ask, so it takes a push to main and a run without a cache at the same moment. When saving the entry fails, a later run that day asks again.
+- On the day main first runs the job, a branch that asked SOTA the same day leaves main without the summits list until the next day.
 - A search near a country with many parks reads that country's whole shard: 388 kB gzipped for France. Splitting the largest shards by region would cut it.
 - Big CTY is found by scraping the category page for the newest zip link. A site redesign stops updates until `latestBigCty` follows it; the cached copy keeps shipping meanwhile.
