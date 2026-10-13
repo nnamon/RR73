@@ -3,16 +3,22 @@
 // export with Mark submitted.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { API_KEY, mockupLog, mockWavelog, seed, wavelogOnly, WAVELOG_URL } from './log-data';
+import { API_KEY, emptySeed, mockupLog, mockWavelog, seed, wavelogOnly, WAVELOG_URL, withFeatures } from './log-data';
 import { FIXED_TIME } from './time';
 
-/** Opens a screen with the clock at FIXED_TIME, running, and optionally a seeded log. */
+/** Opens a screen with the clock at FIXED_TIME, running, and optionally a seeded log, seeded before the screen opens. */
 async function start(page: Page, path: string, data?: Parameters<typeof seed>[1]) {
   await page.clock.install({ time: FIXED_TIME });
+  await page.goto(data ? './' : `./${path}`);
+  await page.locator('main h1').first().waitFor({ state: 'attached' });
+  if (!data) return;
+  await seed(page, data);
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
-  if (data) await seed(page, data);
 }
+
+/** Activations on (Settings › Optional features); every feature is off on a new install. */
+const activations = (data = emptySeed()) => withFeatures(data, { activations: true });
 
 /** Adds a QSO through Log › Add QSO. */
 async function addQso(page: Page, call: string, opts: { grid?: string; sent?: string; rcvd?: string; ref?: string } = {}) {
@@ -192,7 +198,7 @@ test('sends nothing by itself when sending automatically is off, until Send now'
 });
 
 test('starts an activation from Spots, counts its QSOs and ends it', async ({ page }) => {
-  await start(page, '#/spots');
+  await start(page, '#/spots', activations());
   await page.getByRole('button', { name: /^Start activation/ }).click();
   const form = page.getByRole('dialog', { name: 'Start activation' });
   const refInput = form.getByRole('textbox', { name: 'Reference' });
@@ -267,7 +273,7 @@ test('exports a POTA file by download, marks it submitted, and shares through th
     // Chromium on Linux has no Web Share; make that certain so the download path runs.
     Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true });
   });
-  await start(page, '#/log/activations', mockupLog());
+  await start(page, '#/log/activations', activations(mockupLog()));
   await expect(seg(page, 'To do')).toHaveText(/To do\s*3$/);
   const card = page.getByRole('article', { name: /POTA VK-0921 · SOTA VK3\/VC-012/ });
   await expect(card).toContainText('Wavelog: all 7 delivered');
@@ -305,7 +311,7 @@ test('hands files to the share sheet where the browser can share them', async ({
       },
     });
   });
-  await start(page, '#/log/activations', mockupLog());
+  await start(page, '#/log/activations', activations(mockupLog()));
   await page.getByRole('button', { name: 'Share the POTA VK-0921, 11 Oct 2026 file' }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { shared: { name: string; type: string }[] }).shared.map((f) => [f.name, f.type]))).toEqual([['VK3-9V1NE@VK-0921-20261011.adi', 'text/plain']]);
 });
@@ -317,7 +323,7 @@ test('fixes a station location refusal by choosing another station location', as
     body.station_profile_id === '7'
       ? { status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0 } }
       : { status: 400, body: { status: 'abort', adif_count: 1, adif_errors: 1, messages: ['', 'Differing station callsign <b>VK3/9V1NE</b> while importing QSO with VK2ESN for <b>9V1NE</b>: SKIPPED<br>'] } };
-  await start(page, '#/spots', wavelogOnly());
+  await start(page, '#/spots', activations(wavelogOnly()));
   await page.getByRole('button', { name: /^Start activation/ }).click();
   const form = page.getByRole('dialog', { name: 'Start activation' });
   await form.getByRole('textbox', { name: 'Reference' }).fill('VK-0921');

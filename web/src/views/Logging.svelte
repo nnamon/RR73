@@ -7,6 +7,7 @@
   import { log, setFileDestination, setLoggingSettings, wavelogReady } from '../lib/log/log.svelte';
   import type { FileDestinationId } from '../lib/log/types';
   import { hostOf } from '../lib/log/wavelog';
+  import { features } from '../lib/state/features.svelte';
 
   const w = $derived(log.wavelog);
   const ready = $derived(wavelogReady(w));
@@ -65,7 +66,8 @@
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       {/if}
-      {#each files as f (f.id)}
+      <!-- Activation files belong to Activations (Settings › Optional features). -->
+      {#each features.activations ? files : [] as f (f.id)}
         <label class="row">
           <span class="ic {f.bg}" aria-hidden="true"><Icon name={f.icon} size={20} /></span>
           <span class="row-main">
@@ -76,7 +78,9 @@
         </label>
       {/each}
     </div>
-    <p class="section-foot">Every QSO stays on this phone. Each destination gets a copy, and RR73 records which copies arrived. Files are for QSOs made in an activation.</p>
+    <p class="section-foot">
+      Every QSO stays on this phone. Each destination gets a copy, and RR73 records which copies arrived.{features.activations ? ' Files are for QSOs made in an activation.' : ''}
+    </p>
   </div>
 
   <div class="section">

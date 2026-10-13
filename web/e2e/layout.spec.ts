@@ -52,7 +52,7 @@ async function smallTargets(page: Page, scope: string): Promise<string[]> {
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, async ({ page }, info) => {
-      await open(page, s.path, theme, s.seed);
+      await open(page, s.path, theme, s.seed, s.features);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${s.name}.png` });
@@ -61,7 +61,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   for (const running of [false, true]) {
     test(`operate fits without scrolling and keeps the decode list on screen${running ? ' with an activation running' : ''} in ${theme}`, async ({ page }) => {
-      await open(page, '#/operate', theme, running ? 'running' : undefined);
+      await open(page, '#/operate', theme, running ? 'running' : undefined, running ? { activations: true } : undefined);
       if (running) await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 7 of 10\./ })).toBeVisible();
       const vh = await page.evaluate(() => window.innerHeight);
       const wf = (await page.getByTestId('waterfall').boundingBox())!;
@@ -89,7 +89,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   for (const c of LOG_SHEETS) {
     test(`${c.name} sheet in ${theme}`, async ({ page }, info) => {
-      await open(page, c.path, theme, c.seed);
+      await open(page, c.path, theme, c.seed, c.features);
       await c.open(page);
       const sheet = page.getByRole('dialog', { name: c.title });
       await expect(sheet).toBeVisible();

@@ -5,6 +5,7 @@ import type { Page, Route } from '@playwright/test';
 import { applyReceipt, markSubmitted, reconcile, type DestinationFacts } from '../src/lib/log/ledger';
 import { createQso } from '../src/lib/log/qso';
 import type { Activation, DestinationConfig, LedgerEntry, LogQsoRecord, Qso, WavelogConfig } from '../src/lib/log/types';
+import type { Features } from '../src/lib/state/settings.svelte';
 import { FIXED_TIME } from './time';
 
 export const WAVELOG_URL = 'https://wavelog.example.test';
@@ -158,6 +159,18 @@ export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } 
       { key: 'settings', value: { callsign: '9V1NE' } },
     ],
   };
+}
+
+/** Nothing stored: a seed to add features to. */
+export function emptySeed(): Seed {
+  return { qsos: [], ledger: [], activations: [], destinations: [], kv: [] };
+}
+
+/** The seed with optional features turned on (Settings › Optional features), the rest off. */
+export function withFeatures(data: Seed, on: Partial<Features>): Seed {
+  const prev = (data.kv.find((k) => k.key === 'settings')?.value ?? {}) as Record<string, unknown>;
+  const features: Features = { activations: false, potaSpots: false, clusterSpots: false, lotw: false, ...on };
+  return { ...data, kv: [...data.kv.filter((k) => k.key !== 'settings'), { key: 'settings', value: { ...prev, features, schema: 2 } }] };
 }
 
 /** Writes a seed into the app's IndexedDB, then reloads so the app reads it. */

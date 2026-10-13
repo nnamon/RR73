@@ -13,14 +13,21 @@
   import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
   import WavelogSettings from './views/WavelogSettings.svelte';
-  import { route, tabOf } from './lib/app/router.svelte';
+  import { redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
   import { reloadIfIdle, update } from './lib/app/update.svelte';
+  import { spotsShown } from './lib/state/features.svelte';
   import { startClock } from './lib/state/now.svelte';
-  import { settings } from './lib/state/settings.svelte';
+  import { settings, settingsStatus } from './lib/state/settings.svelte';
   import { busy } from './lib/state/station.svelte';
 
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
+
+  // With Spots hidden, its paths (and Activate from earlier versions) open Settings › Optional features.
+  $effect(() => {
+    const to = settingsStatus.loaded ? redirectOf(route.path, spotsShown()) : null;
+    if (to) replace(...to);
+  });
 
   const TITLES: Record<string, string> = { operate: 'Operate', log: 'Log', spots: 'Spots', settings: 'Settings' };
 
@@ -74,7 +81,7 @@
         {:else if sub === 'versions'}
           <VersionHistory focus={route.path[2] ?? null} />
         {:else}
-          <Settings />
+          <Settings section={sub} />
         {/if}
       </div>
     {/if}

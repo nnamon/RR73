@@ -14,6 +14,7 @@
   import { log, markQsoHandled, openEditor, retryQso, sendNow } from '../lib/log/log.svelte';
   import { activationFiles, groupByDay, matches, todoQsos } from '../lib/log/view';
   import type { LedgerEntry, Qso } from '../lib/log/types';
+  import { features } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { storageWaiting } from '../lib/state/storage.svelte';
@@ -21,7 +22,7 @@
   type View = 'all' | 'todo' | 'activations';
   const PAGE = 100;
 
-  let view = $state<View>(route.path[1] === 'todo' || route.path[1] === 'activations' ? route.path[1] : 'all');
+  let view = $state<View>(route.path[1] === 'todo' || (route.path[1] === 'activations' && features.activations) ? route.path[1] : 'all');
   let query = $state('');
   let shown = $state(PAGE);
   let stationOpen = $state(false);
@@ -32,7 +33,8 @@
   const found = $derived(log.live.filter((q) => matches(q, query)));
   const groups = $derived(groupByDay(found.slice(0, shown), clock.ms));
   const todo = $derived(todoQsos(log.qsos, log.index, log.facts).filter((q) => matches(q, query)));
-  const fileActivations = $derived(log.activations.filter((a) => activationFiles(a, log.qsos, log.index, log.facts).some((f) => f.state !== 'submitted')));
+  // Activation files are part of Activations (Settings › Optional features).
+  const fileActivations = $derived(features.activations ? log.activations.filter((a) => activationFiles(a, log.qsos, log.index, log.facts).some((f) => f.state !== 'submitted')) : []);
   const todoCount = $derived(todo.length + fileActivations.reduce((n, a) => n + activationFiles(a, log.qsos, log.index, log.facts).filter((f) => f.state !== 'submitted').length, 0));
   const activations = $derived(
     log.activations.filter((a) => !query.trim() || a.refs.some((r) => r.ref.includes(query.trim().toUpperCase())) || log.live.some((q) => q.activationId === a.id && matches(q, query))),
@@ -41,11 +43,15 @@
   const waiting = $derived(wavelogOn ? log.ledger.filter((e) => e.destinationId === 'wavelog' && e.state === 'waiting').length : 0);
   const wavelogStatus = $derived(log.outbox.wavelog);
 
-  const views: { id: View; label: string }[] = [
+  const views = $derived<{ id: View; label: string }[]>([
     { id: 'all', label: 'All' },
     { id: 'todo', label: 'To do' },
-    { id: 'activations', label: 'Activations' },
-  ];
+    ...(features.activations ? [{ id: 'activations' as const, label: 'Activations' }] : []),
+  ]);
+  // Turning Activations off while its view shows goes back to All.
+  $effect(() => {
+    if (view === 'activations' && !features.activations) view = 'all';
+  });
 
   function fix(qso: Qso, e: LedgerEntry) {
     if (e.state === 'changed') return void markQsoHandled(qso.id, e.destinationId);
@@ -139,7 +145,7 @@
       {#if found.length > shown}
         <div class="section more"><button class="btn" onclick={() => (shown += PAGE)}>Show {Math.min(PAGE, found.length - shown)} older QSOs</button></div>
       {/if}
-      {#if activations.length && !query.trim()}
+      {#if features.activations && activations.length && !query.trim()}
         <div class="section">
           <h2 class="section-head">Activations</h2>
           {#each activations.slice(0, 3) as a (a.id)}<div class="group card"><ActivationCard activation={a} /></div>{/each}

@@ -1,15 +1,13 @@
 <script lang="ts">
   import Icon from './Icon.svelte';
-  import { href, type Tab } from '../lib/app/router.svelte';
+  import { href, visibleTabs, type Tab } from '../lib/app/router.svelte';
+  import { spotsShown } from '../lib/state/features.svelte';
 
   let { active }: { active: Tab } = $props();
 
-  const tabs: { id: Tab; label: string }[] = [
-    { id: 'operate', label: 'Operate' },
-    { id: 'log', label: 'Log' },
-    { id: 'spots', label: 'Spots' },
-    { id: 'settings', label: 'Settings' },
-  ];
+  const LABELS: Record<Tab, string> = { operate: 'Operate', log: 'Log', spots: 'Spots', settings: 'Settings' };
+  // Spots shows while activations or a spot source is on (Settings › Optional features).
+  const tabs = $derived(visibleTabs(spotsShown()).map((id) => ({ id, label: LABELS[id] })));
 </script>
 
 <nav class="tabbar" aria-label="Main">

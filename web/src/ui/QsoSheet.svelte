@@ -10,6 +10,7 @@
   import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
+  import { features } from '../lib/state/features.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
   let open = $state(false);
@@ -29,6 +30,8 @@
   let errors = $state<string[]>([]);
   /** True while a save waits for storage, so a second tap cannot log the QSO twice. */
   let saving = $state(false);
+  /** The running activation a new QSO can join: only with Activations on. */
+  const running = $derived(features.activations ? log.current : null);
 
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
@@ -65,7 +68,7 @@
 
   const bands = $derived([...new Set([...BAND_IDS, ...(original && !isBand(original.band) && original.band ? [original.band] : [])])]);
   const modes = $derived([...new Set(['FT8', 'FT4', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
-  const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : log.current);
+  const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : running);
   const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : 'Add QSO');
 
   /** Keeps the frequency on the band's dial frequency while the operator has not typed one. */
@@ -137,7 +140,7 @@
           comment: comment.trim(),
           theirRefs: parsed.refs,
           source: 'manual',
-          activationId: log.current && join ? log.current.id : null,
+          activationId: running && join ? running.id : null,
         });
       }
     } finally {
@@ -230,11 +233,11 @@
 
     {#if original}
       {#if activation}<p class="note">Part of the activation {refsLabel(activation.refs)}, made as {original.stationCallsign}.</p>{/if}
-    {:else if log.current}
+    {:else if running}
       <label class="card row check">
         <span class="row-main">
           <span class="row-title">Add to the activation</span>
-          <span class="row-sub">{refsLabel(log.current.refs)}, as {log.current.callsign}</span>
+          <span class="row-sub">{refsLabel(running.refs)}, as {running.callsign}</span>
         </span>
         <input type="checkbox" role="switch" class="switch" bind:checked={join} />
       </label>

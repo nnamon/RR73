@@ -13,6 +13,27 @@ export interface Checklist {
   volume: boolean;
 }
 
+/**
+ * Optional parts of the app, each off until the operator turns it on in Settings › Optional
+ * features. Nothing large downloads or polls for a feature that is off.
+ */
+export interface Features {
+  /** POTA, SOTA, WWFF and IOTA activations: start, progress and files. */
+  activations: boolean;
+  /** Spots from the POTA spot list. */
+  potaSpots: boolean;
+  /** DX cluster spots through HamQTH. */
+  clusterSpots: boolean;
+  /** Marks stations that use LoTW, from the LoTW user list. */
+  lotw: boolean;
+}
+
+export type FeatureId = keyof Features;
+
+export const FEATURE_IDS: readonly FeatureId[] = ['activations', 'potaSpots', 'clusterSpots', 'lotw'];
+
+export const FEATURES_OFF: Readonly<Features> = { activations: false, potaSpots: false, clusterSpots: false, lotw: false };
+
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
   callsign: string;
@@ -29,6 +50,7 @@ export interface Settings {
   /** Receive and transmit audio frequencies, Hz. */
   rxHz: number;
   txHz: number;
+  features: Features;
 }
 
 export const DEFAULTS: Settings = {
@@ -42,11 +64,37 @@ export const DEFAULTS: Settings = {
   checklist: { focus: false, clicks: false, volume: false },
   rxHz: 1500,
   txHz: 1500,
+  features: { ...FEATURES_OFF },
 };
 
 const KEY = 'settings';
 
+/**
+ * The stored record's format, kept in it as `schema`:
+ *
+ * 1. 0.5.0 and earlier, with no `schema` field and no optional features.
+ * 2. Optional features. Every feature starts off, including activations, which 0.5.0 always showed.
+ */
+export const SETTINGS_SCHEMA = 2;
+
+function schemaOf(raw: unknown): number {
+  const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).schema : undefined;
+  return typeof v === 'number' ? v : 1;
+}
+
+/** The changes that bring a stored record up to SETTINGS_SCHEMA; empty when it is current. */
+export function migration(raw: unknown): Record<string, unknown> {
+  const from = schemaOf(raw);
+  if (from >= SETTINGS_SCHEMA) return {};
+  const patch: Record<string, unknown> = { schema: SETTINGS_SCHEMA };
+  if (from < 2) patch.features = { ...FEATURES_OFF };
+  return patch;
+}
+
 export const settings = $state<Settings>(structuredClone(DEFAULTS));
+
+/** True once the stored settings have been read, or storage has failed for good. */
+export const settingsStatus = $state({ loaded: false });
 
 /** Upper case, callsign characters only, at most 13: "vk3/9v1ne" gives "VK3/9V1NE". */
 export function normaliseCallsign(s: string): string {
@@ -73,6 +121,8 @@ export function validate(raw: unknown): Settings {
     const v = r[k];
     if (typeof v === 'number' && v >= 100 && v <= 2900) s[k] = Math.round(v);
   }
+  const f = r.features as Partial<Features> | undefined;
+  if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
   return s;
 }
 
@@ -81,10 +131,16 @@ let early: Partial<Settings>[] | null = [];
 
 function apply(stored: unknown) {
   if (!early) return;
-  Object.assign(settings, validate(stored));
+  const m = migration(stored);
+  Object.assign(settings, validate({ ...(stored as object), ...m }));
   const mine = early;
   early = null;
   for (const p of mine) Object.assign(settings, p);
+  settingsStatus.loaded = true;
+  if (stored === undefined) return;
+  // Store the migration, except for values the operator has changed since: theirs are stored already.
+  for (const p of mine) for (const k of Object.keys(p)) delete m[k];
+  if (Object.keys(m).length) void mergeKv(KEY, m).catch(() => undefined);
 }
 
 /**
@@ -99,6 +155,7 @@ export async function loadSettings(): Promise<void> {
   } catch {
     // No IndexedDB (a private window): the defaults stay and changes last until the page closes.
     early = null;
+    settingsStatus.loaded = true;
   }
 }
 
@@ -108,7 +165,7 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
   const plain = $state.snapshot(patch) as Partial<Settings>;
   early?.push(plain);
   try {
-    await mergeKv(KEY, plain);
+    await mergeKv(KEY, { ...plain, schema: SETTINGS_SCHEMA });
   } catch {
     // As in loadSettings.
   }
@@ -118,4 +175,5 @@ export async function updateSettings(patch: Partial<Settings>): Promise<void> {
 export function resetSettings() {
   Object.assign(settings, structuredClone(DEFAULTS));
   early = [];
+  settingsStatus.loaded = false;
 }
