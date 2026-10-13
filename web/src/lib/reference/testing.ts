@@ -1,4 +1,21 @@
-// Test doubles for the reference data: an in-memory Cache API and a fake origin serving data/.
+// Test doubles for the reference data: an in-memory Cache API, a fake origin serving data/, and
+// the country file pinned in fixtures/.
+
+import { readFileSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { parseCtyCsvCodes, parseCtyDat, toCtyJson } from './cty';
+import type { CtyJson } from './format';
+
+/**
+ * cty.json as the build makes it from Big CTY of 15 September 2026, pinned in
+ * fixtures/reference/bigcty-20260915 (cty.dat as released, and cty.csv for the DXCC codes).
+ */
+export function bigCtyFixture(): CtyJson {
+  const dir = new URL('../../../../fixtures/reference/bigcty-20260915/', import.meta.url);
+  const dat = gunzipSync(readFileSync(new URL('cty.dat.gz', dir))).toString('latin1');
+  const csv = gunzipSync(readFileSync(new URL('cty-columns.csv.gz', dir))).toString('latin1');
+  return toCtyJson(parseCtyDat(dat), parseCtyCsvCodes(csv), { version: '2026-09-15', source: 'fixtures/reference/bigcty-20260915', notice: 'MIT' });
+}
 
 /** The parts of the Cache API that HttpStore uses, kept in memory. */
 export class MemoryCache {

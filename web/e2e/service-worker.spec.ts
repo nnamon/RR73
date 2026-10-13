@@ -3,7 +3,7 @@
 // still load; versions up to 0.5.0 never send it, and the handover script lets the new worker
 // take over from those at once (public/sw-handover.js).
 import { expect, test } from '@playwright/test';
-import { readFileSync, statSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const DIST = fileURLToPath(new URL('../dist/', import.meta.url));
@@ -20,12 +20,16 @@ test('a new version waits for the app before it takes over', () => {
   expect(text.replace(handler![0], '')).not.toContain('skipWaiting');
 });
 
-test('the precache holds the app and the decoder, and stays small', () => {
+test('the precache holds the app, the decoder and the country file, and stays small', () => {
   const urls = precached();
   for (const pattern of [/^index\.html$/, /^assets\/index-[\w-]+\.js$/, /^assets\/decoder\.worker-[\w-]+\.js$/, /^assets\/waterfall\.worker-[\w-]+\.js$/, /^assets\/capture\.worklet-[\w-]+\.js$/, /^assets\/rr73_wasm_bg-[\w-]+\.wasm$/, /^sw-handover\.js$/]) {
     expect(urls.some((u) => pattern.test(u)), String(pattern)).toBe(true);
   }
   expect(urls.filter((u) => u.endsWith('.map'))).toEqual([]);
+  // Reference data (tools/refdata): the country file and the manifest when the build has them,
+  // and nothing that loads only with a feature switched on.
+  const data = ['data/manifest.json', 'data/cty.json'].filter((u) => existsSync(`${DIST}${u}`));
+  expect(urls.filter((u) => u.startsWith('data/')).sort()).toEqual(data.sort());
   const bytes = urls.reduce((n, u) => n + statSync(`${DIST}${u}`).size, 0);
   test.info().annotations.push({ type: 'precache', description: `${urls.length} files, ${(bytes / 1e6).toFixed(2)} MB` });
   expect(bytes).toBeLessThan(3e6);

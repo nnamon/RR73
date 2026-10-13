@@ -38,7 +38,18 @@ Fields kept:
 
 ## Loading and offline use
 
-The country file is core: the service worker precaches it with the app. `reference.countries()` loads it once and `loadedCountries()` returns it synchronously afterwards, for lists of decodes.
+The country file is core: the service worker precaches it with the app, and no switch turns it off. The precache is 1.67 MB with it, against the 3 MB limit in `e2e/service-worker.spec.ts`. `reference.countries()` loads it once and `loadedCountries()` returns it synchronously afterwards, for lists of decodes.
+
+### Country on CQ rows
+
+Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s where `requestIdleCallback` is missing, as in Safari), the country file loads and its index is built. CQ rows then name the calling station's DXCC entity, as the country file writes it, before the numbers: "Australia" on the row for "CQ VK2LAW QF56". A WAE entity shows its DXCC entity: Sicily shows Italy. Rows drawn before the file loads show no country and fill in later; the row keeps its 32 pt height. Other rows, our own transmissions and calls with no entity (/MM, /AM, unknown prefixes, hashed calls not heard in full) show none.
+
+The message keeps its whole width. The country takes the space left before the numbers, ends in an ellipsis when short of room and drops out under 36 px (`DecodeList.svelte`).
+
+Decision: look up on the main thread, per row as it is drawn. A lookup takes about 1 µs in Node; the index build is the only cost worth measuring (see Open risks). Rejected:
+
+- Lookups in the decoder worker, sent with each decode: a change to the decode protocol and a second copy of the index, for about 50 µs of work per slot.
+- A country column of fixed width: it takes room from the message on every row, and most rows are not CQs.
 
 The LoTW list and the park and summit lists belong to optional features and are not precached. Their loaders take the feature switch as a boolean: `reference.lotw(settings.lotwUsers)`, `reference.parks(settings.activations)`, `reference.summits(settings.activations)`. With the switch off they return null and make no request. With it on, files load on first use and stay on the phone in the Cache API (`rr73-reference`), each under a stable slot name with the content-hashed file it came from. A later load reads the kept copy when it is the current build's file, fetches the new file when it is not, and falls back to the older kept copy, marked stale, when the fetch fails. An operator who updated the app at home therefore keeps the park lists in the field. `reference.forget(source)` removes a source when its feature is turned off.
 
@@ -68,7 +79,7 @@ In CI the "Reference data" job keeps `.refdata-cache` in the Actions cache under
 - The SOTA list is asked at most once per UTC day across the repository. Actions caches belong to one branch each, so the job lists the repository's caches through the GitHub API (`actions: read`) for an entry `sota-asked-<date>`, and asks only when there is none. It saves that entry before the request goes out. A failed listing counts as asked.
 - The build records each attempt in the cache before its request, and the job saves the cache after a failed or cancelled build too, so a second run that day does not ask again.
 
-The web and end-to-end jobs take the output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. A release ships the data in main's newest cache.
+The web and end-to-end jobs take the output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. A release ships the data in main's newest cache. The end-to-end test of the country on CQ rows serves the country file from `fixtures/` and does not depend on the data the build fetched.
 
 Locally, in the node container from the repository root:
 

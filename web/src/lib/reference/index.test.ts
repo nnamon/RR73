@@ -103,10 +103,13 @@ describe('reference data', () => {
   it('warms the country file, and the LoTW list only when its feature is on', async () => {
     vi.useFakeTimers();
     const { origin, ref } = setup();
-    ref.warm({ lotwUsers: false });
+    const warmed = ref.warm({ lotwUsers: false });
     expect(origin.state.requests).toEqual([]);
+    expect(ref.loadedCountries()).toBeNull();
     await vi.runAllTimersAsync();
+    await warmed;
     expect(origin.state.requests).toEqual(['cty.json']);
+    expect(ref.loadedCountries()?.entities).toHaveLength(2);
     ref.warm({ lotwUsers: true });
     await vi.runAllTimersAsync();
     expect(origin.state.requests).toEqual(['cty.json', 'manifest.json', 'lotw.abc.json']);

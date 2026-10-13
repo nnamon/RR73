@@ -56,8 +56,11 @@ export interface ReferenceData {
   parks(enabled: boolean): ReferenceList<Park> | null;
   /** SOTA summits when Activations is on, else null. Loads shard by shard as it is used. */
   summits(enabled: boolean): ReferenceList<Summit> | null;
-  /** Loads the country file, and the LoTW list when its feature is on, once the page is idle. */
-  warm(features: { lotwUsers: boolean }): void;
+  /**
+   * Loads the country file, and the LoTW list when its feature is on, once the page is idle.
+   * Resolves when they have loaded or failed; loadedCountries() and loadedLotw() then say which.
+   */
+  warm(features: { lotwUsers: boolean }): Promise<void>;
   /** Removes an optional source's copies from the phone, for when its feature is turned off. */
   forget(source: Exclude<SourceId, 'cty'>): Promise<void>;
 }
@@ -121,13 +124,16 @@ export function createReferenceData(store: DataStore, opts: { now?: () => Date }
       return summits;
     },
     warm(features) {
-      const run = () => {
-        void countries.get().catch(() => undefined);
-        if (features.lotwUsers) void lotw.get().catch(() => undefined);
-      };
-      // A timer stands in where requestIdleCallback is missing.
-      if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
-      else setTimeout(run, 2000);
+      return new Promise((resolve) => {
+        const run = () => {
+          const loads: Promise<unknown>[] = [countries.get()];
+          if (features.lotwUsers) loads.push(lotw.get());
+          void Promise.allSettled(loads).then(() => resolve());
+        };
+        // A timer stands in where requestIdleCallback is missing.
+        if (typeof requestIdleCallback === 'function') requestIdleCallback(run, { timeout: 5000 });
+        else setTimeout(run, 2000);
+      });
     },
     async forget(source) {
       if (source === 'lotw') {
