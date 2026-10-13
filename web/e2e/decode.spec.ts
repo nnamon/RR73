@@ -199,9 +199,10 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await setCallsign(page);
   await tapStartAudio(page);
   const list = page.getByTestId('decode-list');
-  const heads = list.locator('.slot-bar .st');
-  await expect(heads.first()).toBeVisible({ timeout: 45_000 });
-  const firstSlot = (await heads.first().textContent())!.slice(0, 8);
+  // The top bar's whole line: a run of empty slots keeps its first time as it grows.
+  const heads = list.locator('.slot-bar .visually-hidden');
+  await expect(list.locator('.slot-bar').first()).toBeVisible({ timeout: 45_000 });
+  const firstSlot = (await heads.first().textContent())!;
 
   // Hold a finger on the list across the next slot's decode.
   const box = (await list.boundingBox())!;
@@ -209,10 +210,10 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await page.mouse.down();
   const held = Date.now();
   await page.waitForTimeout(17_000);
-  expect((await heads.first().textContent())!.slice(0, 8)).toBe(firstSlot);
+  expect(await heads.first().textContent()).toBe(firstSlot);
   await page.mouse.up();
   // Free again 0.5 s after the finger lifts: the newer slot goes in on top.
-  await expect.poll(async () => (await heads.first().textContent())!.slice(0, 8), { timeout: 3000 }).not.toBe(firstSlot);
+  await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).not.toBe(firstSlot);
   expect(Date.now() - held).toBeGreaterThan(17_000);
 });
 
