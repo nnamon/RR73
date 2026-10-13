@@ -16,6 +16,12 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Export ADIF in the Log shares the QSOs it shows.
 - Settings › Logging holds the destinations, Send automatically and Send edits to QSOs already sent.
 
+## 0.4.2 · 2026-10-13
+
+- Reload app in Settings, under About, checks for a newer version, installs it and reloads, for when the app runs from the home screen and has no reload button. Clear cached copy and reload loads the app fresh from the network; settings and saved data stay on the phone.
+- Four tabs: Operate, Log, Spots and Settings. Activations move into Spots, above the spots, and old Activate links open Spots.
+- A new app icon from the RR73 mark: the slot ring around the RR73 wordmark. iOS keeps the old icon until RR73 is removed from the home screen and added again.
+
 ## 0.4.1 · 2026-10-13
 
 - Start audio plays 1500 Hz for 0.4 s at the output level, after 1.5 s of silence. The tone stops iOS muting output while the ring switch is on silent, keys the radio's VOX, and runs the keying check. Turn it off under Start tone in Radio and audio.

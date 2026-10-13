@@ -18,7 +18,6 @@ export interface Screen {
 export const SCREENS: readonly Screen[] = [
   { name: 'operate', path: '#/operate', heading: 'Operate' },
   { name: 'log', path: '#/log', heading: 'Log' },
-  { name: 'activate', path: '#/activate', heading: 'Activate' },
   { name: 'spots', path: '#/spots', heading: 'Spots' },
   { name: 'settings', path: '#/settings', heading: 'Settings' },
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },

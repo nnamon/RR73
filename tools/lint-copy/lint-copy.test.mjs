@@ -15,6 +15,8 @@ test('flags hype, corporate verbs, fillers and meta narration', () => {
   assert.deepEqual(rules('We leverage the decoder'), ['error:corporate']);
   assert.deepEqual(rules('Harness the decoder'), ['error:corporate']);
   assert.deepEqual(rules('The test harness links ft8_lib.'), []);
+  assert.deepEqual(rules('Unlock the potential of FT8'), ['error:corporate', 'warning:unlock']);
+  assert.deepEqual(rules('Resume audio plays silence for the same unlock.'), ['warning:unlock']);
   assert.deepEqual(rules('Simply tap Call'), ['error:filler']);
   assert.deepEqual(rules("Here's how the log works"), ['error:meta']);
   assert.deepEqual(rules("It's not just a decoder, it's a lab"), ['error:contrast']);

@@ -4,7 +4,6 @@
   import QsoSheet from './ui/QsoSheet.svelte';
   import TabBar from './ui/TabBar.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
-  import Activate from './views/Activate.svelte';
   import Log from './views/Log.svelte';
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
@@ -22,7 +21,7 @@
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
 
-  const TITLES: Record<string, string> = { operate: 'Operate', log: 'Log', activate: 'Activate', spots: 'Spots', settings: 'Settings' };
+  const TITLES: Record<string, string> = { operate: 'Operate', log: 'Log', spots: 'Spots', settings: 'Settings' };
 
   // The theme follows the system unless Settings pins it.
   $effect(() => {
@@ -61,14 +60,12 @@
     <div class="pane" hidden={tab !== 'operate'}><Operate /></div>
     {#if tab === 'log'}
       <div class="pane scroll"><Log /></div>
-    {:else if tab === 'activate'}
-      <div class="pane scroll"><Activate /></div>
     {:else if tab === 'spots'}
       <div class="pane scroll">
         <Placeholder
           title="Spots"
-          heading="No spots yet"
-          text="POTA, SOTA and WWFF spots on your bands will appear here and refresh every minute while online. Spots arrive in a later version."
+          heading="No spots or activation yet"
+          text="POTA, SOTA and WWFF spots on your bands will appear here, refreshed every minute while online. The activation you are running sits at the top, with its progress and what is left to submit. Both arrive in a later version."
         />
       </div>
     {:else if tab === 'settings'}
