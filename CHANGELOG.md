@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## 0.11.0 · 2026-10-13
+## Unreleased
 
 - Hound mode works DXpeditions in FT8 DXpedition mode. Turn it on per band in the band sheet or •••. Operate shows FT8 Hound next to the band.
 - In Hound mode, calls to the Fox go out at 1000 Hz or above. The R-report goes on the frequency the Fox sent your report on, and moves 300 Hz when repeated.
