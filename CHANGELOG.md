@@ -6,6 +6,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - Messages to your callsign lead their slot, with a solid red edge and bold text over their decode colour. 9V1NE matches VK3/9V1NE and 9V1NE/P.
 - While calling a station or working it, by hand, in Run or in Hunt, decodes unrelated to that station dim to 40% (60% with Increase Contrast). That station's messages, messages to you, the Next, Sending and Sent rows and the slot bars keep full contrast. Calling CQ with no caller dims nothing, and the dimming ends with the QSO or when Tx goes off.
+- Consecutive slots with no decodes share one grey bar that gives the span, such as 22:15:00 to 22:16:15. A single empty slot keeps its own bar.
 
 ## 0.10.1 · 2026-10-13
 

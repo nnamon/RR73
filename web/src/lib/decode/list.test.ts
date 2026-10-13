@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, callerItems, filterCounts, outText, slotHeader, type ListItem, type RowItem, type SlotDecodes } from './list';
+import { buildList, callerItems, filterCounts, outText, quietHeader, slotHeader, type ListItem, type RowItem, type SlotDecodes } from './list';
 import type { Caller } from '../qso/sequencer';
 
 const T = Date.UTC(2026, 9, 13, 13, 14, 15);
@@ -152,6 +152,91 @@ describe('buildList with messages to you', () => {
     expect(rows(buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09'])], '', 'all', 1500)).some((x) => x.toYou)).toBe(false);
     const sent = [{ slotStartMs: T + 15_000, text: 'JA1KXM 9V1NE R-14', freqHz: 1500 }];
     expect(rows(buildList([], '9V1NE', 'all', 1500, sent))[0].toYou).toBeUndefined();
+  });
+});
+
+describe('buildList with runs of empty slots', () => {
+  const empty = (startUtcMs: number, mode: 'FT8' | 'FT4' = 'FT8'): SlotDecodes => ({ startUtcMs, mode, decodes: [], ms: 30 });
+  const full = (startUtcMs: number, mode: 'FT8' | 'FT4' = 'FT8'): SlotDecodes => ({ startUtcMs, mode, decodes: [d('CQ K1ABC FN42', 700)], ms: 30 });
+  const bars = (items: ListItem[]) => items.map((i) => (i.kind === 'header' ? `${i.time}${i.until ? ` to ${i.until}` : ''} ${i.detail}` : 'row'));
+  const S = 15_000;
+
+  it('gives a run one bar with its span, and no parity', () => {
+    expect(quietHeader(T - 5 * S, T)).toEqual({ kind: 'header', id: `hq${T - 5 * S}`, time: '13:13:00', until: '13:14:15', detail: 'no decodes', parity: null, text: '13:13:00 to 13:14:15 UTC · no decodes' });
+  });
+
+  it('keeps a single empty slot as its own bar', () => {
+    expect(bars(buildList([full(T), empty(T - S), full(T - 2 * S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 1 decode', 'row', '13:14:00 0 decodes', '13:13:45 1 decode', 'row']);
+  });
+
+  it('collapses runs between slots with decodes', () => {
+    const slots = [full(T), empty(T - S), empty(T - 2 * S), empty(T - 3 * S), full(T - 4 * S), empty(T - 5 * S), empty(T - 6 * S), full(T - 7 * S)];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500))).toEqual([
+      '13:14:15 1 decode',
+      'row',
+      '13:13:30 to 13:14:00 no decodes',
+      '13:13:15 1 decode',
+      'row',
+      '13:12:45 to 13:13:00 no decodes',
+      '13:12:30 1 decode',
+      'row',
+    ]);
+  });
+
+  it('collapses a run at the top and one at the bottom of the list', () => {
+    const slots = [empty(T + 2 * S), empty(T + S), full(T), empty(T - S), empty(T - 2 * S)];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500))).toEqual(['13:14:30 to 13:14:45 no decodes', '13:14:15 1 decode', 'row', '13:13:45 to 13:14:00 no decodes']);
+  });
+
+  it('shows one bar when every slot is empty', () => {
+    const items = buildList([0, 1, 2, 3, 4, 5].map((i) => empty(T - i * S)), '9V1NE', 'all', 1500);
+    expect(bars(items)).toEqual(['13:13:00 to 13:14:15 no decodes']);
+    expect(items[0]).toMatchObject({ parity: null, id: `hq${T - 5 * S}` });
+  });
+
+  it('collapses FT4 slots 7.5 s apart', () => {
+    const F = 7_500;
+    const slots = [full(T + 3 * F, 'FT4'), empty(T + 2 * F, 'FT4'), empty(T + F, 'FT4'), empty(T, 'FT4'), full(T - F, 'FT4')];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500, [], 'FT4'))).toEqual(['13:14:37 1 decode', 'row', '13:14:15 to 13:14:30 no decodes', '13:14:07 1 decode', 'row']);
+    // 15 s apart in FT4 is a gap.
+    expect(bars(buildList([empty(T + 2 * F, 'FT4'), empty(T, 'FT4')], '9V1NE', 'all', 1500, [], 'FT4'))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes']);
+  });
+
+  it('ends a run at a gap in time, a skipped slot or a change of mode', () => {
+    expect(bars(buildList([empty(T), empty(T - 2 * S), empty(T - 3 * S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 0 decodes', '13:13:30 to 13:13:45 no decodes']);
+    const skipped: SlotDecodes = { ...empty(T - S), skipped: true };
+    expect(bars(buildList([empty(T), skipped, empty(T - 2 * S), empty(T - 3 * S)], '9V1NE', 'all', 1500))).toEqual([
+      '13:14:15 0 decodes',
+      '13:14:00 not decoded: the decoder was busy',
+      '13:13:30 to 13:13:45 no decodes',
+    ]);
+    expect(bars(buildList([empty(T, 'FT4'), empty(T - S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 0 decodes', '13:14:00 0 decodes']);
+  });
+
+  it('never folds a slot holding our own row, which splits the run', () => {
+    // Sent in T - 2S, with the slots on both sides empty.
+    const slots = [empty(T + S), empty(T), empty(T - S), empty(T - 3 * S), empty(T - 4 * S)];
+    const sent = [{ slotStartMs: T - 2 * S, text: 'CQ 9V1NE OJ11', freqHz: 1500 }];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500, sent))).toEqual(['13:14:00 to 13:14:30 no decodes', '13:13:45 sent', 'row', '13:13:15 to 13:13:30 no decodes']);
+    // An empty slot at the start of our own row keeps its bar; so do Next and Sending.
+    const ours = [empty(T + S), empty(T), empty(T - S)];
+    expect(bars(buildList(ours, '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes', '13:14:15 sent', 'row', '13:14:00 0 decodes']);
+    const next = { slotStartMs: T, startMs: T + 500, text: 'CQ 9V1NE OJ11', freqHz: 1500 };
+    expect(bars(buildList(ours, '9V1NE', 'all', 1500, [], 'FT8', undefined, { next }))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes', '13:14:15 next', 'row', '13:14:00 0 decodes']);
+    const onAir = { slotStartMs: T, startMs: T + 500, endMs: T + 13_140 };
+    const sending = buildList(ours, '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }], 'FT8', undefined, { onAir });
+    expect(bars(sending)).toContain('13:14:15 sending');
+    expect(bars(sending).filter((b) => b.includes(' to '))).toEqual([]);
+  });
+
+  it('leaves empty slots out with a filter, as before', () => {
+    expect(buildList([empty(T), empty(T - S), full(T - 2 * S)], '9V1NE', 'cq', 1500).filter((i) => i.kind === 'header')).toHaveLength(1);
+  });
+
+  it('gives every item a unique id', () => {
+    const slots = [empty(T + 2 * S), empty(T + S), full(T), empty(T - S), empty(T - 2 * S), full(T - 3 * S)];
+    const items = buildList(slots, '9V1NE', 'all', 1500, [{ slotStartMs: T - 4 * S, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]);
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
   });
 });
 
