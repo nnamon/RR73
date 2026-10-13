@@ -38,12 +38,21 @@ jobs:
         shell: bash
         run: |
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}"
-          else
-            range="${{ github.event.before }}..${{ github.sha }}"
-            git cat-file -e "${{ github.event.before }}" 2>/dev/null || range="${{ github.sha }}~1..${{ github.sha }}"
-          fi
+          # A branch lints every commit main does not have, so a run cancelled by a newer push
+          # cannot leave commits unlinted and a merge from main adds none of main's. Main lints
+          # the pushed range. A tag points at a release commit already linted on its branch.
+          case "${{ github.event_name }}:${{ github.ref_type }}:${{ github.ref_name }}" in
+            pull_request:*)
+              range="${{ github.event.pull_request.base.sha }}..${{ github.event.pull_request.head.sha }}" ;;
+            push:tag:*)
+              echo "Tag push: commit messages were linted on the branch."; exit 0 ;;
+            push:branch:main)
+              range="${{ github.event.before }}..${{ github.sha }}"
+              git cat-file -e "${{ github.event.before }}" 2>/dev/null || range="${{ github.sha }}~1..${{ github.sha }}" ;;
+            *)
+              range="origin/main..${{ github.sha }}" ;;
+          esac
+          echo "Linting $(git rev-list --no-merges --count "$range") commits in $range"
           status=0
           for sha in $(git rev-list --no-merges "$range"); do
             git log -1 --format=%B "$sha" > /tmp/msg
