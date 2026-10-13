@@ -38,9 +38,10 @@ export function mentions(text: string, call: string): boolean {
 export type FocusState = Pick<SeqState, 'partner' | 'txEnabled' | 'paused' | 'onAir'>;
 
 /**
- * The station the list focuses on: the partner while RR73 calls it or works it, by hand, in Run
- * or in Hunt. Tx has to be on and calling (answering that gave up after its repeats does not
- * count), or a transmission still on air. Null otherwise, and while calling CQ with no partner.
+ * The station the list focuses on: the partner while RR73 calls it or works it, after a
+ * double-tap, a caller to a CQ or Hunt's pick. Tx has to be on and calling (answering that gave
+ * up after its repeats does not count), or a transmission still on air. Null otherwise, and
+ * while calling CQ with no partner.
  */
 export function focusCall(st: FocusState): string | null {
   const p = st.partner;
