@@ -18,12 +18,12 @@ export const TINT_OLD: Record<Theme, number> = { light: 0.25, dark: 0.18 };
 /** Text of rows from older slots (--rr-old-text). */
 export const OLD_TEXT: Record<Theme, string> = { light: '#6E7684', dark: '#8C93A0' };
 /** What the tint is mixed with (--rr-hl-base-light, --rr-hl-base-dark). */
-export const BASE: Record<Theme, string> = { light: '#FFFFFF', dark: '#0B0D10' };
+export const BASE: Record<Theme, string> = { light: '#FFFFFF', dark: '#000000' };
 /**
  * The ground under a plain row's text that gives the least contrast: the list and the groups are
- * #FFF in light; in dark the groups (#15181D) are lighter than the list (#0B0D10).
+ * #FFF in light; in dark the groups (#1C1C1E) are lighter than the list (#000).
  */
-export const GROUND: Record<Theme, string> = { light: '#FFFFFF', dark: '#15181D' };
+export const GROUND: Record<Theme, string> = { light: '#FFFFFF', dark: '#1C1C1E' };
 /** Aimed a little above 4.5:1, so rounding to whole channel values never drops below it. */
 const TARGET = 4.6;
 
