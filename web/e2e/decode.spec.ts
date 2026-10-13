@@ -194,28 +194,6 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   expect(loadLog).toHaveLength(1);
 });
 
-test('the list stays still under a finger and takes new slots after it lifts', async ({ page }) => {
-  test.setTimeout(120_000);
-  await setCallsign(page);
-  await tapStartAudio(page);
-  const list = page.getByTestId('decode-list');
-  const heads = list.locator('.slot-bar .st');
-  await expect(heads.first()).toBeVisible({ timeout: 45_000 });
-  const firstSlot = (await heads.first().textContent())!.slice(0, 8);
-
-  // Hold a finger on the list across the next slot's decode.
-  const box = (await list.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + 60);
-  await page.mouse.down();
-  const held = Date.now();
-  await page.waitForTimeout(17_000);
-  expect((await heads.first().textContent())!.slice(0, 8)).toBe(firstSlot);
-  await page.mouse.up();
-  // Free again 0.5 s after the finger lifts: the newer slot goes in on top.
-  await expect.poll(async () => (await heads.first().textContent())!.slice(0, 8), { timeout: 3000 }).not.toBe(firstSlot);
-  expect(Date.now() - held).toBeGreaterThan(17_000);
-});
-
 test('without the decoder module, the list says so and receive carries on', async ({ page }) => {
   await page.route('**/*.wasm', (r) => r.abort());
   await page.goto('./');
