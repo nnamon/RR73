@@ -173,6 +173,40 @@ test('after an update, a notice opens the version history at the new version', a
   await expect(page.getByText(`Updated to ${VERSION}`)).toBeHidden();
 });
 
+test('the update notice floats over Operate and goes by itself after 4 s', async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem('rr73.lastVersion', '0.0.1');
+      sessionStorage.setItem('seeded', '1');
+    }
+  });
+  await page.goto('./');
+  const notice = page.getByRole('status').filter({ hasText: `Updated to ${VERSION}` });
+  await expect(notice).toBeVisible();
+  // It floats: nothing in Operate moves to make room for it.
+  expect(await notice.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  expect(Math.round((await page.locator('header.top').boundingBox())!.y)).toBe(0);
+  await page.clock.fastForward(3500);
+  await expect(notice).toBeVisible();
+  await page.clock.fastForward(1000);
+  await expect(notice).toBeHidden();
+});
+
+test('a screen opened from Settings starts at the top, and Back returns to the same place', async ({ page }) => {
+  await page.goto('./#/settings');
+  const pane = page.locator('main .pane.scroll');
+  await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const down = await pane.evaluate((el) => el.scrollTop);
+  expect(down).toBeGreaterThan(100);
+  await page.getByRole('link', { name: /^Version / }).click();
+  await expect(page).toHaveURL(/#\/settings\/versions$/);
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBe(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect.poll(() => pane.evaluate((el) => Math.round(el.scrollTop))).toBe(Math.round(down));
+});
+
 test('Reload app and Clear cached copy and reload both reload the page', async ({ page }) => {
   for (const name of [/^Reload app/, /^Clear cached copy and reload/]) {
     await page.goto('./#/settings');

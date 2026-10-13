@@ -20,6 +20,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Halt is a red outline in every state.
 - The buttons at the bottom of Operate are 36 pt high, inside 44 pt targets.
 
+## 0.9.2 · 2026-10-13
+
+- The "Updated to" notice floats over the screen without moving it, and goes by itself after 4 s.
+- Version history and the other Settings screens open at the top. Back returns to where you were.
+
 ## 0.9.1 · 2026-10-13
 
 - Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.

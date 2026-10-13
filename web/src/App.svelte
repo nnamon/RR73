@@ -59,6 +59,29 @@
     });
   });
 
+  // A screen opened from another starts at the top, as on iOS. Going back returns to where the
+  // earlier screen was. Settings › Optional features and a version opened from the update notice
+  // scroll to their own place.
+  const scrolls = new Map<string, number>();
+  let scrollNow = 0;
+  let shownPath = route.path.join('/');
+  $effect(() => {
+    const path = route.path.join('/');
+    const prev = shownPath;
+    if (path === prev) return;
+    shownPath = path;
+    scrolls.set(prev, scrollNow);
+    const back = prev.startsWith(`${path}/`);
+    const own = path === 'settings/features' || (path.startsWith('settings/versions/') && path !== 'settings/versions');
+    // Effects run after the DOM update and before paint, so the new screen never shows at the old
+    // offset and anything measuring it afterwards sees the final position.
+    const pane = document.querySelector<HTMLElement>('main .pane.scroll');
+    if (!pane || own) return;
+    pane.scrollTop = back ? (scrolls.get(path) ?? 0) : 0;
+    scrollNow = pane.scrollTop;
+  });
+  const track = (e: Event) => (scrollNow = (e.currentTarget as HTMLElement).scrollTop);
+
   onMount(() => {
     startClock();
     startQso();
@@ -71,11 +94,11 @@
     <!-- Operate stays mounted so the waterfall keeps its history while another screen is open. -->
     <div class="pane" hidden={tab !== 'operate'}><Operate active={tab === 'operate'} /></div>
     {#if tab === 'log'}
-      <div class="pane scroll"><Log /></div>
+      <div class="pane scroll" onscroll={track}><Log /></div>
     {:else if tab === 'spots'}
-      <div class="pane scroll"><Spots /></div>
+      <div class="pane scroll" onscroll={track}><Spots /></div>
     {:else if tab === 'settings'}
-      <div class="pane scroll">
+      <div class="pane scroll" onscroll={track}>
         {#if sub === 'radio'}
           <RadioAudio />
         {:else if sub === 'logging' && route.path[2] === 'wavelog'}
