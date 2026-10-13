@@ -102,7 +102,7 @@ test('Tune stops by itself after 10 s', async ({ page }) => {
   const sheet = page.getByRole('dialog', { name: 'Transmitting' });
   await expect(sheet).toBeVisible();
   await expect(sheet).toBeHidden({ timeout: 13_000 });
-  await expect(page.getByText(/Not checked at \d\d:\d\d: audio was off during Tune/)).toBeVisible();
+  await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off during Tune/)).toBeVisible();
 });
 
 test('Escape closes the Tune sheet and halts', async ({ page }) => {

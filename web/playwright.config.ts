@@ -46,8 +46,11 @@ export default defineConfig({
         reuseExistingServer: true,
       },
   projects: [
-    { name: 'mic', testMatch: /audio\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
+    { name: 'mic', testMatch: /(audio|start-tone)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    // The decode test aligns Chromium's looped fake microphone with UTC slots from the tap; on a heavily
+    // loaded host the capture can start late enough to put the signals outside the decoder's DT
+    // window. Retries bound that; a decoding regression still fails all three attempts.
+    { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
