@@ -10,8 +10,8 @@ const micPlaying = (file: string) => ({
 });
 // Test tones written by e2e/global-setup.ts.
 const fakeMic = micPlaying('./e2e/.fixtures/tones.wav');
-// One FT8 slot with 4 known messages (e2e/fixtures/ft8-four-signals.json).
-const ft8Mic = micPlaying('./e2e/fixtures/ft8-four-signals.wav');
+// A 15 s FT8 loop with 4 known messages, 4 copies each (e2e/fixtures/ft8-loop.json).
+const ft8Mic = micPlaying('./e2e/fixtures/ft8-loop.wav');
 // The other station of a QSO, written by e2e/global-setup.ts (e2e/qso-script.ts).
 const qsoMic = micPlaying('./e2e/.fixtures/qso-script.wav');
 
@@ -52,9 +52,9 @@ export default defineConfig({
       },
   projects: [
     { name: 'mic', testMatch: /(audio|start-tone)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    // The decode test aligns Chromium's looped fake microphone with UTC slots from the tap; on a heavily
-    // loaded host the capture can start late enough to put the signals outside the decoder's DT
-    // window. Retries bound that; a decoding regression still fails all three attempts.
+    // The decode test passes whatever the offset between the loop and the UTC slots. A loaded host
+    // can still starve the fake microphone and cut the audio inside a slot. Retries bound that; a
+    // decoding regression still fails all three attempts.
     { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
