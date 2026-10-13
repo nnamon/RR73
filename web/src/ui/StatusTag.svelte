@@ -38,6 +38,11 @@
     color: var(--rr-warn);
   }
 
+  .idle {
+    box-shadow: inset 0 0 0 1.5px var(--rr-label3);
+    color: var(--rr-label2);
+  }
+
   .bad {
     background: var(--rr-tx-soft);
     color: var(--rr-tx-text);

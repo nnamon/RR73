@@ -312,8 +312,11 @@ export async function testConnection(cfg: Pick<WavelogConfig, 'url' | 'apiKey' |
   return { at: now, ok: true, message: 'Can read and write', version, ...extra };
 }
 
-/** The outbox's view of Wavelog: sends each QSO to the station location chosen for it. */
-export function wavelogDestination(cfg: WavelogConfig, stationFor: (q: Qso) => string | null, fetchFn: FetchLike): SendingDestination {
+/**
+ * The outbox's view of Wavelog: sends each QSO to the station location chosen for it. `retrying`
+ * says whether the outbox tries again by itself (Send automatically), for the failure messages.
+ */
+export function wavelogDestination(cfg: WavelogConfig, stationFor: (q: Qso) => string | null, fetchFn: FetchLike, retrying: () => boolean = () => true): SendingDestination {
   const host = hostOf(cfg.url);
   const client = wavelogClient(cfg.url, cfg.apiKey, fetchFn, SEND_TIMEOUT_MS);
   return {
@@ -328,7 +331,7 @@ export function wavelogDestination(cfg: WavelogConfig, stationFor: (q: Qso) => s
         }
         const station = cfg.stations.find((s) => s.id === stationId) ?? null;
         const http = await client.postAdif(stationId, writeRecord(qsoToRecord(q)), false);
-        out.push(mapQsoResponse(http, { host, qso: q, station, timeoutS: SEND_TIMEOUT_MS / 1000 }));
+        out.push(mapQsoResponse(http, { host, qso: q, station, timeoutS: SEND_TIMEOUT_MS / 1000, retrying: retrying() }));
       }
       return out;
     },

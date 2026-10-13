@@ -103,7 +103,11 @@ test('adds, edits, deletes and restores a QSO by hand', async ({ page }) => {
   await expect(row(page, 'JA1KXM')).toHaveCount(0);
 });
 
-test('sets up Wavelog, tests the connection and delivers a QSO after the Undo window', async ({ page }) => {
+/** The Send to Wavelog button at the top of the Log, by its count. */
+const sendButton = (page: Page) => page.getByRole('button', { name: /^Send \d+ QSOs? to Wavelog$/ });
+const posts = (mock: { requests: { path: string }[] }) => mock.requests.filter((r) => r.path === '/api/qso');
+
+test('sets up Wavelog, keeps a new QSO not sent for 30 s, then sends it on Send to Wavelog', async ({ page }) => {
   const mock = await mockWavelog(page);
   await start(page, '#/settings/logging/wavelog');
   await page.getByRole('textbox', { name: 'Address' }).fill('wavelog.example.test/');
@@ -121,28 +125,67 @@ test('sets up Wavelog, tests the connection and delivers a QSO after the Undo wi
 
   await page.goto('./#/settings/logging');
   await expect(page.getByRole('link', { name: /Wavelog/ }).first()).toContainText('Connected');
+  await expect(page.getByRole('switch', { name: /Send automatically/ })).not.toBeChecked();
 
   await addQso(page, 'VK2ESN');
-  await expect(row(page, 'VK2ESN')).toContainText('Wavelog · waiting');
-  await page.clock.fastForward(11_000);
+  await expect(row(page, 'VK2ESN')).toContainText('Wavelog · not sent');
+  await page.clock.fastForward(30_000);
+  await page.clock.fastForward(30_000);
+  expect(posts(mock)).toHaveLength(0);
+  await expect(row(page, 'VK2ESN')).toContainText('Wavelog · not sent');
+  await expect(page.getByTestId('send-bar')).toContainText('1 QSO not sent to Wavelog.');
+  await expect(seg(page, 'To do')).toHaveText(/To do\s*1$/);
+
+  await sendButton(page).click();
   await expect(row(page, 'VK2ESN').getByText('Wavelog: delivered')).toBeAttached();
-  const sent = mock.requests.filter((r) => r.path === '/api/qso');
-  expect(sent).toHaveLength(1);
-  expect(sent[0].body).toMatchObject({ key: API_KEY, station_profile_id: '1', type: 'adif' });
-  expect(sent[0].body?.string).toMatch(/^<CALL:6>VK2ESN <QSO_DATE:8>20261013 <TIME_ON:6>131[45]\d\d .*<GRIDSQUARE:4>QF56 <EOR>$/);
+  await expect(page.getByTestId('send-bar')).toContainText('Delivered VK2ESN to Wavelog.');
+  expect(posts(mock)).toHaveLength(1);
+  expect(posts(mock)[0].body).toMatchObject({ key: API_KEY, station_profile_id: '1', type: 'adif' });
+  expect(posts(mock)[0].body?.string).toMatch(/^<CALL:6>VK2ESN <QSO_DATE:8>20261013 <TIME_ON:6>131[45]\d\d .*<GRIDSQUARE:4>QF56 <EOR>$/);
   // No callsign in Settings yet: STATION_CALLSIGN is left out and Wavelog uses the station location's.
-  expect(sent[0].body?.string).not.toContain('STATION_CALLSIGN');
+  expect(posts(mock)[0].body?.string).not.toContain('STATION_CALLSIGN');
+  await expect(seg(page, 'To do')).toHaveText(/To do$/);
 });
 
-test('shows a refused API key with Fix, and delivers once the key is replaced', async ({ page }) => {
+test('sends QSOs oldest first with progress, and sums up mixed results', async ({ page }) => {
+  const mock = await mockWavelog(page);
+  let releaseFirst: () => void = () => undefined;
+  const first = new Promise<void>((r) => (releaseFirst = r));
+  // Wavelog's band refusal for one call, its duplicate report for another.
+  mock.qso = (body) => {
+    const call = /<CALL:\d+>(\S+)/.exec(String(body.string))?.[1];
+    if (call === 'DL1XYZ') return { status: 400, body: { status: 'abort', messages: ['', "QSO on 2026-10-13: Band '20m' is not in the band configuration. This QSO wasn't imported.<br>"] } };
+    if (call === 'K1ABC') return { status: 400, body: { status: 'abort', messages: ['', 'Date/Time: 2026-10-13 13:00:00 Callsign: K1ABC Band: 20m Duplicate for 9V1NE<br>'] } };
+    return { status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0 } };
+  };
+  await page.route(`${WAVELOG_URL}/api/qso`, async (route) => {
+    await first;
+    await route.fallback();
+  });
+  await start(page, '#/log', wavelogOnly());
+  for (const call of ['W1AW', 'K1ABC', 'DL1XYZ', 'G4ABC']) await addQso(page, call);
+  await expect(sendButton(page)).toHaveText('Send 4 QSOs to Wavelog');
+  await sendButton(page).click();
+  await expect(page.getByRole('button', { name: 'Sending 1 of 4' })).toBeDisabled();
+  await expect(page.getByTestId('send-bar')).toContainText('Sending 1 of 4 to Wavelog.');
+  releaseFirst();
+  await expect(page.getByTestId('send-bar')).toContainText('3 delivered. 1 refused: see To do.');
+  expect(posts(mock).map((r) => /<CALL:\d+>(\S+)/.exec(String(r.body?.string))?.[1])).toEqual(['W1AW', 'K1ABC', 'DL1XYZ', 'G4ABC']);
+  await expect(row(page, 'DL1XYZ')).toContainText('Wavelog refused the QSO: 20m is not in its band list.');
+  await expect(seg(page, 'To do')).toHaveText(/To do\s*1$/);
+  await expect(page.getByTestId('log-notice')).toContainText('3 delivered. 1 refused: see To do.');
+});
+
+test('shows a refused API key with Fix, and sends again once the key is replaced', async ({ page }) => {
   const mock = await mockWavelog(page);
   mock.qso = () => ({ status: 403, body: { status: 'failed', reason: 'API key does not have write permissions' } });
   await start(page, '#/log', wavelogOnly());
   await addQso(page, 'YB0AZK', { grid: 'OI33' });
-  await page.clock.fastForward(11_000);
+  await sendButton(page).click();
   const r = row(page, 'YB0AZK');
   await expect(r).toContainText('Wavelog · refused');
   await expect(r).toContainText('Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog.');
+  await expect(page.getByTestId('send-bar')).toContainText('Wavelog refused YB0AZK: see To do.');
   await expect(seg(page, 'To do')).toHaveText(/To do\s*1$/);
 
   await r.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click();
@@ -153,42 +196,82 @@ test('shows a refused API key with Fix, and delivers once the key is replaced', 
   await expect(page.getByText(/The key can read and write\./)).toBeVisible();
 
   await page.goto('./#/log');
+  await expect(row(page, 'YB0AZK')).toContainText('Wavelog · not sent');
+  await sendButton(page).click();
   await expect(row(page, 'YB0AZK').getByText('Wavelog: delivered')).toBeAttached();
-  const last = mock.requests.filter((x) => x.path === '/api/qso').at(-1);
-  expect(last?.body?.key).toBe('new-key-rw');
+  expect(posts(mock).at(-1)?.body?.key).toBe('new-key-rw');
 });
 
-test('keeps QSOs waiting offline and sends them when the phone comes online', async ({ page, context }) => {
+test('disables Send to Wavelog offline, with the reason, and sends one QSO from its sheet', async ({ page, context }) => {
   const mock = await mockWavelog(page);
   await start(page, '#/log', wavelogOnly());
+  await addQso(page, 'ZL1TQK', { grid: 'RF72' });
+  await addQso(page, 'VK3ARR', { grid: 'QF22' });
+  await context.setOffline(true);
+  await expect(sendButton(page)).toBeDisabled();
+  await expect(page.getByText('No connection. Send when the phone is online.')).toBeVisible();
+  await context.setOffline(false);
+  await expect(sendButton(page)).toBeEnabled();
+
+  await row(page, 'VK3ARR').getByRole('button', { name: /^VK3ARR/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Edit QSO' });
+  await expect(sheet).toContainText('Not sent');
+  await sheet.getByRole('textbox', { name: 'Comment' }).fill('Sent from the sheet');
+  await sheet.getByRole('button', { name: 'Send to Wavelog' }).click();
+  await expect(sheet).toBeHidden();
+  await expect(row(page, 'VK3ARR').getByText('Wavelog: delivered')).toBeAttached();
+  await expect(row(page, 'ZL1TQK')).toContainText('Wavelog · not sent');
+  expect(posts(mock)).toHaveLength(1);
+  // The edit was saved first, so Wavelog got it.
+  expect(posts(mock)[0].body?.string).toContain('<COMMENT:19>Sent from the sheet');
+  await expect(sendButton(page)).toHaveText('Send 1 QSO to Wavelog');
+});
+
+test('with Send automatically on, keeps QSOs waiting offline and sends them when the phone comes online', async ({ page, context }) => {
+  const mock = await mockWavelog(page);
+  await start(page, '#/log', wavelogOnly({ sendAutomatically: true }));
   await context.setOffline(true);
   await addQso(page, 'ZL1TQK');
   await page.clock.fastForward(70_000);
   await expect(row(page, 'ZL1TQK')).toContainText('Wavelog · waiting');
-  expect(mock.requests.filter((x) => x.path === '/api/qso')).toHaveLength(0);
+  expect(posts(mock)).toHaveLength(0);
   await seg(page, 'To do').click();
-  await expect(page.getByText('No connection. 1 QSO is waiting for Wavelog.')).toBeVisible();
+  await expect(page.getByTestId('send-bar')).toContainText('1 QSO waiting for Wavelog.');
+  await expect(page.getByText('No connection. Send when the phone is online.')).toBeVisible();
 
   await context.setOffline(false);
   // Delivered QSOs leave To do.
   await expect(page.getByText('Nothing to do')).toBeVisible();
-  expect(mock.requests.filter((x) => x.path === '/api/qso')).toHaveLength(1);
+  expect(posts(mock)).toHaveLength(1);
   await seg(page, 'All').click();
   await expect(row(page, 'ZL1TQK').getByText('Wavelog: delivered')).toBeAttached();
 });
 
-test('sends nothing by itself when sending automatically is off, until Send now', async ({ page }) => {
+test('turning Send automatically on sends QSOs not sent, and new ones after the Undo window', async ({ page }) => {
   const mock = await mockWavelog(page);
-  await start(page, '#/log', wavelogOnly({ sendAutomatically: false }));
+  await start(page, '#/log', wavelogOnly());
   await addQso(page, 'VK3ARR');
-  await page.clock.fastForward(120_000);
-  expect(mock.requests.filter((x) => x.path === '/api/qso')).toHaveLength(0);
-  await seg(page, 'To do').click();
-  await expect(page.getByText('1 QSO is waiting for Wavelog. Sending automatically is off.')).toBeVisible();
-  await page.getByRole('button', { name: 'Send now' }).click();
-  await expect(page.getByText('Nothing to do')).toBeVisible();
-  await seg(page, 'All').click();
-  await expect(row(page, 'VK3ARR').getByText('Wavelog: delivered')).toBeAttached();
+  await page.clock.fastForward(60_000);
+  expect(posts(mock)).toHaveLength(0);
+
+  await page.goto('./#/settings/logging');
+  const toggle = page.getByRole('switch', { name: /Send automatically/ });
+  await expect(toggle).not.toBeChecked();
+  await page.getByText('Send automatically', { exact: true }).click();
+  await expect(toggle).toBeChecked();
+  await expect(page.getByText('Each QSO 10 s after it is logged, while RR73 is open and online')).toBeVisible();
+  await expect.poll(() => posts(mock).length).toBe(1);
+
+  await addQso(page, 'VK4TMZ');
+  await expect(row(page, 'VK4TMZ')).toContainText('Wavelog · waiting');
+  await page.clock.fastForward(11_000);
+  await expect(row(page, 'VK4TMZ').getByText('Wavelog: delivered')).toBeAttached();
+  expect(posts(mock)).toHaveLength(2);
+
+  // Stays on after a reload.
+  await page.reload();
+  await page.goto('./#/settings/logging');
+  await expect(page.getByRole('switch', { name: /Send automatically/ })).toBeChecked();
 });
 
 test('starts an activation from Spots, counts its QSOs and ends it', async ({ page }) => {
@@ -327,13 +410,15 @@ test('fixes a station location refusal by choosing another station location', as
   await form.getByRole('button', { name: 'Start activation' }).click();
   await expect(form).toBeHidden();
   await addQso(page, 'VK2ESN');
-  await page.clock.fastForward(11_000);
+  await sendButton(page).click();
   const r = row(page, 'VK2ESN');
   await expect(r).toContainText('Wavelog refused the QSO: it was made as VK3/9V1NE and the station location Home is for 9V1NE. Choose a station location for VK3/9V1NE.');
   await r.getByRole('button', { name: 'Fix the QSO with VK2ESN' }).click();
   const sheet = page.getByRole('dialog', { name: 'Choose a station location' });
   await expect(sheet).toContainText('The choice applies to the activation POTA VK-0921.');
   await sheet.getByRole('button', { name: /VK3 portable/ }).click();
+  await expect(r).toContainText('Wavelog · not sent');
+  await sendButton(page).click();
   await expect(r.getByText('Wavelog: delivered')).toBeAttached();
   expect(mock.requests.filter((x) => x.path === '/api/qso').map((x) => x.body?.station_profile_id)).toEqual(['1', '7']);
 });

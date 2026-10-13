@@ -85,7 +85,7 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Send automatically</span>
-          <span class="row-sub">When RR73 is open and online</span>
+          <span class="row-sub">{log.settings.sendAutomatically ? 'Each QSO 10 s after it is logged, while RR73 is open and online' : 'Off: QSOs wait in the Log until you tap Send to Wavelog'}</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendAutomatically} onchange={(e) => void setLoggingSettings({ sendAutomatically: e.currentTarget.checked })} />
       </label>

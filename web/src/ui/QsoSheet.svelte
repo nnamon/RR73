@@ -2,11 +2,13 @@
   /**
    * Add a QSO by hand, or edit or delete one. Times are UTC. A new QSO joins the running
    * activation unless the operator unticks it. Opened from the Log, the logged notice and Fix.
+   * An existing QSO shows where it stands at Wavelog, with Send to Wavelog when it is not sent.
    */
   import Sheet from './Sheet.svelte';
   import { checkRef, refsLabel } from '../lib/log/activation';
   import { bandOfHz } from '../lib/log/bandplan';
-  import { closeEditor, deleteQso, log, logQso, qsoById, restoreQso, updateQso } from '../lib/log/log.svelte';
+  import { closeEditor, deleteQso, log, logQso, qsoById, restoreQso, sendToWavelog, updateQso } from '../lib/log/log.svelte';
+  import { stateWords } from '../lib/log/view';
   import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
@@ -65,6 +67,15 @@
   const modes = $derived([...new Set(['FT8', 'FT4', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
   const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : log.current);
   const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : 'Add QSO');
+  const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
+  const wavelog = $derived(original ? (log.index.get(original.id)?.find((e) => e.destinationId === 'wavelog') ?? null) : null);
+  const canSend = $derived(!!wavelog && (wavelog.state === 'not-sent' || wavelog.state === 'waiting' || wavelog.state === 'refused'));
+  const sendReason = $derived(!log.online ? 'No connection. Send when the phone is online.' : log.sync.running ? 'Wavelog is busy with other QSOs. Try again when they are sent.' : null);
+  const wavelogText = $derived.by(() => {
+    if (!wavelog) return '';
+    const words = stateWords(wavelog.state);
+    return `${words[0].toUpperCase()}${words.slice(1)}${wavelog.lastError ? `. ${wavelog.lastError}` : ''}`;
+  });
 
   /** Keeps the frequency on the band's dial frequency while the operator has not typed one. */
   function changeBandOrMode(nextBand: string, nextMode: string) {
@@ -87,6 +98,13 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
+    if (!(await persist())) return;
+    open = false;
+    closeEditor();
+  }
+
+  /** Saves the form, a new or an edited QSO; false when it says what is wrong instead. */
+  async function persist(): Promise<boolean> {
     const problems: string[] = [];
     const c = normaliseCall(call);
     if (!/[A-Z0-9]/.test(c)) problems.push('Type the other station’s callsign.');
@@ -100,7 +118,7 @@
     const parsed = parseRefs(refs);
     if (parsed.bad.length) problems.push(`${parsed.bad.join(', ')} ${parsed.bad.length > 1 ? 'are not references' : 'is not a reference'}. They look like US-1234, W7O/CN-001, KFF-1234 or OC-001.`);
     errors = problems;
-    if (problems.length) return;
+    if (problems.length) return false;
 
     if (original) {
       const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
@@ -135,8 +153,17 @@
         activationId: log.current && join ? log.current.id : null,
       });
     }
+    return true;
+  }
+
+  /** Saves any edit, then sends this QSO to Wavelog; the result shows as a notice. */
+  async function sendOne() {
+    if (!original) return;
+    const id = original.id;
+    if (!(await persist())) return;
     open = false;
     closeEditor();
+    await sendToWavelog([id]);
   }
 
   async function remove() {
@@ -232,6 +259,23 @@
       </label>
     {/if}
 
+    {#if original && original.deletedAt === null && wavelogOn && wavelog}
+      <div class="card wl">
+        <div class="row">
+          <span class="row-main">
+            <span class="row-title">Wavelog</span>
+            <span class="row-sub">{wavelogText}</span>
+          </span>
+        </div>
+        {#if canSend}
+          <button type="button" class="row send" disabled={!!sendReason} aria-describedby={sendReason ? 'qso-send-reason' : undefined} onclick={() => void sendOne()}>
+            <span class="row-title">Send to Wavelog</span>
+          </button>
+        {/if}
+      </div>
+      {#if canSend && sendReason}<p class="note" id="qso-send-reason">{sendReason}</p>{/if}
+    {/if}
+
     {#if original?.deletedAt != null}
       <button type="button" class="btn primary wide" onclick={() => void restore()}>Restore QSO</button>
     {:else}
@@ -280,6 +324,18 @@
   .check {
     margin-top: var(--rr-space-3);
     cursor: pointer;
+  }
+
+  .wl {
+    margin-top: var(--rr-space-3);
+  }
+
+  .send {
+    color: var(--rr-accent);
+  }
+
+  .send:disabled {
+    color: var(--rr-label3);
   }
 
   .errors {

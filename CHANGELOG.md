@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Send automatically is now off: QSOs stay in the Log as "not sent" until you tap Send to Wavelog. A phone that ran 0.5.0 switches it off once; turn it back on in Settings › Logging.
+- Send to Wavelog, at the top of the Log, sends every QSO not sent, oldest first, shows "Sending 2 of 4", then what happened: "3 delivered. 1 refused: see To do." The QSO sheet sends one QSO.
+- To do counts QSOs not sent to Wavelog.
+- QSOs logged in the same second go to Wavelog in the order they were logged.
+
 ## 0.5.0 · 2026-10-13
 
 - The Log lists every QSO on this phone by UTC day with where each copy went: Wavelog waiting, delivered, refused or changed. Search by callsign, grid or park.

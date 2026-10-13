@@ -3,6 +3,7 @@
 // real Wavelog: every request to the mock address is answered by the test.
 import type { Page, Route } from '@playwright/test';
 import { applyReceipt, markSubmitted, reconcile, type DestinationFacts } from '../src/lib/log/ledger';
+import { SEND_AUTOMATICALLY_OFF } from '../src/lib/log/migrations';
 import { createQso } from '../src/lib/log/qso';
 import type { Activation, DestinationConfig, LedgerEntry, LogQsoRecord, Qso, WavelogConfig } from '../src/lib/log/types';
 import { FIXED_TIME } from './time';
@@ -50,11 +51,11 @@ function qso(call: string, at: number, extra: Partial<LogQsoRecord>, a: Activati
   return createQso(r, { id: `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`, now: at, activation: a, callsign: '9V1NE' });
 }
 
-function entries(q: Qso, a: Activation | null, wavelog: 'waiting' | 'delivered' | 'refused' | null): LedgerEntry[] {
+function entries(q: Qso, a: Activation | null, wavelog: 'not-sent' | 'delivered' | 'refused' | null): LedgerEntry[] {
   const out: LedgerEntry[] = [];
   for (const f of Object.values(FACTS)) {
     if (f.id === 'wavelog' && !wavelog) continue;
-    let e = reconcile({ entry: null, dest: f, qso: q, activation: a, sendEdits: true, now: q.createdAt })!;
+    let e = reconcile({ entry: null, dest: f, qso: q, activation: a, sendEdits: true, sendAutomatically: false, now: q.createdAt })!;
     if (f.id === 'wavelog' && wavelog === 'delivered') e = applyReceipt(e, { qsoId: q.id, outcome: 'delivered', remoteRef: null, duplicate: false }, q.updatedAt, q.createdAt + 12_000, 0);
     if (f.id === 'wavelog' && wavelog === 'refused')
       e = applyReceipt(
@@ -69,7 +70,7 @@ function entries(q: Qso, a: Activation | null, wavelog: 'waiting' | 'delivered' 
   return out;
 }
 
-/** Wavelog set up and sending automatically, with no QSOs yet. */
+/** Wavelog set up, with no QSOs yet. Send automatically is off unless asked for. */
 export function wavelogOnly(opts: { sendAutomatically?: boolean } = {}): Seed {
   return {
     qsos: [],
@@ -77,8 +78,9 @@ export function wavelogOnly(opts: { sendAutomatically?: boolean } = {}): Seed {
     activations: [],
     destinations: [WAVELOG],
     kv: [
-      { key: 'logging', value: { sendAutomatically: opts.sendAutomatically ?? true, sendEdits: true } },
+      { key: 'logging', value: { sendAutomatically: opts.sendAutomatically ?? false, sendEdits: true } },
       { key: 'settings', value: { callsign: '9V1NE' } },
+      { key: 'migrations', value: [SEND_AUTOMATICALLY_OFF] },
     ],
   };
 }
@@ -125,7 +127,7 @@ export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } 
     qso('9M2TRX', FIXED_TIME - 23 * MIN, { mode: 'FT4', dialHz: 14_080_000, audioHz: 1200, grid: 'OJ02', reportSent: -4, reportRcvd: -7 }, null),
     qso('YB0AZK', FIXED_TIME - 52 * MIN, { band: '30m', dialHz: 10_136_000, audioHz: 1100, grid: 'OI33', reportSent: -11, reportRcvd: -13 }, null),
   ];
-  ledger.push(...entries(today[0], null, 'waiting'), ...entries(today[1], null, 'delivered'), ...entries(today[2], null, 'delivered'), ...entries(today[3], null, 'refused'));
+  ledger.push(...entries(today[0], null, 'not-sent'), ...entries(today[1], null, 'delivered'), ...entries(today[2], null, 'delivered'), ...entries(today[3], null, 'refused'));
   if (opts.stationRefusal) {
     const e = ledger.find((x) => x.qsoId === today[3].id && x.destinationId === 'wavelog')!;
     e.lastError = 'Wavelog refused the QSO: it was made as 9V1NE and the station location VK3 portable is for VK3/9V1NE. Choose a station location for 9V1NE.';
@@ -144,7 +146,7 @@ export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } 
       qso('ZL2AB', FIXED_TIME - 9 * MIN, { reportSent: -13, reportRcvd: -12 }, live),
       qso('VK2ESN', FIXED_TIME - 3 * MIN, { grid: 'QF56', reportSent: -12, reportRcvd: -10 }, live),
     ];
-    for (const q of lq) ledger.push(...entries(q, live, 'waiting'));
+    for (const q of lq) ledger.push(...entries(q, live, 'not-sent'));
     activations.push(live);
     qsos.push(...lq);
   }
@@ -156,6 +158,7 @@ export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } 
     kv: [
       { key: 'logging', value: { sendAutomatically: false, sendEdits: true } },
       { key: 'settings', value: { callsign: '9V1NE' } },
+      { key: 'migrations', value: [SEND_AUTOMATICALLY_OFF] },
     ],
   };
 }

@@ -75,7 +75,8 @@ export function matches(q: Qso, query: string): boolean {
   return [q.call, q.gridsquare.toUpperCase(), q.myPotaRef, q.mySotaRef, q.myWwffRef, q.myIota, q.potaRef, q.sotaRef, q.wwffRef, q.iota, q.comment.toUpperCase()].some((f) => f.includes(t));
 }
 
-export type Tone = 'ok' | 'wait' | 'bad';
+/** ok: delivered or submitted. wait: queued or needing a file. idle: not sent yet. bad: refused. */
+export type Tone = 'ok' | 'wait' | 'idle' | 'bad';
 
 export interface Tag {
   destination: DestinationId;
@@ -88,6 +89,7 @@ export interface Tag {
 }
 
 const STATE_WORDS: Record<LedgerState, string> = {
+  'not-sent': 'not sent',
   waiting: 'waiting',
   delivered: 'delivered',
   refused: 'refused',
@@ -104,13 +106,13 @@ export function stateWords(s: LedgerState): string {
 export function tagFor(e: LedgerEntry, name: string): Tag | null {
   if (e.state === 'not-needed') return null;
   const done = e.state === 'delivered' || e.state === 'submitted';
-  const tone: Tone = done ? 'ok' : e.state === 'refused' ? 'bad' : 'wait';
+  const tone: Tone = done ? 'ok' : e.state === 'refused' ? 'bad' : e.state === 'not-sent' ? 'idle' : 'wait';
   return { destination: e.destinationId, state: e.state, text: done ? name : `${name} · ${STATE_WORDS[e.state]}`, label: `${name}: ${STATE_WORDS[e.state]}`, tone };
 }
 
 /** Entries that need the operator, or the outbox. */
 export function needsAction(e: LedgerEntry): boolean {
-  return e.state === 'waiting' || e.state === 'refused' || e.state === 'changed' || e.state === 'file-ready';
+  return e.state === 'not-sent' || e.state === 'waiting' || e.state === 'refused' || e.state === 'changed' || e.state === 'file-ready';
 }
 
 /** Ledger entries by QSO id. */
@@ -142,10 +144,10 @@ export function rowProblem(entries: readonly LedgerEntry[] | undefined, facts: r
   return live.find((e) => e.state === 'refused') ?? live.find((e) => e.state === 'changed') ?? null;
 }
 
-/** QSOs on the To do list: waiting, refused or changed at an active direct destination. Deleted QSOs appear while a destination still holds them. */
+/** QSOs on the To do list: not sent, waiting, refused or changed at an active direct destination. Deleted QSOs appear while a destination still holds them. */
 export function todoQsos(qsos: readonly Qso[], index: Map<string, LedgerEntry[]>, facts: readonly DestinationFacts[]): Qso[] {
   const direct = new Set(facts.filter((f) => f.active && f.transport !== 'file').map((f) => f.id));
-  return qsos.filter((q) => (index.get(q.id) ?? []).some((e) => direct.has(e.destinationId) && (e.state === 'waiting' || e.state === 'refused' || e.state === 'changed')));
+  return qsos.filter((q) => (index.get(q.id) ?? []).some((e) => direct.has(e.destinationId) && (e.state === 'not-sent' || e.state === 'waiting' || e.state === 'refused' || e.state === 'changed')));
 }
 
 export interface FileRow {
@@ -188,6 +190,7 @@ export interface DirectSummary {
   name: string;
   total: number;
   delivered: number;
+  notSent: number;
   waiting: number;
   refused: number;
   changed: number;
@@ -199,10 +202,11 @@ export function activationDirect(activation: Activation, qsos: readonly Qso[], i
   return facts
     .filter((f) => f.active && f.transport !== 'file')
     .map((f) => {
-      const s: DirectSummary = { destination: f.id, name: f.name, total: live.length, delivered: 0, waiting: 0, refused: 0, changed: 0 };
+      const s: DirectSummary = { destination: f.id, name: f.name, total: live.length, delivered: 0, notSent: 0, waiting: 0, refused: 0, changed: 0 };
       for (const q of live) {
         const e = index.get(q.id)?.find((x) => x.destinationId === f.id);
-        if (!e || e.state === 'waiting') s.waiting++;
+        if (!e || e.state === 'not-sent') s.notSent++;
+        else if (e.state === 'waiting') s.waiting++;
         else if (e.state === 'delivered') s.delivered++;
         else if (e.state === 'refused') s.refused++;
         else if (e.state === 'changed') s.changed++;
@@ -215,7 +219,7 @@ export function activationDirect(activation: Activation, qsos: readonly Qso[], i
 export function directText(s: DirectSummary): string {
   if (s.total === 0) return `${s.name}: no QSOs yet`;
   if (s.delivered === s.total) return `${s.name}: all ${s.total} delivered`;
-  const rest = [s.waiting && `${s.waiting} waiting`, s.refused && `${s.refused} refused`, s.changed && `${s.changed} changed`].filter(Boolean).join(', ');
+  const rest = [s.notSent && `${s.notSent} not sent`, s.waiting && `${s.waiting} waiting`, s.refused && `${s.refused} refused`, s.changed && `${s.changed} changed`].filter(Boolean).join(', ');
   return `${s.name}: ${s.delivered} of ${s.total} delivered${rest ? `, ${rest}` : ''}`;
 }
 
@@ -231,6 +235,7 @@ export function afterLine(direct: readonly DirectSummary[], files: readonly File
   const parts: string[] = [];
   for (const d of direct) {
     if (d.refused) parts.push(`${d.name} ${d.refused} refused`);
+    else if (d.notSent) parts.push(`${d.name} ${d.notSent} not sent`);
     else if (d.waiting) parts.push(`${d.name} ${d.waiting} waiting`);
     else if (d.total) parts.push(`${d.name} all delivered`);
   }

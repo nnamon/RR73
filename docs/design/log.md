@@ -31,7 +31,8 @@ One entry per QSO and destination: `state`, `attempts`, `lastAttemptAt`, `nextAt
 
 | State | Meaning |
 | --- | --- |
-| waiting | In the outbox. |
+| not sent | Send automatically is off and the operator has not sent it yet. |
+| waiting | In the outbox: queued, and sent while the app is open and online. |
 | delivered | The destination confirmed it. |
 | refused | The destination said no; `lastError` says why and what to do. |
 | changed | Edited or deleted after delivery or submission (`updatedAt` > `deliveredUpdatedAt`). Cleared by Mark handled once the operator made the change there. |
@@ -39,13 +40,15 @@ One entry per QSO and destination: `state`, `attempts`, `lastAttemptAt`, `nextAt
 | submitted | The operator confirmed a file upload. |
 | not needed | Outside the destination's scope, such as POTA for a QSO outside an activation, or a QSO undone before it was sent. |
 
-To do counts what needs the operator: waiting, refused and changed QSOs, and files not yet submitted. Changed is included because the destination holds a copy that no longer matches.
+To do counts what needs the operator: not sent, waiting, refused and changed QSOs, and files not yet submitted. Changed is included because the destination holds a copy that no longer matches.
 
 File destinations track each file on its own in the entry's `parts`: a QSO at two parks is in two POTA files and is submitted when both are.
 
 ## Outbox
 
-- Runs while the app is open and `navigator.onLine` is true, on start, on `online` events, after each new QSO, when a held or backed-off QSO falls due, and every 60 s. Send now runs it by hand, also with Send automatically off.
+- Send automatically is off by default (0.5.1): the operator reviews the log, then taps Send to Wavelog. QSOs for Wavelog are `not sent` until then, and nothing goes out by itself. Send to Wavelog sends every QSO not sent, oldest first (by start, then by when it was logged), one request each, with progress and a summary; the QSO sheet sends one. A failure or a refusal of the key stops the run, and what is left stays `not sent`.
+- A phone that ran 0.5.0, where the default was on, switches it off once at the first start. The kv store records the migration (`migrations`), so turning it on again sticks.
+- With Send automatically on, the outbox runs while the app is open and `navigator.onLine` is true, on start, on `online` events, after each new QSO, when a held or backed-off QSO falls due, and every 60 s. Switching it on queues every QSO not sent; switching it off takes what is queued back to `not sent`.
 - New QSOs wait 10 s, the life of the logged notice, so Undo never needs a delete at a destination.
 - One request at a time per destination, oldest first. Backoff after errors: 30 s doubling to 30 min, per destination, or longer when the destination asks (Wavelog's `retry_after`). Coming online clears the backoff. Refusals are not retried until the operator acts.
 - A refusal that applies to the whole destination (a wrong or read-only key, a station location that is gone) refuses every waiting QSO there with the same reason. A new key, address or station location, or a passing Test connection, sends them again.

@@ -97,6 +97,7 @@ describe('status tags', () => {
     expect(tagFor(entry('x', 'wavelog', 'changed'), 'Wavelog')).toMatchObject({ text: 'Wavelog · changed', tone: 'wait' });
     expect(tagFor(entry('x', 'pota-file', 'file-ready'), 'POTA')).toMatchObject({ text: 'POTA · file ready', tone: 'wait' });
     expect(tagFor(entry('x', 'pota-file', 'submitted'), 'POTA')).toMatchObject({ text: 'POTA', label: 'POTA: submitted', tone: 'ok' });
+    expect(tagFor(entry('x', 'wavelog', 'not-sent'), 'Wavelog')).toEqual({ destination: 'wavelog', state: 'not-sent', text: 'Wavelog · not sent', label: 'Wavelog: not sent', tone: 'idle' });
     expect(tagFor(entry('x', 'wavelog', 'not-needed'), 'Wavelog')).toBeNull();
   });
 
@@ -118,6 +119,8 @@ describe('To do', () => {
     const e = q('E', NOW);
     const ledger = [entry(a.id, 'wavelog', 'waiting'), entry(b.id, 'wavelog', 'delivered'), entry(c.id, 'wavelog', 'refused'), entry(d.id, 'wavelog', 'changed'), entry(e.id, 'pota-file', 'file-ready')];
     expect(todoQsos([a, b, c, d, e], byQso(ledger), FACTS).map((x) => x.call)).toEqual(['A', 'C', 'D']);
+    const f = q('F', NOW);
+    expect(todoQsos([f], byQso([entry(f.id, 'wavelog', 'not-sent')]), FACTS).map((x) => x.call)).toEqual(['F']);
     expect(todoQsos([a, b, c, d, e], byQso(ledger), FACTS.map((f) => ({ ...f, active: f.id !== 'wavelog' })))).toEqual([]);
   });
 });
@@ -139,9 +142,13 @@ describe('activation cards', () => {
     ];
     const idx = byQso(ledger);
     const direct = activationDirect(ACT, qs, idx, FACTS);
-    expect(direct).toEqual([{ destination: 'wavelog', name: 'Wavelog', total: 3, delivered: 2, waiting: 1, refused: 0, changed: 0 }]);
+    expect(direct).toEqual([{ destination: 'wavelog', name: 'Wavelog', total: 3, delivered: 2, notSent: 0, waiting: 1, refused: 0, changed: 0 }]);
     expect(directText(direct[0])).toBe('Wavelog: 2 of 3 delivered, 1 waiting');
     expect(directText({ ...direct[0], delivered: 3, waiting: 0 })).toBe('Wavelog: all 3 delivered');
+    expect(directText({ ...direct[0], delivered: 1, notSent: 2, waiting: 0 })).toBe('Wavelog: 1 of 3 delivered, 2 not sent');
+    const notSent = activationDirect(ACT, qs, byQso(qs.slice(0, 3).map((x) => entry(x.id, 'wavelog', 'not-sent'))), FACTS);
+    expect(notSent[0]).toMatchObject({ notSent: 3, waiting: 0 });
+    expect(afterLine(notSent, [])).toBe('Wavelog 3 not sent');
     const files = activationFiles(ACT, qs, idx, FACTS);
     expect(files.map(fileText)).toEqual(['POTA VK-0921, 11 Oct 2026: file ready', 'SOTA VK3/VC-012, 11 Oct 2026: submitted 12 Oct']);
     expect(files[0]).toMatchObject({ key: 'pota|VK-0921|20261011', destination: 'pota-file', count: 3, state: 'file-ready' });
@@ -157,12 +164,12 @@ describe('activation cards', () => {
   it('writes the after-the-activation line', () => {
     const ready = (destination: 'pota-file' | 'sota-file' | 'adif-file', label: string) => ({ key: label, destination, label, state: 'file-ready' as const, count: 1, submittedAt: null });
     expect(afterLine([], [])).toBe('Nothing to send');
-    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 0, waiting: 7, refused: 0, changed: 0 }], [ready('pota-file', 'POTA VK-0921, 11 Oct 2026'), ready('sota-file', 'SOTA VK3/VC-012, 11 Oct 2026')])).toBe(
+    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 0, notSent: 0, waiting: 7, refused: 0, changed: 0 }], [ready('pota-file', 'POTA VK-0921, 11 Oct 2026'), ready('sota-file', 'SOTA VK3/VC-012, 11 Oct 2026')])).toBe(
       'Wavelog 7 waiting · POTA and SOTA files ready',
     );
-    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 6, waiting: 0, refused: 1, changed: 0 }], [ready('pota-file', 'POTA A'), ready('pota-file', 'POTA B'), ready('sota-file', 'SOTA C'), ready('adif-file', 'ADIF')])).toBe(
+    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 6, notSent: 0, waiting: 0, refused: 1, changed: 0 }], [ready('pota-file', 'POTA A'), ready('pota-file', 'POTA B'), ready('sota-file', 'SOTA C'), ready('adif-file', 'ADIF')])).toBe(
       'Wavelog 1 refused · POTA, SOTA and ADIF files ready',
     );
-    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 7, waiting: 0, refused: 0, changed: 0 }], [])).toBe('Wavelog all delivered');
+    expect(afterLine([{ destination: 'wavelog', name: 'Wavelog', total: 7, delivered: 7, notSent: 0, waiting: 0, refused: 0, changed: 0 }], [])).toBe('Wavelog all delivered');
   });
 });

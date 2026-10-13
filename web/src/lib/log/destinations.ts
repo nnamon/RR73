@@ -30,8 +30,8 @@ export interface LogDestination {
   makeFile?(qsos: Qso[], scope: FileScope): Promise<File>;
 }
 
-export function wavelogAdapter(cfg: WavelogConfig, stationFor: (q: Qso) => string | null, fetchFn: FetchLike, now: () => number): LogDestination {
-  const direct = wavelogDestination(cfg, stationFor, fetchFn);
+export function wavelogAdapter(cfg: WavelogConfig, stationFor: (q: Qso) => string | null, fetchFn: FetchLike, now: () => number, retrying: () => boolean = () => true): LogDestination {
+  const direct = wavelogDestination(cfg, stationFor, fetchFn, retrying);
   return {
     id: 'wavelog',
     kind: 'wavelog',

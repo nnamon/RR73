@@ -1,7 +1,7 @@
 // The log store end to end in Node: real IndexedDB code on fake-indexeddb, a fake Wavelog behind
-// fetch, the outbox driven by Send now.
+// fetch. Send automatically starts off, so QSOs go to Wavelog when the test sends them.
 import { beforeAll, describe, expect, it } from 'vitest';
-import { db } from '../state/db';
+import { db, getKv } from '../state/db';
 import { settings } from '../state/settings.svelte';
 import { UNDO_MS } from './ledger';
 import {
@@ -14,8 +14,9 @@ import {
   logQso,
   markFileSubmitted,
   markQsoHandled,
+  outbox,
   restoreQso,
-  sendNow,
+  sendToWavelog,
   setFetch,
   setFileDestination,
   setLoggingSettings,
@@ -23,20 +24,23 @@ import {
   startActivation,
   testWavelog,
   undoQso,
+  unsentForWavelog,
   updateActivation,
   updateQso,
 } from './log.svelte';
+import { SEND_AUTOMATICALLY_OFF } from './migrations';
 import { loadSnapshot } from './store';
 import type { LogQsoRecord } from './types';
 import type { FetchLike } from './wavelog';
 
 const T = Date.now();
 const RECORD: LogQsoRecord = { call: 'VK2ESN', grid: 'QF56', mode: 'FT8', band: '20m', dialHz: 14_074_000, audioHz: 1500, startUtcMs: T - 60_000, endUtcMs: T, reportSent: -12, reportRcvd: -10 };
+const created = () => new Response(JSON.stringify({ status: 'created', adif_count: 1 }), { status: 201 });
 
-/** A fake Wavelog whose /api/qso answer the test sets. */
+/** A fake Wavelog whose /api/qso answer the test sets, from the call in the ADIF. */
 const wavelog = {
-  posts: [] as { station: string; key: string; adif: string }[],
-  qso: (): Response => new Response(JSON.stringify({ status: 'created', adif_count: 1, adif_errors: 0 }), { status: 201 }),
+  posts: [] as { station: string; key: string; adif: string; call: string }[],
+  qso: (call: string): Response | Promise<Response> => (void call, created()),
 };
 const fake: FetchLike = async (url, init) => {
   const path = new URL(url).pathname;
@@ -52,8 +56,9 @@ const fake: FetchLike = async (url, init) => {
   if (path === '/api/version') return new Response(JSON.stringify({ status: 'ok', version: '2.1' }));
   if (path === '/api/qso') {
     const body = JSON.parse(init.body as string) as { station_profile_id: string; key: string; string: string };
-    wavelog.posts.push({ station: body.station_profile_id, key: body.key, adif: body.string });
-    return wavelog.qso();
+    const call = /<CALL:\d+>(\S+)/.exec(body.string)?.[1] ?? '';
+    wavelog.posts.push({ station: body.station_profile_id, key: body.key, adif: body.string, call });
+    return wavelog.qso(call);
   }
   return new Response('', { status: 404 });
 };
@@ -64,13 +69,15 @@ beforeAll(async () => {
   settings.callsign = '9V1NE';
   setFetch(fake);
   await loadLog();
-  await setLoggingSettings({ sendAutomatically: false });
 });
 
 describe('the log store', () => {
-  it('starts empty with the default destinations', () => {
+  it('starts empty, with Send automatically off and the migration recorded', async () => {
     expect(log.ready).toBe(true);
     expect(log.qsos).toEqual([]);
+    expect(log.settings).toEqual({ sendAutomatically: false, sendEdits: true });
+    expect(outbox.running).toBe(false);
+    expect(await getKv('migrations')).toEqual([SEND_AUTOMATICALLY_OFF]);
     expect(log.facts.map((f) => [f.id, f.active])).toEqual([
       ['wavelog', false],
       ['adif-file', false],
@@ -97,44 +104,91 @@ describe('the log store', () => {
     expect(log.notice).toBeNull();
   });
 
-  it('queues every QSO for Wavelog once it is set up, and Test connection fills the station locations', async () => {
+  it('marks every QSO not sent once Wavelog is set up, and sends nothing by itself', async () => {
     await setWavelog({ url: 'https://log.example.test', apiKey: 'key-1' });
-    // No station location yet: nothing is queued for Wavelog.
+    // No station location yet: Wavelog takes nothing.
     expect(entry(log.qsos[0].id)).toBeUndefined();
     expect(log.facts.find((f) => f.id === 'wavelog')?.active).toBe(false);
     const r = await testWavelog({ url: 'https://log.example.test', apiKey: 'key-1', stationId: null });
     expect(r.ok).toBe(true);
     expect(log.wavelog).toMatchObject({ stationId: '1', lastTest: { ok: true, rights: 'rw', version: '2.1' } });
-    expect(log.wavelog.stations.map((s) => s.name)).toEqual(['Home', 'VK3 portable']);
-    const first = log.qsos[0];
-    expect(entry(first.id)).toMatchObject({ state: 'waiting' });
-    const stored = await (await db()).get('destinations', 'wavelog');
-    expect(stored).toMatchObject({ apiKey: 'key-1', url: 'https://log.example.test' });
-  });
-
-  it('holds a new QSO for Undo, then delivers it on Send now', async () => {
+    expect(entry(log.qsos[0].id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });
     const q = await addQso({ ...RECORD, call: 'JA1KXM' });
-    expect(entry(q.id)?.nextAttemptAt).toBe(q.createdAt + UNDO_MS);
-    await sendNow();
-    expect(entry(q.id)).toMatchObject({ state: 'delivered', attempts: 1 });
-    expect(wavelog.posts.map((p) => p.station)).toEqual(['1', '1']);
-    expect(wavelog.posts.some((p) => p.adif.startsWith('<CALL:6>JA1KXM '))).toBe(true);
-    expect((await (await db()).get('ledger', [q.id, 'wavelog']))?.state).toBe('delivered');
+    expect(entry(q.id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });
+    // Even the outbox's own Send now leaves not-sent QSOs alone.
+    await outbox.sendNow();
+    expect(wavelog.posts).toEqual([]);
+    const first = log.qsos.find((x) => x.call === 'VK2ESN')!;
+    expect(unsentForWavelog().map((e) => e.qsoId).sort()).toEqual([first.id, q.id].sort());
   });
 
-  it('removes a QSO on Undo before anything is sent, and brings it back', async () => {
+  it('sends every QSO not sent on Send to Wavelog, oldest first, with progress and a summary', async () => {
+    const older = await addQso({ ...RECORD, call: 'ZL1TQK', startUtcMs: T - 3_600_000, endUtcMs: T - 3_590_000 });
+    const progress: string[] = [];
+    const seen = new Set<number>();
+    wavelog.qso = (call) => {
+      if (!seen.has(log.sync.done)) progress.push(`${log.sync.done + 1} of ${log.sync.total}`);
+      seen.add(log.sync.done);
+      void call;
+      return created();
+    };
+    const summary = await sendToWavelog();
+    expect(wavelog.posts.map((p) => p.call)).toEqual(['ZL1TQK', 'VK2ESN', 'JA1KXM']);
+    expect(progress).toEqual(['1 of 3', '2 of 3', '3 of 3']);
+    expect(summary).toMatchObject({ total: 3, delivered: 3, refused: 0, unsent: 0, text: '3 delivered.', ok: true });
+    expect(log.sync).toMatchObject({ running: false, total: 3, done: 3 });
+    expect(log.notice).toMatchObject({ kind: 'info', text: '3 delivered.' });
+    expect(entry(older.id)?.state).toBe('delivered');
+    expect(unsentForWavelog()).toEqual([]);
+    expect(await sendToWavelog()).toBeNull();
+  });
+
+  it('reports mixed results: delivered, a duplicate, and a QSO Wavelog refuses', async () => {
+    const calls = ['W1AW', 'K1ABC', 'DL1XYZ', 'G4ABC'];
+    for (const [i, call] of calls.entries()) await addQso({ ...RECORD, call, startUtcMs: T - 100_000 + i * 1000, endUtcMs: T - 99_000 + i * 1000 });
+    const band = "QSO on 2026-10-13: Band '20m' is not in the band configuration. This QSO wasn't imported.<br>";
+    wavelog.qso = (call) =>
+      call === 'K1ABC'
+        ? new Response(JSON.stringify({ status: 'abort', messages: ['', 'Date/Time: 2026-10-13 13:00:00 Callsign: K1ABC Band: 20m Duplicate for 9V1NE<br>'] }), { status: 400 })
+        : call === 'DL1XYZ'
+          ? new Response(JSON.stringify({ status: 'abort', messages: ['', band] }), { status: 400 })
+          : created();
     const before = wavelog.posts.length;
+    const summary = await sendToWavelog();
+    expect(wavelog.posts.slice(before).map((p) => p.call)).toEqual(calls);
+    expect(summary).toMatchObject({ total: 4, delivered: 3, refused: 1, unsent: 0, text: '3 delivered. 1 refused: see To do.', ok: false });
+    const dl = log.qsos.find((q) => q.call === 'DL1XYZ')!;
+    expect(entry(dl.id)).toMatchObject({ state: 'refused', refusal: { fix: 'resend', scope: 'qso' } });
+    expect(entry(log.qsos.find((q) => q.call === 'K1ABC')!.id)).toMatchObject({ state: 'delivered', duplicate: true });
+
+    // Send again from the refused row: one QSO, sent at once.
+    wavelog.qso = () => created();
+    expect(await sendToWavelog([dl.id])).toMatchObject({ total: 1, delivered: 1, text: 'Delivered DL1XYZ to Wavelog.' });
+  });
+
+  it('stops at a failure and leaves the rest not sent, saying why', async () => {
+    const a = await addQso({ ...RECORD, call: 'VK3ARR', startUtcMs: T - 50_000, endUtcMs: T - 49_000 });
+    const b = await addQso({ ...RECORD, call: 'VK4TMZ', startUtcMs: T - 40_000, endUtcMs: T - 39_000 });
+    wavelog.qso = () => Promise.reject(new TypeError('Load failed'));
+    const summary = await sendToWavelog();
+    expect(summary).toMatchObject({ total: 2, delivered: 0, refused: 0, unsent: 2, ok: false });
+    expect(summary?.text).toBe('Could not reach Wavelog at log.example.test. Check the address and that this phone is online. 2 QSOs are not sent.');
+    expect(entry(a.id)).toMatchObject({ state: 'not-sent', attempts: 1, nextAttemptAt: null });
+    expect(entry(a.id)?.lastError).toBe('Could not reach Wavelog at log.example.test. Check the address and that this phone is online.');
+    expect(entry(b.id)).toMatchObject({ state: 'not-sent', attempts: 0 });
+    wavelog.qso = () => created();
+    expect(await sendToWavelog()).toMatchObject({ delivered: 2, text: '2 delivered.' });
+  });
+
+  it('removes a QSO on Undo, and a restored one is not sent again until sent', async () => {
     const q = await logQso({ ...RECORD, call: '9M2TRX' });
     await undoQso(q.id);
     expect(log.notice).toMatchObject({ kind: 'removed', text: 'Removed 9M2TRX from the log' });
-    expect(log.live.some((x) => x.id === q.id)).toBe(false);
     expect(entry(q.id)?.state).toBe('not-needed');
-    await sendNow();
-    expect(wavelog.posts.length).toBe(before);
+    expect(unsentForWavelog().some((e) => e.qsoId === q.id)).toBe(false);
     await restoreQso(q.id);
-    expect(entry(q.id)?.state).toBe('waiting');
-    await sendNow();
-    expect(entry(q.id)?.state).toBe('delivered');
+    expect(entry(q.id)?.state).toBe('not-sent');
+    expect(await sendToWavelog()).toMatchObject({ delivered: 1 });
   });
 
   it('marks an edit after delivery as changed, until handled', async () => {
@@ -142,24 +196,40 @@ describe('the log store', () => {
     const edited = await updateQso(q.id, { gridsquare: 'PM95', comment: 'Fixed grid' });
     expect(edited.updatedAt).toBeGreaterThan(q.updatedAt);
     expect(entry(q.id)?.state).toBe('changed');
+    expect(unsentForWavelog().some((e) => e.qsoId === q.id)).toBe(false);
     await markQsoHandled(q.id, 'wavelog');
     expect(entry(q.id)).toMatchObject({ state: 'delivered', deliveredUpdatedAt: edited.updatedAt });
     expect(await updateQso(q.id, { gridsquare: 'PM95' })).toEqual(edited);
   });
 
-  it('refuses every waiting QSO when Wavelog refuses the key, and sends them after the key is changed', async () => {
+  it('with Send automatically on, holds a new QSO for Undo and sends it by itself; off again, queued QSOs wait', async () => {
+    const waitingBefore = await addQso({ ...RECORD, call: 'JH1RRT' });
+    expect(entry(waitingBefore.id)?.state).toBe('not-sent');
+    await setLoggingSettings({ sendAutomatically: true });
+    expect(outbox.running).toBe(true);
+    expect(entry(waitingBefore.id)?.state).toBe('waiting');
+    const q = await addQso({ ...RECORD, call: 'VK5PAS' });
+    expect(entry(q.id)).toMatchObject({ state: 'waiting', nextAttemptAt: q.createdAt + UNDO_MS });
+    await setLoggingSettings({ sendAutomatically: false });
+    expect(outbox.running).toBe(false);
+    expect(entry(q.id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });
+    expect(entry(waitingBefore.id)?.state).toBe('not-sent');
+    expect(await sendToWavelog()).toMatchObject({ delivered: 2 });
+  });
+
+  it('refuses every QSO not sent when Wavelog refuses the key, and they are ready again after the key changes', async () => {
     wavelog.qso = () => new Response(JSON.stringify({ status: 'failed', reason: 'API key does not have write permissions' }), { status: 403 });
     const a = await addQso({ ...RECORD, call: 'YB0AZK' });
-    const b = await addQso({ ...RECORD, call: 'ZL1TQK' });
-    await sendNow();
+    const b = await addQso({ ...RECORD, call: 'ZL2AB' });
+    const summary = await sendToWavelog();
+    expect(summary).toMatchObject({ total: 2, refused: 2, text: '2 refused: see To do.' });
     for (const q of [a, b]) {
       expect(entry(q.id)).toMatchObject({ state: 'refused', lastError: 'Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog.', refusal: { fix: 'wavelog-key', scope: 'destination' } });
     }
-    wavelog.qso = () => new Response(JSON.stringify({ status: 'created', adif_count: 1 }), { status: 201 });
+    wavelog.qso = () => created();
     await setWavelog({ apiKey: 'key-2' });
-    expect(entry(a.id)?.state).toBe('waiting');
-    await sendNow();
-    expect([entry(a.id)?.state, entry(b.id)?.state]).toEqual(['delivered', 'delivered']);
+    expect([entry(a.id)?.state, entry(b.id)?.state]).toEqual(['not-sent', 'not-sent']);
+    expect(await sendToWavelog()).toMatchObject({ delivered: 2 });
     expect(wavelog.posts.at(-1)?.key).toBe('key-2');
   });
 
@@ -181,7 +251,7 @@ describe('the log store', () => {
     const day = new Date(q.start).toISOString().slice(0, 10).replace(/-/g, '');
     expect(entry(q.id, 'pota-file')).toMatchObject({ state: 'file-ready', parts: [{ key: `pota|VK-0921|${day}`, submittedAt: null }] });
     expect(entry(q.id, 'sota-file')?.state).toBe('file-ready');
-    await sendNow();
+    await sendToWavelog();
     expect(wavelog.posts.at(-1)?.station).toBe('7');
 
     await markFileSubmitted(`pota|VK-0921|${day}`);
@@ -197,25 +267,26 @@ describe('the log store', () => {
     expect(log.current).toBeNull();
     const later = await addQso({ ...RECORD, call: 'W1AW' });
     expect(later.activationId).toBeNull();
+    await sendToWavelog();
   });
 
-  it('sends station refusals again after a station location is chosen', async () => {
+  it('makes station refusals ready again after a station location is chosen', async () => {
     const m = 'Differing station callsign <b>9V1NE</b> while importing QSO with K1ABC for <b>VK3/9V1NE</b>: SKIPPED<br>';
     wavelog.qso = () => new Response(JSON.stringify({ status: 'abort', messages: ['', m] }), { status: 400 });
     await setWavelog({ stationId: '7' });
     const q = await addQso({ ...RECORD, call: 'K1ABC' });
-    await sendNow();
+    await sendToWavelog();
     expect(entry(q.id)).toMatchObject({ state: 'refused', refusal: { fix: 'wavelog-station', scope: 'qso' } });
-    wavelog.qso = () => new Response(JSON.stringify({ status: 'created', adif_count: 1 }), { status: 201 });
+    wavelog.qso = () => created();
     await chooseStation('1', null);
-    expect(entry(q.id)?.state).toBe('waiting');
-    await sendNow();
+    expect(entry(q.id)?.state).toBe('not-sent');
+    await sendToWavelog();
     expect(entry(q.id)?.state).toBe('delivered');
     expect(wavelog.posts.at(-1)?.station).toBe('1');
   });
 
   it('adds the ADIF file to activation QSOs when switched on', async () => {
-    const q = log.live.find((x) => x.call === 'VK3ARR')!;
+    const q = log.live.find((x) => x.call === 'VK3ARR' && x.activationId !== null)!;
     expect(entry(q.id, 'adif-file')).toBeUndefined();
     await setFileDestination('adif-file', true);
     expect(entry(q.id, 'adif-file')).toMatchObject({ state: 'file-ready', parts: [{ key: `adif|${q.activationId}`, submittedAt: null }] });
@@ -227,6 +298,8 @@ describe('the log store', () => {
     expect(s.ledger.length).toBe(log.ledger.length);
     expect(s.activations).toHaveLength(1);
     expect(s.settings).toEqual({ sendAutomatically: false, sendEdits: true });
+    expect(s.migrations).toEqual([SEND_AUTOMATICALLY_OFF]);
     expect(s.destinations.map((d) => d.id).sort()).toEqual(['adif-file', 'wavelog']);
+    expect((await (await db()).get('kv', 'logging'))?.value).toEqual({ sendAutomatically: false, sendEdits: true });
   });
 });
