@@ -355,6 +355,31 @@ export function subjectFindings(text, ext, file = 'x') {
   return findings;
 }
 
+/** Operate's status line notices: each string a fact of at most 6 words, with no full stop. */
+export const STATUS_FILE = 'web/src/lib/qso/status.ts';
+export const STATUS_MAX_WORDS = 6;
+
+/**
+ * Status line strings over 6 words of copy, or ending in a full stop. Interpolated values (a
+ * callsign, a frequency) are not copy and count as no words.
+ */
+export function statusFindings(text, file = STATUS_FILE) {
+  const code = stripComments(stripDisabled(text));
+  const at = lineOf(code);
+  const findings = [];
+  const add = (index, rule, match, message) => findings.push({ file, line: at(index) + 1, level: 'error', rule, match: match.trim().slice(0, 80), message });
+  const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
+  let m;
+  while ((m = literal.exec(code))) {
+    const copy = m[2].replace(/\$\{[^}]*\}/g, ' ');
+    if (!/[A-Za-z]{2}/.test(copy)) continue;
+    const words = countWords(copy);
+    if (words > STATUS_MAX_WORDS) add(m.index, 'status-length', m[2], `status of ${words} words; at most ${STATUS_MAX_WORDS}: state the event or the new value`);
+    if (/\.\s*$/.test(m[2])) add(m.index, 'status-stop', m[2], 'full stop in a status; drop it');
+  }
+  return findings;
+}
+
 /** True for the screens' sources, where the subject rule applies. */
 export const isViewFile = (rel) => /^web\/src\/views\/.*\.(svelte|ts)$/.test(rel) && !rel.endsWith('.test.ts');
 
@@ -419,6 +444,7 @@ export function lintFile(root, rel) {
     ...lintText(sourceProse(text, ext), rel, { screen, source: true }),
     ...lengthFindings(text, ext, rel),
     ...(isViewFile(rel) ? subjectFindings(text, ext, rel) : []),
+    ...(rel === STATUS_FILE ? statusFindings(text, rel) : []),
   ];
 }
 

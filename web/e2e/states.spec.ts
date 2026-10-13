@@ -278,7 +278,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '1');
     await expectToYou(rowOf(page, '9V1NE VJ6X -12'));
     await bar.getByRole('button', { name: 'More' }).click();
-    await page.getByRole('menuitemcheckbox', { name: /^Run/ }).click();
+    await page.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ }).click();
     await page.keyboard.press('Escape');
     await bar.getByRole('button', { name: 'CQ', exact: true }).click();
     // The callers answer in an odd slot that starts after the QSO ended, so RR73 sent nothing in it.

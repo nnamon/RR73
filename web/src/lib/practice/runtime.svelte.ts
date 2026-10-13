@@ -19,6 +19,7 @@ import { practice, updatePractice } from '../state/practice.svelte';
 import { endQso, qso, showNotice } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
 import { codec, setInputSource, startAudio } from '../state/station.svelte';
+import { STATUS } from '../qso/status';
 import { scenarioOf, type ScenarioId } from './scenarios';
 import { PracticeBand, type OperatorTx } from './sim';
 import { PracticeInput, type SlotFeed } from './source';
@@ -98,7 +99,7 @@ export function setPracticeOn(on: boolean): Promise<void> {
 export function chooseScenario(id: ScenarioId) {
   void updatePractice({ scenario: id });
   const s = scenarioOf(id);
-  showNotice(`Practice: ${s.name}. ${s.hint}`);
+  showNotice(STATUS.practice(s.name));
 }
 
 export function setCrowded(on: boolean) {

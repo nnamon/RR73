@@ -64,16 +64,23 @@
     return `${bare(selCall)} · ${where}`;
   });
 
-  /** The status line: the Run tag, the text, the right-hand note, and its tone. Null leaves the line empty. */
-  const line = $derived.by((): { run: boolean; text: string; aside: string; warn: boolean } | null => {
-    if (tx.tuning) return { run: false, text: `Tune · ${settings.txHz} Hz`, aside, warn: false };
-    if (onAir) return { run: running, text: `Tx${onAir.tx} · ${onAir.text}`, aside, warn: false };
-    if (notice) return { run: false, text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside, warn: notice.kind !== 'info' };
-    if (blocked) return { run: false, text: blocked, aside, warn: true };
-    if (hunting) return { run: false, text: hunting, aside, warn: false };
-    if (text) return { run: running, text, aside, warn: false };
-    if (selLine) return { run: false, text: selLine, aside: 'Double-tap to call', warn: false };
+  /** The status line: the text and the right-hand note, in one style whatever they say. Null leaves the line empty. */
+  const line = $derived.by((): { text: string; aside: string } | null => {
+    if (tx.tuning) return { text: `Tune · ${settings.txHz} Hz`, aside };
+    if (onAir) return { text: `Tx${onAir.tx} · ${onAir.text}`, aside };
+    if (notice) return { text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside };
+    if (blocked) return { text: blocked, aside };
+    if (hunting) return { text: hunting, aside };
+    if (text) return { text, aside };
+    if (selLine) return { text: selLine, aside: 'Double-tap to call' };
     return null;
+  });
+
+  // The floating notices (App.svelte) sit above this bar; 0 while Operate is hidden.
+  let barH = $state(0);
+  $effect(() => {
+    document.documentElement.style.setProperty('--rr-bar-h', `${barH}px`);
+    return () => document.documentElement.style.removeProperty('--rr-bar-h');
   });
 
   let menuOpen = $state(false);
@@ -138,11 +145,10 @@
   }
 </script>
 
-<section class="bar" aria-label="Transmit" bind:this={barEl}>
+<section class="bar" aria-label="Transmit" bind:this={barEl} bind:offsetHeight={barH}>
   <div class="status" role="status">
     {#if line}
-      {#if line.run}<span class="pill">Run</span>{/if}
-      <span class="msg" class:warn={line.warn} class:mono={!line.warn}>{line.text}</span>
+      <span class="msg">{line.text}</span>
       {#if line.aside}<span class="aside">{line.aside}</span>{/if}
     {/if}
   </div>
@@ -172,7 +178,7 @@
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
       <button class="mi gap" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
       <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
-        Run <span class="v">{settings.run ? 'On' : 'Off'}</span>
+        Repeat CQ <span class="v">{settings.run ? 'On' : 'Off'}</span>
       </button>
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ queueOrder: ORDERS[(ORDERS.indexOf(order) + 1) % ORDERS.length].id })}>
         Answer order <span class="v">{order.label}</span>
@@ -217,28 +223,12 @@
     white-space: nowrap;
   }
 
-  .pill {
-    flex: none;
-    padding: 0 var(--rr-space-1-5);
-    border-radius: var(--rr-radius-s);
-    background: var(--rr-run);
-    color: var(--rr-on-strong);
-    font-size: var(--rr-text-caption);
-    font-weight: var(--rr-weight-bold);
-    line-height: var(--rr-leading-caption);
-  }
-
   .msg {
     min-width: 0;
     overflow: hidden;
     font-size: var(--rr-text-row);
     font-weight: var(--rr-weight-semibold);
     text-overflow: ellipsis;
-  }
-
-  .msg.warn {
-    font-size: var(--rr-text-foot);
-    color: var(--rr-warn);
   }
 
   .aside {

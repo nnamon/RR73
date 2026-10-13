@@ -6,7 +6,7 @@
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, normaliseGrid, normaliseMinutes, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
-  import { audio, band, busy } from '../lib/state/station.svelte';
+  import { audio, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
   import { log } from '../lib/log/log.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
@@ -85,14 +85,6 @@
     if (audio.status !== 'running' || !r) return 'Audio off';
     const ch = r.channelUsed === 'mono' || !r.channelUsed ? 'mono' : `${r.channelUsed} channel`;
     return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
-  });
-
-  const decoderText = $derived.by(() => {
-    const d = band.decoder;
-    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
-    if (d.state === 'loading') return 'Loading';
-    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
-    return 'Loads when audio starts';
   });
 
   const loggingSummary = $derived.by(() => {
@@ -199,7 +191,7 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Same day, band and mode</span></span>
+        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">Same day, band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
@@ -304,18 +296,10 @@
     <h2 class="section-head">About</h2>
     <div class="group">
       <a class="row link" href={href('settings', 'versions')}>
-        <span class="row-main"><span class="row-title">Version {__APP_VERSION__} ({__APP_BUILD__})</span></span>
-        <span class="row-value">Version history</span>
+        <span class="row-main"><span class="row-title">Version history</span></span>
+        <span class="row-value">{__APP_VERSION__}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
-      <div class="row">
-        <span class="row-main"><span class="row-title">Decoder</span></span>
-        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
-      </div>
-      <div class="row">
-        <span class="row-main"><span class="row-title">Licence</span></span>
-        <span class="row-value">MIT or Apache 2.0</span>
-      </div>
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>

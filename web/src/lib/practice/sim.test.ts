@@ -154,7 +154,7 @@ describe('calling a station', () => {
       expect(ours, `seed ${seed}`).toEqual([1, end!.slot + 1]);
       expect(theirs.find((x) => x.ex.to === ME)?.slot, `seed ${seed}`).toBe(end!.slot + 2);
       expect(s.sim.logged().map((q) => q.call), `seed ${seed}`).toEqual([cq.call]);
-      expect(s.sim.notices()[0], `seed ${seed}`).toMatchObject({ kind: 'lost', text: `${cq.call} answered ${other}. Calling once more when they finish.` });
+      expect(s.sim.notices()[0], `seed ${seed}`).toMatchObject({ kind: 'lost', text: `${cq.call} answered ${other}` });
     }
   });
 

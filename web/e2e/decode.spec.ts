@@ -227,5 +227,6 @@ test('without the decoder module, the list says so and receive carries on', asyn
   await expect(alert).toContainText('The waterfall and Save slot still work');
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/);
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Radio and audio/ }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
 });

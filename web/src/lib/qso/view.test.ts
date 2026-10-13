@@ -27,7 +27,7 @@ describe('bottom bar view', () => {
     expect(barText(r.st)).toBeNull();
     r.call(1, 'CQ JA1KXM PM95');
     r.run(2, 10);
-    expect(barText(r.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · no reply after 3 repeats');
+    expect(barText(r.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · no reply');
   });
 
   it('waits for callers after a CQ', () => {
@@ -84,7 +84,7 @@ describe('bottom bar view', () => {
     const t = new Sim({ tailEnd: false });
     t.call(1, 'CQ VK2LAW QF56');
     t.run(2, 3, { 3: ['DV5CEL VK2LAW -05'] });
-    expect(barText(t.st)).toBe('Tx1 · VK2LAW 9V1NE OJ11 · VK2LAW answered DV5CEL');
+    expect(barText(t.st)).toBe('Tx1 · VK2LAW 9V1NE OJ11 · answered DV5CEL');
   });
 
   it('tallies Run once it has logged a QSO', () => {

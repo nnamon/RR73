@@ -41,6 +41,10 @@ export default defineConfig({
   testDir: here('./e2e'),
   outputDir: here('./test-results/output'),
   timeout: 60_000,
+  // On CI, one retry: WebKit on the runner sometimes crashes a page ("Page crashed", 0.10.0's run
+  // on main). A test that passes on its retry is reported as flaky. Projects with their own
+  // retries keep them.
+  retries: process.env.CI ? 1 : 0,
   fullyParallel: true,
   reporter: [['list'], ['json', { outputFile: here('./test-results/report.json') }]],
   globalSetup: here('./e2e/global-setup.ts'),
