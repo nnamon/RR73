@@ -12,6 +12,7 @@
   import { startClock } from './lib/state/now.svelte';
   import { settings } from './lib/state/settings.svelte';
   import { busy } from './lib/state/station.svelte';
+  import { startQso } from './lib/state/qso.svelte';
 
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
@@ -46,6 +47,7 @@
 
   onMount(() => {
     startClock();
+    startQso();
   });
 </script>
 

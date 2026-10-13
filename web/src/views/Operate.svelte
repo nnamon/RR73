@@ -8,6 +8,15 @@
   import SaveSlotSheet from '../ui/SaveSlotSheet.svelte';
   import SlotRing from '../ui/SlotRing.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
+  import CallerQueue from '../ui/CallerQueue.svelte';
+  import LoggedNotice from '../ui/LoggedNotice.svelte';
+  import MessagesSheet from '../ui/MessagesSheet.svelte';
+  import QsoDock from '../ui/QsoDock.svelte';
+  import QsoEditSheet from '../ui/QsoEditSheet.svelte';
+  import StationSheet from '../ui/StationSheet.svelte';
+  import { callStation, confirmBand, qso, select, type Selected } from '../lib/state/qso.svelte';
+  import type { ListItem } from '../lib/decode/list';
+  import type { QsoRecord } from '../lib/qso/record';
   import { mhz, utcTime } from '../lib/clock/format';
   import { SLOT_MS, parity, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
@@ -19,13 +28,55 @@
 
   let bandOpen = $state(false);
   let saveOpen = $state(false);
+  let messagesOpen = $state(false);
+  let detailOpen = $state(false);
+  let detail = $state<Selected | null>(null);
+  let editOpen = $state(false);
+  let editing = $state<QsoRecord | null>(null);
+  /** In Run mode the caller queue replaces the band activity unless asked for. */
+  let showBand = $state(false);
+  const queueView = $derived(qso.st.run && !showBand);
+
+  type RowItem = Extract<ListItem, { kind: 'row' }>;
+  const asSelected = (i: RowItem): Selected => ({ decode: i.row.decode, slotStartMs: i.slotStartMs, id: i.id });
+  // Our own rows say what we sent; selecting one selects the station we sent it to.
+  function onselect(i: RowItem) {
+    select(asSelected(i));
+  }
+  function oncall(i: RowItem) {
+    callStation(i.row.decode, i.slotStartMs);
+  }
+  function ondetail(i: RowItem) {
+    detail = asSelected(i);
+    detailOpen = true;
+  }
+  // The logged notice stays 15 s.
+  $effect(() => {
+    const r = qso.logged;
+    if (!r) return;
+    const t = setTimeout(() => {
+      if (qso.logged?.id === r.id) qso.logged = null;
+    }, 15_000);
+    return () => clearTimeout(t);
+  });
   let filter = $state<Filter>('all');
 
   const dial = $derived(dialHz(settings.band, settings.mode));
   const live = $derived(audio.status === 'running');
   const progress = $derived(slotProgress(clock.ms, settings.mode));
+  const transmitting = $derived(!!qso.onAir);
   const stateText = $derived(
-    tx.tuning ? 'Tuning' : live ? 'Receiving' : audio.status === 'starting' ? 'Starting audio' : audio.status === 'stopped' ? 'Audio stopped' : 'Audio off',
+    transmitting
+      ? 'Transmitting'
+      : tx.tuning
+        ? 'Tuning'
+        : live
+          ? 'Receiving'
+          : audio.status === 'starting'
+            ? 'Starting audio'
+            : audio.status === 'stopped'
+              ? 'Audio stopped'
+              : 'Audio off',
   );
   const slotSeconds = $derived(SLOT_MS[settings.mode] / 1000);
 
@@ -105,7 +156,7 @@
     listEl?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  const items = $derived(buildList(shown, settings.callsign, filter, settings.rxHz));
+  const items = $derived(buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent));
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -122,7 +173,7 @@
   } as const;
 </script>
 
-<section class="operate" aria-labelledby="operate-title">
+<section class="operate" class:transmitting aria-labelledby="operate-title">
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   <header class="head">
     <div class="band-col">
@@ -137,10 +188,10 @@
       <LevelMeter rmsDb={audio.rmsDb} {live} />
     </div>
     <div class="clk" role="timer" aria-label="UTC time and slot progress">
-      <SlotRing progress={progress} tone={tx.tuning ? 'tx' : live ? 'rx' : 'idle'} />
+      <SlotRing progress={progress} tone={tx.tuning || transmitting ? 'tx' : live ? 'rx' : 'idle'} />
       <div>
         <p class="utc mono">{utcTime(clock.ms)}</p>
-        <p class="state" class:alert={tx.tuning || audio.status === 'stopped'}>{stateText}</p>
+        <p class="state" class:alert={tx.tuning || transmitting || audio.status === 'stopped'}>{stateText}</p>
       </div>
     </div>
   </header>
@@ -156,19 +207,6 @@
 
   <Waterfall mode={settings.mode} rxHz={settings.rxHz} txHz={settings.txHz} stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null} />
 
-  <div class="tools">
-    <p class="info">
-      {#if recent.slots.length}
-        {recent.slots.length} {recent.slots.length === 1 ? 'slot' : 'slots'} kept · {parity(clock.ms, settings.mode) === 'even' ? 'Even' : 'Odd'} slot now
-      {:else if live}
-        First slot kept at the next {slotSeconds} s boundary
-      {:else}
-        Slots are kept while audio runs
-      {/if}
-    </p>
-    <button class="btn tint compact" disabled={!recent.slots.length} onclick={() => (saveOpen = true)}>Save slot</button>
-  </div>
-
   <div class="list-wrap">
     {#if band.decoder.state === 'failed'}
       <div class="decoder-error" role="alert">
@@ -176,21 +214,39 @@
         <p class="s">{FAILED[band.decoder.reason]} Receive still works: the waterfall and Save slot carry on. Reload RR73 to try again.</p>
       </div>
     {/if}
-    {#if shown.length}
-      <div class="chips" role="radiogroup" aria-label="Show decodes">
-        {#each chips as c (c.id)}
-          <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
-            {c.label} <span class="n">{counts[c.id]}</span>
-          </button>
-        {/each}
-      </div>
-    {/if}
+    <div class="toolbar">
+      {#if queueView}
+        <span class="info">Run · callers in answering order</span>
+      {:else if shown.length}
+        <div class="chips" role="radiogroup" aria-label="Show decodes">
+          {#each chips as c (c.id)}
+            <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
+              {c.label} <span class="n">{counts[c.id]}</span>
+            </button>
+          {/each}
+        </div>
+      {:else}
+        <p class="info">
+          {#if recent.slots.length}
+            {recent.slots.length} {recent.slots.length === 1 ? 'slot' : 'slots'} kept · {parity(clock.ms, settings.mode) === 'even' ? 'Even' : 'Odd'} slot now
+          {:else if live}
+            First slot kept at the next {slotSeconds} s boundary
+          {:else}
+            Slots are kept while audio runs
+          {/if}
+        </p>
+      {/if}
+      <button class="btn tint compact save" disabled={!recent.slots.length} onclick={() => (saveOpen = true)}>Save slot</button>
+    </div>
     {#if unseen > 0}
       <button class="newpill" onclick={showNewest}><Icon name="chevdown" size={13} class="up" />{unseen} new {unseen === 1 ? 'decode' : 'decodes'}</button>
     {/if}
-    <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
-      {#if shown.length}
-        <DecodeList {items} />
+    <div class="list" bind:this={listEl} role="region" aria-label={queueView ? 'Callers' : 'Decodes, newest slot first'} data-testid="decode-list">
+      {#if queueView}
+        <CallerQueue onbandactivity={() => (showBand = true)} />
+      {:else if shown.length || qso.sent.length}
+        {#if qso.st.run}<button class="back-queue" onclick={() => (showBand = false)}>Show the caller queue</button>{/if}
+        <DecodeList {items} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}
@@ -204,12 +260,32 @@
       {/if}
     </div>
   </div>
+  {#if qso.logged}
+    <LoggedNotice
+      record={qso.logged}
+      onedit={() => {
+        editing = qso.logged;
+        editOpen = true;
+      }}
+    />
+  {/if}
+  <QsoDock
+    onconfirmband={() => (bandOpen = true)}
+    onmessages={() => (messagesOpen = true)}
+    ondetail={() => {
+      detail = qso.selected;
+      detailOpen = !!detail;
+    }}
+  />
 </section>
 
 <svelte:window onpointerup={up} onpointercancel={up} />
 
-<BandSheet bind:open={bandOpen} />
+<BandSheet bind:open={bandOpen} onconfirm={confirmBand} />
 <SaveSlotSheet bind:open={saveOpen} />
+<MessagesSheet bind:open={messagesOpen} />
+<StationSheet bind:open={detailOpen} item={detail} />
+<QsoEditSheet bind:open={editOpen} record={editing} />
 
 <style>
   .operate {
@@ -306,13 +382,37 @@
     font-weight: var(--rr-weight-semibold);
   }
 
-  .tools {
+  .toolbar {
     display: flex;
     flex: none;
+    gap: var(--rr-space-2);
     align-items: center;
-    gap: var(--rr-space-3);
-    padding: var(--rr-space-1) calc(var(--rr-space-4) + var(--rr-safe-right)) var(--rr-space-1) calc(var(--rr-space-4) + var(--rr-safe-left));
-    border-bottom: var(--rr-hairline) solid var(--rr-sep);
+    min-height: var(--rr-tap);
+    padding-right: calc(var(--rr-space-4) + var(--rr-safe-right));
+  }
+
+  .toolbar .info {
+    flex: 1;
+    min-width: 0;
+    padding-left: calc(var(--rr-space-4) + var(--rr-safe-left));
+  }
+
+  .toolbar .save {
+    flex: none;
+  }
+
+  .back-queue {
+    display: block;
+    min-height: var(--rr-tap);
+    margin-left: auto;
+    padding: 0 var(--rr-space-4);
+    color: var(--rr-accent);
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-semibold);
+  }
+
+  .operate.transmitting {
+    box-shadow: inset 0 3px 0 var(--rr-tx);
   }
 
   .info {
@@ -382,7 +482,8 @@
 
   .chips {
     display: flex;
-    flex: none;
+    flex: 1;
+    min-width: 0;
     gap: var(--rr-space-2);
     align-items: center;
     height: var(--rr-tap);

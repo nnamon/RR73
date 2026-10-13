@@ -65,9 +65,14 @@ for (const theme of ['light', 'dark'] as const) {
     const wf = (await page.getByTestId('waterfall').boundingBox())!;
     const list = (await page.locator('.operate .list').boundingBox())!;
     const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+    const banner = (await page.getByRole('status').filter({ hasText: 'Audio is off' }).boundingBox())!;
+    const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
     expect(wf.height).toBeGreaterThanOrEqual(120);
-    expect(list.height).toBeGreaterThanOrEqual(120);
-    expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
+    // The banner goes once audio starts; the list then has its space too.
+    expect(list.height).toBeGreaterThanOrEqual(64);
+    expect(list.height + banner.height).toBeGreaterThanOrEqual(200);
+    expect(list.y + list.height).toBeLessThanOrEqual(dock.y + 0.5);
+    expect(dock.y + dock.height).toBeLessThanOrEqual(bar.y + 0.5);
     expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
   });
 

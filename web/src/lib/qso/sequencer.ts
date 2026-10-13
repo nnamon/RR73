@@ -179,6 +179,17 @@ export interface SeqResult {
   effects: SeqEffect[];
 }
 
+/** The queue in answering order: dupes last, then by the chosen order. */
+export function orderQueue(queue: Caller[], order: QueueOrder): Caller[] {
+  const by: Record<QueueOrder, (a: Caller, b: Caller) => number> = {
+    first: (a, b) => a.seq - b.seq,
+    strongest: (a, b) => b.snrDb - a.snrDb || a.seq - b.seq,
+    farthest: (a, b) => (b.distanceKm ?? -1) - (a.distanceKm ?? -1) || a.seq - b.seq,
+    new: (a, b) => Number(b.isNew) - Number(a.isNew) || a.seq - b.seq,
+  };
+  return [...queue].sort((a, b) => Number(a.dupe) - Number(b.dupe) || by[order](a, b));
+}
+
 export function initialState(config: SeqConfig): SeqState {
   return {
     config,
@@ -484,15 +495,7 @@ class Machine {
   }
 
   ordered(): Caller[] {
-    const q = [...this.st.queue];
-    const order = this.cfg.order;
-    const by: Record<QueueOrder, (a: Caller, b: Caller) => number> = {
-      first: (a, b) => a.seq - b.seq,
-      strongest: (a, b) => b.snrDb - a.snrDb || a.seq - b.seq,
-      farthest: (a, b) => (b.distanceKm ?? -1) - (a.distanceKm ?? -1) || a.seq - b.seq,
-      new: (a, b) => Number(b.isNew) - Number(a.isNew) || a.seq - b.seq,
-    };
-    return q.sort((a, b) => Number(a.dupe) - Number(b.dupe) || by[order](a, b));
+    return orderQueue(this.st.queue, this.cfg.order);
   }
 
   isDupe(call: string, nowMs: number): boolean {
