@@ -79,6 +79,6 @@ Without `web/public/data` the app builds and runs; every lookup reports its sour
 ## Open risks
 
 - The LoTW list changes each week, so a phone with "LoTW users" on downloads about 1 MB again after each app update that carries a new list.
-- Building the indexes runs on the main thread: 40 to 190 ms for the country file and 110 to 280 ms for the LoTW list, measured in Node on the build machine. `warm()` runs them when the page is idle. Not measured on a phone; a worker would take them off the main thread.
+- Building the indexes runs on the main thread: 7 to 37 ms for the country file (50 to 205 ms before alias overrides were read on first match) and 110 to 280 ms for the LoTW list, measured in Node on the build machine under load. `warm()` runs them when the page is idle. Not measured on a phone; a worker would take them off the main thread.
 - A search near a country with many parks reads that country's whole shard: 388 kB gzipped for France. Splitting the largest shards by region would cut it.
 - Big CTY is found by scraping the category page for the newest zip link. A site redesign stops updates until `latestBigCty` follows it; the cached copy keeps shipping meanwhile.

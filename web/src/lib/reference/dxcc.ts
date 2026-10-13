@@ -23,7 +23,7 @@
  */
 
 import { parsePortable, withArea } from './callsign';
-import { parseAlias, type CtyAlias } from './cty';
+import { CtyFormatError, parseAlias, TOKEN_SYNTAX, type CtyAlias } from './cty';
 import { readCtyJson, type Continent, type CtyEntityJson, type CtyJson } from './format';
 
 export interface DxccMatch {
@@ -67,9 +67,26 @@ export interface DxccMiss {
 
 export type DxccResult = DxccMatch | DxccMiss;
 
+/**
+ * One alias in the index. Its overrides are parsed on its first match: parsing all 29,000
+ * aliases up front took most of the index build (about 100 ms in Node).
+ */
 interface Entry {
   entity: number;
-  alias: CtyAlias;
+  token: string;
+  alias?: CtyAlias;
+}
+
+/** An entity's alias list: tokens in cty.dat syntax, one space apart. */
+const ALIAS_LIST = new RegExp(`^${TOKEN_SYNTAX}(?: ${TOKEN_SYNTAX})*$`);
+
+/** Where a token's overrides start: ( [ < { or ~. */
+function overridesAt(token: string): number {
+  for (let i = 0; i < token.length; i++) {
+    const c = token.charCodeAt(i);
+    if (c === 40 || c === 91 || c === 60 || c === 123 || c === 126) return i;
+  }
+  return token.length;
 }
 
 export class DxccIndex {
@@ -90,12 +107,15 @@ export class DxccIndex {
     this.entities = data.entities;
     let longest = 0;
     data.entities.forEach((e, entity) => {
-      for (const token of e.aliases.split(' ')) {
-        if (!token) continue;
-        const alias = parseAlias(token);
-        const map = alias.exact ? this.exact : this.prefixes;
-        if (!map.has(alias.text)) map.set(alias.text, { entity, alias });
-        if (!alias.exact) longest = Math.max(longest, alias.text.length);
+      const aliases = e.aliases.trim().toUpperCase();
+      if (!aliases) return;
+      if (!ALIAS_LIST.test(aliases)) throw new CtyFormatError(`The aliases of ${e.name} are not in cty.dat syntax`);
+      for (const token of aliases.split(' ')) {
+        const exact = token.charCodeAt(0) === 61;
+        const text = token.slice(exact ? 1 : 0, overridesAt(token));
+        const map = exact ? this.exact : this.prefixes;
+        if (!map.has(text)) map.set(text, { entity, token });
+        if (!exact) longest = Math.max(longest, text.length);
       }
     });
     this.longest = longest;
@@ -145,7 +165,7 @@ export class DxccIndex {
 
   private match(call: string, hit: Entry, rule: 'exact' | 'prefix', lookedUp: string): DxccMatch {
     const e = this.entities[hit.entity];
-    const a = hit.alias;
+    const a = (hit.alias ??= parseAlias(hit.token));
     return {
       found: true,
       call,

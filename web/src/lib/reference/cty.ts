@@ -59,6 +59,8 @@ export interface CtyEntity {
 
 const CONTINENT = /^(AF|AN|AS|EU|NA|OC|SA)$/;
 const TOKEN = /^(=?)([A-Z0-9/]+)((?:\(\d+\)|\[\d+\]|<-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?>|\{[A-Z]{2}\}|~-?\d+(?:\.\d+)?~)*)$/;
+/** TOKEN without anchors or groups, for checking a whole alias list in one pass. */
+export const TOKEN_SYNTAX = String.raw`=?[A-Z0-9/]+(?:\(\d+\)|\[\d+\]|<-?\d+(?:\.\d+)?\/-?\d+(?:\.\d+)?>|\{[A-Z]{2}\}|~-?\d+(?:\.\d+)?~)*`;
 const OVERRIDE = /\((\d+)\)|\[(\d+)\]|<(-?[\d.]+)\/(-?[\d.]+)>|\{([A-Z]{2})\}|~(-?[\d.]+)~/g;
 
 /** Negates without producing -0, which JSON and equality checks treat as a different value. */
