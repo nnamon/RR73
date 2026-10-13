@@ -10,9 +10,12 @@ export interface Snapshot {
   activations: Activation[];
   destinations: DestinationConfig[];
   settings: LoggingSettings | undefined;
+  /** Ids of the one-time migrations that have run (migrations.ts). */
+  migrations: string[] | undefined;
 }
 
 const SETTINGS_KEY = 'logging';
+const MIGRATIONS_KEY = 'migrations';
 
 export async function loadSnapshot(): Promise<Snapshot> {
   const d = await db();
@@ -24,7 +27,7 @@ export async function loadSnapshot(): Promise<Snapshot> {
     tx.objectStore('destinations').getAll(),
   ]);
   await tx.done;
-  return { qsos, ledger, activations, destinations, settings: await getKv<LoggingSettings>(SETTINGS_KEY) };
+  return { qsos, ledger, activations, destinations, settings: await getKv<LoggingSettings>(SETTINGS_KEY), migrations: await getKv<string[]>(MIGRATIONS_KEY) };
 }
 
 export interface Changes {
@@ -52,4 +55,8 @@ export async function saveChanges(c: Changes): Promise<void> {
 
 export function saveLoggingSettings(s: LoggingSettings): Promise<void> {
   return setKv(SETTINGS_KEY, s);
+}
+
+export function saveMigrations(applied: readonly string[]): Promise<void> {
+  return setKv(MIGRATIONS_KEY, applied);
 }

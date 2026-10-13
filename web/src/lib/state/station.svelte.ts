@@ -23,6 +23,7 @@ import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
 import { settings } from './settings.svelte';
+import { noteLoadFailure } from '../app/update.svelte';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -99,8 +100,10 @@ decoder.onStatus((st) => {
   if (st.state === 'ready') console.info(`RR73 decoder ${st.version} loaded in ${Math.round(st.loadMs)} ms`);
   if (st.state === 'failed') {
     console.warn(`RR73 decoder unavailable (${st.reason}): ${st.detail}`);
-    // Receive carries on without decodes.
+    // Receive carries on without decodes. The worker or the WebAssembly may be gone from the
+    // server because a newer build replaced them.
     decoder = new NullDecoder(st);
+    if (st.reason === 'worker' || st.reason === 'load') void noteLoadFailure();
   }
 });
 const chunkListeners = new Set<(c: Chunk) => void>();
@@ -123,6 +126,8 @@ function getEngine(): CaptureEngine {
     audio.reason = s.reason;
     audio.stoppedAtUtcMs = s.stoppedAtUtcMs;
     audio.error = s.error;
+    // The capture worklet may be gone from the server because a newer build replaced it.
+    if (s.error === 'worklet' || s.error === 'busy' || s.error === 'unknown') void noteLoadFailure();
     if (s.status !== 'running' && s.status !== 'starting') {
       halt();
       const partial = assembler?.flush();

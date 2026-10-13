@@ -93,10 +93,45 @@ a {
   letter-spacing: 0;
 }
 
-/* Screens that scroll: a large title, then inset grouped sections, as in iOS Settings. */
+/*
+ * Screens that scroll: a 44 pt navigation bar (LargeTitleHeader on tab roots, BackLink on
+ * sub-screens) right under the status bar, then inset grouped sections, as in iOS Settings.
+ */
 .screen {
   min-height: 100%;
-  padding: calc(var(--rr-safe-top) + var(--rr-space-2)) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+  padding: var(--rr-safe-top) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+}
+
+/*
+ * Navigation bar buttons: 44 pt targets side by side, as UIKit places bar items, around 24 px
+ * glyphs whose ink is 18 px wide, in the tint: about 26 pt between glyphs. The last button runs
+ * into the margin so its glyph's ink ends 16 pt from the screen edge. Disabled: the tint at
+ * reduced opacity, as iOS. Focus: a rounded ring that follows the button.
+ */
+.bar-buttons {
+  display: flex;
+  align-items: center;
+  padding-right: calc(var(--rr-space-half) + var(--rr-space-px));
+}
+
+.bar-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--rr-tap);
+  height: var(--rr-tap);
+  border-radius: var(--rr-radius-l);
+  color: var(--rr-accent);
+}
+
+.bar-button:focus-visible {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: -2px;
+}
+
+.bar-button:disabled {
+  opacity: 0.35;
 }
 
 .large-title {
@@ -155,6 +190,11 @@ a {
   background: var(--rr-sep-strong);
   transform: scaleY(0.5);
   transform-origin: 0 0;
+}
+
+/* After a row with a leading 30 pt icon, the separator starts at the text, as iOS insets it. */
+.row:has(> .ic) + .row::before {
+  left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
 }
 
 .row-main {

@@ -2,8 +2,12 @@
  * The delivery ledger: one entry per QSO and destination, as pure functions of the entry, the
  * QSO, its activation and the destination (docs/design/log.md). No IndexedDB, fetch or timers.
  *
- * States: waiting (in the outbox), delivered, refused (not retried until the operator acts),
- * changed (edited or deleted after delivery or submission), file ready, submitted, not needed.
+ * States: not sent (Send automatically is off and the operator has not sent it), waiting (in the
+ * outbox), delivered, refused (not retried until the operator acts), changed (edited or deleted
+ * after delivery or submission), file ready, submitted, not needed.
+ *
+ * Send automatically decides between the first two: with it off no entry is waiting, so nothing
+ * goes out until the operator sends it; with it on no entry is not sent.
  */
 
 import { utcDayKey } from './activation';
@@ -98,6 +102,11 @@ function waiting(e: LedgerEntry, now: number): LedgerEntry {
   return { ...e, state: 'waiting', attempts: 0, nextAttemptAt: now, lastError: null, refusal: null };
 }
 
+/** Ready to go: queued with Send automatically on, else not sent until the operator sends it. */
+function ready(e: LedgerEntry, auto: boolean, at: number): LedgerEntry {
+  return auto ? waiting(e, at) : { ...e, state: 'not-sent', attempts: 0, nextAttemptAt: null, lastError: null, refusal: null };
+}
+
 export interface ReconcileInput {
   entry: LedgerEntry | null;
   dest: DestinationFacts;
@@ -106,6 +115,8 @@ export interface ReconcileInput {
   activation: Activation | null;
   /** Settings › Logging › Send edits to QSOs already sent. */
   sendEdits: boolean;
+  /** Settings › Logging › Send automatically. */
+  sendAutomatically: boolean;
   now: number;
 }
 
@@ -118,35 +129,45 @@ export function reconcile(i: ReconcileInput): LedgerEntry | null {
   return i.dest.transport === 'file' ? reconcileFile(i) : reconcileDirect(i);
 }
 
-function reconcileDirect({ entry, dest, qso, sendEdits, now }: ReconcileInput): LedgerEntry | null {
+function reconcileDirect({ entry, dest, qso, sendEdits, sendAutomatically: auto, now }: ReconcileInput): LedgerEntry | null {
   const deleted = qso.deletedAt !== null;
+  // New and restored QSOs wait UNDO_MS before the outbox may send them.
+  const hold = Math.max(now, qso.createdAt + UNDO_MS);
   if (!entry) {
     if (!dest.active || deleted) return null;
-    return { ...emptyEntry(qso.id, dest.id), state: 'waiting', nextAttemptAt: Math.max(now, qso.createdAt + UNDO_MS) };
+    return ready(emptyEntry(qso.id, dest.id), auto, hold);
   }
   const held = entry.deliveredAt !== null;
   const edited = entry.deliveredUpdatedAt !== null && qso.updatedAt > entry.deliveredUpdatedAt;
   const resend = dest.canUpdate && sendEdits;
+  const gone = (e: LedgerEntry): LedgerEntry =>
+    held ? { ...e, state: 'changed', nextAttemptAt: null, refusal: null, lastError: deletedNote(dest) } : { ...e, state: 'not-needed', nextAttemptAt: null, lastError: null, refusal: null };
   switch (entry.state) {
     case 'waiting':
+      if (deleted) return gone(entry);
+      // Send automatically switched off: what was queued waits for the operator, keeping why a send failed.
+      return auto ? entry : { ...entry, state: 'not-sent', nextAttemptAt: null };
+    case 'not-sent':
+      if (deleted) return gone(entry);
+      return auto ? { ...entry, state: 'waiting', nextAttemptAt: hold } : entry;
     case 'refused':
-      if (deleted) return held ? { ...entry, state: 'changed', nextAttemptAt: null, refusal: null, lastError: deletedNote(dest) } : { ...entry, state: 'not-needed', nextAttemptAt: null, lastError: null, refusal: null };
-      // An edit after a refusal of this QSO is the operator's fix: send again.
-      if (entry.state === 'refused' && entry.refusal?.scope === 'qso' && entry.refusal.fix === 'edit-qso' && qso.updatedAt > (entry.lastAttemptAt ?? 0)) return waiting(entry, now);
+      if (deleted) return gone(entry);
+      // An edit after a refusal of this QSO is the operator's fix: it is ready to send again.
+      if (entry.refusal?.scope === 'qso' && entry.refusal.fix === 'edit-qso' && qso.updatedAt > (entry.lastAttemptAt ?? 0)) return ready(entry, auto, now);
       return entry;
     case 'delivered':
       if (deleted) return { ...entry, state: 'changed', lastError: deletedNote(dest) };
-      if (edited) return resend ? waiting(entry, now) : { ...entry, state: 'changed', lastError: editedNote(dest) };
+      if (edited) return resend ? ready(entry, auto, now) : { ...entry, state: 'changed', lastError: editedNote(dest) };
       return entry;
     case 'changed':
       if (deleted) return { ...entry, lastError: deletedNote(dest) };
       if (!edited) return { ...entry, state: 'delivered', lastError: null };
-      return resend ? waiting(entry, now) : { ...entry, lastError: editedNote(dest) };
+      return resend ? ready(entry, auto, now) : { ...entry, lastError: editedNote(dest) };
     case 'not-needed':
       if (deleted || !dest.active) return entry;
       if (held) return edited ? { ...entry, state: 'changed', lastError: editedNote(dest) } : { ...entry, state: 'delivered', lastError: null };
       // Restored after Undo or Delete.
-      return { ...waiting(entry, now), nextAttemptAt: Math.max(now, qso.createdAt + UNDO_MS) };
+      return ready(entry, auto, hold);
     default:
       return entry;
   }
@@ -205,14 +226,19 @@ export function applyReceipt(entry: LedgerEntry, r: Receipt, sentUpdatedAt: numb
   return { ...e, state: 'waiting', lastError: r.message, nextAttemptAt: retryAt, possibleDuplicate: e.possibleDuplicate || r.timeout };
 }
 
-/** Every waiting entry of a destination, refused for the destination-wide reason another QSO met. */
+/** Every waiting or not-sent entry of a destination, refused for the destination-wide reason another QSO met. */
 export function refuseWaiting(entries: readonly LedgerEntry[], dest: DestinationId, message: string, refusal: Refusal): LedgerEntry[] {
-  return entries.filter((e) => e.destinationId === dest && e.state === 'waiting').map((e) => ({ ...e, state: 'refused', lastError: message, refusal, nextAttemptAt: null }));
+  return entries
+    .filter((e) => e.destinationId === dest && (e.state === 'waiting' || e.state === 'not-sent'))
+    .map((e) => ({ ...e, state: 'refused', lastError: message, refusal, nextAttemptAt: null }));
 }
 
-/** Refused entries of a destination back in the outbox, after the operator changed what caused them. */
-export function requeue(entries: readonly LedgerEntry[], dest: DestinationId, now: number, which: (e: LedgerEntry) => boolean = () => true): LedgerEntry[] {
-  return entries.filter((e) => e.destinationId === dest && e.state === 'refused' && which(e)).map((e) => waiting(e, now));
+/**
+ * Refused entries of a destination ready again, after the operator changed what caused them:
+ * back in the outbox with Send automatically on, else not sent.
+ */
+export function requeue(entries: readonly LedgerEntry[], dest: DestinationId, now: number, which: (e: LedgerEntry) => boolean = () => true, auto = true): LedgerEntry[] {
+  return entries.filter((e) => e.destinationId === dest && e.state === 'refused' && which(e)).map((e) => ready(e, auto, now));
 }
 
 /** Send again: one refused entry back in the outbox. */
@@ -244,17 +270,27 @@ export function markSubmitted(entry: LedgerEntry, key: string, qso: Qso, now: nu
   return { ...entry, parts, state: all ? 'submitted' : entry.state, deliveredAt: now, deliveredUpdatedAt: qso.updatedAt, lastError: null };
 }
 
-/** The oldest QSO that is due at a destination: waiting, and its next attempt time has come (or `force`). */
-export function pickNext(entries: readonly LedgerEntry[], dest: DestinationId, now: number, startOf: (qsoId: string) => number, force = false): LedgerEntry | null {
+/**
+ * The oldest QSO that is due at a destination: waiting, and its next attempt time has come (or
+ * `force`). Oldest by start time, then by when it was logged; `orderOf` gives both for a QSO.
+ */
+export function pickNext(
+  entries: readonly LedgerEntry[],
+  dest: DestinationId,
+  now: number,
+  orderOf: (qsoId: string) => readonly [start: number, loggedAt: number],
+  force = false,
+): LedgerEntry | null {
   let best: LedgerEntry | null = null;
-  let bestStart = Infinity;
+  let bestKey: readonly [number, number] = [Infinity, Infinity];
   for (const e of entries) {
     if (e.destinationId !== dest || e.state !== 'waiting') continue;
     if (!force && (e.nextAttemptAt ?? 0) > now) continue;
-    const s = startOf(e.qsoId);
-    if (s < bestStart || (s === bestStart && best && e.qsoId < best.qsoId)) {
+    const k = orderOf(e.qsoId);
+    const before = k[0] < bestKey[0] || (k[0] === bestKey[0] && (k[1] < bestKey[1] || (k[1] === bestKey[1] && best !== null && e.qsoId < best.qsoId)));
+    if (!best || before) {
       best = e;
-      bestStart = s;
+      bestKey = k;
     }
   }
   return best;

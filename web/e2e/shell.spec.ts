@@ -1,6 +1,7 @@
 // The app shell: tabs, headings, settings stored in IndexedDB, version history and the update notice.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { emptySeed, seed, withFeatures } from './log-data';
 
 const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
@@ -8,6 +9,7 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
   await page.goto('./');
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: 'Operate' })).toHaveAttribute('aria-current', 'page');
+  await seed(page, withFeatures(emptySeed(), { activations: true }));
   for (const [name, heading] of [
     ['Log', 'Log'],
     ['Spots', 'Spots'],
@@ -23,12 +25,25 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
 test('the empty tabs say what will appear', async ({ page }) => {
   await page.goto('./#/log');
   await expect(page.getByText('No QSOs yet')).toBeVisible();
+  await seed(page, withFeatures(emptySeed(), { activations: true, potaSpots: true }));
   await page.goto('./#/spots');
   await expect(page.getByRole('button', { name: /^Start activation/ })).toBeVisible();
-  await expect(page.getByText(/^No spots yet\./)).toBeVisible();
+  await expect(page.getByText(/^No spots yet\. POTA spots on your bands/)).toBeVisible();
 });
 
-test('four tabs, and an old Activate link opens Spots', async ({ page }) => {
+test('three tabs on a new install, and an old Activate link opens Optional features', async ({ page }) => {
+  await page.goto('./#/activate');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Settings']);
+  await expect(page).toHaveURL(/#\/settings\/features$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('The Spots tab shows while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
+});
+
+test('with Activations on, an old Activate link opens Spots', async ({ page }) => {
+  await page.goto('./');
+  await seed(page, withFeatures(emptySeed(), { activations: true }));
   await page.goto('./#/activate');
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Spots', 'Settings']);
@@ -68,6 +83,35 @@ test('the callsign is stored on the phone and marks nothing until set', async ({
   await expect.poll(() => storedSettings(page)).toMatchObject({ key: 'settings', value: { callsign: '9V1NE' } });
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Callsign' })).toHaveValue('9V1NE');
+});
+
+test('Use GPS sets the 6-character grid from a fine fix', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 1.3521, longitude: 103.8198, accuracy: 30 });
+  await page.goto('./#/settings');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('textbox', { name: 'Grid' })).toHaveValue('OJ11vi');
+  await expect.poll(() => storedSettings(page)).toMatchObject({ value: { grid: 'OJ11vi' } });
+});
+
+test('Use GPS gives the 4-character square from a coarse fix and says why', async ({ page, context }) => {
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 1.3521, longitude: 103.8198, accuracy: 3200 });
+  await page.goto('./#/settings');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('textbox', { name: 'Grid' })).toHaveValue('OJ11');
+  await expect(page.getByRole('status').filter({ hasText: 'Position accurate to 3.2 km, so the grid has 4 characters.' })).toBeVisible();
+  await expect.poll(() => storedSettings(page)).toMatchObject({ value: { grid: 'OJ11' } });
+});
+
+test('Use GPS without location permission says what to do and keeps the grid', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Grid' });
+  await field.fill('OJ11');
+  await field.press('Enter');
+  await page.getByRole('button', { name: 'Use GPS' }).click();
+  await expect(page.getByRole('alert')).toHaveText('Location is off for RR73. Allow it in iOS Settings › Privacy, or type the grid.');
+  await expect(field).toHaveValue('OJ11');
 });
 
 /** Reads the settings record straight from IndexedDB; null until the store exists. */

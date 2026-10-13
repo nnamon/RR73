@@ -103,8 +103,20 @@ pub enum RenderError {
 /// Renders `scene` with randomness from `seed`: one slot of 12 kHz audio and the truth for
 /// each signal. The same scene and seed give the same samples on every run. Signal `i`
 /// takes its fading from random stream `i + 1`, so adding a signal leaves the others
-/// unchanged; the noise uses stream 0.
+/// unchanged; the noise uses stream 0. Parts of a signal outside the slot are cut.
 pub fn render(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
+    render_placed(scene, seed, false)
+}
+
+/// Renders `scene` as a loop: as [`render`], but a signal that runs past the end of the
+/// slot continues at its start, and one that starts before the slot ends at its end. Played
+/// back to back, the audio carries every signal whole whatever sample playback starts at.
+/// DT may take any value; a start position wraps modulo the slot length (15 s for FT8).
+pub fn render_loop(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
+    render_placed(scene, seed, true)
+}
+
+fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
     let params = scene.mode.params();
     let len = (f64::from(params.slot_s) * channel::SAMPLE_RATE).round() as usize;
     let mut audio = vec![0.0f32; len];
@@ -134,8 +146,10 @@ pub fn render(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), Render
         rng.set_stream(i as u64 + 1);
         let wave = channel::apply(&wave, s.drift_hz_per_s, s.fading, &mut rng, &mut plans);
         let start = ((f64::from(params.start_offset_s) + s.dt_s) * channel::SAMPLE_RATE).round() as i64;
+        let slot_len = len as i64;
         for (k, &v) in wave.iter().enumerate() {
             let n = start + k as i64;
+            let n = if wrap { n.rem_euclid(slot_len.max(1)) } else { n };
             if n >= 0
                 && let Some(x) = audio.get_mut(n as usize)
             {

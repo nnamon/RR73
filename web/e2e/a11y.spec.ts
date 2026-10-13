@@ -11,7 +11,7 @@ async function axe(page: Page) {
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, async ({ page }) => {
-      await open(page, s.path, theme, s.seed);
+      await open(page, s.path, theme, s.seed, s.features);
       expect(await axe(page)).toEqual([]);
     });
   }
@@ -31,7 +31,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   for (const c of LOG_SHEETS) {
     test(`${c.name} sheet in ${theme}`, async ({ page }) => {
-      await open(page, c.path, theme, c.seed);
+      await open(page, c.path, theme, c.seed, c.features);
       await c.open(page);
       await expect(page.getByRole('dialog', { name: c.title })).toBeVisible();
       expect(await axe(page)).toEqual([]);

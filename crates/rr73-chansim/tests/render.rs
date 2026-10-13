@@ -1,6 +1,8 @@
 //! Rendering tests that use the codec's tones and GFSK synthesis.
 
-use rr73_chansim::{NOISE_RMS, Noise, RenderError, Scene, SimSignal, Watterson, noise_only, render};
+use rr73_chansim::{
+    NOISE_RMS, Noise, RenderError, Scene, SimSignal, Watterson, noise_only, render, render_loop,
+};
 use rr73_ft8::Mode;
 
 fn power(x: &[f32]) -> f64 {
@@ -86,6 +88,27 @@ fn dt_shifts_the_start_and_partial_signals_are_cut() {
     .0;
     assert!(power(&late[..17_000]) < 1e-12);
     assert!(power(&late[19_000..20_000]) > 0.0);
+}
+
+#[test]
+fn loops_carry_signals_past_the_end_over_to_the_start() {
+    let at = |dt: f64| quiet(Mode::Ft8, vec![SimSignal::new("CQ K1ABC FN42", 1500.0, dt, 0.0)]);
+    // Starting 11 s into the slot, the transmission runs 8.64 s past its end. The loop is
+    // the cut rendering at that DT plus the cut rendering one slot (15 s) earlier.
+    let (looped, truth) = render_loop(&at(10.5), 1).expect("render");
+    let (head, _) = render(&at(10.5), 1).expect("render");
+    let (tail, _) = render(&at(10.5 - 15.0), 1).expect("render");
+    assert_eq!(truth[0].dt_s, 10.5);
+    let joined: Vec<f32> = head.iter().zip(&tail).map(|(h, t)| h + t).collect();
+    assert_eq!(looped, joined);
+    assert!(power(&looped[..12_000]) > 0.0 && power(&looped[170_000..]) > 0.0);
+    // The same holds for any whole number of slots, early or late.
+    assert_eq!(render_loop(&at(10.5 - 30.0), 1).expect("render").0, looped);
+    assert_eq!(render_loop(&at(10.5 + 15.0), 1).expect("render").0, looped);
+    // A transmission inside the slot renders as before, noise included.
+    let mut noisy = at(0.2);
+    noisy.noise = Noise::Awgn;
+    assert_eq!(render_loop(&noisy, 3), render(&noisy, 3));
 }
 
 #[test]

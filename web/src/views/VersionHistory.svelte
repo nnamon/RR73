@@ -53,7 +53,7 @@
 
   .intro {
     margin-top: var(--rr-space-2);
-    padding: 0 var(--rr-space-4);
+    padding: 0 var(--rr-space-8);
     font-size: var(--rr-text-sub);
     line-height: var(--rr-leading-sub);
     color: var(--rr-label2);

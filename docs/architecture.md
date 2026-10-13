@@ -110,7 +110,8 @@ SlotAudio (12 kHz f32, start time, mode)
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
-| `lib/state` | Settings and persistent stores in IndexedDB. |
+| `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
+| `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
@@ -120,6 +121,10 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
 - The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`. Input latency is unknown on iOS, so the residual offset is measured from the median DT of decodes and corrected.
 - Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s, as in WSJT-X.
+
+## Updates
+
+The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A new version installs and waits; the running build keeps its own files, including the decoder worker and the WebAssembly it may still load. At the next change of screen with audio off, or on Reload app, the app sends SKIP_WAITING and reloads. Workers up to 0.5.0 do not answer the handover check in `public/sw-handover.js`, so a new worker takes over from them at once, as those builds expect. When a file of the running build fails to load and the server's index.html names another build, the app says a new version is ready and reloads at the next safe moment.
 
 ## Platform constraints
 

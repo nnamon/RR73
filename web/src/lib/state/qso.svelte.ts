@@ -17,6 +17,7 @@ import { webAudioOut } from '../tx/web-audio';
 import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
 import { log, logQso } from '../log/log.svelte';
+import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
@@ -54,9 +55,9 @@ export const qso = new QsoRuntime();
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
 const sessionStart = Date.now();
 
-/** The call and grid on air: the running activation's, else Settings. */
-function configNow() {
-  const a = log.current;
+/** The call and grid on air: the running activation's (with Activations on), else Settings. Exported for tests. */
+export function configNow() {
+  const a = features.activations ? log.current : null;
   return {
     myCall: a?.callsign || settings.callsign,
     myGrid: a?.grid || settings.grid,

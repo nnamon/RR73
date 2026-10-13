@@ -7,6 +7,7 @@
   import { log, setFileDestination, setLoggingSettings, wavelogReady } from '../lib/log/log.svelte';
   import type { FileDestinationId } from '../lib/log/types';
   import { hostOf } from '../lib/log/wavelog';
+  import { features } from '../lib/state/features.svelte';
 
   const w = $derived(log.wavelog);
   const ready = $derived(wavelogReady(w));
@@ -44,7 +45,7 @@
         <span class="ic blue" data-letter="W" aria-hidden="true"></span>
         <span class="row-main">
           <span class="row-title">Wavelog</span>
-          <span class="row-sub">{w.url ? `${hostOf(w.url)} · sends each QSO` : 'Sends each QSO to your Wavelog'}</span>
+          <span class="row-sub">{w.url ? `${hostOf(w.url)}${log.settings.sendAutomatically ? ' · sends automatically' : ''}` : 'Your Wavelog server'}</span>
           {#if refusal && (!w.lastTest || (refusal.lastAttemptAt ?? 0) >= w.lastTest.at)}
             <span class="row-sub badt">Refused at {utcHm(refusal.lastAttemptAt ?? 0)} UTC: {refusal.lastError}</span>
           {:else if w.lastTest}
@@ -65,7 +66,8 @@
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       {/if}
-      {#each files as f (f.id)}
+      <!-- Activation files belong to Activations (Settings › Optional features). -->
+      {#each features.activations ? files : [] as f (f.id)}
         <label class="row">
           <span class="ic {f.bg}" aria-hidden="true"><Icon name={f.icon} size={20} /></span>
           <span class="row-main">
@@ -76,7 +78,9 @@
         </label>
       {/each}
     </div>
-    <p class="section-foot">Every QSO stays on this phone. Each destination gets a copy, and RR73 records which copies arrived. Files are for QSOs made in an activation.</p>
+    <p class="section-foot">
+      Every QSO stays on this phone. Each destination gets a copy, and RR73 records which copies arrived.{features.activations ? ' Files are for QSOs made in an activation.' : ''}
+    </p>
   </div>
 
   <div class="section">
@@ -85,7 +89,7 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Send automatically</span>
-          <span class="row-sub">When RR73 is open and online</span>
+          <span class="row-sub">{log.settings.sendAutomatically ? 'Each QSO 10 s after it is logged, while RR73 is open and online' : 'Off: QSOs wait in the Log until you tap Send to Wavelog'}</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendAutomatically} onchange={(e) => void setLoggingSettings({ sendAutomatically: e.currentTarget.checked })} />
       </label>
@@ -131,6 +135,10 @@
 
   .indent {
     padding-left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
+  }
+
+  .indent + :global(.row)::before {
+    left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
   }
 
   .ic {

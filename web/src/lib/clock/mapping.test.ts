@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AudioClockMapper } from './mapping';
+import { AudioClockMapper, outputLatencyMs, plausibleTimestamp } from './mapping';
+import recorded from '../../../../fixtures/clock/output-timestamps.json';
 import { prng } from '../testing/signal';
 
 // A simulated pair of clocks: performance.now() starts at 0 at `origin` (UTC ms), and the audio
@@ -76,5 +77,24 @@ describe('AudioClockMapper', () => {
     expect(m.ready).toBe(false);
     m.observe({ contextTime: 1, performanceTime: 9000 }, 9000, origin + 9000);
     expect(m.toUtcMs(1)).toBe(origin + 9000);
+  });
+
+  it('accepts the output timestamps Chromium gives and rejects those of Playwright\'s WebKit', () => {
+    const check = (rows: number[][]) =>
+      rows.map(([contextTime, performanceTime, perfNow, , currentTime]) => ({
+        latency: outputLatencyMs({ contextTime, performanceTime }, currentTime, perfNow),
+        ok: plausibleTimestamp({ contextTime, performanceTime }, currentTime, perfNow),
+      }));
+    // Chromium: 28 to 43 ms of output latency throughout.
+    for (const r of check(recorded.chromium)) {
+      expect(r.latency).toBeGreaterThan(25);
+      expect(r.latency).toBeLessThan(50);
+      expect(r.ok).toBe(true);
+    }
+    // WebKit: performanceTime advances 2 s per second, so the latency grows with the time audio has run.
+    const webkit = check(recorded.webkit);
+    expect(webkit.at(-1)!.latency).toBeGreaterThan(29_000);
+    expect(webkit.filter((r) => r.latency > 500).every((r) => !r.ok)).toBe(true);
+    expect(webkit.slice(8).every((r) => !r.ok)).toBe(true);
   });
 });

@@ -2,6 +2,26 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## 0.6.2 · 2026-10-13
+
+- Updating no longer leaves RR73 blank or without its decoder. While an older copy of RR73 holds the log, the app opens, says "Close other copies of RR73 to finish updating" and finishes the update once that copy closes. A new version takes over at the next change of screen with audio off.
+- Optional features in Settings, each off until turned on: Activations, POTA spots, Cluster spots and LoTW users. With Activations and both spot sources off, the Spots tab is hidden and the app has three tabs. Activations and QSOs already logged stay on the phone.
+- Use GPS in Settings sets the grid from the phone's position: 6 characters when the fix is within 1 km, otherwise the 4-character square with the reason. RR73 keeps the grid, never the position. The activation form's Use GPS works the same way.
+- Slots and transmissions stay on UTC when the browser's output timestamps disagree with its audio clock. In Playwright's WebKit they gained 1 s every second, so slots drifted and no call went on air. Not tested on an iPhone.
+
+## 0.6.1 · 2026-10-13
+
+- Send automatically is now off: QSOs stay in the Log as "not sent" until you tap Send to Wavelog. A phone that ran 0.5.0 switches it off once; turn it back on in Settings › Logging.
+- Send to Wavelog, at the top of the Log, sends every QSO not sent, oldest first, shows "Sending 2 of 4", then what happened: "3 delivered. 1 refused: see To do." The QSO sheet sends one QSO.
+- To do counts QSOs not sent to Wavelog.
+- QSOs logged in the same second go to Wavelog in the order they were logged.
+- Log, Spots and Settings put their large titles in the same place, under the same 44 pt bar. Add QSO and Export ADIF are equal glyphs in the tint, 16 pt from the edge, and Export ADIF dims when there is nothing to export.
+- The QSO sheet takes the date and time as 24-hour UTC (2026-10-13, 13:14:52), and its report fields open a keyboard with a minus sign.
+- Station location lists mark the one in use with a checkmark.
+- The Wavelog switch in Settings › Logging › Wavelog is now called Use Wavelog.
+- The Logged notice leaves out signal reports that were not received.
+- Log badges share one shape: grey for not sent, green for delivered, red for refused.
+
 ## 0.6.0 · 2026-10-13
 
 - Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.

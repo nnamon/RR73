@@ -53,10 +53,11 @@ export const ICONS = {
   chevdown: { stroke: ['M6.5 9.5L12 15L17.5 9.5'], width: 2.4 },
   chevright: { stroke: ['M9 5L16 12L9 19'], width: 2.3 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
-  share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.6 10.3H7.2A2.2 2.2 0 0 0 5 12.5V18.8A2.2 2.2 0 0 0 7.2 21H16.8A2.2 2.2 0 0 0 19 18.8V12.5A2.2 2.2 0 0 0 16.8 10.3H15.4'], width: 1.8 },
+  // Bar glyphs share one stroke weight and an 18-unit-wide ink box centred on 12, as SF Symbols do.
+  share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
   // Log, activations and destinations.
   search: { stroke: ['M15.4 15.4L20.2 20.2'], rings: [[10.6, 10.6, 6.4, 6.4]], width: 2.1 },
-  plus: { stroke: ['M12 5V19M5 12H19'], width: 2.2 },
+  plus: { stroke: ['M12 3.9V20.1M3.9 12H20.1'], width: 1.8 },
   checkcircle: { dots: [[12, 12, 10]], inner: ['M7.4 12.4L10.6 15.5L16.7 9'], innerWidth: 2.3 },
   warncircle: { fill: ['M10.3 3.6a2 2 0 0 1 3.4 0l8 14a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3Z'], inner: ['M12 9.2V13.4'], innerDots: [[12, 16.8, 1.25]], innerWidth: 2.2 },
   cloudoff: { stroke: ['M21.2 16.4A4.4 4.4 0 0 0 17.6 9.6H16.5A7 7 0 0 0 9.9 4.4M5.6 6.9A7 7 0 0 0 8.7 19.6H17.4A4.6 4.6 0 0 0 18.8 19.4', 'M3 3L21 21'], width: 1.9 },
