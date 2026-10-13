@@ -3,7 +3,9 @@
 // targets (13 receiving at 393 x 852, 10 at 375 x 667), and the bottom bar keeps one height. The
 // status bar and home indicator insets of the device are applied, as the app runs from the Home
 // Screen. WebKit's mock microphone runs the audio; decodes come through the screen-review hooks
-// (src/lib/testing/e2e-hooks.ts). Transmissions are real: the scheduler plays them.
+// (src/lib/testing/e2e-hooks.ts). Transmissions are real: the scheduler plays them, so each run
+// waits for real slots, 1 to 3 min. It runs in the review projects only (RR73_REVIEW=1,
+// docs/testing.md); operate.spec.ts checks the bar height and row targets in CI.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -92,6 +94,8 @@ for (const theme of ['light', 'dark'] as const) {
     const counts: Record<string, number> = {};
     const bars: Record<string, number> = {};
     mkdirSync(SHOTS, { recursive: true });
+    // The names the screens had in the webkit projects: webkit-375x667-light-1-receiving.png.
+    const prefix = `${SHOTS}/${info.project.name.replace(/^review-/, 'webkit-')}-${theme}`;
     const shot = async (name: string) => {
       // As after a tap on the new decodes pill: the newest slot at the top.
       await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));
@@ -103,7 +107,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(wide).toBeLessThanOrEqual(0);
       // The document never scrolls in any state: only the list does.
       expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
-      await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${name}.png` });
+      await page.screenshot({ path: `${prefix}-${name}.png` });
     };
     await page.addInitScript((i) => {
       document.addEventListener('DOMContentLoaded', () => {
@@ -228,7 +232,7 @@ for (const theme of ['light', 'dark'] as const) {
 
     // One bottom bar height in every state: idle, CQ, calling, in a QSO and Run.
     expect(new Set(Object.values(bars)).size, JSON.stringify(bars)).toBe(1);
-    writeFileSync(`${SHOTS}/${info.project.name}-${theme}-rows.json`, JSON.stringify({ counts, bars }));
+    writeFileSync(`${prefix}-rows.json`, JSON.stringify({ counts, bars }));
     console.log(`${info.project.name} ${theme} rows ${JSON.stringify(counts)} bar ${JSON.stringify(bars)}`);
   });
 }

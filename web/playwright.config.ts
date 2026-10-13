@@ -34,8 +34,25 @@ const iphone = (width: number, height: number, scale: number) => ({
   userAgent: IPHONE_UA,
 });
 
+/**
+ * RR73_REVIEW=1 adds the projects CI leaves out: review-375x667 and review-393x852 capture every
+ * screen, sheet and Operate state in both themes for the visual review (AGENTS.md), and
+ * slot-record checks the lost-audio measure behind decode.spec's skip (docs/testing.md).
+ */
+const REVIEW = !!process.env.RR73_REVIEW;
+const desktop = { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } };
+
+const reviewProjects = REVIEW
+  ? [
+      { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...desktop, ...holeMic } },
+      // layout.spec also matches colours-layout.spec. Screenshots go to test-results/screens.
+      { name: 'review-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
+      { name: 'review-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
+    ]
+  : [];
+
 /** Projects that finish before the transmit timing tests start. */
-const QUIET = ['mic', 'decode', 'slot-record', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852'];
+const QUIET = ['mic', 'decode', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852', ...reviewProjects.map((p) => p.name)];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -60,28 +77,31 @@ export default defineConfig({
         reuseExistingServer: true,
       },
   projects: [
-    { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...desktop, ...fakeMic } },
     // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
     // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
-    { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
-    { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...holeMic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'decode', testMatch: /decode\.spec/, use: { ...desktop, ...ft8Mic } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list)\.spec/, use: desktop },
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
-    // layout.spec also matches colours-layout.spec.
-    { name: 'webkit-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
+    // Layout in the light theme: geometry is the same in dark, where only colours change
+    // (tokens.css). Checks that do not depend on the screen size run at 375 x 667 only, tagged
+    // @ci-375; those that do also run at 393 x 852, tagged @ci-393. layout.spec also matches
+    // colours-layout.spec.
+    { name: 'webkit-375x667', testMatch: /(layout|operate)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
+    { name: 'webkit-393x852', testMatch: /(layout|operate)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
+    ...reviewProjects,
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
     // after the other projects, so the rest of the suite does not load the machine meanwhile
     // (locally: --no-deps to run them alone), with 2 retries.
-    { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
-    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
+    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
     // The practice band: synthesised in the page, decoded in real time, no microphone. It loads
     // the machine as the transmit tests do, so it runs after them, with 2 retries.
-    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['tx-cq', 'webkit-tx', 'transmit'], use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['tx-cq', 'webkit-tx', 'transmit'], use: desktop },
   ],
 });

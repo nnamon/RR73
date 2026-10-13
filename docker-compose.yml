@@ -42,6 +42,8 @@ services:
     <<: *workspace
     environment:
       - CI=1
+      # RR73_REVIEW=1 docker compose run ... adds the review projects (docs/testing.md).
+      - RR73_REVIEW
 
   wsjtx:
     build: { context: tools/wsjtx }

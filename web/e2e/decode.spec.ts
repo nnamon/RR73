@@ -17,7 +17,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { loadavg } from 'node:os';
 import { fileURLToPath } from 'node:url';
-import { LOST_LIMIT_S, complete, slotRecords } from './slot-record';
+import { LOST_LIMIT_S, audioLoss, complete, slotRecords } from './slot-record';
 
 interface Truth {
   text: string;
@@ -120,6 +120,21 @@ function findCopies(slots: ListedSlot[]) {
  * CI=1 for local runs too, so CI does not tell them apart.
  */
 const STRICT_AUDIO = process.env.GITHUB_ACTIONS === 'true';
+
+// The measure of lost audio the test judges slots by; slot-record.spec.ts (RR73_REVIEW=1) checks
+// it against a slot played with 1 s of silence.
+test('zero runs of 2 ms or more count as lost audio, and silence at the start as a late start', () => {
+  const x = new Float32Array(12_000).fill(0.01);
+  x.fill(0, 0, 600); // 0.05 s before audio began
+  x.fill(0, 3000, 3023); // 23 samples: below 2 ms, not counted
+  x.fill(0, 6000, 7200); // 0.1 s lost
+  const loss = audioLoss(x);
+  expect(loss.beforeStartS).toBeCloseTo(0.05, 6);
+  expect(loss.lostS).toBeCloseTo(0.1, 6);
+  expect(complete(loss)).toBe(false);
+  expect(complete({ beforeStartS: 0.05, lostS: 0.099 })).toBe(true);
+  expect(complete({ beforeStartS: 0.1, lostS: 0 })).toBe(false);
+});
 
 test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page }) => {
   test.setTimeout(150_000);

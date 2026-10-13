@@ -1,13 +1,13 @@
 // Decode colours on iPhone viewports in WebKit, light and dark: the Decode colours screen and its
 // colour sheet, and Operate with a decode of every category on screen. Operate keeps 32 pt rows,
-// shows 13 rows at 393 x 852 (10 at 375 x 667), and a colour change moves no row. Screens are
-// saved to test-results/screens/colours. The status bar and home indicator insets are applied,
-// as in states.spec.ts. Decodes, QSOs and the sent row come through the screen-review hooks.
-// states.spec.ts transmits for real and checks the sent row there.
+// shows 13 rows at 393 x 852 (10 at 375 x 667), and a colour change moves no row. The review
+// projects save the screens to test-results/screens/colours; CI runs the light theme (ci() in
+// layout-checks.ts). The status bar and home indicator insets are applied, as in states.spec.ts.
+// Decodes, QSOs and the sent row come through the screen-review hooks.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { checkLayout, smallTargets } from './layout-checks';
+import { checkLayout, ci, shot, smallTargets } from './layout-checks';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/colours', import.meta.url));
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
@@ -56,7 +56,7 @@ function rowsOnScreen(page: Page): Promise<number> {
 const rowBoxes = (page: Page) => page.locator('[data-testid=decode-list] button.dr').evaluateAll((els) => els.map((el) => JSON.stringify(el.getBoundingClientRect())));
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`decode colours screen and sheet in ${theme}`, async ({ page }, info) => {
+  test(`decode colours screen and sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     mkdirSync(SHOTS, { recursive: true });
     await page.emulateMedia({ colorScheme: theme });
     await page.goto('./#/settings/colours');
@@ -69,25 +69,22 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.locator('.text-list > li')).toHaveCount(1);
     await expect(page.locator('.text-list .grip')).toHaveCount(0);
     for (const box of await rows.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))) expect(box).toBeGreaterThanOrEqual(55.5);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-screen.png` });
+    await shot(page, info, SHOTS, `${theme}-screen`);
     await page.locator('main .pane:not([hidden])').evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-screen-end.png` });
+    await shot(page, info, SHOTS, `${theme}-screen-end`, 200);
 
     await page.getByRole('button', { name: 'Change colour: New call', exact: true }).click();
     const sheet = page.getByRole('dialog', { name: 'New call' });
     await expect(sheet).toBeVisible();
     expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
-    await page.waitForTimeout(250);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-sheet.png` });
+    await shot(page, info, SHOTS, `${theme}-sheet`, 250);
     await page.keyboard.press('Escape');
     await page.getByRole('button', { name: 'Change colour: Worked before' }).click();
     await expect(page.getByRole('dialog', { name: 'Worked before' })).toBeVisible();
-    await page.waitForTimeout(250);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-sheet-text.png` });
+    await shot(page, info, SHOTS, `${theme}-sheet-text`, 250);
   });
 
-  test(`Operate with every category in ${theme}`, async ({ page }, info) => {
+  test(`Operate with every category in ${theme}`, ci(theme, 375, 393), async ({ page }, info) => {
     mkdirSync(SHOTS, { recursive: true });
     const width = page.viewportSize()!.width;
     await page.addInitScript((i) => {
@@ -147,7 +144,7 @@ for (const theme of ['light', 'dark'] as const) {
     expect(new Set(heights.map((h) => Math.round(h)))).toEqual(new Set([32]));
     expect(await rowsOnScreen(page)).toBeGreaterThanOrEqual(TARGET[width]);
     await checkLayout(page);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-operate.png` });
+    await shot(page, info, SHOTS, `${theme}-operate`);
 
     // A colour change moves no row.
     const before = await rowBoxes(page);
@@ -160,6 +157,6 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));
     await page.waitForTimeout(300);
     expect(await rowBoxes(page)).toEqual(before);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-operate-teal.png` });
+    await shot(page, info, SHOTS, `${theme}-operate-teal`);
   });
 }

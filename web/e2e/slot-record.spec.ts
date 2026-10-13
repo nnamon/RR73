@@ -2,23 +2,12 @@
 // the fake microphone plays fixtures/ft8-loop.wav with 1 s of silence (.fixtures/ft8-loop-hole.wav,
 // written by global-setup.ts), and the record of the next full slot must show at least that much
 // lost. The app counts those zeros as audio, as it does when the browser's audio thread falls
-// behind, so the check reads the recorded audio.
+// behind, so the check reads the recorded audio. It checks the test's own measure, which CI does
+// not need: there decode.spec fails on any missed message, starved slot or not. It runs with
+// RR73_REVIEW=1 (docs/testing.md).
 import { expect, test } from '@playwright/test';
 import { HOLE_S } from './global-setup';
-import { audioLoss, complete, slotRecords } from './slot-record';
-
-test('zero runs of 2 ms or more count as lost audio, and silence at the start as a late start', () => {
-  const x = new Float32Array(12_000).fill(0.01);
-  x.fill(0, 0, 600); // 0.05 s before audio began
-  x.fill(0, 3000, 3023); // 23 samples: below 2 ms, not counted
-  x.fill(0, 6000, 7200); // 0.1 s lost
-  const loss = audioLoss(x);
-  expect(loss.beforeStartS).toBeCloseTo(0.05, 6);
-  expect(loss.lostS).toBeCloseTo(0.1, 6);
-  expect(complete(loss)).toBe(false);
-  expect(complete({ beforeStartS: 0.05, lostS: 0.099 })).toBe(true);
-  expect(complete({ beforeStartS: 0.1, lostS: 0 })).toBe(false);
-});
+import { complete, slotRecords } from './slot-record';
 
 test('a slot played with 1 s of silence records at least 1 s of lost audio', async ({ page }) => {
   test.setTimeout(90_000);
