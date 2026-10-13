@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The frequency ruler lies over the bottom edge of the waterfall, with its ticks on the edge and the numbers above them, so the picture is 22 pt taller. The Tx and Rx markers pass behind the numbers.
+
 ## 0.10.2 · 2026-10-13
 
 - The Logged notice and the notices about updates float above Operate's buttons. In 0.10.1 they pushed the buttons up.
