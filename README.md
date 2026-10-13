@@ -2,7 +2,7 @@
 
 RR73 is an iPhone home-screen app that lets radio amateurs operate FT8 and FT4 through the headset jack, with its own Rust decoders and a log that works without a connection.
 
-Status: Phase 0. The research bench and the app shell are under construction. Nothing is ready for operating yet.
+Status: in development. Receiving FT8 works on an iPhone with a KX2. Transmitting is not yet tested on the air.
 
 ## Repository
 
