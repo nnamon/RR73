@@ -23,6 +23,10 @@ scope.onmessage = (e) => {
     scope.postMessage({ type: 'frame', info: renderer.info() });
     return;
   }
+  if (m.type === 'quietest') {
+    scope.postMessage({ type: 'quietest', id: m.id, hz: renderer?.quietest(m.nowMs, m.nearHz) ?? null });
+    return;
+  }
   if (!renderer) return;
   if (m.type === 'samples') {
     const info = renderer.push(m.samples, m.utcMs, m.index);

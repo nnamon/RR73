@@ -6,6 +6,8 @@ function fakeModule(over: Partial<WasmModule> = {}): WasmModule {
   return {
     default: vi.fn(async () => undefined),
     decode_slot: vi.fn(() => '[{"text":"CQ 9M2TRX OJ02","freq_hz":1022,"dt_s":0.1,"snr_db":-10}]'),
+    pack_message: () => '{}',
+    synthesize: () => new Float32Array(0),
     version: () => '0.1.0',
     ...over,
   };
@@ -81,5 +83,38 @@ describe('DecoderCore', () => {
       { type: 'error', id: 1, detail: 'Error: unknown preset' },
       { type: 'decoded', id: 2, decodes: [], ms: 25 },
     ]);
+  });
+});
+
+describe('DecoderCore encoder', () => {
+  it('checks messages and synthesises them, transferring the samples', async () => {
+    const posted: { m: FromDecoder; transfer?: Transferable[] }[] = [];
+    const mod = fakeModule({
+      pack_message: (text: string) => JSON.stringify({ ok: true, text: text.toUpperCase(), i3n3: '1.0', error: null }),
+      synthesize: (_t: string, _m: string, _f: number, rate: number) => new Float32Array(rate),
+    });
+    const core = new DecoderCore(async () => mod, (m, transfer) => posted.push({ m, transfer }), () => 0);
+    await core.handle({ type: 'pack', id: 1, text: 'cq 9v1ne oj11', mode: 'FT8' });
+    await core.handle({ type: 'synth', id: 2, text: 'CQ 9V1NE OJ11', mode: 'FT8', f0Hz: 1500, sampleRate: 48000 });
+    expect(posted[1].m).toEqual({ type: 'packed', id: 1, packed: { ok: true, text: 'CQ 9V1NE OJ11', i3n3: '1.0', error: null } });
+    const synth = posted[2];
+    expect(synth.m).toMatchObject({ type: 'synthesized', id: 2 });
+    expect((synth.m as { samples: Float32Array }).samples.length).toBe(48000);
+    expect(synth.transfer).toEqual([(synth.m as { samples: Float32Array }).samples.buffer]);
+  });
+
+  it('reports what cannot be packed and errors from synthesis', async () => {
+    const posted: FromDecoder[] = [];
+    const mod = fakeModule({
+      pack_message: () => '{"ok":false,"text":"X","i3n3":"","error":"the message is empty"}',
+      synthesize: () => {
+        throw new Error('base tone 5000 Hz is outside 100 to 3000 Hz');
+      },
+    });
+    const core = new DecoderCore(async () => mod, (m) => posted.push(m), () => 0);
+    await core.handle({ type: 'pack', id: 1, text: 'X', mode: 'FT8' });
+    await core.handle({ type: 'synth', id: 2, text: 'X', mode: 'FT8', f0Hz: 5000, sampleRate: 48000 });
+    expect(posted[1]).toEqual({ type: 'packed', id: 1, packed: { ok: false, text: 'X', i3n3: '', error: 'the message is empty' } });
+    expect(posted[2]).toEqual({ type: 'error', id: 2, detail: 'Error: base tone 5000 Hz is outside 100 to 3000 Hz' });
   });
 });

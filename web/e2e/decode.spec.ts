@@ -59,7 +59,7 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
 
   // The first full slot ends within 15.2 s; allow a second slot in case the first starts late.
   const list = page.getByTestId('decode-list');
-  const row = (text: string) => list.locator('li.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) }).first();
+  const row = (text: string) => list.locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) }).first();
   await expect(row(TRUTH[0].text)).toBeVisible({ timeout: 45_000 });
   for (const t of TRUTH) await expect(row(t.text), t.text).toBeVisible();
 
@@ -79,7 +79,7 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   await expect(row('9V1NE JA1KXM PM95')).toHaveClass(/k-me/);
   await expect(row('9V1NE JA1KXM PM95').locator('.c-msg b')).toHaveText('JA1KXM');
   await expect(row('JH1RRT YB0AZK RR73')).not.toHaveClass(/k-(cq|me)/);
-  await expect(page.getByRole('listitem', { name: /9V1NE JA1KXM PM95, to you/ })).toBeVisible();
+  await expect(page.getByRole('button', { name: /9V1NE JA1KXM PM95, to you/ })).toBeVisible();
 
   // Rows are 40 px, and the list with decodes passes axe (WCAG 2.2 AA).
   for (const t of TRUTH) expect((await row(t.text).boundingBox())!.height).toBeCloseTo(40, 0);

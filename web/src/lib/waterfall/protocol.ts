@@ -7,6 +7,7 @@ export type ToWaterfall =
   | { type: 'resize'; width: number; height: number }
   | { type: 'samples'; samples: Float32Array; utcMs: number; index: number }
   | { type: 'mode'; mode: Mode }
-  | { type: 'clear' };
+  | { type: 'clear' }
+  | { type: 'quietest'; id: number; nowMs: number; nearHz: number };
 
-export type FromWaterfall = { type: 'frame'; info: FrameInfo } | { type: 'failed'; reason: string };
+export type FromWaterfall = { type: 'frame'; info: FrameInfo } | { type: 'failed'; reason: string } | { type: 'quietest'; id: number; hz: number | null };

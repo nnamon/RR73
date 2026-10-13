@@ -2,6 +2,25 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## 0.6.0 · 2026-10-13
+
+- Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.
+- In loopback tests in desktop Chromium, CQ started 20 to 40 ms after slot + 0.5 s and Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
+- The sequencer sends Tx1 to Tx6 as WSJT-X does and logs the QSO when it completes. The dock shows the steps, the next message and when it starts.
+- A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and the dock says which.
+- Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Stations already in the Log for this UTC day, band and mode are marked as dupes and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
+- Touch and hold a decode for the station's details: distance, bearing, SNR and Call.
+- Messages edits Tx1 to Tx6. Text that cannot be encoded is refused before it is sent.
+- What you send appears in the decode list as amber rows. While transmitting, Operate shows a red edge and "On air" with the message.
+- Each completed QSO goes to the Log with the Logged notice, Edit and Undo, and on to Wavelog and the activation files.
+- While an activation runs, RR73 transmits its callsign and grid.
+- The watchdog stops Tx after 6 min without a touch or a new message.
+- Transmitting needs your callsign and grid in Settings, the band confirmed in the band sheet, and audio running.
+- Tap the waterfall to set the receive or transmit frequency: a bar offers Receive here, Transmit here and Both. Find clear Tx moves Tx to the quietest 50 Hz in the last 2 to 4 slots.
+- Calling a station moves Rx to its frequency. Turn off Hold Tx frequency in Settings to move Tx as well.
+- Tune transmits at the Tx frequency, and the Tune sheet says which.
+- On iOS, every tap that can start a transmission plays a 0.1 s silent clip, so output works with the ring switch on silent. Not tested on a device.
+
 ## 0.5.0 · 2026-10-13
 
 - The Log lists every QSO on this phone by UTC day with where each copy went: Wavelog waiting, delivered, refused or changed. Search by callsign, grid or park.

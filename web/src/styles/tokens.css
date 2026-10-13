@@ -132,6 +132,7 @@
   --rr-teal: light-dark(#0E7490, #3EC1D3);
   --rr-ok: light-dark(#12703F, #34C77B);
   --rr-ok-bar: light-dark(#178A50, #34C77B);
+  --rr-run: light-dark(#12703F, #34C77B);
   --rr-ok-soft: light-dark(rgb(23 138 80 / 12%), rgb(52 199 123 / 16%));
   --rr-warn: light-dark(#A84D08, #F0A23B);
   --rr-warn-soft: light-dark(rgb(217 119 6 / 13%), rgb(240 162 59 / 16%));

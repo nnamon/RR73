@@ -39,14 +39,17 @@
   };
 </script>
 
-{#if status !== 'running'}
+{#if status === 'off'}
+  <div class="banner off compact" role="status">
+    <Icon name="mic" size={22} class="banner-icon" />
+    <p class="t">Audio is off</p>
+    <button class="btn primary start" onclick={onstart}>Start audio</button>
+  </div>
+{:else if status !== 'running'}
   <div class="banner {status}" role="status">
     <Icon name={status === 'stopped' || status === 'failed' ? 'alert' : 'mic'} size={22} class="banner-icon" />
     <div class="text">
-      {#if status === 'off'}
-        <p class="t">Audio is off</p>
-        <p class="s">RR73 listens to the radio through the headset microphone contact.</p>
-      {:else if status === 'starting'}
+      {#if status === 'starting'}
         <p class="t">Starting audio</p>
         <p class="s">Allow the microphone if Safari asks.</p>
       {:else if status === 'stopped'}
@@ -95,6 +98,26 @@
   .text {
     flex: 1;
     min-width: 0;
+  }
+
+  .compact {
+    align-items: center;
+    padding: var(--rr-space-2) var(--rr-space-2) var(--rr-space-2) var(--rr-space-3);
+  }
+
+  .compact .t {
+    flex: 1;
+  }
+
+  .compact .start {
+    flex: none;
+    width: auto;
+    margin-top: 0;
+    padding: 0 var(--rr-space-4);
+  }
+
+  .compact :global(.banner-icon) {
+    margin-top: 0;
   }
 
   .t {

@@ -12,6 +12,7 @@ import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } fro
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import type { CaptureReport } from '../audio/report';
+import type { AudioClockMapper } from '../clock/mapping';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
 import { SLOT_SAMPLES, type Mode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
@@ -103,6 +104,9 @@ decoder.onStatus((st) => {
   }
 });
 const chunkListeners = new Set<(c: Chunk) => void>();
+const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[]) => void>();
+const statusListeners = new Set<(s: AudioStatus) => void>();
+const haltHooks = new Set<() => void>();
 /** Recent input levels for the keying check: [performance.now() ms, RMS dBFS]. */
 let levelLog: [number, number][] = [];
 let peakHold: { db: number; at: number } = { db: FLOOR_DB, at: 0 };
@@ -113,12 +117,14 @@ function getEngine(): CaptureEngine {
   wake = new WakeLockKeeper();
   wake.onChange = (s) => (audio.wake = s);
   engine.onState((s) => {
+    const changed = audio.status !== s.status;
     audio.status = s.status;
+    if (changed) for (const l of statusListeners) l(s.status);
     audio.reason = s.reason;
     audio.stoppedAtUtcMs = s.stoppedAtUtcMs;
     audio.error = s.error;
     if (s.status !== 'running' && s.status !== 'starting') {
-      output.halt();
+      halt();
       const partial = assembler?.flush();
       if (partial) onSlot(partial);
       audio.rmsDb = FLOOR_DB;
@@ -162,11 +168,44 @@ function onSlot(slot: AssembledSlot) {
   };
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
   decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
-    (decodes) => keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 }),
+    (decodes) => {
+      keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 });
+      for (const l of decodeListeners) l(slot.startUtcMs, decodes);
+    },
     (e: unknown) => {
       if (e instanceof DecoderBusyError) keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
     },
   );
+}
+
+/** Listens to each slot's decodes as they arrive (the sequencer). */
+export function onSlotDecoded(fn: (slotStartMs: number, decodes: Decode[]) => void): () => void {
+  decodeListeners.add(fn);
+  return () => decodeListeners.delete(fn);
+}
+
+/** Listens to changes of the audio status. */
+export function onAudioStatus(fn: (s: AudioStatus) => void): () => void {
+  statusListeners.add(fn);
+  return () => statusListeners.delete(fn);
+}
+
+/** Adds to what Halt stops (the transmit scheduler). */
+export function onHalt(fn: () => void): () => void {
+  haltHooks.add(fn);
+  return () => haltHooks.delete(fn);
+}
+
+/** The running audio context and its clock mapping, for the transmit scheduler. */
+export function audioOut(): { ctx: AudioContext; mapper: AudioClockMapper } | null {
+  const ctx = engine?.context;
+  if (!engine || !ctx || audio.status !== 'running' || !engine.mapper.ready) return null;
+  return { ctx, mapper: engine.mapper };
+}
+
+/** The wasm client, for encoding transmissions. */
+export function codec(): DecoderClient {
+  return decoder;
 }
 
 /** Listens to the 12 kHz capture stream (the waterfall). */
@@ -249,14 +288,14 @@ function median(xs: number[]): number | null {
   return s[s.length >> 1];
 }
 
-/** Plays the Tune tone (1500 Hz, 10 s). Call from the confirming tap. */
+/** Plays the Tune tone at the Tx frequency for 10 s. Call from the confirming tap. */
 export function startTune() {
   playClip(silentClipUri());
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
-  const handle = output.tune(ctx, { ...TUNE, level: settings.outputLevel });
+  const handle = output.tune(ctx, { ...TUNE, hz: settings.txHz, level: settings.outputLevel });
   tx.tuning = true;
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);
@@ -270,9 +309,10 @@ export function startTune() {
   });
 }
 
-/** Stops all output at once. */
+/** Stops all output at once: Tune and any transmission. */
 export function halt() {
   output.halt();
+  for (const h of haltHooks) h();
 }
 
 /** True while audio runs or Tune plays: a reload would interrupt the operator. */
@@ -282,7 +322,7 @@ export function busy(): boolean {
 
 if (typeof document !== 'undefined') {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') output.halt();
+    if (document.visibilityState === 'hidden') halt();
   });
-  window.addEventListener('pagehide', () => output.halt());
+  window.addEventListener('pagehide', () => halt());
 }
