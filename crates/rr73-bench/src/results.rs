@@ -132,6 +132,9 @@ pub struct DecodeRecord {
     /// For OSD decodes, the weighted distance as a fraction of the total reliability.
     #[serde(default, skip_serializing_if = "is_zero")]
     pub osd_distance: f64,
+    /// WSPR decodes: frequency drift, in Hz per second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_hz_per_s: Option<f64>,
 }
 
 fn is_zero(x: &f64) -> bool {

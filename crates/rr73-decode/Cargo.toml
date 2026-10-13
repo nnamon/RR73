@@ -1,6 +1,6 @@
 [package]
 name = "rr73-decode"
-description = "FT8 and FT4 decoder pipeline with swappable stages"
+description = "FT8, FT4 and WSPR decoder pipelines with swappable stages"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 rr73-ft8.workspace = true
+rr73-wspr.workspace = true
 rr73-dsp.workspace = true
 serde.workspace = true
 serde_json.workspace = true

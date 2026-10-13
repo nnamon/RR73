@@ -85,6 +85,22 @@ SlotAudio (12 kHz f32, start time, mode)
   -> Vec<Decode>
 ```
 
+WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same pattern:
+
+```text
+120 s of 12 kHz audio
+  -> Downconverter       one FFT, 375 Hz complex baseband around 1500 Hz
+  -> SymbolSpectrogram   one-symbol window, quarter-symbol hop
+  -> WsprSearch          sync correlation over frequency, start and drift -> candidates
+  -> WsprRefine          start, frequency and drift from block phase coherence
+  -> WsprDemod           multi-symbol noncoherent detection             -> [f32; 162]
+  -> SequentialDecoder   Fano algorithm over the K = 32 code            -> 81 bits
+  -> WsprValidator       unpack, callsign layout, re-encoding, SNR
+  -> WsprReport
+```
+
+`decode_wspr(&samples, &WsprConfig, &mut WsprContext) -> WsprReport`. `WsprContext` carries the type 3 callsign hash table. `WsprDecode` carries the text, the signal centre (Hz), DT from 1 s into the slot (s), drift (Hz/s), SNR (dB, 2500 Hz), sync score, Fano steps and hard errors.
+
 - `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, later `osd-depth-3` and so on), so a bench run is reproducible from its name and overrides.
 - `decode(&SlotAudio, &DecoderConfig, &mut DecodeContext) -> DecodeReport`. `DecodeContext` carries callsign hashes and, later, a priori information.
 - `Decode` carries the message, text, frequency (base tone, Hz), DT (s), SNR (dB, 2500 Hz reference), pass number, LDPC statistics and candidate score.

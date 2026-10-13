@@ -1,6 +1,6 @@
 [package]
 name = "rr73-chansim"
-description = "Channel simulator for FT8 and FT4 test slots"
+description = "Channel simulator for FT8, FT4 and WSPR test slots"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 rr73-ft8.workspace = true
+rr73-wspr.workspace = true
 rr73-dsp.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true
