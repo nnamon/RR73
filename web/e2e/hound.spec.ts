@@ -67,6 +67,16 @@ for (const theme of ['light', 'dark'] as const) {
     const hound = page.getByRole('switch', { name: 'Hound' });
     await hound.check();
     await expect(hound).toBeChecked();
+    // The DXpedition's dial frequency: refused outside the band, then set the radio to it.
+    const dial = page.getByRole('textbox', { name: 'Dial frequency, MHz' });
+    await expect(dial).toHaveValue('14.074');
+    await dial.fill('14.4');
+    await dial.press('Enter');
+    await expect(page.getByRole('alert')).toHaveText('14.4 MHz is outside 20m. Enter 14.000 to 14.350 MHz.');
+    await dial.fill('14.090');
+    await dial.press('Enter');
+    await expect(page.getByRole('alert')).toBeHidden();
+    await expect(page.getByText('14.090 MHz', { exact: true })).toBeVisible();
     await shot('1-band-sheet');
     await page.keyboard.press('Escape');
     await expect(top.locator('.mode')).toHaveText('FT8 Hound');

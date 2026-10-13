@@ -10,8 +10,9 @@ import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ou
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
 import { parity as parityOf, type Parity } from '../clock/slots';
-import { dialHz } from '../radio/bands';
+import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
+import type { BandId } from '../radio/bands';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
@@ -65,7 +66,7 @@ export function configNow() {
     myGrid: a?.grid || settings.grid,
     mode: settings.mode,
     band: settings.band,
-    dialHz: dialHz(settings.band, settings.mode) ?? 0,
+    dialHz: operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,
@@ -94,6 +95,11 @@ export function houndOn(): boolean {
 export function setHound(on: boolean) {
   const bands = on ? [...new Set([...settings.houndBands, settings.band])] : settings.houndBands.filter((b) => b !== settings.band);
   void updateSettings({ houndBands: bands, ...(on && settings.txHz < HOUND_MIN_HZ ? { txHz: houndCallHz(settings.txHz) } : {}) });
+}
+
+/** Stores the DXpedition's dial frequency for Hound mode on `band`, Hz. */
+export function setHoundDial(band: BandId, hz: number) {
+  void updateSettings({ houndDialHz: { ...settings.houndDialHz, [band]: hz } });
 }
 
 const scheduler = new TxScheduler({

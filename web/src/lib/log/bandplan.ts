@@ -31,6 +31,12 @@ export function bandOfHz(hz: number): string | null {
   return null;
 }
 
+/** A band's edges, Hz, by ADIF band name in any case, or null for an unknown band. */
+export function bandEdges(name: string): [number, number] | null {
+  const b = BANDS.find(([n]) => n === name.toLowerCase());
+  return b ? [b[1], b[2]] : null;
+}
+
 /** True for an ADIF band name, in any case. */
 export function isAdifBand(name: string): boolean {
   const n = name.toLowerCase();

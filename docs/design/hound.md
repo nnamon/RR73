@@ -21,9 +21,13 @@ Writing these tests found a bug: an even report below −30 dB wrapped in the mu
 
 **Calling.** Tx1 is `<Fox base callsign> <me> <grid>`: the guide has Hounds call a compound Fox (KH1/KH7Z) by its base callsign (KH7Z). Tx1 goes out at the Tx frequency when that is 1000 Hz or above, and at 1000 Hz otherwise, because a Fox does not answer first calls below 1000 Hz. Turning Hound on moves a Tx frequency below 1000 Hz to 1000 Hz, and a Tx frequency chosen on the waterfall stays at 1000 Hz or above. Calling the Fox moves Rx to it and leaves Tx where it is. Tx1 repeats until the Fox answers: the guide says to keep calling, and the watchdog ends it as usual.
 
-**The report.** A report to us, alone or in a multi-call message, gets Tx3 (`KH7Z K1ABC R-11`) at the frequency the Fox sent it on, in the 300 to 900 Hz range. The guide moves later R-reports "300 Hz higher or lower" without saying which; RR73 moves 300 Hz up when that stays at or below 900 Hz, the top of the Fox's range, and 300 Hz down otherwise. A report repeated on another stream moves the R-report to that stream, 300 Hz away. The R-report repeats up to the retry limit (3), then calling stops with "No RR73 from KH7Z after 3 repeats. Not logged." and Tx turns off. The Fox sends RR73 up to 3 times to a Hound that repeats its R-report, so 4 R-reports cover it.
+**The report.** A report to us, alone or in a multi-call message, gets Tx3 (`KH7Z K1ABC R-11`) at the frequency the Fox sent it on, in the 300 to 900 Hz range. The guide moves later R-reports "300 Hz higher or lower" without saying which; RR73 moves 300 Hz up when that stays at or below 900 Hz, the top of the Fox's range, and 300 Hz down otherwise. A report repeated on another stream moves the R-report to that stream, 300 Hz away. The R-report repeats up to the retry limit (3), then calling stops with "No reply from KH7Z · not logged" and Tx turns off. The Fox sends RR73 up to 3 times to a Hound that repeats its R-report, so 4 R-reports cover it.
 
 **Logging.** The Fox's RR73 to us, alone or in a multi-call message, logs the QSO once we have its report, and Tx turns off. No 73 goes out. An RR73 before any report to us is ignored: the Fox sends RR73 only after hearing an R-report.
+
+**Dial frequency.** DXpeditions run Fox and Hound on frequencies of their own. With Hound on, the band sheet takes the dial frequency in MHz, starting at the band's FT8 frequency, stored per band, and refuses a value outside the band's edges ("14.4 MHz is outside 20m. Enter 14.000 to 14.350 MHz."). Set the radio to, the top bar and every Hound QSO's logged frequency (dial plus the audio offset) use it. With Hound off the usual frequency applies again (`lib/radio/hound-dial.ts`).
+
+**Tx marker.** The waterfall marks where the transmission on air or planned goes: during the R-report and its repeats, the Fox's frequency and 300 Hz from it, and between repeats the last one. After the QSO it returns to the operator's Tx frequency (`markedTxHz` in `lib/qso/view.ts`).
 
 **Status.** The status line names the stage: "Calling the Fox · KH1/KH7Z", "Report received · −12 dB from KH1/KH7Z", "Logged · KH1/KH7Z". The QSO steps end with Logged.
 
@@ -55,6 +59,5 @@ Classic Fox and Hound ships. A Hound can call a SuperFox, which hears normal FT8
 
 - Not tested on a device or against a real Fox.
 - The guide is from 2018. WSJT-X 2.x Hound behaviour that it does not describe, such as when a repeated R-report moves, is Unverified.
-- DXpeditions announce their own dial frequency. The band sheet shows the usual one, and QSOs record it with the right band and the wrong dial frequency.
 - A Hound with a compound callsign sends Tx1 with its callsign hashed; the Fox may not know the hash. Not tested.
 - The R-report goes below 1000 Hz. A radio whose transmit filter starts above 300 Hz attenuates it.

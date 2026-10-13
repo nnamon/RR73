@@ -21,7 +21,8 @@
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
   import { orderQueue } from '../lib/qso/sequencer';
-  import { dialHz } from '../lib/radio/bands';
+  import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { markedTxHz } from '../lib/qso/view';
   import { STATUS } from '../lib/qso/status';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
@@ -220,7 +221,7 @@
   <TopBar
     band={settings.band}
     mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
-    dialHz={dialHz(settings.band, settings.mode)}
+    dialHz={operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
     utc={utcTime(clock.ms)}
     progress={slotProgress(clock.ms, settings.mode)}
     tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
@@ -247,7 +248,7 @@
     bind:this={wf}
     mode={settings.mode}
     rxHz={settings.rxHz}
-    txHz={settings.txHz}
+    txHz={markedTxHz(qso.st, settings.txHz)}
     txSlots={tx.slots}
     contrast={settings.waterfallContrast}
     stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}

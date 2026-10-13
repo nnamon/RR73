@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 import { HOUND_MIN_HZ, houndCallHz, houndRepeatHz, reduce, type SeqConfig } from './sequencer';
 import { foxCall, fromFox, parseExchange, parseParts } from './messages';
-import { houndText, steps } from './view';
+import { houndText, markedTxHz, steps } from './view';
 import { Sim, decode } from '../testing/qso-sim';
 
 const texts = (s: Sim) => s.sent.map((t) => `${t.slot}:${t.text}${t.freqHz === null ? '' : ` @${t.freqHz}`}`);
@@ -174,5 +174,29 @@ describe('Hound', () => {
     const r = reduce(s.st, { type: 'configure', patch: { hound: false }, nowMs: s.at(2) });
     expect(r.state.partner).toBeNull();
     expect(r.state.txEnabled).toBe(false);
+  });
+
+  it("logs the DXpedition's dial frequency and the Tx audio frequency", () => {
+    const s = calling({ dialHz: 14_090_000 });
+    s.run(1, 4, { 2: [decode('9V1NE KH7Z -10', -12, 420)], 4: [decode('9V1NE KH7Z RR73', -12, 420)] });
+    expect(s.logged()).toMatchObject([{ dialHz: 14_090_000, audioHz: 1500 }]);
+  });
+
+  it('marks the R-report and its repeats on the waterfall where they go, then the Tx frequency again', () => {
+    const s = calling();
+    const marked = () => markedTxHz(s.st, 1500);
+    s.run(1, 1);
+    expect(marked()).toBe(1500);
+    s.hear(2, [decode('9V1NE KH7Z -10', -12, 360)]);
+    expect(marked()).toBe(360);
+    s.play(3);
+    // Between the R-report and the Fox's next slot nothing is planned: the mark stays.
+    expect(marked()).toBe(360);
+    s.hear(4, []);
+    expect(marked()).toBe(660);
+    s.play(5);
+    s.hear(6, [decode('9V1NE KH7Z RR73', -12, 360)]);
+    expect(s.logged()).toHaveLength(1);
+    expect(marked()).toBe(1500);
   });
 });

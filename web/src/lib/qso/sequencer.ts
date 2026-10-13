@@ -174,6 +174,8 @@ export interface Planned {
 
 export interface Sent {
   tx: TxNum;
+  /** Tx audio frequency the sequencer set (Hound), Hz; null for the operator's. */
+  freqHz: number | null;
   text: string;
   slotStartMs: number;
 }
@@ -1115,12 +1117,12 @@ class Machine {
     // is on air: note it, and keep the plan, which the audio layer reports as missed.
     if (!n || n.slotStartMs !== e.slotStartMs || n.text !== e.text) {
       const tx = (Object.entries(messages(st)).find(([, t]) => t === e.text)?.[0] ?? '6') as unknown as TxNum;
-      st.onAir = { tx: Number(tx) as TxNum, text: e.text, slotStartMs: e.slotStartMs };
+      st.onAir = { tx: Number(tx) as TxNum, text: e.text, slotStartMs: e.slotStartMs, freqHz: null };
       if (e.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
       st.lastTxText = e.text;
       return;
     }
-    st.onAir = { tx: n.tx, text: n.text, slotStartMs: n.slotStartMs };
+    st.onAir = { tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, freqHz: n.freqHz };
     if (n.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
     st.lastTxText = n.text;
     if (st.partner && st.partner.startMs === null && n.tx !== 6) st.partner.startMs = e.slotStartMs + n.offsetS * 1000;

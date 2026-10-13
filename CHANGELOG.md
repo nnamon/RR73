@@ -8,6 +8,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - In Hound mode, calls to the Fox go out at 1000 Hz or above. The R-report goes on the frequency the Fox sent your report on, and moves 300 Hz when repeated.
 - Hound mode reads your report inside the Fox's multi-call messages and logs the QSO on its RR73, with no 73. The Fox working other Hounds does not read as a lost station.
 - The status line names the stage with the Fox: Calling the Fox, Report received, Logged.
+- With Hound on, the band sheet takes the DXpedition's dial frequency for the band. Set the radio to, Operate and the QSOs logged use it.
+- During the R-report and its repeats the Tx marker shows where it goes, and returns to your Tx frequency after the QSO.
 - Practice scenario Fox (DXpedition): a Fox works 3 Hounds a slot and answers you after a few calls.
 - A multi-call message with a report below −30 dB is refused. It went out as a high report.
 
