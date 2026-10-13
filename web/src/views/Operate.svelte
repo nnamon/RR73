@@ -16,7 +16,10 @@
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
-  import { buildList, callerItems, filterCounts, type Filter } from '../lib/decode/list';
+  import { buildList, callerItems, filterCounts, type Classify, type Filter } from '../lib/decode/list';
+  import { highlightDecode } from '../lib/decode/highlight';
+  import { log } from '../lib/log/log.svelte';
+  import { buildLogIndex } from '../lib/log/worked';
   import { orderQueue } from '../lib/qso/sequencer';
   import { dialHz } from '../lib/radio/bands';
   import { SIGNAL_HZ } from '../lib/waterfall/pick';
@@ -165,12 +168,23 @@
     listEl?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
+  // Decode colours: the log's calls and grids are indexed once per change of the log, so each row
+  // looks its station up in O(1).
+  const logIndex = $derived(buildLogIndex(log.live));
+  const classify: Classify = $derived.by(() => {
+    const index = logIndex;
+    const where = { band: settings.band, mode: settings.mode };
+    const me = settings.callsign;
+    const entries = settings.highlights;
+    return (d, sent) => highlightDecode({ text: d.text, sent }, me, index, where, entries);
+  });
+
   const callers = $derived.by(() => {
     const st = qso.st;
     if (!st.run || (filter !== 'all' && filter !== 'me')) return [];
-    return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes);
+    return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes, classify);
   });
-  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode)]);
+  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify)]);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -247,7 +261,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
       {#if items.length}
-        <DecodeList {items} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}

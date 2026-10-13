@@ -5,6 +5,7 @@
  * - sent: a message I transmitted (amber), the other station in bold.
  */
 
+import type { HighlightId } from './highlight';
 import type { Decode } from './types';
 
 export type Mark = 'cq' | 'me' | 'sent' | null;
@@ -28,6 +29,10 @@ export interface DecodeRowData {
   meta?: string;
   /** Already worked: the message is dimmed. */
   worked?: boolean;
+  /** The background decode colour that matched first (highlight.ts), if any. */
+  hl?: HighlightId | null;
+  /** The text layer over it, such as worked before, if any. */
+  ink?: HighlightId | null;
 }
 
 /** Text with one bold span, for rendering without HTML. */

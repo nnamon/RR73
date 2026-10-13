@@ -2,6 +2,14 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.
+- Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
+- Decodes from stations in the log on this band and mode show grey text over any colour.
+- Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore WSJT-X colours puts the defaults back, with Undo.
+- Decode text keeps 4.5:1 contrast on every colour in light and dark.
+
 ## 0.7.2 · 2026-10-13
 
 - The wording on Operate, Messages, Save a slot, Spots, Settings, Radio and audio, Logging, Wavelog, Version history and the update notice now follows the style guide, as do the notes for 0.6.0 to 0.7.1. Settings › Operating is now called FT8 and FT4, as its settings apply only to those modes.

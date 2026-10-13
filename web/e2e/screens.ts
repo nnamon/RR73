@@ -30,6 +30,7 @@ export const SCREENS: readonly Screen[] = [
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
   { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
+  { name: 'colours', path: '#/settings/colours', heading: 'Decode colours' },
   { name: 'wavelog', path: '#/settings/logging/wavelog', heading: 'Wavelog' },
   { name: 'log-all', path: '#/log', heading: 'Log', seed: 'log' },
   { name: 'log-todo', path: '#/log/todo', heading: 'Log', seed: 'log' },
@@ -75,5 +76,6 @@ export const LOG_SHEETS: readonly SheetCase[] = [
   { name: 'edit-activation', path: '#/spots', seed: 'running', features: ACTIVATIONS, title: 'Edit activation', open: (page) => page.getByRole('button', { name: 'Edit activation' }).click() },
   { name: 'end-activation', path: '#/spots', seed: 'running', features: ACTIVATIONS, title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
   { name: 'station', path: '#/log', seed: 'station', title: 'Choose a station location', open: (page) => page.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click() },
+  { name: 'colour', path: '#/settings/colours', title: 'New call', open: (page) => page.getByRole('button', { name: 'Change colour: New call', exact: true }).click() },
   { name: 'remove-wavelog', path: '#/settings/logging/wavelog', seed: 'log', title: 'Remove Wavelog?', open: (page) => page.getByRole('button', { name: 'Remove Wavelog…' }).click() },
 ];

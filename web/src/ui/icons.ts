@@ -52,6 +52,9 @@ export const ICONS = {
   settings: { stroke: [gearPath()], rings: [[12, 12, 3.1, 3.1]], width: 1.75 },
   chevdown: { stroke: ['M6.5 9.5L12 15L17.5 9.5'], width: 2.4 },
   chevright: { stroke: ['M9 5L16 12L9 19'], width: 2.3 },
+  chevup: { stroke: ['M6.5 14.5L12 9L17.5 14.5'], width: 2.4 },
+  // Reorder handle: three lines, as in iOS table views.
+  grip: { stroke: ['M4.5 8H19.5M4.5 12H19.5M4.5 16H19.5'], width: 1.8 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
   // Bar glyphs share one stroke weight and an 18-unit-wide ink box centred on 12, as SF Symbols do.
   share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },

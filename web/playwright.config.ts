@@ -61,9 +61,10 @@ export default defineConfig({
     // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...holeMic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
+    // layout.spec also matches colours-layout.spec.
     { name: 'webkit-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,

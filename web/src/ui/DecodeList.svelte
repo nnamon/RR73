@@ -10,14 +10,20 @@
 <script lang="ts">
   /**
    * Band activity: 30 pt monospace rows (SNR, DT, Hz, message) under a 22 pt bar per slot,
-   * marked as in WSJT-X. CQ calls green, messages to you red, what you sent amber, each with a
-   * 4 px bar, a tint and the callsign in bold. Slot bars alternate slate (even) and blue (odd).
+   * coloured as in WSJT-X by the first matching decode colour (Settings › Decode colours): a
+   * 4 px bar and a tint. Worked before greys the text over any tint. The colours ride on the row as
+   * classes, data-hl and data-ink, so the markup can change without touching the matcher. The
+   * callsign of a CQ, a message to you or what you sent is bold. Slot bars alternate slate (even)
+   * and blue (odd).
    *
    * A tap selects a row (or clears the selection, on the selected row), a double-tap calls, and
-   * touch and hold opens the station's details.
+   * touch and hold opens the station's details. `preview` draws the rows without actions, for the
+   * example in Settings.
    */
   import { dt, snr } from '../lib/clock/format';
-  import { splitKey, type DecodeRowData } from '../lib/decode/marking';
+  import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
+  import { inkFor } from '../lib/decode/highlight-colour';
+  import { splitKey, type DecodeRowData, type TextParts } from '../lib/decode/marking';
 
   type RowItem = Extract<DecodeListItem, { kind: 'row' }>;
 
@@ -25,6 +31,8 @@
     items,
     label = 'Decodes',
     selectedId = null,
+    highlights = defaultHighlights(),
+    preview = false,
     onselect,
     oncall,
     ondetail,
@@ -32,13 +40,20 @@
     items: DecodeListItem[];
     label?: string;
     selectedId?: string | null;
+    /** Decode colours, for each row's category colour. */
+    highlights?: readonly HighlightEntry[];
+    preview?: boolean;
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
   } = $props();
 
   const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'you sent' } as const;
+  /** Categories the mark already reads out. */
+  const SAID: readonly HighlightId[] = ['cq', 'myCall', 'sent'];
   const HOLD_MS = 500;
+
+  const colours = $derived(new Map(highlights.map((e) => [e.id, e.colour])));
 
   function spoken(r: DecodeRowData): string {
     const parts = [
@@ -46,10 +61,30 @@
       `${Math.round(r.decode.freq_hz)} Hz`,
       r.decode.text,
       r.mark ? MARK_TEXT[r.mark] : '',
+      r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
+      r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
       r.meta ?? '',
     ];
     return parts.filter(Boolean).join(', ');
+  }
+
+  function rowClass(r: DecodeRowData, selected: boolean): string {
+    const bg = !!r.hl && colours.has(r.hl);
+    const ink = !!r.ink && colours.has(r.ink);
+    return ['dr', r.mark ? `k-${r.mark}` : '', r.worked ? 'worked' : '', bg ? 'rr-hl hl-background' : '', ink ? 'rr-ink hl-ink' : '', selected ? 'sel' : ''].filter(Boolean).join(' ');
+  }
+
+  // Text colours per pair of text colour and tint, worked out once each (highlight-colour.ts).
+  const inks = new Map<string, { light: string; dark: string }>();
+  function inkOf(r: DecodeRowData): { light: string; dark: string } | null {
+    const ink = r.ink ? colours.get(r.ink) : undefined;
+    if (!ink) return null;
+    const bg = r.hl ? (colours.get(r.hl) ?? null) : null;
+    const key = `${ink}${bg ?? ''}`;
+    let v = inks.get(key);
+    if (!v) inks.set(key, (v = inkFor(ink, bg)));
+    return v;
   }
 
   let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -91,6 +126,23 @@
   }
 </script>
 
+{#snippet cells(r: DecodeRowData, t: TextParts)}
+  {#if r.mark === 'sent'}
+    <span class="c-db" aria-hidden="true">Tx</span>
+    <span class="c-dt" aria-hidden="true"></span>
+  {:else}
+    <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
+    <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
+  {/if}
+  <span class="c-hz" aria-hidden="true">{Math.round(r.decode.freq_hz)}</span>
+  <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
+  {#if r.badge}
+    <span class="badge {r.badge.tone}" aria-hidden="true">{r.badge.text}</span>
+  {:else if r.meta}
+    <span class="c-meta" aria-hidden="true">{r.meta}</span>
+  {/if}
+{/snippet}
+
 <ul class="list" aria-label={label}>
   {#each items as item (item.id)}
     {#if item.kind === 'header'}
@@ -103,39 +155,35 @@
     {:else}
       {@const r = item.row}
       {@const t = splitKey(r.decode.text, r.key)}
+      {@const colour = r.hl ? (colours.get(r.hl) ?? null) : null}
+      {@const ink = inkOf(r)}
       <li class="dr-item">
-        <button
-          type="button"
-          class="dr"
-          class:k-cq={r.mark === 'cq'}
-          class:k-me={r.mark === 'me'}
-          class:k-sent={r.mark === 'sent'}
-          class:worked={r.worked}
-          class:sel={selectedId === item.id}
-          aria-label={spoken(r)}
-          aria-pressed={selectedId === item.id}
-          onpointerdown={(e) => down(e, item)}
-          onpointermove={move}
-          onpointerup={up}
-          onpointercancel={up}
-          oncontextmenu={(e) => e.preventDefault()}
-          onclick={(e) => click(e, item)}
-        >
-          {#if r.mark === 'sent'}
-            <span class="c-db" aria-hidden="true">Tx</span>
-            <span class="c-dt" aria-hidden="true"></span>
-          {:else}
-            <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
-            <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
-          {/if}
-          <span class="c-hz" aria-hidden="true">{Math.round(r.decode.freq_hz)}</span>
-          <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
-          {#if r.badge}
-            <span class="badge {r.badge.tone}" aria-hidden="true">{r.badge.text}</span>
-          {:else if r.meta}
-            <span class="c-meta" aria-hidden="true">{r.meta}</span>
-          {/if}
-        </button>
+        {#if preview}
+          <div class={rowClass(r, false)} style:--rr-hl={colour} style:--rr-ink-light={ink?.light} style:--rr-ink-dark={ink?.dark} data-hl={r.hl ?? undefined} data-ink={r.ink ?? undefined}>
+            <span class="visually-hidden">{spoken(r)}</span>
+            {@render cells(r, t)}
+          </div>
+        {:else}
+          <button
+            type="button"
+            class={rowClass(r, selectedId === item.id)}
+            style:--rr-hl={colour}
+            style:--rr-ink-light={ink?.light}
+            style:--rr-ink-dark={ink?.dark}
+            data-hl={r.hl ?? undefined}
+            data-ink={r.ink ?? undefined}
+            aria-label={spoken(r)}
+            aria-pressed={selectedId === item.id}
+            onpointerdown={(e) => down(e, item)}
+            onpointermove={move}
+            onpointerup={up}
+            onpointercancel={up}
+            oncontextmenu={(e) => e.preventDefault()}
+            onclick={(e) => click(e, item)}
+          >
+            {@render cells(r, t)}
+          </button>
+        {/if}
       </li>
     {/if}
   {/each}
@@ -243,31 +291,16 @@
     transform-origin: 0 0;
   }
 
-  .dr.k-cq {
-    background: var(--rr-cq-tint);
+  /* Decode colours: --rr-hl-bg and --rr-hl-ink come from .rr-hl in tokens.css. */
+  .dr.hl-background {
+    background: var(--rr-hl-bg);
   }
 
-  .dr.k-cq::after {
-    background: var(--rr-cq);
+  .dr.hl-background::after {
+    background: var(--rr-hl);
   }
 
-  .dr.k-me {
-    background: var(--rr-me-tint);
-  }
-
-  .dr.k-me::after {
-    background: var(--rr-tx);
-  }
-
-  .dr.k-sent {
-    background: var(--rr-sent-tint);
-  }
-
-  .dr.k-sent::after {
-    background: var(--rr-amber);
-  }
-
-  /* After the marking tints, so a selected row shows as selected. */
+  /* After the decode colours, so a selected row shows as selected. */
   .dr.sel {
     background: var(--rr-sel-tint);
     box-shadow: inset 0 0 0 2px var(--rr-accent-fill);
@@ -293,6 +326,32 @@
 
   .worked .c-msg {
     color: var(--rr-label2);
+  }
+
+  /* On a tint, every column takes the label colour, which keeps 4.5:1 on any decode colour. */
+  .hl-background .c-db,
+  .hl-background .c-dt,
+  .hl-background .c-hz,
+  .hl-background .c-msg,
+  .hl-background .c-meta {
+    color: var(--rr-label);
+  }
+
+  /* Worked before: after the tint's label colour, so it wins over it. */
+  .hl-ink .c-db,
+  .hl-ink .c-dt,
+  .hl-ink .c-hz,
+  .hl-ink .c-msg,
+  .hl-ink .c-meta {
+    color: var(--rr-hl-ink);
+  }
+
+  .hl-ink.sel .c-db,
+  .hl-ink.sel .c-dt,
+  .hl-ink.sel .c-hz,
+  .hl-ink.sel .c-msg,
+  .hl-ink.sel .c-meta {
+    color: var(--rr-label);
   }
 
   .c-meta {
