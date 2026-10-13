@@ -427,6 +427,25 @@ mod tests {
     use super::*;
 
     #[test]
+    fn subtraction_residue_gives_no_false_decode() {
+        // Slot 526 of wspr-snr-sweep/awgn at 40 slots per step: before the guard around
+        // subtracted signals, the second pass decoded the residue of its -21 dB signal as
+        // `IVH/9J7TAD 57` (1.6 Hz off, 66 hard errors).
+        let opts = SynthOptions {
+            per_step: 40,
+            ..SynthOptions::default()
+        };
+        let jobs = synth::jobs_for("wspr-snr-sweep", Path::new("x"), &opts).expect("jobs");
+        let job = jobs
+            .iter()
+            .find(|j| j.set == "wspr-snr-sweep/awgn" && j.index == 526)
+            .expect("job");
+        let decoder = Decoder::new("wspr", &[]).expect("wspr");
+        let r = process_job(job, &decoder, &mut Contexts::default());
+        assert_eq!((r.expected, r.matched, r.unique), (1, 1, 0), "{:?}", r.decodes);
+    }
+
+    #[test]
     fn config_floats_stay_short() {
         let v = Decoder::Ft(DecoderConfig::baseline())
             .config_json()

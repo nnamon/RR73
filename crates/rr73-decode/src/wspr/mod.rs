@@ -47,6 +47,11 @@ use refine::{CoherentRefine, GridRefine, NoRefine, ToneCorrelator, ToneCorrs, To
 use search::{SearchScratch, SyncSearch, WsprSearch};
 use validate::{UnpackValidator, WsprRejection, WsprValidator};
 
+/// After subtraction, candidates within this distance (Hz) and 1 s of an earlier pass's
+/// decode are skipped: the residue of a subtracted signal decoded once as a false message
+/// (`docs/experiments/0004-wspr.md`).
+pub const SUBTRACTED_GUARD_HZ: f32 = 2.0;
+
 /// One decoded WSPR message.
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct WsprDecode {
@@ -95,8 +100,8 @@ pub struct WsprPipeline {
     pub search: Box<dyn WsprSearch>,
     /// Refinement.
     pub refine: Box<dyn WsprRefine>,
-    /// Demodulator.
-    pub demod: Box<dyn WsprDemod>,
+    /// Demodulators, tried in order until one gives a valid message.
+    pub demods: Vec<Box<dyn WsprDemod>>,
     /// Sequential decoder.
     pub decoder: Box<dyn SequentialDecoder>,
     /// Validator.
@@ -108,7 +113,10 @@ impl std::fmt::Debug for WsprPipeline {
         f.debug_struct("WsprPipeline")
             .field("search", &self.search.name())
             .field("refine", &self.refine.name())
-            .field("demod", &self.demod.name())
+            .field(
+                "demods",
+                &self.demods.iter().map(|d| d.name()).collect::<Vec<_>>(),
+            )
             .field("decoder", &self.decoder.name())
             .field("validator", &self.validator.name())
             .finish()
@@ -196,14 +204,21 @@ impl WsprPipeline {
                 block: config.refine.block,
             }),
         };
-        let demod: Box<dyn WsprDemod> = match config.demod.kind {
-            WsprDemodKind::Noncoherent => Box::new(NoncoherentDemod {
+        let demods: Vec<Box<dyn WsprDemod>> = match config.demod.kind {
+            WsprDemodKind::Noncoherent => vec![Box::new(NoncoherentDemod {
                 llr_scale: config.demod.llr_scale,
-            }),
-            WsprDemodKind::Block => Box::new(BlockDemod {
-                block: config.demod.block,
-                llr_scale: config.demod.llr_scale,
-            }),
+            })],
+            WsprDemodKind::Block => config
+                .demod
+                .blocks
+                .iter()
+                .map(|&block| {
+                    Box::new(BlockDemod {
+                        block,
+                        llr_scale: config.demod.llr_scale,
+                    }) as Box<dyn WsprDemod>
+                })
+                .collect(),
         };
         let decoder: Box<dyn SequentialDecoder> = match config.fano.kind {
             FanoKind::Fano => Box::new(Fano {
@@ -221,14 +236,15 @@ impl WsprPipeline {
         Self {
             search,
             refine,
-            demod,
+            demods,
             decoder,
             validator,
         }
     }
 
-    /// Decodes one 120 s slot of 12 kHz audio.
-    pub fn run(&self, samples: &[f32], passes: u32, ctx: &mut WsprContext) -> WsprReport {
+    /// Decodes one 120 s slot of 12 kHz audio in up to `passes` passes, skipping candidates
+    /// within `guard_hz` and 1 s of a decode.
+    pub fn run(&self, samples: &[f32], passes: u32, guard_hz: f32, ctx: &mut WsprContext) -> WsprReport {
         let total = Stopwatch::start();
         let mut stats = DecodeStats::default();
         let mut timings = StageTimings::default();
@@ -255,9 +271,17 @@ impl WsprPipeline {
             let mut found: Vec<(WsprCandidate, [u8; SYMBOLS])> = Vec::new();
             for &c in ws.candidates.iter() {
                 // A candidate on a signal already decoded in this slot.
-                let near = decodes
-                    .iter()
-                    .any(|d| (d.freq_hz - c.centre_hz()).abs() < 1.0 && (d.dt_s - c.dt_s()).abs() < 0.5);
+                // Decodes of this pass are still in the audio, so candidates near them in
+                // frequency, at any start, are their sidelobes. Earlier passes' decodes are
+                // subtracted; what remains within a tone and a half of them is residue.
+                let near = decodes.iter().enumerate().any(|(n, d)| {
+                    let df = (d.freq_hz - c.centre_hz()).abs();
+                    if n >= pass_start {
+                        df < guard_hz
+                    } else {
+                        df < SUBTRACTED_GUARD_HZ && (d.dt_s - c.dt_s()).abs() < 1.0
+                    }
+                });
                 if near {
                     stats.duplicates += 1;
                     continue;
@@ -270,49 +294,61 @@ impl WsprPipeline {
 
                 let sw = Stopwatch::start();
                 ws.corr.correlations(&ws.bb, &cand, &mut ws.corrs, &mut ws.powers);
-                self.demod.soft(&ws.corrs, &ws.powers, &mut ws.soft);
-                let llr_code: [f32; CODE_BITS] = deinterleave(&ws.soft.llr);
                 timings.demod_s += sw.elapsed_s();
+                // Each demodulator in turn until one gives a valid message: long blocks win
+                // on phase-stable signals, single symbols on signals whose phase wanders.
+                for demod in &self.demods {
+                    let sw = Stopwatch::start();
+                    demod.soft(&ws.corrs, &ws.powers, &mut ws.soft);
+                    let llr_code: [f32; CODE_BITS] = deinterleave(&ws.soft.llr);
+                    timings.demod_s += sw.elapsed_s();
 
-                let sw = Stopwatch::start();
-                stats.ldpc_attempts += 1;
-                let outcome = self.decoder.decode(&llr_code, &mut bits);
-                timings.ldpc_s += sw.elapsed_s();
-                if !outcome.decoded {
-                    continue;
-                }
-                stats.ldpc_converged += 1;
-
-                let sw = Stopwatch::start();
-                match self.validator.validate(&bits, &ws.powers, &ws.soft, hashes) {
-                    Err(WsprRejection::Unpack) => stats.unpack_failures += 1,
-                    Err(WsprRejection::Implausible | WsprRejection::Weak) => stats.implausible += 1,
-                    Ok(v) => {
-                        let text = v.message.to_string();
-                        if decodes.iter().any(|d| d.text == text) {
-                            stats.duplicates += 1;
-                        } else {
-                            hashes.learn(&v.message);
-                            let noise = ws.soft.noise.max(f32::MIN_POSITIVE);
-                            let score = refine::sync_sum(&ws.powers) / (noise * 25.455_844);
-                            found.push((cand, v.symbols));
-                            decodes.push(WsprDecode {
-                                text,
-                                message: v.message,
-                                freq_hz: cand.centre_hz(),
-                                dt_s: cand.dt_s(),
-                                drift_hz_per_s: (f64::from(cand.drift_hz) / TRANSMISSION_S) as f32,
-                                snr_db: v.snr_db,
-                                score,
-                                cycles: outcome.cycles,
-                                metric: outcome.metric,
-                                hard_errors: v.hard_errors,
-                                pass,
-                            });
-                        }
+                    let sw = Stopwatch::start();
+                    stats.ldpc_attempts += 1;
+                    let outcome = self.decoder.decode(&llr_code, &mut bits);
+                    timings.ldpc_s += sw.elapsed_s();
+                    if !outcome.decoded {
+                        continue;
                     }
+                    stats.ldpc_converged += 1;
+
+                    let sw = Stopwatch::start();
+                    let valid = match self.validator.validate(&bits, &ws.powers, &ws.soft, hashes) {
+                        Ok(v) => v,
+                        Err(r) => {
+                            match r {
+                                WsprRejection::Unpack => stats.unpack_failures += 1,
+                                WsprRejection::Implausible | WsprRejection::Weak => stats.implausible += 1,
+                            }
+                            timings.validate_s += sw.elapsed_s();
+                            continue;
+                        }
+                    };
+                    let text = valid.message.to_string();
+                    if decodes.iter().any(|d| d.text == text) {
+                        stats.duplicates += 1;
+                    } else {
+                        hashes.learn(&valid.message);
+                        let noise = ws.soft.noise.max(f32::MIN_POSITIVE);
+                        let score = refine::sync_sum(&ws.powers) / (noise * 25.455_844);
+                        found.push((cand, valid.symbols));
+                        decodes.push(WsprDecode {
+                            text,
+                            message: valid.message,
+                            freq_hz: cand.centre_hz(),
+                            dt_s: cand.dt_s(),
+                            drift_hz_per_s: (f64::from(cand.drift_hz) / TRANSMISSION_S) as f32,
+                            snr_db: valid.snr_db,
+                            score,
+                            cycles: outcome.cycles,
+                            metric: outcome.metric,
+                            hard_errors: valid.hard_errors,
+                            pass,
+                        });
+                    }
+                    timings.validate_s += sw.elapsed_s();
+                    break;
                 }
-                timings.validate_s += sw.elapsed_s();
             }
             if pass == passes || decodes.len() == pass_start {
                 break;
@@ -375,7 +411,7 @@ pub fn subtract(bb: &mut [Complex32], cand: &WsprCandidate, symbols: &[u8; SYMBO
 /// (1 440 000 samples) is a full slot, shorter input is padded with silence and longer input
 /// cut. Never panics on sample values: non-finite samples read as zero.
 pub fn decode_wspr(samples: &[f32], config: &WsprConfig, ctx: &mut WsprContext) -> WsprReport {
-    WsprPipeline::from_config(config).run(samples, config.passes, ctx)
+    WsprPipeline::from_config(config).run(samples, config.passes, config.search.guard_hz, ctx)
 }
 
 #[cfg(test)]

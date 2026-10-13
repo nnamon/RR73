@@ -62,6 +62,10 @@ pub struct WsprSearchParams {
     pub max_candidates: usize,
     /// Lowest sync score kept, in standard deviations of the score on noise.
     pub min_score: f32,
+    /// Candidates whose centre lies within this many Hz of a signal decoded in the same pass
+    /// are skipped as its sidelobes; the next pass finds them again after subtraction when
+    /// they are real.
+    pub guard_hz: f32,
 }
 
 /// Refinement implementations.
@@ -96,7 +100,8 @@ pub enum WsprDemodKind {
     /// ratio of two Rician hypotheses from the tone amplitudes, the estimated signal amplitude
     /// and the noise power.
     Noncoherent,
-    /// Multi-symbol noncoherent detection over `block` symbols of phase-aligned correlations.
+    /// Multi-symbol noncoherent detection over blocks of phase-aligned correlations, one
+    /// demodulator per entry of `blocks`.
     Block,
 }
 
@@ -108,8 +113,9 @@ pub struct WsprDemodParams {
     pub kind: WsprDemodKind,
     /// Factor applied to every log-likelihood ratio.
     pub llr_scale: f32,
-    /// Symbols per block for `block`: odd, 1 to 9.
-    pub block: usize,
+    /// Symbols per block for `block`, odd, 1 to 9: one demodulator per entry, tried in order
+    /// until one gives a valid message (1 to 4 entries).
+    pub blocks: Vec<usize>,
 }
 
 /// Sequential decoder implementations.
@@ -156,10 +162,14 @@ pub struct WsprValidateParams {
 }
 
 impl WsprConfig {
-    /// The `wspr` preset: sync search over 1400 to 1600 Hz, DT -2 to 4 s and drift up to
-    /// 4 Hz over the transmission in 0.5 Hz steps, at most 60 candidates scoring 4 or more;
-    /// coherent refinement over blocks of 5 symbols; soft bits from 5-symbol blocks; the Fano
-    /// decoder with up to 10000 steps per bit; unpack and plausibility checks; one pass.
+    /// The `wspr` preset: sync search over 1400 to 1600 Hz, DT -2 to 6 s and drift up to
+    /// 4 Hz over the transmission in 0.5 Hz steps, ranked by the sync fraction, at most 60
+    /// candidates scoring 4 or more; coherent refinement over blocks of 5 symbols; soft bits
+    /// from 7-symbol blocks, then from single symbols when that gives no message; the Fano
+    /// decoder with up to 10000 steps per bit, threshold step 1 and bias 0.4; unpack and
+    /// plausibility checks; up to 2 passes, subtracting each pass's decodes from the baseband
+    /// and skipping candidates within 4.5 Hz of a decode until then. The choices come from
+    /// `docs/experiments/0004-wspr.md`.
     pub fn wspr() -> Self {
         Self {
             search: WsprSearchParams {
@@ -167,11 +177,12 @@ impl WsprConfig {
                 freq_min_hz: 1400.0,
                 freq_max_hz: 1600.0,
                 dt_min_s: -2.0,
-                dt_max_s: 4.0,
+                dt_max_s: 6.0,
                 drift_max_hz: 4.0,
                 drift_step_hz: 0.5,
                 max_candidates: 60,
                 min_score: 4.0,
+                guard_hz: 4.5,
             },
             refine: WsprRefineParams {
                 kind: WsprRefineKind::Coherent,
@@ -180,20 +191,20 @@ impl WsprConfig {
             demod: WsprDemodParams {
                 kind: WsprDemodKind::Block,
                 llr_scale: 1.0,
-                block: 5,
+                blocks: vec![7, 1],
             },
             fano: FanoParams {
                 kind: FanoKind::Fano,
                 max_cycles_per_bit: 10_000,
                 delta: 1.0,
-                bias: 0.5,
+                bias: 0.4,
             },
             validate: WsprValidateParams {
                 kind: WsprValidateKind::Unpack,
                 max_hard_errors: 162,
                 min_snr_db: -40.0,
             },
-            passes: 1,
+            passes: 2,
         }
     }
 
@@ -236,6 +247,9 @@ impl WsprConfig {
         if !(s.drift_max_hz >= 0.0 && s.drift_max_hz <= 20.0 && s.drift_step_hz > 0.0) {
             return bad("drift_max_hz must be 0 to 20 and drift_step_hz positive");
         }
+        if !(0.0..=20.0).contains(&s.guard_hz) {
+            return bad("guard_hz must be 0 to 20 Hz");
+        }
         if s.drift_max_hz / s.drift_step_hz > 200.0 || s.max_candidates > 10_000 || !s.min_score.is_finite() {
             return bad("at most 401 drift steps and 10000 candidates; min_score finite");
         }
@@ -245,8 +259,12 @@ impl WsprConfig {
         if !(1..=8).contains(&self.refine.block) {
             return bad("refine.block must be 1 to 8");
         }
-        if !(1..=9).contains(&self.demod.block) || self.demod.block.is_multiple_of(2) {
-            return bad("demod.block must be odd, 1 to 9");
+        let blocks = &self.demod.blocks;
+        if blocks.is_empty()
+            || blocks.len() > 4
+            || blocks.iter().any(|b| !(1..=9).contains(b) || b.is_multiple_of(2))
+        {
+            return bad("demod.blocks must hold 1 to 4 odd block lengths from 1 to 9");
         }
         let f = &self.fano;
         if !(1..=10_000_000).contains(&f.max_cycles_per_bit)

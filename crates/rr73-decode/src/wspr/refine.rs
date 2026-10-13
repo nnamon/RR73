@@ -364,6 +364,7 @@ mod tests {
             start: 375,
             drift_hz: 0.0,
             score: 0.0,
+            ratio: 0.0,
         };
         let mut p = [[0.0f32; 4]; SYMBOLS];
         ToneCorrelator::default().powers(&bb, &cand, &mut p);
@@ -388,6 +389,7 @@ mod tests {
             start: 384,
             drift_hz: 0.25,
             score: 0.0,
+            ratio: 0.0,
         };
         let mut p = [[0.0f32; 4]; SYMBOLS];
         let mut c = [[Complex32::new(0.0, 0.0); 4]; SYMBOLS];

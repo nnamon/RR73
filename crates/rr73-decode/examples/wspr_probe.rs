@@ -35,7 +35,7 @@ fn main() {
     let corr = ToneCorrelator::default();
     let demod: Box<dyn WsprDemod> = if config.demod.kind == rr73_decode::wspr::config::WsprDemodKind::Block {
         Box::new(BlockDemod {
-            block: config.demod.block,
+            block: config.demod.blocks[0],
             llr_scale: config.demod.llr_scale,
         })
     } else {
@@ -75,6 +75,7 @@ fn main() {
             start: ((1.0 + s.dt_s) * 375.0).round() as i32,
             drift_hz: 0.0,
             score: 0.0,
+            ratio: 0.0,
         };
         let mut line = format!("seed {seed:3} f {:.1} dt {:+.2}: ", s.freq_hz, s.dt_s);
         let mut run = |cand: &WsprCandidate, label: &str, line: &mut String| -> bool {

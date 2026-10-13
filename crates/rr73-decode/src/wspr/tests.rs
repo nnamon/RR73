@@ -106,3 +106,25 @@ fn hostile_audio_never_panics_or_decodes() {
         );
     }
 }
+
+#[test]
+fn a_second_pass_finds_a_weak_signal_beside_a_strong_one() {
+    // 3.5 Hz apart: the weak signal's tones overlap the strong one's.
+    let audio = slot(
+        vec![
+            WsprSignal::new("9V1NE OJ11 37", 1500.0, 0.2, -12.0),
+            WsprSignal::new("G4JNT IO90 30", 1503.5, 0.6, -24.0),
+        ],
+        6,
+    );
+    let mut ctx = WsprContext::new();
+    let two = decode_wspr(&audio, &WsprConfig::wspr(), &mut ctx);
+    let texts: Vec<(&str, u32)> = two.decodes.iter().map(|d| (d.text.as_str(), d.pass)).collect();
+    assert_eq!(texts, [("9V1NE OJ11 37", 1), ("G4JNT IO90 30", 2)], "{two:?}");
+    let one = decode_wspr(
+        &audio,
+        &WsprConfig::wspr().with_overrides(&["passes=1"]).expect("config"),
+        &mut ctx,
+    );
+    assert_eq!(one.decodes.len(), 1);
+}

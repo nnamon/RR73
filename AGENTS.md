@@ -116,7 +116,7 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 
 | Term | Meaning |
 | --- | --- |
-| slot | One FT8 (15 s) or FT4 (7.5 s) transmit period, aligned to UTC. Even and odd slots alternate. |
+| slot | One FT8 (15 s), FT4 (7.5 s) or WSPR (120 s, from an even minute) transmit period, aligned to UTC. Even and odd FT8 and FT4 slots alternate. |
 | decode | One message recovered from a slot. |
 | QSO | A contact between two stations. |
 | callsign | One word. |

@@ -29,6 +29,8 @@ pub struct WsprCandidate {
     pub drift_hz: f32,
     /// Sync score, in standard deviations above noise.
     pub score: f32,
+    /// Sync sum over the power read at the candidate's tones, -1 to 1: the search ranks by it.
+    pub ratio: f32,
 }
 
 impl WsprCandidate {
@@ -61,8 +63,11 @@ pub trait WsprSearch {
 #[derive(Clone, Debug, Default)]
 pub struct SearchScratch {
     diff: Vec<f32>,
+    total: Vec<f32>,
     acc: Vec<f32>,
+    acc_total: Vec<f32>,
     best: Vec<f32>,
+    best_z: Vec<f32>,
     best_drift: Vec<f32>,
 }
 
@@ -110,22 +115,35 @@ impl WsprSearch for SyncSearch {
         // bins whose upper tones fall outside read the missing powers as 0.
         scratch.diff.clear();
         scratch.diff.resize(spec.frames * bins, 0.0);
+        scratch.total.clear();
+        scratch.total.resize(spec.frames * bins, 0.0);
         for t in 0..spec.frames {
             for k in 0..bins {
                 let b = k as i32 - SPEC_HALF_BINS;
                 let ti = t as i64;
-                scratch.diff[t * bins + k] =
-                    spec.get(ti, b + 2) + spec.get(ti, b + 6) - spec.get(ti, b) - spec.get(ti, b + 4);
+                let (p0, p1, p2, p3) = (
+                    spec.get(ti, b),
+                    spec.get(ti, b + 2),
+                    spec.get(ti, b + 4),
+                    spec.get(ti, b + 6),
+                );
+                scratch.diff[t * bins + k] = p1 + p3 - p0 - p2;
+                scratch.total[t * bins + k] = p0 + p1 + p2 + p3;
             }
         }
 
         scratch.best.clear();
         scratch.best.resize(nt * nf, f32::NEG_INFINITY);
+        scratch.best_z.clear();
+        scratch.best_z.resize(nt * nf, 0.0);
         scratch.best_drift.clear();
         scratch.best_drift.resize(nt * nf, 0.0);
         let steps = (p.drift_max_hz / p.drift_step_hz).floor() as i32;
         let mut shifts = [0i32; SYMBOLS];
-        for ds in -steps..=steps {
+        let min_raw = p.min_score * NOISE_SD;
+        // Smallest drift first, so equal scores keep the smallest drift.
+        for k in 0..=2 * steps {
+            let ds = if k % 2 == 0 { k / 2 } else { -(k + 1) / 2 };
             let drift = ds as f32 * p.drift_step_hz;
             for (i, s) in shifts.iter_mut().enumerate() {
                 *s = (f64::from(drift) * (i as f64 - 80.5) / SYMBOLS as f64 / SPEC_BIN_HZ).round() as i32;
@@ -134,38 +152,56 @@ impl WsprSearch for SyncSearch {
                 let t0 = t_lo + ti as i64;
                 scratch.acc.clear();
                 scratch.acc.resize(nf, 0.0);
+                scratch.acc_total.clear();
+                scratch.acc_total.resize(nf, 0.0);
                 for i in 0..SYMBOLS {
                     let t = t0 + step * i as i64;
                     if t < 0 || t as usize >= spec.frames {
                         continue;
                     }
                     let row = &scratch.diff[t as usize * bins..(t as usize + 1) * bins];
+                    let row_total = &scratch.total[t as usize * bins..(t as usize + 1) * bins];
                     let sign = if SYNC[i] == 1 { 1.0 } else { -1.0 };
                     let first = b_lo + shifts[i] + SPEC_HALF_BINS;
-                    for (f, a) in scratch.acc.iter_mut().enumerate() {
+                    for (f, (a, at)) in scratch
+                        .acc
+                        .iter_mut()
+                        .zip(scratch.acc_total.iter_mut())
+                        .enumerate()
+                    {
                         let k = first + f as i32;
                         if k >= 0 && (k as usize) < bins {
                             *a += sign * row[k as usize];
+                            *at += row_total[k as usize];
                         }
                     }
                 }
                 let best = &mut scratch.best[ti * nf..(ti + 1) * nf];
+                let best_z = &mut scratch.best_z[ti * nf..(ti + 1) * nf];
                 let best_drift = &mut scratch.best_drift[ti * nf..(ti + 1) * nf];
                 for f in 0..nf {
-                    if scratch.acc[f] > best[f] {
-                        best[f] = scratch.acc[f];
+                    // Rank by the sync sum as a fraction of the power read: a weak signal on
+                    // its sync pattern scores above a strong one read at the wrong time or
+                    // frequency, whose raw sum can be large.
+                    let a = scratch.acc[f];
+                    if a < min_raw {
+                        continue;
+                    }
+                    let ratio = a / scratch.acc_total[f].max(f32::MIN_POSITIVE);
+                    if ratio > best[f] {
+                        best[f] = ratio;
+                        best_z[f] = a / NOISE_SD;
                         best_drift[f] = drift;
                     }
                 }
             }
         }
 
-        // Local maxima over 3 start times and 5 bins, best first.
-        let min_raw = p.min_score * NOISE_SD;
+        // Local maxima of the ratio over 3 start times and 5 bins, best first.
         for ti in 0..nt {
             for f in 0..nf {
                 let v = scratch.best[ti * nf + f];
-                if v.is_nan() || v < min_raw {
+                if !v.is_finite() {
                     continue;
                 }
                 let mut peak = true;
@@ -188,12 +224,13 @@ impl WsprSearch for SyncSearch {
                         tone0_hz: ((b_lo + f as i32) as f64 * SPEC_BIN_HZ) as f32,
                         start: ((t_lo + ti as i64) * HOP as i64) as i32,
                         drift_hz: scratch.best_drift[ti * nf + f],
-                        score: v / NOISE_SD,
+                        score: scratch.best_z[ti * nf + f],
+                        ratio: v,
                     });
                 }
             }
         }
-        out.sort_by(|a, b| b.score.total_cmp(&a.score));
+        out.sort_by(|a, b| b.ratio.total_cmp(&a.ratio));
         out.truncate(p.max_candidates);
     }
 }

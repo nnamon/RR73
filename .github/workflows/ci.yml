@@ -124,6 +124,15 @@ jobs:
       - name: Gate subtract-3-osd2 against bench/subtract-3-osd2.json
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3-osd2.json --baseline bench/subtract-3-osd2.json
+      # WSPR: the wspr preset on wspr-smoke and 50 wspr-noise slots, rendered in memory so no
+      # 2.9 MB WAV file per 120 s slot is written. Gated against bench/wspr.json with
+      # bench/gate-wspr.toml.
+      - name: Run the wspr preset
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- run --preset wspr --synth wspr-smoke --synth wspr-noise --noise-count 50 --out results/ci-wspr.json
+      - name: Gate wspr against bench/wspr.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-wspr.json --baseline bench/wspr.json --thresholds bench/gate-wspr.toml
       - uses: actions/upload-artifact@v4
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         with:
@@ -131,6 +140,7 @@ jobs:
           path: |
             results/ci.json
             results/ci-subtract-3-osd2.json
+            results/ci-wspr.json
 
   wasm:
     name: WebAssembly
