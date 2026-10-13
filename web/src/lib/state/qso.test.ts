@@ -124,3 +124,22 @@ describe('Call CQ while audio is not running', () => {
     expect(qso.st.next!.scheduled).toBe(false);
   });
 });
+
+describe('the sequencer’s notices', () => {
+  it('reach the status line: a station called answers another station', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // VK2LAW calls CQ in the odd slot before 13:15:00; we call in even slots.
+      const t = Date.UTC(2026, 9, 13, 13, 15, 0);
+      vi.setSystemTime(t + 1000);
+      callStation(decode('CQ VK2LAW QF56', -8, 1200), t - 15_000);
+      expect(qso.st.phase).toBe('answering');
+      // In his next slot he answers DV5CEL.
+      vi.setSystemTime(t + 30_100);
+      dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('DV5CEL VK2LAW -05', -8, 1200)], nowMs: Date.now() });
+      expect(qso.notice).toMatchObject({ kind: 'lost', text: 'VK2LAW answered DV5CEL' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
