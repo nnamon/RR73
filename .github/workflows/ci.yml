@@ -191,6 +191,13 @@ jobs:
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
+      # The same fonts as the local e2e image (tools/e2e/Dockerfile), so text measures the same.
+      - name: Fonts
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends fonts-inter fonts-jetbrains-mono
+          cp tools/e2e/fonts.conf /etc/fonts/local.conf
+          fc-cache -f
       - name: Playwright
         run: npx --prefix web playwright test
         env:
