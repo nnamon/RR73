@@ -14,7 +14,8 @@ import { Outbox, systemClock, type DestinationStatus, type SendingDestination } 
 import { adifChanged, createQso, displayMode, newId, stampActivation } from './qso';
 import { loadSnapshot, saveChanges, saveLoggingSettings, type Changes } from './store';
 import { byQso, reportsText } from './view';
-import { testConnection, wavelogDestination, type FetchLike, type TestResult } from './wavelog';
+import { wavelogAdapter } from './destinations';
+import { testConnection, type FetchLike, type TestResult } from './wavelog';
 import type {
   Activation,
   DestinationConfig,
@@ -159,8 +160,11 @@ async function commit(c: Changes): Promise<void> {
   }
 }
 
+/** The destinations the outbox sends to: Wavelog when set up. Relay destinations join here later. */
 function sending(): SendingDestination[] {
-  return wavelogReady(log.wavelog) ? [wavelogDestination(log.wavelog, stationFor, fetchFn)] : [];
+  if (!wavelogReady(log.wavelog)) return [];
+  const a = wavelogAdapter(log.wavelog, stationFor, fetchFn, now);
+  return a.send ? [{ id: a.id, send: a.send }] : [];
 }
 
 export const outbox = new Outbox({
