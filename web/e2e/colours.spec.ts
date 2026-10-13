@@ -1,5 +1,5 @@
 // Settings › Decode colours: a colour change shows in Operate at once, the order decides which
-// colour a decode takes, and Restore WSJT-X colours acts on the first tap with Undo. Decodes come
+// colour a decode takes, and a preset (WSJT-X or Quiet) acts on the first tap with Undo. Decodes come
 // through the screen-review hooks (src/lib/testing/e2e-hooks.ts).
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -25,6 +25,8 @@ async function decoded(page: Page, texts: string[]) {
 const row = (page: Page, text: string) => page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) });
 const order = (page: Page) => page.locator('.hl-list:not(.text-list) > li').evaluateAll((els) => els.map((el) => (el as HTMLElement).dataset.id));
 const hlOf = (l: Locator) => l.evaluate((el) => (el as HTMLElement).style.getPropertyValue('--rr-hl'));
+const preset = (page: Page, name: string) => page.getByRole('radiogroup', { name: 'Preset' }).getByRole('radio', { name });
+const choose = (page: Page, name: string) => page.getByRole('radiogroup', { name: 'Preset' }).getByText(name, { exact: true }).click();
 
 /** sRGB channels 0 to 255 from a computed colour, rgb() or color(srgb ...). */
 function channels(css: string): number[] {
@@ -152,36 +154,37 @@ test('the order decides which colour a decode takes', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Move CQ in the message up' })).toBeDisabled();
 });
 
-test('Restore WSJT-X colours acts on the first tap and offers Undo', async ({ page }) => {
+test('the WSJT-X preset acts on the first tap and offers Undo', async ({ page }) => {
   await page.goto('./#/settings');
   const link = page.getByRole('link', { name: /^Decode colours/ });
   await expect(link).toContainText('WSJT-X');
   await link.click();
   await expect(page.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '#/settings');
-  const restore = page.getByRole('button', { name: 'Restore WSJT-X colours' });
-  await expect(restore).toBeDisabled();
+  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await expect(preset(page, 'Custom')).toBeDisabled();
   const defaults = await order(page);
 
   // Change all three: a switch, a colour and the order.
   await page.getByRole('switch', { name: 'New call', exact: true }).uncheck();
   await page.getByRole('button', { name: 'Change colour: CQ in the message' }).click();
   await page.getByRole('dialog', { name: 'CQ in the message' }).getByRole('button', { name: 'Magenta' }).click();
-  await page.getByRole('button', { name: 'Move What I sent up' }).focus();
+  await page.getByRole('button', { name: 'Move Sent up' }).focus();
   await page.keyboard.press('Enter');
   const changed = await order(page);
   expect(changed).not.toEqual(defaults);
+  await expect(preset(page, 'Custom')).toBeChecked();
 
-  await restore.click();
+  await choose(page, 'WSJT-X');
   // No confirmation: the defaults are back at once, with Undo in a notice.
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await order(page)).toEqual(defaults);
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).toBeChecked();
   expect(await hlOf(page.getByRole('button', { name: 'Change colour: CQ in the message' }))).toBe('#66FF66');
-  await expect(restore).toBeDisabled();
+  await expect(preset(page, 'WSJT-X')).toBeChecked();
   const notice = page.getByTestId('colours-notice');
-  await expect(notice).toContainText('WSJT-X colours and order restored.');
+  await expect(notice).toContainText('WSJT-X preset applied.');
 
-  await notice.getByRole('button', { name: 'Undo restoring WSJT-X colours' }).click();
+  await notice.getByRole('button', { name: 'Undo the WSJT-X preset' }).click();
   await expect(notice).toBeHidden();
   expect(await order(page)).toEqual(changed);
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).not.toBeChecked();
@@ -193,4 +196,36 @@ test('Restore WSJT-X colours acts on the first tap and offers Undo', async ({ pa
   expect(await order(page)).toEqual(changed);
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('Custom');
+});
+
+test('the Quiet preset keeps CQ green and turns the new-station colours off, with Undo', async ({ page }) => {
+  await page.goto('./#/settings/colours');
+  const example = page.getByTestId('colours-example');
+  const fresh = '[data-hl="newGrid"], [data-hl="newGridBand"], [data-hl="newCall"], [data-hl="newCallBand"]';
+  await expect(example.locator(fresh)).toHaveCount(4);
+  await expect(example.locator('[data-hl="cq"]')).toHaveCount(1);
+  await expect(example.locator('[data-ink="worked"]')).toHaveCount(2);
+
+  await choose(page, 'Quiet');
+  await expect(preset(page, 'Quiet')).toBeChecked();
+  // The five CQ rows are green: no row keeps a new grid or new call colour, and no text greys as worked before.
+  await expect(example.locator('[data-hl="cq"]')).toHaveCount(5);
+  for (const r of await example.locator('[data-hl="cq"]').all()) expect(await hlOf(r)).toBe('#66FF66');
+  await expect(example.locator(fresh)).toHaveCount(0);
+  await expect(example.locator('[data-ink="worked"]')).toHaveCount(0);
+  for (const name of ['New grid', 'New grid on this band', 'New call', 'New call on this band', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
+  for (const name of ['My call in the message', 'Ending a QSO', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
+
+  const notice = page.getByTestId('colours-notice');
+  await expect(notice).toContainText('Quiet preset applied.');
+  await notice.getByRole('button', { name: 'Undo the Quiet preset' }).click();
+  await expect(notice).toBeHidden();
+  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await expect(example.locator(fresh)).toHaveCount(4);
+  await expect(example.locator('[data-hl="cq"]')).toHaveCount(1);
+
+  // Chosen again, Settings names it.
+  await choose(page, 'Quiet');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('Quiet');
 });

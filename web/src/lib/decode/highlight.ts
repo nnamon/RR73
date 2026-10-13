@@ -7,7 +7,7 @@
  *
  * New call, new grid and ending a QSO look at the station sending a CQ, 73 or RR73, as WSJT-X
  * does. No category looks at the operator's own callsign as a sender. Calls compare by base
- * callsign. Own transmissions match only What I sent, and received decodes never match it.
+ * callsign. Own transmissions match only Sent, and received decodes never match it.
  */
 
 import { parseExchange } from '../qso/messages';
@@ -45,7 +45,7 @@ export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'newCallBand', rank: 13, label: 'New call on this band', style: 'background', colour: '#99CCFF', spoken: 'new call on this band' },
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: '#FFE2C8', spoken: 'ending a QSO' },
   { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: '#66FF66', spoken: 'CQ' },
-  { id: 'sent', rank: 16, label: 'What I sent', style: 'background', colour: '#C98A1A', spoken: 'you sent' },
+  { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: '#C98A1A', spoken: 'sent' },
   { id: 'worked', rank: 17, label: 'Worked before', sub: 'On this band and mode', style: 'text', colour: '#8C93A0', spoken: 'worked before' },
 ];
 
@@ -137,6 +137,35 @@ export function isDefault(entries: readonly HighlightEntry[]): boolean {
 }
 
 /** `entries` with the one at `from` moved to `to`. */
+/** A preset in Settings › Decode colours. Each keeps WSJT-X's order and colours and sets which categories are on. */
+export type PresetId = 'wsjtx' | 'quiet';
+
+export const PRESETS: readonly { id: PresetId; label: string; off: readonly HighlightId[] }[] = [
+  { id: 'wsjtx', label: 'WSJT-X', off: [] },
+  // My call, Sent, CQ and Ending a QSO only.
+  { id: 'quiet', label: 'Quiet', off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
+];
+
+/** The entries a preset sets: WSJT-X's order and colours, with the preset's categories off. */
+export function presetHighlights(id: PresetId): HighlightEntry[] {
+  const off = PRESETS.find((p) => p.id === id)?.off ?? [];
+  return defaultHighlights().map((e) => ({ ...e, on: !off.includes(e.id) }));
+}
+
+/** The preset whose order, colours and switches the entries match, or 'custom'. */
+export function presetOf(entries: readonly HighlightEntry[]): PresetId | 'custom' {
+  for (const p of PRESETS) {
+    const d = presetHighlights(p.id);
+    if (entries.length === d.length && entries.every((e, i) => e.id === d[i].id && e.on === d[i].on && e.colour === d[i].colour)) return p.id;
+  }
+  return 'custom';
+}
+
+/** The name Settings shows for a preset, or Custom. */
+export function presetLabel(id: PresetId | 'custom'): string {
+  return PRESETS.find((p) => p.id === id)?.label ?? 'Custom';
+}
+
 export function moveEntry(entries: readonly HighlightEntry[], from: number, to: number): HighlightEntry[] {
   const out = entries.map((e) => ({ ...e }));
   if (from === to || from < 0 || to < 0 || from >= out.length || to >= out.length) return out;

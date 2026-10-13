@@ -4,7 +4,8 @@
    * layer, worked before. Each background category has a swatch (opens the colour sheet), a switch
    * and a handle: touch and hold the handle, then drag, as on iOS. Move up and Move down do the
    * same for VoiceOver and keyboards; they show when focused. Every change applies at once.
-   * Restore WSJT-X colours offers Undo for 10 s.
+   * Choosing a preset (WSJT-X or Quiet) offers Undo for 10 s. Custom shows when the colours match
+   * neither preset, and cannot be chosen.
    */
   import { tick } from 'svelte';
   import BackLink from '../ui/BackLink.svelte';
@@ -12,7 +13,7 @@
   import DecodeList, { type DecodeListItem } from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
-  import { category, defaultHighlights, highlightDecode, isBackground, isDefault, moveBackground, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
+  import { PRESETS, category, highlightDecode, isBackground, moveBackground, presetHighlights, presetOf, type HighlightEntry, type HighlightId, type PresetId } from '../lib/decode/highlight';
   import { inkFor } from '../lib/decode/highlight-colour';
   import { markDecode } from '../lib/decode/marking';
   import { buildLogIndex } from '../lib/log/worked';
@@ -170,14 +171,14 @@
     };
   }
 
-  // Restore, with Undo.
-  let notice = $state<{ before: HighlightEntry[]; seq: number } | null>(null);
-  const atDefaults = $derived(isDefault(entries));
+  // Presets, with Undo.
+  let notice = $state<{ before: HighlightEntry[]; label: string; seq: number } | null>(null);
+  const preset = $derived(presetOf(entries));
 
-  function restore() {
+  function choose(id: PresetId) {
     const before = $state.snapshot(settings.highlights) as HighlightEntry[];
-    save(defaultHighlights());
-    notice = { before, seq: (notice?.seq ?? 0) + 1 };
+    save(presetHighlights(id));
+    notice = { before, label: PRESETS.find((p) => p.id === id)?.label ?? '', seq: (notice?.seq ?? 0) + 1 };
   }
 
   function undo() {
@@ -194,6 +195,24 @@
 
 <section class="screen" aria-labelledby="colours-title">
   <BackLink to={href('settings')} label="Settings" title="Decode colours" id="colours-title" />
+
+  <div class="section">
+    <h2 class="section-head" id="preset-head">Preset</h2>
+    <div class="group" role="radiogroup" aria-labelledby="preset-head">
+      {#each PRESETS as p (p.id)}
+        <label class="row pick">
+          <input class="visually-hidden" type="radio" name="preset" value={p.id} checked={preset === p.id} onchange={() => choose(p.id)} />
+          <span class="row-main"><span class="row-title">{p.label}</span></span>
+          {#if preset === p.id}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
+        </label>
+      {/each}
+      <label class="row">
+        <input class="visually-hidden" type="radio" name="preset" value="custom" checked={preset === 'custom'} disabled />
+        <span class="row-main"><span class="row-title">Custom</span></span>
+        {#if preset === 'custom'}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
+      </label>
+    </div>
+  </div>
 
   <div class="section">
     <h2 class="section-head">Example</h2>
@@ -245,18 +264,12 @@
     </ul>
   </div>
 
-  <div class="section">
-    <div class="group">
-      <button type="button" class="row restore" disabled={atDefaults} onclick={restore}>Restore WSJT-X colours</button>
-    </div>
-  </div>
-
   <span class="visually-hidden" role="status">{announce}</span>
   <div class="notice" role="status">
     {#if notice}
       <div class="toast" data-testid="colours-notice">
-        <span class="msg">WSJT-X colours and order restored.</span>
-        <button type="button" class="act" aria-label="Undo restoring WSJT-X colours" onclick={undo}>Undo</button>
+        <span class="msg">{notice.label} preset applied.</span>
+        <button type="button" class="act" aria-label="Undo the {notice.label} preset" onclick={undo}>Undo</button>
       </div>
     {/if}
   </div>
@@ -439,15 +452,19 @@
     opacity: 0.35;
   }
 
-  .restore {
-    justify-content: center;
-    color: var(--rr-accent);
-    font-size: var(--rr-text-body);
+  .pick {
+    cursor: pointer;
   }
 
-  .restore:disabled {
-    opacity: 0.35;
+  .pick:has(:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
   }
+
+  .tick {
+    flex: none;
+    color: var(--rr-accent);
+  }
+
 
   .notice {
     position: sticky;
