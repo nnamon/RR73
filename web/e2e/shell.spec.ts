@@ -123,3 +123,24 @@ test('after an update, a notice opens the version history at the new version', a
   await page.reload();
   await expect(page.getByText(`Updated to ${VERSION}`)).toBeHidden();
 });
+
+test('Reload app and Clear cached copy and reload both reload the page', async ({ page }) => {
+  for (const name of [/^Reload app/, /^Clear cached copy and reload/]) {
+    await page.goto('./#/settings');
+    await page.evaluate(() => ((window as unknown as { __marker: boolean }).__marker = true));
+    const button = page.getByRole('button', { name });
+    await expect(button).toBeEnabled();
+    await Promise.all([page.waitForEvent('load'), button.click()]);
+    expect(await page.evaluate(() => (window as unknown as { __marker?: boolean }).__marker ?? false)).toBe(false);
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  }
+});
+
+test('Clear cached copy waits for a connection', async ({ page, context }) => {
+  await page.goto('./#/settings');
+  await context.setOffline(true);
+  await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeDisabled();
+  await expect(page.getByText('Needs a connection: the app loads fresh from the network.')).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
+});
