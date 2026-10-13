@@ -199,7 +199,7 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Same day, band and mode</span></span>
+        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">Same day, band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">

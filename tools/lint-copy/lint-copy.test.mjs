@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, countWords, maskExpressions } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
 const screen = (text) => lintText(text, 'x', { screen: true }).map((f) => `${f.level}:${f.rule}`);
@@ -166,4 +166,15 @@ test('interface sources flag reassurance and plans, and the changelog may quote 
 test('markup text around an expression is prose too', () => {
   const found = lintText(sourceProse('<p>Peak {peak} dBFS. Simply aim for the green zone.</p>', '.svelte'), 'x').map((f) => f.rule);
   assert.deepEqual(found, ['filler']);
+});
+
+test('holds status line notices to 6 words of copy with no full stop', () => {
+  const status = (text) => statusFindings(text).map((f) => `${f.line}:${f.rule}`);
+  assert.deepEqual(status("txSet: (hz) => `Tx set to ${hz} Hz`,"), []);
+  assert.deepEqual(status("noReply: (call) => `No reply from ${call} · not logged`,"), []);
+  assert.deepEqual(status("txSet: (hz) => `Tx moved to ${hz} Hz, the quietest ${w} Hz in the last slots.`,"), ['1:status-length', '1:status-stop']);
+  assert.deepEqual(status("audio: 'Tx stopped because the audio stopped. The QSO keeps its place.',"), ['1:status-length', '1:status-stop']);
+  assert.deepEqual(status("noCall: 'No callsign to call.',"), ['1:status-stop']);
+  // Comments and values are not copy.
+  assert.deepEqual(status("/** A very long comment that says far more than six words. */\nx: `${a} ${b} ${c}`,"), []);
 });

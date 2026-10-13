@@ -118,8 +118,10 @@
     {/if}
   </main>
   {#if update.notice}<UpdateNotice version={update.notice} />{/if}
-  <StatusNotice />
-  <LogNotice />
+  <div class="floats">
+    <StatusNotice />
+    <LogNotice />
+  </div>
 </div>
 
 <QsoSheet />
@@ -138,6 +140,24 @@
   /* Under the home indicator, Operate's bottom bar carries on. */
   .app.on-operate {
     background: var(--rr-dock);
+  }
+
+  /* Notices float over the screen above Operate's buttons, or above the screen's bottom edge, so nothing under them moves. */
+  .floats {
+    position: fixed;
+    right: 0;
+    bottom: calc(var(--rr-safe-bottom) + var(--rr-space-2));
+    left: 0;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 0 var(--rr-space-4);
+    pointer-events: none;
+  }
+
+  .app.on-operate .floats {
+    bottom: calc(var(--rr-safe-bottom) + var(--rr-bar-h, 0px) + var(--rr-space-2));
   }
 
   .main {

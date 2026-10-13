@@ -22,7 +22,7 @@
   import { buildLogIndex } from '../lib/log/worked';
   import { orderQueue } from '../lib/qso/sequencer';
   import { dialHz } from '../lib/radio/bands';
-  import { SIGNAL_HZ } from '../lib/waterfall/pick';
+  import { STATUS } from '../lib/qso/status';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
@@ -74,11 +74,11 @@
   async function findClear() {
     const hz = (await wf?.quietest()) ?? null;
     if (hz === null) {
-      showNotice('Finding a clear Tx frequency needs 2 slots of audio.');
+      showNotice(STATUS.noClear);
       return;
     }
     setFrequencies({ txHz: hz });
-    showNotice(`Tx moved to ${hz} Hz, the quietest ${SIGNAL_HZ[settings.mode]} Hz in the last slots.`);
+    showNotice(STATUS.txSet(hz));
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or

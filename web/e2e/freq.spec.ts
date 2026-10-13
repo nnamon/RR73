@@ -127,6 +127,6 @@ test('Find clear Tx in the ••• menu says when there is not enough audio', 
   await bar.getByRole('button', { name: 'More' }).click();
   await page.getByRole('menuitem', { name: 'Find clear Tx' }).click();
   await expect(page.getByRole('menu')).toBeHidden();
-  await expect(bar.getByRole('status')).toHaveText('Finding a clear Tx frequency needs 2 slots of audio.');
+  await expect(bar.getByRole('status')).toHaveText('Not enough audio yet');
   await expect(slider(page, 'Transmit')).toHaveValue('1500');
 });

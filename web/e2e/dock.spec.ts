@@ -94,7 +94,7 @@ test('a double-tap on a decode calls the station with Tx on at once', async ({ p
   await expect(bar.getByRole('list', { name: 'QSO progress' })).toBeVisible();
   // Rx moves to the station; Hold Tx keeps Tx. Audio is off here, so the bar says why nothing goes out.
   await expect(page.getByRole('slider', { name: 'Receive frequency, Hz' })).toHaveValue('505');
-  await expect(bar.getByRole('status')).toContainText('Resume audio to transmit.');
+  await expect(bar.getByRole('status')).toContainText('Audio off');
   // Halt stays a red outline: the Tx button carries the state.
   await expect(bar.getByRole('button', { name: 'Halt' })).toHaveClass(/halt/);
 });
@@ -106,7 +106,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Run Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Repeat CQ Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -121,8 +121,8 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await menu.getByRole('menuitem', { name: /^Hunt order/ }).click();
   await expect(menu.getByRole('menuitem', { name: /^Hunt order/ })).toHaveText('Hunt order Strongest');
   // Run is a setting: it starts nothing.
-  await menu.getByRole('menuitemcheckbox', { name: /^Run/ }).click();
-  await expect(menu.getByRole('menuitemcheckbox', { name: /^Run/ })).toHaveText('Run On');
+  await menu.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ }).click();
+  await expect(menu.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ })).toHaveText('Repeat CQ On');
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
@@ -149,7 +149,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await page.reload();
   await bar.getByRole('button', { name: 'More' }).click();
   await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd');
-  await expect(menu.getByRole('menuitemcheckbox', { name: /^Run/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(menu.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ })).toHaveAttribute('aria-checked', 'true');
   await expect(menu.getByRole('menuitem', { name: /^Hunt order/ })).toHaveText('Hunt order Strongest');
 });
 
