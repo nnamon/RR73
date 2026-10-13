@@ -88,6 +88,9 @@ function setup(over: Partial<EngineDeps> = {}) {
   return { engine, ctx, nodes, streams, deps, clock };
 }
 
+/** One chunk, s. */
+const CHUNK_S = 512 / 12000;
+
 function chunk(index: number, contextTime: number): CaptureMessage {
   return { type: 'chunk', samples: new Float32Array(512), index, contextTime, peakDb: -20, rmsDb: -30 };
 }
@@ -101,13 +104,13 @@ async function replay(rows: number[][]): Promise<number[]> {
   const { engine, ctx, nodes, clock } = setup();
   await engine.start();
   const errors: number[] = [];
-  let date = 0;
-  engine.onChunk((c) => errors.push(c.utcMs + (c.samples.length / 12000) * 1000 - date));
+  // Chunks wait while the mapping settles, so each is compared with the Date.now() of its own reading.
+  engine.onChunk((c) => errors.push(c.utcMs + (c.samples.length / 12000) * 1000 - rows[c.index / 512][3]));
   rows.forEach(([contextTime, performanceTime, perfNow, dateNow, currentTime], i) => {
     ctx.getOutputTimestamp = () => ({ contextTime, performanceTime });
     ctx.currentTime = currentTime;
     clock.perf = perfNow;
-    clock.date = date = dateNow;
+    clock.date = dateNow;
     nodes[0].post(chunk(i * 512, currentTime - 512 / 12000));
   });
   return errors;
@@ -155,8 +158,13 @@ describe('CaptureEngine', () => {
     ctx.perf = 5000;
     clock.perf = 5000;
     clock.date = T0;
-    nodes[0].post(chunk(0, 1.5));
-    expect(got).toEqual([T0 - 500]);
+    // Chunks wait until 5 readings agree, then go out stamped with the settled mapping.
+    for (let i = 0; i < 4; i++) nodes[0].post(chunk(i * 512, 1.5 + i * CHUNK_S));
+    expect(got).toEqual([]);
+    nodes[0].post(chunk(4 * 512, 1.5 + 4 * CHUNK_S));
+    expect(got).toHaveLength(5);
+    expect(got[0]).toBe(T0 - 500);
+    expect(got[4]).toBeCloseTo(T0 - 500 + 4 * CHUNK_S * 1000, 6);
   });
 
   it('maps from currentTime until output timestamps arrive, then starts over on them', async () => {
@@ -169,12 +177,15 @@ describe('CaptureEngine', () => {
     ctx.currentTime = 2;
     clock.perf = 5000;
     clock.date = T0;
-    nodes[0].post(chunk(0, 1.5));
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5));
     expect(got[0]).toBe(T0 - 500);
+    expect(engine.clockSource).toBe('current-time');
     // Output starts: context time 2 s is heard 40 ms after now. Only these observations count.
     ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
-    nodes[0].post(chunk(512, 1.5 + 512 / 12000));
-    expect(got[1]).toBeCloseTo(T0 + 40 - 500 + (512 / 12000) * 1000, 6);
+    for (let i = 5; i < 10; i++) nodes[0].post(chunk(i * 512, 1.5 + CHUNK_S));
+    expect(got).toHaveLength(10);
+    expect(got[5]).toBeCloseTo(T0 + 40 - 500 + CHUNK_S * 1000, 6);
+    expect(engine.clockSource).toBe('output');
   });
 
   it('updates the report with the channels that arrive', async () => {
@@ -188,7 +199,7 @@ describe('CaptureEngine', () => {
     const { engine, ctx, nodes } = setup();
     await engine.start();
     ctx.currentTime = 2;
-    nodes[0].post(chunk(0, 1.5));
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5 - (4 - i) * CHUNK_S));
     ctx.setState('interrupted');
     expect(engine.state).toMatchObject({ status: 'stopped', reason: 'interrupted' });
     // The last chunk started 0.5 s before T0 and lasted 512 samples.
@@ -288,12 +299,15 @@ describe('CaptureEngine', () => {
     ctx.currentTime = 2;
     // Heard 3 s after now: wrong. After 5 of these, currentTime pairs with now.
     ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 8000 });
-    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5));
-    expect(got).toEqual([T0 - 500]);
+    for (let i = 0; i < 9; i++) nodes[0].post(chunk(i * 512, 1.5));
+    expect(got[0]).toBe(T0 - 500);
+    expect(engine.clockSource).toBe('current-time');
     ctx.setState('suspended');
     await engine.resume();
+    const n = got.length;
     ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
-    nodes[0].post(chunk(0, 1.5));
-    expect(got[1]).toBe(T0 + 40 - 500);
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5));
+    expect(got[n]).toBe(T0 + 40 - 500);
+    expect(engine.clockSource).toBe('output');
   });
 });

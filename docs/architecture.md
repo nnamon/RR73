@@ -119,7 +119,7 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 ## Timing
 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
-- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`. Input latency is unknown on iOS, so the residual offset is measured from the median DT of decodes and corrected.
+- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it.
 - Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s, as in WSJT-X.
 
 ## Updates

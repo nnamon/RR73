@@ -134,7 +134,7 @@ function onTxReport(r: TxReport) {
     const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
     // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
-    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode);
+    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: settings.txHz });
     qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
   } else if (r.type === 'ended') {
     qso.onAir = null;
