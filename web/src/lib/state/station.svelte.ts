@@ -163,19 +163,26 @@ function onSlot(slot: AssembledSlot) {
   // A slot with less than half its audio cannot hold a whole FT8 or FT4 message.
   if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available) return;
   const t0 = performance.now();
-  const keep = (entry: DecodedSlot) => {
-    band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
-  };
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
   decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
-    (decodes) => {
-      keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 });
-      for (const l of decodeListeners) l(slot.startUtcMs, decodes);
-    },
+    (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 }),
     (e: unknown) => {
-      if (e instanceof DecoderBusyError) keep({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
+      if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
     },
   );
+}
+
+function keepSlot(entry: DecodedSlot) {
+  band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
+}
+
+/**
+ * A slot's decodes: into the decode list, then to the listeners (the sequencer). The decoder's
+ * path, and the screen-review build's (lib/testing/e2e-hooks.ts).
+ */
+export function deliverDecodes(entry: DecodedSlot) {
+  keepSlot(entry);
+  for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes);
 }
 
 /** Listens to each slot's decodes as they arrive (the sequencer). */

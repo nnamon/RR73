@@ -22,6 +22,8 @@ const here = (p: string) => fileURLToPath(new URL(p, import.meta.url));
 const IPHONE_UA =
   'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
 const iphone = (width: number, height: number, scale: number) => ({
+  // WebKit's mock microphone, for the screen-state review.
+  permissions: ['microphone'],
   browserName: 'webkit' as const,
   viewport: { width, height },
   deviceScaleFactor: scale,
@@ -44,7 +46,8 @@ export default defineConfig({
   webServer: process.env.BASE_URL
     ? undefined
     : {
-        command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+        // VITE_E2E adds the hooks the screen review uses (src/lib/testing/e2e-hooks.ts).
+        command: 'VITE_E2E=1 npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
         cwd: here('.'),
         url: 'http://127.0.0.1:4173',
         timeout: 180_000,
@@ -57,8 +60,8 @@ export default defineConfig({
     // window. Retries bound that; a decoding regression still fails all three attempts.
     { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
-    { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
+    { name: 'webkit-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
+    { name: 'webkit-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
