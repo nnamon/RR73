@@ -52,7 +52,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   await page.getByRole('button', { name: 'Copy timing report' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Copied' })).toBeVisible();
   const report = await page.evaluate(() => navigator.clipboard.readText());
-  expect(report).toMatch(/^RR73 \d+\.\d+\.\d+ timing report, \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
+  expect(report).toMatch(/^RR73 \d+\.\d+\.\d+ \(\w+\) timing report, \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
   expect(report).toContain('Clock source: output timestamps');
   expect(report).toMatch(/\nAudio gaps bridged: \d+, \d+\.\d ms\n/);
   expect(report).toContain('Input offset: 0.080 s');

@@ -3,8 +3,8 @@
    * The live waterfall: newest time at the top, 0 to 3000 Hz across, slot lines labelled with
    * their UTC start, and a ruler strip under it with a tick every 100 Hz, a taller one every
    * 500 Hz and labels from 500 to 3000. Drawing happens in the waterfall worker; this component
-   * sizes the canvas, feeds it audio and places the overlays. Slots RR73 transmitted in are drawn
-   * blank and labelled Tx.
+   * sizes the canvas, feeds it audio and places the overlays. Slots RR73 transmitted in show
+   * the transmitted audio and are labelled Tx.
    *
    * Tx (red) and Rx (green) show as two lines at the signal's lowest and highest tone with a
    * light fill, through the picture and the ruler. Dragging sideways anywhere moves Tx, with the
@@ -23,7 +23,7 @@
   import type { Contrast } from '../lib/waterfall/levels';
   import { utcTime } from '../lib/clock/format';
   import type { Mode } from '../lib/clock/slots';
-  import { onAudioChunk } from '../lib/state/station.svelte';
+  import { onAudioChunk, onTxWave, recentTxWaves } from '../lib/state/station.svelte';
 
   let {
     mode,
@@ -38,7 +38,7 @@
     mode: Mode;
     rxHz: number;
     txHz: number;
-    /** Starts of the slots RR73 transmitted in, UTC ms: drawn blank. */
+    /** Starts of the slots RR73 transmitted in, UTC ms: drawn from the transmitted audio. */
     txSlots?: number[];
     contrast?: Contrast;
     stoppedAtUtcMs?: number | null;
@@ -158,6 +158,7 @@
         client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
         client.setContrast(contrast);
         client.setTxSlots(txSlots);
+        for (const w of recentTxWaves()) client.setTxWave(w);
       } else client.resize(w, h);
     };
     const ro = new ResizeObserver(measure);
@@ -166,8 +167,10 @@
     const off = onAudioChunk((c) => {
       client?.push(c.samples, c.utcMs, c.index);
     });
+    const offTx = onTxWave((w) => client?.setTxWave(w));
     return () => {
       off();
+      offTx();
       ro.disconnect();
       client?.destroy();
       client = null;

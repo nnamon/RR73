@@ -130,7 +130,7 @@ describe('retries', () => {
     s.run(2, 12);
     expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE OJ11', '6:JA1KXM 9V1NE OJ11', '8:JA1KXM 9V1NE OJ11']);
     expect(s.st).toMatchObject({ paused: true, txEnabled: true, current: 1 });
-    expect(s.notices().at(-1)).toMatchObject({ kind: 'no-reply', text: 'No reply from JA1KXM after 3 repeats. Tap Call to try again.' });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'no-reply', text: 'No reply from JA1KXM' });
     // Calling again starts over.
     s.call(11, 'CQ JA1KXM PM95');
     s.run(12, 12);
@@ -401,7 +401,7 @@ describe('a lost station', () => {
       s.call(1, 'CQ VK2LAW QF56');
       s.run(2, 10, { 3: [msg], 5: [msg], 7: ['CQ VK2LAW QF56'] });
       expect(texts(s), msg).toEqual(['2:VK2LAW 9V1NE OJ11']);
-      expect(s.notices(), msg).toEqual([{ type: 'notice', kind: 'lost', text: 'VK2LAW answered DV5CEL.' }]);
+      expect(s.notices(), msg).toEqual([{ type: 'notice', kind: 'lost', text: 'VK2LAW answered DV5CEL' }]);
       expect(s.st, msg).toMatchObject({ phase: 'answering', paused: true, txEnabled: true });
     }
   });
@@ -431,7 +431,7 @@ describe('tail-ending', () => {
       s.run(2, 10, { 3: ['DV5CEL VK2LAW -05'], 5: [`DV5CEL VK2LAW ${end}`], 7: ['9V1NE VK2LAW -08'], 9: ['9V1NE VK2LAW RR73'] });
       expect(texts(s), end).toEqual(['2:VK2LAW 9V1NE OJ11', '6:VK2LAW 9V1NE OJ11', '8:VK2LAW 9V1NE R-10', '10:VK2LAW 9V1NE 73']);
       expect(s.logged().map((r) => r.call)).toEqual(['VK2LAW']);
-      expect(s.notices()).toEqual([{ type: 'notice', kind: 'lost', text: 'VK2LAW answered DV5CEL. Calling once more when they finish.' }]);
+      expect(s.notices()).toEqual([{ type: 'notice', kind: 'lost', text: 'VK2LAW answered DV5CEL' }]);
     }
   });
 
@@ -454,7 +454,7 @@ describe('tail-ending', () => {
     s.call(1, 'CQ VK2LAW QF56');
     s.run(2, 14, { 3: ['DV5CEL VK2LAW -05'], 5: ['DV5CEL VK2LAW RR73'], 7: ['CQ VK2LAW QF56'], 9: ['CQ VK2LAW QF56'] });
     expect(texts(s)).toEqual(['2:VK2LAW 9V1NE OJ11', '6:VK2LAW 9V1NE OJ11']);
-    expect(s.notices().at(-1)).toEqual({ type: 'notice', kind: 'no-reply', text: 'No reply from VK2LAW after one more call.' });
+    expect(s.notices().at(-1)).toEqual({ type: 'notice', kind: 'no-reply', text: 'No reply from VK2LAW' });
     expect(s.st).toMatchObject({ paused: true, txEnabled: true, lost: null });
   });
 
@@ -483,7 +483,7 @@ describe('tail-ending', () => {
     expect(s.st.lost?.state).toBe('watching');
     s.run(12, 16, heard);
     expect(texts(s)).toEqual(['2:VK2LAW 9V1NE OJ11']);
-    expect(s.notices().at(-1)).toMatchObject({ kind: 'lost', text: 'VK2LAW is still working DV5CEL.' });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'lost', text: 'VK2LAW is still working DV5CEL' });
     expect(s.st).toMatchObject({ paused: true, lost: null });
   });
 });
@@ -548,7 +548,7 @@ describe('Hunt', () => {
     for (let i = 1; i <= 51; i += 2) heard[i] = cqs.slice(0, 2);
     s.run(0, 18, heard);
     expect(texts(s)).toEqual([2, 4, 6, 8].map((i) => `${i}:JA1KXM 9V1NE OJ11`).concat([10, 12, 14, 16].map((i) => `${i}:K1ABC 9V1NE OJ11`)));
-    expect(s.notices().map((n) => n.text)).toEqual(['No reply from JA1KXM after 3 repeats.', 'No reply from K1ABC after 3 repeats.']);
+    expect(s.notices().map((n) => n.text)).toEqual(['No reply from JA1KXM', 'No reply from K1ABC']);
     // JA1KXM was given up at 13:16:30.1; Hunt calls him again 10 min later.
     expect(s.st.ignored.map((i) => i.call)).toEqual(['JA1KXM', 'K1ABC']);
     s.run(19, 50, heard);
@@ -696,7 +696,7 @@ describe('watchdog', () => {
     expect(s.st.txEnabled).toBe(true);
     s.send({ type: 'tick', nowMs: s.at(24, 0.5) });
     expect(s.st).toMatchObject({ txEnabled: false, hunt: false });
-    expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Tx stopped: 6 min without a touch or a new message. Enable Tx to carry on.' });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Watchdog stopped Tx after 6 min' });
     expect(s.effects.at(-2)).toEqual({ type: 'cancelTx', stopPlaying: true });
   });
 
@@ -732,7 +732,7 @@ describe('watchdog', () => {
       expect(s.st.txEnabled, text).toBe(true);
       s.send({ type: 'tick', nowMs: s.at(0, 0.1) + ms });
       expect(s.st.txEnabled, text).toBe(false);
-      expect(s.notices().at(-1)?.text).toBe(`Tx stopped: ${text} without a touch or a new message. Enable Tx to carry on.`);
+      expect(s.notices().at(-1)?.text).toBe(`Watchdog stopped Tx after ${text}`);
     }
   });
 
@@ -801,7 +801,7 @@ describe('safety', () => {
     expect(s.notices().at(-1)?.kind).toBe('audio');
     s.send({ type: 'enableTx', on: true, nowMs: s.at(4, 0.3) });
     expect(s.pending).toBeNull();
-    expect(notReady(s.st)).toBe('Resume audio to transmit.');
+    expect(notReady(s.st)).toBe('Audio off');
     s.send({ type: 'audioResumed', nowMs: s.at(5, 1) });
     expect(s.st.txEnabled).toBe(true);
     s.send({ type: 'enableTx', on: true, nowMs: s.at(5, 1.1) });
@@ -854,7 +854,7 @@ describe('safety', () => {
       const s = new Sim(over);
       s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
       expect(s.pending, JSON.stringify(over)).toBeNull();
-      expect(notReady(s.st)).toBe('Set your callsign and grid in Settings to transmit.');
+      expect(notReady(s.st)).toBe('Set callsign and grid in Settings');
     }
   });
 

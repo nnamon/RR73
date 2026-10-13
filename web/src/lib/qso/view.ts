@@ -7,6 +7,7 @@ import { MINUS, signed as signedNum, utcTime } from '../clock/format';
 import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
 import { messages, type SeqState } from './sequencer';
+import { PAUSED } from './status';
 
 export type StepState = 'done' | 'now' | 'next' | 'todo';
 
@@ -63,7 +64,7 @@ export function barText(st: SeqState): string | null {
   const m = messages(st);
   const p = st.partner;
   if (st.onAir) return `Tx${st.onAir.tx} · ${st.onAir.text}`;
-  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? `no reply after ${st.config.maxRetries} repeats`}`;
+  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? PAUSED.noReply}`;
   if (p && st.lost?.state === 'watching') return `${bare(p.call)} · working ${st.lost.other}`;
   if (st.next) {
     const n = st.next;

@@ -237,6 +237,25 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-logged-notice.png` });
   });
 
+  test(`logged notice floats above Operate's buttons without moving them in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/operate', theme);
+    const bar = page.getByRole('region', { name: 'Transmit' });
+    const before = (await bar.boundingBox())!;
+    await page.goto('./#/log');
+    await page.getByRole('button', { name: 'Add QSO' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add QSO' });
+    await sheet.getByRole('textbox', { name: 'Callsign' }).fill('JA1KXM');
+    await sheet.getByRole('button', { name: 'Add QSO' }).click();
+    await page.getByRole('link', { name: 'Operate' }).click();
+    const notice = page.getByTestId('log-notice');
+    await expect(notice).toBeVisible();
+    // In 0.10.1 the notice sat under the bar and pushed it up by the notice's height.
+    expect((await bar.boundingBox())!).toEqual(before);
+    const n = (await notice.boundingBox())!;
+    expect(n.y + n.height).toBeLessThanOrEqual(before.y);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-logged-notice-operate.png` });
+  });
+
   test(`tune sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/settings/radio', theme);
     await page.getByRole('button', { name: /^Tune for 10 s/ }).click();

@@ -11,7 +11,7 @@
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
+  import { audio, band, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
@@ -68,6 +68,14 @@
     if (k.passed === null)
       return k.source === 'tune' ? `Not checked at ${at}: receive audio was off. Start audio, then run Tune.` : `Not checked at ${at}: receive audio started after the chime. Start audio again.`;
     return k.passed ? `Passed at ${at}: receive audio dropped ${Math.round(k.dropDb ?? 0)} dB.` : `Failed at ${at}: receive audio did not drop. Check the radio’s VOX and the cable.`;
+  });
+
+  const decoderText = $derived.by(() => {
+    const d = band.decoder;
+    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
+    if (d.state === 'loading') return 'Loading';
+    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
+    return 'Not loaded';
   });
 
   // Timing: measurements for checking receive and transmit timing on the air.
@@ -263,6 +271,10 @@
   <div class="section">
     <h2 class="section-head">Timing</h2>
     <div class="group" data-testid="timing">
+      <div class="row">
+        <span class="row-main"><span class="row-title">Decoder</span></span>
+        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
+      </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
       </div>

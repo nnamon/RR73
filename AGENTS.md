@@ -79,6 +79,7 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 
 - Buttons are a verb and an object: "Log QSO", "Resume audio", "Change band".
 - Status says what is true now: "Transmitting", "Waiting for signal", "Refused by Wavelog".
+- Operate's status line states the event or the new value in a few words, with no full stop: "Tx set to 908 Hz", "No reply from VK2LAW". No reasons or instructions unless the operator has to act. Every line has one style. Its notices live in `web/src/lib/qso/status.ts`, and the copy lint holds them to 6 words.
 - Errors say what happened, the cause if known, and what to do: "Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog." Never raw exception text.
 - Confirmations name the consequence: "End activation? The 7 QSOs stay on this phone."
 - Empty states say what will appear and when.
@@ -121,7 +122,7 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 | callsign | One word. |
 | band, mode | 20m, 40m; FT8, FT4, WSPR. |
 | Tx, Rx | Transmit, receive. |
-| Run | The switch that keeps CQ going after each QSO: the next caller, or CQ again. Off, Tx goes off after the QSO. |
+| Repeat CQ | The switch in Operate's ••• that keeps CQ going after each QSO: the next caller, or CQ again. Off, Tx goes off after the QSO. Called `run` in the code. |
 | Hunt | Answers CQs one after another, logging each QSO, until stopped. |
 | tail-end | Calling a station once more as it ends a QSO with another station. |
 | activation | Operating from a park, summit or island under one or more references. |
