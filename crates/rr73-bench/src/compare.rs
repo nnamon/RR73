@@ -267,6 +267,8 @@ mod tests {
             overrides: Vec::new(),
             config: serde_json::Value::Null,
             reference_key: None,
+            audio_s: None,
+            audio_fill: None,
             environment: Environment {
                 os: "linux".into(),
                 arch: "x86_64".into(),

@@ -63,6 +63,13 @@ enum Command {
         /// else jt9-d3, else the first key).
         #[arg(long)]
         reference: Option<String>,
+        /// Decode only the first this many seconds of each slot (early decoding).
+        #[arg(long, value_name = "SECONDS")]
+        audio_s: Option<f64>,
+        /// With --audio-s: `absent` ends the audio there (a partial slot), `zero` pads the
+        /// slot with silence.
+        #[arg(long, value_enum, default_value_t = run::AudioFill::Absent)]
+        audio_fill: run::AudioFill,
         /// Corpus files or directories.
         #[arg(required = true)]
         paths: Vec<PathBuf>,
@@ -165,6 +172,8 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             out,
             threads,
             reference,
+            audio_s,
+            audio_fill,
             paths,
         } => {
             let opts = run::RunOptions {
@@ -174,6 +183,8 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 out,
                 threads,
                 reference,
+                audio_s,
+                audio_fill,
             };
             let (results, path) = run::run(&opts)?;
             print!("{}", run::summary_table(&results));

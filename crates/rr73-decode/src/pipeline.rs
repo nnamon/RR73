@@ -2,7 +2,7 @@
 
 use std::sync::OnceLock;
 
-use rr73_dsp::{FftPlans, Spectrogram, SpectrogramConfig, SpectrogramPlan};
+use rr73_dsp::{FftPlans, Spectrogram, SpectrogramPlan};
 use rr73_ft8::{CallsignHashes, Mode, Payload};
 
 use crate::clock::Stopwatch;
@@ -11,13 +11,14 @@ use crate::demod::{Demodulator, MaxLogDemod};
 use crate::layout::{CODEWORD_BITS, FrameLayout};
 use crate::ldpc::{LdpcDecoder, LdpcScratch, MinSum, ParityGraph, SumProduct};
 use crate::osd::{BpOsd, OsdParams};
-use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
+use crate::report::DecodeReport;
 use crate::search::{CandidateSearch, CostasSearch};
+use crate::session::{DecodeSession, Stage};
 use crate::snr::SnrScale;
 use crate::stages::{NoRefine, NoSubtract, Subtractor, SyncRefine};
 use crate::subtract::{ModelSubtract, SubtractScratch};
-use crate::validate::{CrcUnpack, Rejection, Validator};
-use crate::view::{Candidate, SymbolView, frame_range};
+use crate::validate::{CrcUnpack, Validator};
+use crate::view::Candidate;
 
 /// Sample rate the decoder expects, in Hz.
 pub const SAMPLE_RATE: u32 = 12_000;
@@ -32,6 +33,10 @@ pub struct SlotAudio<'a> {
     pub mode: Mode,
     /// Slot start in seconds since the Unix epoch (UTC), when known. Informational.
     pub start_utc_s: Option<f64>,
+    /// `true` when `samples` is the start of a slot still being received. The spectrogram
+    /// then keeps only frames whose window lies wholly inside the audio, so symbols cut by
+    /// the end of the audio count as missing (zero LLRs) instead of as weak.
+    pub partial: bool,
 }
 
 impl<'a> SlotAudio<'a> {
@@ -41,6 +46,15 @@ impl<'a> SlotAudio<'a> {
             samples,
             mode,
             start_utc_s: None,
+            partial: false,
+        }
+    }
+
+    /// The first part of a slot still being received (see [`SlotAudio::partial`]).
+    pub fn partial(samples: &'a [f32], mode: Mode) -> Self {
+        Self {
+            partial: true,
+            ..Self::new(samples, mode)
         }
     }
 }
@@ -50,7 +64,7 @@ impl<'a> SlotAudio<'a> {
 pub struct DecodeContext {
     /// Callsigns seen in full, used to resolve hashed callsigns. Decoding adds to it.
     pub hashes: CallsignHashes,
-    ws: Workspace,
+    pub(crate) ws: Workspace,
 }
 
 impl Default for DecodeContext {
@@ -77,18 +91,19 @@ impl DecodeContext {
     }
 }
 
-struct Workspace {
-    plans: FftPlans,
-    plan: Option<(SpectrogramPlan, SnrScale)>,
-    spec: Spectrogram,
-    candidates: Vec<Candidate>,
-    llr: [f32; CODEWORD_BITS],
-    codeword: [u8; CODEWORD_BITS],
-    ldpc: LdpcScratch,
-    noise: Vec<f32>,
-    audio: Vec<f32>,
-    seen: Vec<Payload>,
-    subtract: SubtractScratch,
+pub(crate) struct Workspace {
+    pub(crate) plans: FftPlans,
+    pub(crate) plan: Option<(SpectrogramPlan, SnrScale)>,
+    pub(crate) spec: Spectrogram,
+    pub(crate) candidates: Vec<Candidate>,
+    pub(crate) llr: [f32; CODEWORD_BITS],
+    pub(crate) codeword: [u8; CODEWORD_BITS],
+    pub(crate) ldpc: LdpcScratch,
+    pub(crate) noise: Vec<f32>,
+    pub(crate) audio: Vec<f32>,
+    pub(crate) seen: Vec<Payload>,
+    pub(crate) subtract: SubtractScratch,
+    pub(crate) chunk: Vec<Candidate>,
 }
 
 impl Default for Workspace {
@@ -105,6 +120,7 @@ impl Default for Workspace {
             audio: Vec::new(),
             seen: Vec::new(),
             subtract: SubtractScratch::default(),
+            chunk: Vec::new(),
         }
     }
 }
@@ -173,6 +189,7 @@ impl Pipeline {
                     source: config.ldpc.osd_source,
                     max_hard_errors: config.ldpc.osd_max_hard_errors,
                     max_distance: config.ldpc.osd_max_distance,
+                    erasures_as_errors: config.ldpc.osd_erasures_as_errors,
                 },
             }),
         };
@@ -198,172 +215,23 @@ impl Pipeline {
         }
     }
 
-    /// Runs the pipeline over `samples` for `layout`, decoding codewords on `graph`.
+    /// Runs `config` over `audio` for `layout`, decoding codewords on `graph`, as a
+    /// one-stage [`DecodeSession`].
     pub fn run(
-        &self,
-        samples: &[f32],
-        layout: &FrameLayout,
-        graph: &ParityGraph,
+        audio: &SlotAudio<'_>,
+        layout: &'static FrameLayout,
+        graph: &'static ParityGraph,
         config: &DecoderConfig,
         ctx: &mut DecodeContext,
     ) -> DecodeReport {
         let total = Stopwatch::start();
-        let mut stats = DecodeStats::default();
-        let mut timings = StageTimings::default();
-        let mut decodes: Vec<Decode> = Vec::new();
-        let DecodeContext { hashes, ws } = ctx;
-
-        let sp = &config.spectrogram;
-        let Ok(mut spec_config) = SpectrogramConfig::oversampled(
-            layout.samples_per_symbol,
-            sp.time_osr,
-            sp.freq_osr,
-            sp.freq_min_hz,
-            sp.freq_max_hz,
-            SAMPLE_RATE,
-        ) else {
-            return DecodeReport {
-                decodes,
-                stats,
-                timings,
-            };
-        };
-        spec_config.window = sp.window;
-        if ws.plan.as_ref().is_none_or(|(p, _)| *p.config() != spec_config) {
-            let window = spec_config.window.build(spec_config.fft_size);
-            let scale = SnrScale::new(layout, spec_config.fft_size, &window);
-            ws.plan = SpectrogramPlan::new(spec_config.clone(), &mut ws.plans)
-                .ok()
-                .map(|p| (p, scale));
-        }
-        let Some((plan, snr_scale)) = ws.plan.as_mut() else {
-            return DecodeReport {
-                decodes,
-                stats,
-                timings,
-            };
-        };
-        let snr_scale = *snr_scale;
-
-        let (dt_min, dt_max) = match layout.mode {
-            Mode::Ft8 => (config.search.ft8_dt_min_s, config.search.ft8_dt_max_s),
-            Mode::Ft4 => (config.search.ft4_dt_min_s, config.search.ft4_dt_max_s),
-        };
-        let hop = spec_config.hop;
-        let range = frame_range(layout, hop, dt_min, dt_max);
-        // Frames up to the last symbol of the latest candidate, and no further than the audio.
-        let last_needed = i64::from(*range.end()) + ((layout.symbols.saturating_sub(1)) * sp.time_osr) as i64;
-        let frames = (samples.len().div_ceil(hop) as i64).min(last_needed + 1).max(0) as usize;
-
-        let passes = config.passes.max(1);
-        if passes > 1 {
-            ws.audio.clear();
-            ws.audio.extend_from_slice(samples);
-        }
-        ws.seen.clear();
-
-        for pass in 1..=passes {
-            let audio: &[f32] = if passes > 1 { &ws.audio } else { samples };
-            let sw = Stopwatch::start();
-            plan.compute(audio, frames, &mut ws.spec);
-            timings.spectrogram_s += sw.elapsed_s();
-
-            let view = SymbolView {
-                spec: &ws.spec,
-                layout,
-                time_osr: sp.time_osr,
-                freq_osr: sp.freq_osr,
-            };
-            let sw = Stopwatch::start();
-            self.search.search(&view, range.clone(), &mut ws.candidates);
-            timings.search_s += sw.elapsed_s();
-            stats.candidates += ws.candidates.len() as u32;
-
-            let pass_start = decodes.len();
-            for &found in ws.candidates.iter() {
-                let mut cand = found;
-                let sw = Stopwatch::start();
-                self.refine.refine(&view, &mut cand);
-                timings.refine_s += sw.elapsed_s();
-
-                let sw = Stopwatch::start();
-                self.demod.llrs(&view, &cand, &mut ws.llr);
-                timings.demod_s += sw.elapsed_s();
-
-                let sw = Stopwatch::start();
-                stats.ldpc_attempts += 1;
-                let outcome = self.ldpc.decode(graph, &ws.llr, &mut ws.ldpc, &mut ws.codeword);
-                timings.ldpc_s += sw.elapsed_s();
-                if !outcome.converged {
-                    continue;
-                }
-                stats.ldpc_converged += 1;
-                stats.osd_codewords += u32::from(outcome.osd);
-
-                let sw = Stopwatch::start();
-                let valid = match self
-                    .validator
-                    .validate(layout.mode, &ws.codeword, &outcome, hashes)
-                {
-                    Ok(v) => v,
-                    Err(r) => {
-                        match r {
-                            Rejection::Crc => stats.crc_failures += 1,
-                            Rejection::ZeroPayload => stats.zero_payloads += 1,
-                            Rejection::Unpack(_) => stats.unpack_failures += 1,
-                            Rejection::Implausible => stats.implausible += 1,
-                        }
-                        timings.validate_s += sw.elapsed_s();
-                        continue;
-                    }
-                };
-                if self.validator.is_duplicate(&valid, &ws.seen) {
-                    stats.duplicates += 1;
-                    timings.validate_s += sw.elapsed_s();
-                    continue;
-                }
-                let tones = rr73_ft8::tones::from_payload(layout.mode, &valid.payload);
-                let snr_db = snr_scale.estimate(&view, &cand, &tones, &mut ws.noise);
-                // An OSD codeword claiming an SNR below what decoding reaches is noise.
-                if outcome.osd && snr_db < config.validate.osd_min_snr_db {
-                    stats.implausible += 1;
-                    timings.validate_s += sw.elapsed_s();
-                    continue;
-                }
-                ws.seen.push(valid.payload);
-                hashes.learn(&valid.message);
-                decodes.push(Decode {
-                    text: valid.text,
-                    message: valid.message,
-                    payload: valid.payload,
-                    freq_hz: view.freq_hz(&cand),
-                    dt_s: view.dt_s(&cand),
-                    snr_db,
-                    pass,
-                    ldpc_iterations: outcome.iterations,
-                    hard_errors: outcome.hard_errors,
-                    score: cand.score,
-                    osd: outcome.osd,
-                    osd_distance: outcome.distance,
-                });
-                timings.validate_s += sw.elapsed_s();
-            }
-
-            // A pass that found nothing new leaves the residual as it was: stop.
-            if pass == passes || decodes.len() == pass_start {
-                break;
-            }
-            let sw = Stopwatch::start();
-            self.subtractor
-                .subtract(layout, &mut ws.audio, &decodes[pass_start..], &mut ws.subtract);
-            timings.subtract_s += sw.elapsed_s();
-        }
-        timings.total_s = total.elapsed_s();
-        DecodeReport {
-            decodes,
-            stats,
-            timings,
-        }
+        let stage = Stage::new("main", config.clone());
+        let mut session = DecodeSession::with_parts(audio, vec![stage], std::mem::take(ctx), layout, graph);
+        session.run_to_end();
+        let mut report = session.report();
+        *ctx = session.into_context();
+        report.timings.total_s = total.elapsed_s();
+        report
     }
 }
 
@@ -382,7 +250,7 @@ pub fn layout(mode: Mode) -> &'static FrameLayout {
 /// Never panics on sample values: non-finite samples read as zero, silence and noise give
 /// no decodes, and buffers of any length (including empty) are accepted.
 pub fn decode(audio: &SlotAudio<'_>, config: &DecoderConfig, ctx: &mut DecodeContext) -> DecodeReport {
-    Pipeline::from_config(config).run(audio.samples, layout(audio.mode), ParityGraph::ft8(), config, ctx)
+    Pipeline::run(audio, layout(audio.mode), ParityGraph::ft8(), config, ctx)
 }
 
 #[cfg(test)]
@@ -412,7 +280,11 @@ mod tests {
     }
 
     fn run(samples: &[f32], config: &DecoderConfig, ctx: &mut DecodeContext) -> DecodeReport {
-        Pipeline::from_config(config).run(samples, &test_layouts::ft8(), &toy_graph(), config, ctx)
+        static LAYOUT: OnceLock<FrameLayout> = OnceLock::new();
+        static GRAPH: OnceLock<ParityGraph> = OnceLock::new();
+        let layout = LAYOUT.get_or_init(test_layouts::ft8);
+        let graph = GRAPH.get_or_init(toy_graph);
+        Pipeline::run(&SlotAudio::new(samples, Mode::Ft8), layout, graph, config, ctx)
     }
 
     #[test]

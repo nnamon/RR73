@@ -164,6 +164,9 @@ pub struct LdpcParams {
     /// Largest reliability-weighted distance of an OSD codeword, as a fraction of the total
     /// reliability.
     pub osd_max_distance: f32,
+    /// Count erased bits (symbols outside the audio) as hard errors of OSD codewords.
+    #[serde(default)]
+    pub osd_erasures_as_errors: bool,
 }
 
 /// Validator implementations.
@@ -264,6 +267,7 @@ impl DecoderConfig {
                 osd_source: OsdSource::Channel,
                 osd_max_hard_errors: 174,
                 osd_max_distance: 1.0,
+                osd_erasures_as_errors: false,
             },
             validate: ValidateParams {
                 kind: ValidateKind::CrcUnpack,
@@ -296,8 +300,9 @@ impl DecoderConfig {
     /// `subtract-3` with ordered-statistics decoding of `order` (1 or 2) after failed belief
     /// propagation: reliabilities from the channel LLRs, flips among the `window` least
     /// reliable information positions, at most 30 hard errors, a weighted distance of at
-    /// most 0.07, an SNR of at least -24 dB, and OSD messages limited to plausible standard
-    /// messages. The limits come from `docs/experiments/0002-osd.md`.
+    /// most 0.07 (erased bits of a partial slot count as hard errors), an SNR of at least
+    /// -24 dB, and OSD messages limited to plausible standard messages. The limits come from
+    /// `docs/experiments/0002-osd.md` and `docs/experiments/0003-anytime.md`.
     fn subtract_3_osd(order: u8, window: usize) -> Self {
         let mut c = Self::subtract_3();
         c.ldpc.kind = LdpcKind::BpOsd;
@@ -306,6 +311,7 @@ impl DecoderConfig {
         c.ldpc.osd_source = OsdSource::Channel;
         c.ldpc.osd_max_hard_errors = 30;
         c.ldpc.osd_max_distance = 0.07;
+        c.ldpc.osd_erasures_as_errors = true;
         c.validate.osd_messages = OsdMessages::Standard;
         c
     }

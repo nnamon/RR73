@@ -28,6 +28,23 @@ pub struct RunOptions {
     pub threads: Option<usize>,
     /// Reference key for real slots.
     pub reference: Option<String>,
+    /// Decode only the first this many seconds of each slot.
+    pub audio_s: Option<f64>,
+    /// What stands in for the rest of the slot when `audio_s` is set.
+    pub audio_fill: AudioFill,
+}
+
+/// The rest of a slot cut short by `--audio-s`.
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, clap::ValueEnum,
+)]
+#[serde(rename_all = "kebab-case")]
+pub enum AudioFill {
+    /// The audio ends there; the decoder treats the slot as partial.
+    #[default]
+    Absent,
+    /// Zeros up to the slot length; the decoder sees a full slot.
+    Zero,
 }
 
 /// Runs the decoder over the corpus, writes the results file and returns it with its path.
@@ -52,7 +69,9 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let mut slots: Vec<SlotResult> = pool.install(|| {
         files
             .par_iter()
-            .map_init(DecodeContext::new, |ctx, f| process(f, &config, ctx, reference))
+            .map_init(DecodeContext::new, |ctx, f| {
+                process(f, &config, ctx, reference, opts.audio_s, opts.audio_fill)
+            })
             .collect()
     });
     let wall_s = start.elapsed().as_secs_f64();
@@ -67,6 +86,8 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         overrides: opts.overrides.clone(),
         config: config_json(&config)?,
         reference_key: opts.reference.clone(),
+        audio_s: opts.audio_s,
+        audio_fill: opts.audio_s.map(|_| opts.audio_fill),
         environment: util::environment(threads),
         wall_s,
         slim: false,
@@ -105,6 +126,8 @@ fn process(
     config: &DecoderConfig,
     ctx: &mut DecodeContext,
     reference: Option<&str>,
+    audio_s: Option<f64>,
+    fill: AudioFill,
 ) -> SlotResult {
     let path = files.wav.display().to_string();
     let set = set_name(&files.wav);
@@ -135,8 +158,25 @@ fn process(
     };
     // Each slot starts from an empty hash table so results do not depend on thread order.
     ctx.hashes = CallsignHashes::new();
+    let mut samples = slot.samples.clone();
+    let mut partial = false;
+    if let Some(seconds) = audio_s {
+        let keep = ((seconds.max(0.0) * 12_000.0).round() as usize).min(samples.len());
+        match fill {
+            AudioFill::Absent => {
+                samples.truncate(keep);
+                partial = true;
+            }
+            AudioFill::Zero => samples[keep..].fill(0.0),
+        }
+    }
+    let audio = if partial {
+        SlotAudio::partial(&samples, mode)
+    } else {
+        SlotAudio::new(&samples, mode)
+    };
     let started = Instant::now();
-    let report = decode(&SlotAudio::new(&slot.samples, mode), config, ctx);
+    let report = decode(&audio, config, ctx);
     let time_s = started.elapsed().as_secs_f64();
 
     let decoded: Vec<Entry> = report

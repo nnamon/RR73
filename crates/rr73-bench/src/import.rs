@@ -195,6 +195,8 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
             "dt_offset_s": opts.dt_offset_s,
         }),
         reference_key: opts.reference.clone(),
+        audio_s: None,
+        audio_fill: None,
         environment: util::environment(0),
         wall_s: 0.0,
         slim: false,

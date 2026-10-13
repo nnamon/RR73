@@ -344,6 +344,7 @@ fn bp_osd_recovers_codewords_belief_propagation_misses() {
             source: OsdSource::Channel,
             max_hard_errors: 30,
             max_distance: 0.07,
+            erasures_as_errors: false,
         },
     };
     let mut rng = ChaCha8Rng::seed_from_u64(31);

@@ -27,6 +27,12 @@ pub struct Results {
     pub config: serde_json::Value,
     /// Reference key used for real slots, or `null` for the default choice.
     pub reference_key: Option<String>,
+    /// Seconds of each slot decoded (`--audio-s`), or `null` for whole slots.
+    #[serde(default)]
+    pub audio_s: Option<f64>,
+    /// What stood in for the rest of a cut slot (`--audio-fill`).
+    #[serde(default)]
+    pub audio_fill: Option<crate::run::AudioFill>,
     /// Machine and build.
     pub environment: Environment,
     /// Wall time of the whole run (reading, decoding, scoring), in seconds.

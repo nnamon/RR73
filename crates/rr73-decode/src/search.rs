@@ -82,6 +82,17 @@ impl CostasSearch {
     }
 }
 
+/// Sort order of candidate lists: best first (see [`better`]).
+pub(crate) fn best_first(a: &Candidate, b: &Candidate) -> std::cmp::Ordering {
+    if better(a, b) {
+        std::cmp::Ordering::Less
+    } else if better(b, a) {
+        std::cmp::Ordering::Greater
+    } else {
+        std::cmp::Ordering::Equal
+    }
+}
+
 /// Orders candidates best first: higher score, then earlier frame, then lower bin.
 fn better(a: &Candidate, b: &Candidate) -> bool {
     match a.score.total_cmp(&b.score) {
