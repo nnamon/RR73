@@ -127,7 +127,7 @@
       <button class="row tune" onclick={() => (tuneOpen = true)}>
         <span class="row-main">
           <span class="row-title acc">Tune…</span>
-          <span class="row-sub">Asks first, then transmits 1500 Hz for 10 s with a countdown.</span>
+          <span class="row-sub">Asks first, then transmits at {settings.txHz} Hz for 10 s with a countdown.</span>
         </span>
       </button>
     </div>

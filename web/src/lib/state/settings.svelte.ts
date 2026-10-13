@@ -24,9 +24,13 @@ export interface Settings {
   /** Tune output level, 0 to 1. */
   outputLevel: number;
   checklist: Checklist;
-  /** Receive and transmit audio frequencies, Hz. */
+  /** Receive and transmit audio frequencies (lowest tone), Hz. */
   rxHz: number;
   txHz: number;
+  /** Tx stays put when calling a station; when false, Tx moves to the station called. */
+  holdTx: boolean;
+  /** The operator has set a frequency from the waterfall, so the hint under it is gone. */
+  freqPicked: boolean;
   /** Operator grid square, 4 or 6 characters; empty until set. */
   grid: string;
   /** Tx4 acknowledges with RR73 or RRR. */
@@ -49,6 +53,8 @@ export const DEFAULTS: Settings = {
   checklist: { focus: false, clicks: false, volume: false },
   rxHz: 1500,
   txHz: 1500,
+  holdTx: true,
+  freqPicked: false,
   grid: '',
   ack: 'RR73',
   workDupes: false,
@@ -89,6 +95,8 @@ export function validate(raw: unknown): Settings {
   if (typeof r.grid === 'string' && /^[A-R]{2}\d{2}([A-X]{2})?$/i.test(r.grid.trim())) s.grid = normaliseGrid(r.grid);
   if (r.ack === 'RR73' || r.ack === 'RRR') s.ack = r.ack;
   if (typeof r.workDupes === 'boolean') s.workDupes = r.workDupes;
+  if (typeof r.holdTx === 'boolean') s.holdTx = r.holdTx;
+  if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
   if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
   if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
   for (const k of ['rxHz', 'txHz'] as const) {

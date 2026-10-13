@@ -60,5 +60,6 @@ describe('dock view', () => {
     expect(statusLine(s.st, s.at(1, 20.1))).toBe('Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:25');
     s.send({ type: 'halt', nowMs: s.at(2) });
     expect(statusLine(s.st, s.at(2))).toBe('Auto Seq on · Hold Tx 1500 Hz · Tx off');
+    expect(statusLine(s.st, s.at(2), false)).toBe('Auto Seq on · Tx 1500 Hz · Tx off');
   });
 });

@@ -100,11 +100,11 @@ export function nextLine(st: SeqState, nowMs: number): NextLine | null {
   return null;
 }
 
-/** "Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:40". */
-export function statusLine(st: SeqState, nowMs: number): string {
+/** "Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:40"; without Hold Tx, "Tx 1500 Hz". */
+export function statusLine(st: SeqState, nowMs: number, holdTx = true): string {
   const left = Math.max(0, st.config.watchdogMs - (nowMs - st.watchdogFromMs));
   const m = Math.floor(left / 60000);
   const s = Math.floor((left % 60000) / 1000);
   const wd = st.txEnabled ? `Watchdog ${m}:${String(s).padStart(2, '0')}` : 'Tx off';
-  return `Auto Seq on · Hold Tx ${st.config.txHz} Hz · ${wd}`;
+  return `Auto Seq on · ${holdTx ? 'Hold Tx' : 'Tx'} ${st.config.txHz} Hz · ${wd}`;
 }

@@ -14,7 +14,7 @@
   import QsoDock from '../ui/QsoDock.svelte';
   import QsoEditSheet from '../ui/QsoEditSheet.svelte';
   import StationSheet from '../ui/StationSheet.svelte';
-  import { callStation, confirmBand, qso, select, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, confirmBand, qso, select, setFrequencies, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import type { QsoRecord } from '../lib/qso/record';
   import { mhz, utcTime } from '../lib/clock/format';
@@ -205,7 +205,14 @@
     onresume={() => void resumeAudio()}
   />
 
-  <Waterfall mode={settings.mode} rxHz={settings.rxHz} txHz={settings.txHz} stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null} />
+  <Waterfall
+    mode={settings.mode}
+    rxHz={settings.rxHz}
+    txHz={settings.txHz}
+    stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
+    hint={!settings.freqPicked}
+    onset={setFrequencies}
+  />
 
   <div class="list-wrap">
     {#if band.decoder.state === 'failed'}

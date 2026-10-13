@@ -15,6 +15,8 @@ export class WaterfallClient {
   private worker: Worker | null = null;
   private local: WaterfallRenderer | null = null;
   private readonly onFrame: (info: FrameInfo) => void;
+  private readonly asks = new Map<number, (hz: number | null) => void>();
+  private nextAsk = 1;
 
   constructor(canvas: HTMLCanvasElement, palette: WaterfallPalette, mode: Mode, width: number, height: number, onFrame: (info: FrameInfo) => void) {
     this.onFrame = onFrame;
@@ -24,6 +26,10 @@ export class WaterfallClient {
       this.worker = new Worker(new URL('./waterfall.worker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e: MessageEvent<FromWaterfall>) => {
         if (e.data.type === 'frame') this.onFrame(e.data.info);
+        else if (e.data.type === 'quietest') {
+          this.asks.get(e.data.id)?.(e.data.hz);
+          this.asks.delete(e.data.id);
+        }
       };
       this.send({ type: 'init', canvas: offscreen, palette, mode, width, height }, [offscreen]);
       this.offscreen = true;
@@ -71,7 +77,20 @@ export class WaterfallClient {
     }
   }
 
+  /** The quietest Tx frequency in the last 2 to 4 slots, Hz, or null with less audio. */
+  quietest(nowMs: number, nearHz: number): Promise<number | null> {
+    if (this.local) return Promise.resolve(this.local.quietest(nowMs, nearHz));
+    if (!this.worker) return Promise.resolve(null);
+    const id = this.nextAsk++;
+    return new Promise((resolve) => {
+      this.asks.set(id, resolve);
+      this.send({ type: 'quietest', id, nowMs, nearHz });
+    });
+  }
+
   destroy() {
+    for (const done of this.asks.values()) done(null);
+    this.asks.clear();
     this.worker?.terminate();
     this.worker = null;
     this.local = null;

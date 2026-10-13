@@ -38,7 +38,7 @@
   };
   const next = $derived(nextLine(st, clock.ms));
   const stepList = $derived(steps(st));
-  const status = $derived(statusLine(st, clock.ms));
+  const status = $derived(statusLine(st, clock.ms, settings.holdTx));
   const onAir = $derived(qso.onAir);
   const elapsed = $derived(onAir ? Math.max(0, Math.min(onAir.endMs, clock.ms) - onAir.startMs) / 1000 : 0);
   const total = $derived(onAir ? (onAir.endMs - onAir.startMs) / 1000 : 0);

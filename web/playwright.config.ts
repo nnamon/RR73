@@ -55,7 +55,7 @@ export default defineConfig({
     { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
     { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|freq)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
   ],

@@ -114,8 +114,12 @@
         <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Stations already worked today on this band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Hold Tx frequency</span><span class="row-sub">{settings.holdTx ? `Tx stays on ${settings.txHz} Hz when you call a station` : 'Tx moves to the station you call'}</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.holdTx} onchange={(e) => void updateSettings({ holdTx: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
     </div>
-    <p class="section-foot">Tx4 sends RR73 or RRR. The watchdog stops Tx after 6 min without a touch or a new message.</p>
+    <p class="section-foot">Tx4 sends RR73 or RRR. Calling a station moves Rx to its frequency. The watchdog stops Tx after 6 min without a touch or a new message.</p>
   </div>
 
   <div class="section">

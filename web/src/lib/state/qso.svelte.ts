@@ -14,7 +14,8 @@ import type { Decode } from '../decode/types';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
-import { settings } from './settings.svelte';
+import { clampHz } from '../waterfall/pick';
+import { settings, updateSettings } from './settings.svelte';
 import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
 
 export interface SentRow {
@@ -101,8 +102,16 @@ const scheduler = new TxScheduler({
 
 /** Applies one event to the sequencer and carries out its effects. */
 export function dispatch(e: SeqEvent) {
+  const before = qso.st.partner?.call ?? null;
   const r = reduce(qso.st, e);
   qso.st = r.state;
+  // A new partner, called by hand or answered in Run: Rx moves to their frequency, and Tx too
+  // when Hold Tx is off. Done before the effects so the first transmission uses it.
+  const p = r.state.partner;
+  if (p && p.call !== before) {
+    const hz = clampHz(p.freqHz, r.state.config.mode);
+    void updateSettings(settings.holdTx ? { rxHz: hz } : { rxHz: hz, txHz: hz });
+  }
   for (const f of r.effects) {
     switch (f.type) {
       case 'scheduleTx':
@@ -157,6 +166,37 @@ function onTxReport(r: TxReport) {
 export function haltTx() {
   scheduler.halt();
   dispatch({ type: 'halt', nowMs: Date.now() });
+}
+
+/**
+ * Sets the receive and transmit audio frequencies from the waterfall, Hz. A transmission waiting
+ * for its slot is made again at the new Tx frequency when more than 1.5 s remain; one on air
+ * finishes where it is.
+ */
+export function setFrequencies(f: { rxHz?: number; txHz?: number }) {
+  const mode = settings.mode;
+  const patch: { rxHz?: number; txHz?: number; freqPicked: true } = { freqPicked: true };
+  if (f.rxHz !== undefined) patch.rxHz = clampHz(f.rxHz, mode);
+  if (f.txHz !== undefined) patch.txHz = clampHz(f.txHz, mode);
+  const moved = patch.txHz !== undefined && patch.txHz !== settings.txHz;
+  void updateSettings(patch);
+  if (moved) retune();
+}
+
+const RETUNE_MARGIN_MS = 1500;
+
+function retune() {
+  const p = qso.st.next;
+  if (!p?.scheduled || qso.onAir) return;
+  if (p.slotStartMs + p.offsetS * 1000 - Date.now() < RETUNE_MARGIN_MS) return;
+  void scheduler.schedule({
+    text: p.text,
+    mode: qso.st.config.mode,
+    slotStartMs: p.slotStartMs,
+    startOffsetS: p.offsetS,
+    f0Hz: settings.txHz,
+    level: settings.outputLevel,
+  });
 }
 
 export function select(s: Selected | null) {

@@ -239,13 +239,13 @@ function median(xs: number[]): number | null {
   return s[s.length >> 1];
 }
 
-/** Plays the Tune tone (1500 Hz, 10 s). Call from the confirming tap. */
+/** Plays the Tune tone at the Tx frequency for 10 s. Call from the confirming tap. */
 export function startTune() {
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
-  const handle = output.tune(ctx, { ...TUNE, level: settings.outputLevel });
+  const handle = output.tune(ctx, { ...TUNE, hz: settings.txHz, level: settings.outputLevel });
   tx.tuning = true;
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);

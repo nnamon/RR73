@@ -26,6 +26,12 @@ describe('settings', () => {
     expect(validate({ grid: 'ZZ99', ack: 'R', cqParity: 'third', queueOrder: 'random' })).toMatchObject({ grid: '', ack: 'RR73', cqParity: 'even', queueOrder: 'first' });
   });
 
+  it('reads Hold Tx and whether a frequency was set from the waterfall', () => {
+    expect(DEFAULTS).toMatchObject({ holdTx: true, freqPicked: false });
+    expect(validate({ holdTx: false, freqPicked: true })).toMatchObject({ holdTx: false, freqPicked: true });
+    expect(validate({ holdTx: 'no', freqPicked: 1 })).toMatchObject({ holdTx: true, freqPicked: false });
+  });
+
   it('keeps only valid stored values', () => {
     expect(validate({ callsign: '9v1ne', band: '2m', mode: 'JT65', outputLevel: 3, rxHz: 50, txHz: 1180, theme: 'dark', checklist: { focus: true, clicks: 'yes' } })).toEqual({
       ...DEFAULTS,

@@ -73,6 +73,32 @@ for (const theme of ['light', 'dark'] as const) {
     expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
   });
 
+  test(`frequency bar in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/operate', theme);
+    await expect(page.getByText('Tap the waterfall to set the receive or transmit frequency.')).toBeVisible();
+    const wf = (await page.getByTestId('waterfall').boundingBox())!;
+    await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
+    const bar = page.getByRole('group', { name: 'Set the frequency' });
+    await expect(bar).toBeVisible();
+    await expect(page.getByTestId('freq-guide')).toBeVisible();
+    const box = (await bar.boundingBox())!;
+    const vw = await page.evaluate(() => window.innerWidth);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(vw);
+    // Below the axis, clear of the dock.
+    expect(box.y).toBeGreaterThanOrEqual(wf.y + wf.height);
+    const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(dock.y);
+    expect(await smallTargets(page, '[data-testid=freq-bar]')).toEqual([]);
+    // Every label fits its button.
+    const clipped = await bar.evaluate((el) =>
+      [...el.querySelectorAll('button')].filter((b) => b.scrollWidth > b.clientWidth + 0.5).map((b) => b.textContent?.trim()),
+    );
+    expect(clipped).toEqual([]);
+    await checkLayout(page);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-freq-bar.png` });
+  });
+
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);
     await page.getByRole('button', { name: /^Change band/ }).click();
