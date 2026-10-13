@@ -612,6 +612,19 @@ describe('messages and planning', () => {
     expect(ourSlot(st, T0 + 3000)).toEqual({ slotStartMs: T0 + 15000, offsetS: 0.5, tooLateFor: null });
   });
 
+  it('plans again for a changed callsign, grid or acknowledgement, and not for unchanged settings', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 1) });
+    expect(s.pending?.text).toBe('CQ 9V1NE OJ11');
+    s.effects = [];
+    // Settings send the whole configuration whenever one value changes, here the Tx frequency.
+    s.send({ type: 'configure', patch: { myCall: '9V1NE', myGrid: 'OJ11', ack: 'RR73', txHz: 1846 }, nowMs: s.at(1, 1) });
+    expect(s.effects.filter((f) => f.type === 'scheduleTx' || f.type === 'cancelTx')).toEqual([]);
+    expect(s.st.config.txHz).toBe(1846);
+    s.send({ type: 'configure', patch: { myCall: '9V1NE', myGrid: 'OJ12' }, nowMs: s.at(1, 2) });
+    expect(s.pending?.text).toBe('CQ 9V1NE OJ12');
+  });
+
   it('does not change the state it was given', () => {
     const s = new Sim();
     const before = JSON.stringify(s.st);

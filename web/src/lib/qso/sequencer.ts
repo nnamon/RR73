@@ -857,9 +857,13 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       m.plan(e.tx, e.nowMs);
       break;
     case 'configure': {
+      const was = { ...st.config };
       Object.assign(st.config, e.patch);
-      if (e.patch.order || e.patch.workDupes !== undefined) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
-      if (st.next && !st.onAir && st.current && (e.patch.myCall !== undefined || e.patch.myGrid !== undefined || e.patch.ack || e.patch.cqModifier !== undefined)) m.plan(st.current, e.nowMs);
+      const changed = (k: keyof SeqConfig) => e.patch[k] !== undefined && e.patch[k] !== was[k];
+      if (changed('order') || changed('workDupes')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
+      // Only a change to the message text plans the transmission again; Settings sends every
+      // value whenever one changes, and a new plan would replace a transmission about to start.
+      if (st.next && !st.onAir && st.current && (changed('myCall') || changed('myGrid') || changed('ack') || changed('cqModifier'))) m.plan(st.current, e.nowMs);
       m.flush();
       break;
     }

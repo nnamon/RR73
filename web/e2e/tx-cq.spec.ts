@@ -7,11 +7,17 @@ import { prepare, startError, waitForTransmissions } from './txhelp';
 
 test.describe.configure({ mode: 'serial' });
 
-test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s, and Halt stops a transmission at once', async ({ page }) => {
+test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt stops a transmission at once', async ({ page }) => {
   test.setTimeout(150_000);
   const dock = await prepare(page);
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  // Tx at 1846 Hz, set on the waterfall.
+  const wf = (await page.getByTestId('waterfall').boundingBox())!;
+  const x = Math.round(wf.x + (wf.width * 1846) / 3000);
+  const txHz = Math.round(((x - wf.x) / wf.width) * 3000);
+  await page.mouse.click(x, Math.round(wf.y + wf.height / 2));
+  await page.getByRole('button', { name: `Transmit here, ${txHz} Hz` }).click();
   await dock.getByRole('button', { name: 'Call CQ' }).click();
 
   const [first] = await waitForTransmissions(page, 1, 50_000);
@@ -26,7 +32,7 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s, and Halt stops a transmission
   expect(Math.abs(length - 12_640)).toBeLessThanOrEqual(20);
   // CQ goes out in the 1st (even) slots by default.
   expect(slotOf(first) % (2 * SLOT_MS)).toBe(0);
-  expect(decodes[0].freq_hz).toBeCloseTo(1500, -1);
+  expect(Math.abs(decodes[0].freq_hz - txHz)).toBeLessThanOrEqual(3);
 
   // The next CQ, 30 s later: Halt 2 s into it.
   await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
@@ -39,7 +45,8 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s, and Halt stops a transmission
   test.info().annotations.push({ type: 'halt', description: JSON.stringify({ heardEndAfterTapMs: Math.round(stopMs), sentMs: Math.round(sentMs) }) });
   expect(sentMs).toBeLessThan(4000);
   expect(stopMs).toBeLessThan(100);
-  await expect(dock.getByRole('button', { name: 'Enable Tx' })).toHaveAttribute('aria-pressed', 'false');
+  // Halt ends the CQ: the dock offers Call CQ again.
+  await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
   await page.waitForTimeout(16_000);
   expect(await page.evaluate(() => window.__tx.length)).toBe(2);
 });

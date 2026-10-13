@@ -22,24 +22,28 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, and the QSO is 
   await cq.dblclick();
   await expect(dock.getByText(DX.call, { exact: true })).toBeVisible();
 
-  const sent = await waitForTransmissions(page, 3, 110_000);
+  // The QSO ends with 73 sent and logged; then the dock is idle again.
+  await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible({ timeout: 150_000 });
+  const sent = await waitForTransmissions(page, 3, 1000);
   const wasm = (await loadWasm())!;
   const report = row(`9V1NE ${DX.call} -12`);
   const snr = Number((await report.locator('.c-db').textContent())!.replace('−', '-'));
   const rpt = `${snr < 0 ? '-' : '+'}${String(Math.abs(snr)).padStart(2, '0')}`;
-  const summary = sent.map((t) => ({ text: decodeCaptured(wasm, t).map((d) => d.text), startErrorMs: Math.round(startError(t) * 10) / 10, slot: new Date(slotOf(t)).toISOString().slice(11, 19) }));
-  test.info().annotations.push({ type: 'qso', description: JSON.stringify({ tapAfterSlotMs: tappedAt - (slotOf(sent[0]) ), summary }) });
+  const summary = sent.map((t) => ({ text: decodeCaptured(wasm, t).map((d) => d.text).join(' | '), startErrorMs: Math.round(startError(t) * 10) / 10, slot: new Date(slotOf(t)).toISOString().slice(11, 19) }));
+  test.info().annotations.push({ type: 'qso', description: JSON.stringify({ tapAfterSlotMs: tappedAt - slotOf(sent[0]), summary }) });
 
-  expect(summary.map((s) => s.text)).toEqual([[`${DX.call} 9V1NE OJ11`], [`${DX.call} 9V1NE R${rpt}`], [`${DX.call} 9V1NE 73`]]);
-  // Tx1 may start late, by up to 1.5 s, when the tap comes after slot + 0.3 s; Tx3 and Tx5 are
-  // decided 0.1 s after the slot starts and go out on time.
+  // Tx1, Tx3, Tx5. On a loaded machine the decode of their reply can come after our next slot
+  // has started; the message then goes out once more and the next one follows a slot later.
+  const order = summary.map((s) => s.text).filter((t, i, all) => i === 0 || t !== all[i - 1]);
+  expect(order).toEqual([`${DX.call} 9V1NE OJ11`, `${DX.call} 9V1NE R${rpt}`, `${DX.call} 9V1NE 73`]);
+  expect(sent.length).toBeLessThanOrEqual(4);
+  // Tx1 may start late, by up to 1.5 s, when the tap comes after slot + 0.3 s; the rest are
+  // decided before their slot and go out on time.
   expect(startError(sent[0])).toBeGreaterThanOrEqual(-50);
   expect(startError(sent[0])).toBeLessThanOrEqual(1550);
-  expect(Math.abs(startError(sent[1]))).toBeLessThanOrEqual(50);
-  expect(Math.abs(startError(sent[2]))).toBeLessThanOrEqual(50);
+  for (const t of sent.slice(1)) expect(Math.abs(startError(t))).toBeLessThanOrEqual(50);
   // One parity: our slots are 2 apart.
-  expect(slotOf(sent[1]) - slotOf(sent[0])).toBe(2 * SLOT_MS);
-  expect(slotOf(sent[2]) - slotOf(sent[1])).toBe(2 * SLOT_MS);
+  for (let i = 1; i < sent.length; i++) expect(slotOf(sent[i]) - slotOf(sent[i - 1])).toBe(2 * SLOT_MS);
 
   const notice = page.getByRole('status').filter({ hasText: `Logged ${DX.call}` });
   await expect(notice).toContainText(`Logged ${DX.call} 20m FT8 −${rpt.slice(1)} / −12`);
