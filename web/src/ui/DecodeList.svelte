@@ -8,13 +8,33 @@
   /**
    * Band activity: 40 px rows marked as in WSJT-X. CQ calls green, messages to you red, what
    * you sent amber, each with a 4 px bar, a tint and the callsign in bold.
+   *
+   * A tap selects a row, a double-tap calls, and touch and hold opens the station's details.
    */
   import { dt, snr } from '../lib/clock/format';
   import { splitKey, type DecodeRowData } from '../lib/decode/marking';
 
-  let { items, label = 'Decodes' }: { items: DecodeListItem[]; label?: string } = $props();
+  type RowItem = Extract<DecodeListItem, { kind: 'row' }>;
+
+  let {
+    items,
+    label = 'Decodes',
+    selectedId = null,
+    onselect,
+    oncall,
+    ondetail,
+  }: {
+    items: DecodeListItem[];
+    label?: string;
+    selectedId?: string | null;
+    onselect?: (item: RowItem) => void;
+    oncall?: (item: RowItem) => void;
+    ondetail?: (item: RowItem) => void;
+  } = $props();
 
   const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'you sent' } as const;
+  const HOLD_MS = 500;
+  const DOUBLE_MS = 350;
 
   function spoken(r: DecodeRowData): string {
     const parts = [
@@ -27,6 +47,44 @@
     ];
     return parts.filter(Boolean).join(', ');
   }
+
+  let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+  let lastTap: { id: string; at: number } | null = null;
+
+  function down(e: PointerEvent, item: RowItem) {
+    if (press) clearTimeout(press.timer);
+    const p = { id: item.id, x: e.clientX, y: e.clientY, held: false, timer: setTimeout(() => {
+      p.held = true;
+      lastTap = null;
+      ondetail?.(item);
+    }, HOLD_MS) };
+    press = p;
+  }
+
+  function move(e: PointerEvent) {
+    if (press && Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10) clearTimeout(press.timer);
+  }
+
+  function up() {
+    if (press) clearTimeout(press.timer);
+  }
+
+  function click(e: MouseEvent, item: RowItem) {
+    if (press?.id === item.id && press.held) {
+      e.preventDefault();
+      press = null;
+      return;
+    }
+    press = null;
+    const now = performance.now();
+    if (lastTap?.id === item.id && now - lastTap.at < DOUBLE_MS) {
+      lastTap = null;
+      oncall?.(item);
+      return;
+    }
+    lastTap = { id: item.id, at: now };
+    onselect?.(item);
+  }
 </script>
 
 <ul class="list" aria-label={label}>
@@ -36,20 +94,38 @@
     {:else}
       {@const r = item.row}
       {@const t = splitKey(r.decode.text, r.key)}
-      <li class="dr" class:k-cq={r.mark === 'cq'} class:k-me={r.mark === 'me'} class:k-sent={r.mark === 'sent'} class:worked={r.worked} aria-label={spoken(r)}>
-        {#if r.time}
-          <span class="c-time" aria-hidden="true">{r.time}</span>
-        {:else}
-          <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
-          <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
-        {/if}
-        <span class="c-hz" aria-hidden="true">{Math.round(r.decode.freq_hz)}</span>
-        <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
-        {#if r.badge}
-          <span class="badge {r.badge.tone}" aria-hidden="true">{r.badge.text}</span>
-        {:else if r.meta}
-          <span class="c-meta" aria-hidden="true">{r.meta}</span>
-        {/if}
+      <li class="dr-item">
+        <button
+          type="button"
+          class="dr"
+          class:k-cq={r.mark === 'cq'}
+          class:k-me={r.mark === 'me'}
+          class:k-sent={r.mark === 'sent'}
+          class:worked={r.worked}
+          class:sel={selectedId === item.id}
+          aria-label={spoken(r)}
+          aria-pressed={selectedId === item.id}
+          onpointerdown={(e) => down(e, item)}
+          onpointermove={move}
+          onpointerup={up}
+          onpointercancel={up}
+          oncontextmenu={(e) => e.preventDefault()}
+          onclick={(e) => click(e, item)}
+        >
+          {#if r.time}
+            <span class="c-time" aria-hidden="true">{r.time}</span>
+          {:else}
+            <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
+            <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
+          {/if}
+          <span class="c-hz" aria-hidden="true">{Math.round(r.decode.freq_hz)}</span>
+          <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
+          {#if r.badge}
+            <span class="badge {r.badge.tone}" aria-hidden="true">{r.badge.text}</span>
+          {:else if r.meta}
+            <span class="c-meta" aria-hidden="true">{r.meta}</span>
+          {/if}
+        </button>
       </li>
     {/if}
   {/each}
@@ -72,16 +148,25 @@
     color: var(--rr-label3);
   }
 
+  .dr-item {
+    position: relative;
+  }
+
   .dr {
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
     height: var(--rr-row-decode);
     padding: 0 var(--rr-space-4);
     font-size: var(--rr-text-row);
     line-height: var(--rr-leading-row);
     letter-spacing: 0;
+    text-align: left;
+    user-select: none;
+    -webkit-touch-callout: none;
   }
+
 
   .dr::after {
     content: '';
@@ -92,7 +177,7 @@
     width: var(--rr-mark-bar);
   }
 
-  .dr + .dr::before {
+  .dr-item + .dr-item .dr::before {
     content: '';
     position: absolute;
     top: 0;
@@ -126,6 +211,12 @@
 
   .dr.k-sent::after {
     background: var(--rr-amber);
+  }
+
+  /* After the marking tints, so a selected row shows as selected. */
+  .dr.sel {
+    background: var(--rr-sel-tint);
+    box-shadow: inset 0 0 0 2px var(--rr-accent-fill);
   }
 
   .c-db,

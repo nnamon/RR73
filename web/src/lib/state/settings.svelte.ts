@@ -47,9 +47,23 @@ export interface Settings {
   /** Play the start tone (1500 Hz, 0.4 s) through the radio when audio starts. */
   startTone: boolean;
   checklist: Checklist;
-  /** Receive and transmit audio frequencies, Hz. */
+  /** Receive and transmit audio frequencies (lowest tone), Hz. */
   rxHz: number;
   txHz: number;
+  /** Tx stays put when calling a station; when false, Tx moves to the station called. */
+  holdTx: boolean;
+  /** The operator has set a frequency from the waterfall, so the hint under it is gone. */
+  freqPicked: boolean;
+  /** Operator grid square, 4 or 6 characters; empty until set. */
+  grid: string;
+  /** Tx4 acknowledges with RR73 or RRR. */
+  ack: 'RR73' | 'RRR';
+  /** Run mode works stations already worked today on this band and mode. */
+  workDupes: boolean;
+  /** Parity for calling CQ: even is 1st. */
+  cqParity: 'even' | 'odd';
+  /** Order Run mode answers callers in. */
+  queueOrder: 'first' | 'strongest' | 'farthest' | 'new';
   features: Features;
 }
 
@@ -64,6 +78,13 @@ export const DEFAULTS: Settings = {
   checklist: { focus: false, clicks: false, volume: false },
   rxHz: 1500,
   txHz: 1500,
+  holdTx: true,
+  freqPicked: false,
+  grid: '',
+  ack: 'RR73',
+  workDupes: false,
+  cqParity: 'even',
+  queueOrder: 'first',
   features: { ...FEATURES_OFF },
 };
 
@@ -104,6 +125,12 @@ export function normaliseCallsign(s: string): string {
     .slice(0, 13);
 }
 
+/** Grid squares as written: field and square upper case, subsquare lower case, "OJ11ab". */
+export function normaliseGrid(s: string): string {
+  const g = s.trim().replace(/\s+/g, '');
+  return g.slice(0, 4).toUpperCase() + g.slice(4, 6).toLowerCase();
+}
+
 /** Merges stored values over the defaults, keeping only values of the right type. */
 export function validate(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -117,6 +144,13 @@ export function validate(raw: unknown): Settings {
   if (typeof r.startTone === 'boolean') s.startTone = r.startTone;
   const c = r.checklist as Partial<Checklist> | undefined;
   if (c && typeof c === 'object') for (const k of ['focus', 'clicks', 'volume'] as const) if (typeof c[k] === 'boolean') s.checklist[k] = c[k];
+  if (typeof r.grid === 'string' && /^[A-R]{2}\d{2}([A-X]{2})?$/i.test(r.grid.trim())) s.grid = normaliseGrid(r.grid);
+  if (r.ack === 'RR73' || r.ack === 'RRR') s.ack = r.ack;
+  if (typeof r.workDupes === 'boolean') s.workDupes = r.workDupes;
+  if (typeof r.holdTx === 'boolean') s.holdTx = r.holdTx;
+  if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
+  if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
+  if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
   for (const k of ['rxHz', 'txHz'] as const) {
     const v = r[k];
     if (typeof v === 'number' && v >= 100 && v <= 2900) s[k] = Math.round(v);

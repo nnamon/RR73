@@ -23,6 +23,23 @@ describe('settings', () => {
     expect(normaliseCallsign('ABCDEFGHIJKLMNOP')).toHaveLength(13);
   });
 
+  it('reads and normalises the grid and the operating choices', () => {
+    expect(validate({ grid: 'oj11AB', ack: 'RRR', workDupes: true, cqParity: 'odd', queueOrder: 'strongest' })).toMatchObject({
+      grid: 'OJ11ab',
+      ack: 'RRR',
+      workDupes: true,
+      cqParity: 'odd',
+      queueOrder: 'strongest',
+    });
+    expect(validate({ grid: 'ZZ99', ack: 'R', cqParity: 'third', queueOrder: 'random' })).toMatchObject({ grid: '', ack: 'RR73', cqParity: 'even', queueOrder: 'first' });
+  });
+
+  it('reads Hold Tx and whether a frequency was set from the waterfall', () => {
+    expect(DEFAULTS).toMatchObject({ holdTx: true, freqPicked: false });
+    expect(validate({ holdTx: false, freqPicked: true })).toMatchObject({ holdTx: false, freqPicked: true });
+    expect(validate({ holdTx: 'no', freqPicked: 1 })).toMatchObject({ holdTx: true, freqPicked: false });
+  });
+
   it('keeps only valid stored values', () => {
     expect(
       validate({

@@ -67,12 +67,40 @@ for (const theme of ['light', 'dark'] as const) {
       const wf = (await page.getByTestId('waterfall').boundingBox())!;
       const list = (await page.locator('.operate .list').boundingBox())!;
       const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+      const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
       expect(wf.height).toBeGreaterThanOrEqual(120);
       expect(list.height).toBeGreaterThanOrEqual(120);
-      expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
+      expect(list.y + list.height).toBeLessThanOrEqual(dock.y + 0.5);
+      expect(dock.y + dock.height).toBeLessThanOrEqual(bar.y + 0.5);
       expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
     });
   }
+
+  test(`frequency bar in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/operate', theme);
+    await expect(page.getByText('Tap the waterfall to set the receive or transmit frequency.')).toBeVisible();
+    const wf = (await page.getByTestId('waterfall').boundingBox())!;
+    await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
+    const bar = page.getByRole('group', { name: 'Set the frequency' });
+    await expect(bar).toBeVisible();
+    await expect(page.getByTestId('freq-guide')).toBeVisible();
+    const box = (await bar.boundingBox())!;
+    const vw = await page.evaluate(() => window.innerWidth);
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width).toBeLessThanOrEqual(vw);
+    // Below the axis, clear of the dock.
+    expect(box.y).toBeGreaterThanOrEqual(wf.y + wf.height);
+    const dock = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
+    expect(box.y + box.height).toBeLessThanOrEqual(dock.y);
+    expect(await smallTargets(page, '[data-testid=freq-bar]')).toEqual([]);
+    // Every label fits its button.
+    const clipped = await bar.evaluate((el) =>
+      [...el.querySelectorAll('button')].filter((b) => b.scrollWidth > b.clientWidth + 0.5).map((b) => b.textContent?.trim()),
+    );
+    expect(clipped).toEqual([]);
+    await checkLayout(page);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-freq-bar.png` });
+  });
 
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);
@@ -131,5 +159,48 @@ for (const theme of ['light', 'dark'] as const) {
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-tune.png` });
     await sheet.getByRole('button', { name: 'Cancel' }).click();
     await expect(sheet).toBeHidden();
+  });
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`transmit dock and Run queue in ${theme}`, async ({ page }, info) => {
+    await open(page, '#/settings', theme);
+    for (const [name, value] of [
+      ['Callsign', '9V1NE'],
+      ['Grid', 'OJ11'],
+    ]) {
+      const field = page.getByRole('textbox', { name });
+      await field.fill(value);
+      await field.press('Enter');
+    }
+    await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Operate' }).click();
+    const dock = page.getByRole('region', { name: 'Transmit' });
+    await dock.getByRole('button', { name: 'Confirm band' }).click();
+    await page.getByRole('dialog', { name: 'Change band' }).getByRole('button', { name: 'Use 20m FT8' }).click();
+    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-dock-idle.png` });
+
+    await dock.getByRole('button', { name: 'Run' }).click();
+    await expect(dock.getByRole('button', { name: 'Stop after this QSO' })).toBeVisible();
+    await expect(page.getByRole('list', { name: 'Callers' })).toBeVisible();
+    // Audio is off in WebKit here, so the dock says why nothing goes out.
+    await expect(dock.getByText('Resume audio to transmit.')).toBeVisible();
+    await checkLayout(page);
+    // The dock, and Halt in it, stays above the tab bar.
+    const dockBox = (await dock.boundingBox())!;
+    const tabs = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+    expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(tabs.y + 0.5);
+    await expect(page.getByRole('list', { name: 'Callers' })).toBeInViewport();
+    // Halt is the largest control in the dock.
+    const halt = (await dock.getByRole('button', { name: 'Halt' }).boundingBox())!;
+    for (const b of await dock.getByRole('button').all()) {
+      const box = (await b.boundingBox())!;
+      expect(halt.width * halt.height).toBeGreaterThanOrEqual(box.width * box.height);
+      expect(halt.height).toBeGreaterThanOrEqual(box.height);
+    }
+    await page.waitForTimeout(200);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-run.png` });
+    await dock.getByRole('button', { name: 'Halt' }).click();
+    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
   });
 }

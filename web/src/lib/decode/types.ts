@@ -1,5 +1,5 @@
 import type { Mode } from '../clock/slots';
-import type { DecoderFailure } from './protocol';
+import type { DecoderFailure, Packed } from './protocol';
 
 /** One message recovered from a slot. Field names match the corpus JSON and rr73-decode. */
 export interface Decode {
@@ -38,5 +38,9 @@ export interface DecoderClient {
   load(): void;
   /** Decodes one slot. The samples may be transferred to a worker; callers keep a copy if needed. */
   decodeSlot(slot: SlotAudio): Promise<Decode[]>;
+  /** Checks text for transmission. */
+  pack(text: string, mode: Mode): Promise<Packed>;
+  /** Synthesises a transmission at `sampleRate`, peak 1. */
+  synthesize(text: string, mode: Mode, f0Hz: number, sampleRate: number): Promise<Float32Array>;
   dispose(): void;
 }

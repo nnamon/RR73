@@ -1,6 +1,6 @@
 /**
- * The only path from RR73 to the headphone contact, which keys the radio by VOX. In this
- * version only Tune plays: a 1500 Hz tone for 10 s. halt() stops output at once, from any state.
+ * Tune's path to the headphone contact, which keys the radio by VOX: a tone at the Tx frequency
+ * for 10 s. halt() stops output at once, from any state.
  *
  * Tone edges ramp over 5 ms so the transmitter does not splatter; Halt ramps over 3 ms and
  * stops the oscillator 1 ms later.
