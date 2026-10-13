@@ -291,7 +291,7 @@ export function timingSnapshot(): TimingSnapshot {
   const running = audio.status === 'running';
   return {
     atUtcMs: Date.now(),
-    appVersion: __APP_VERSION__,
+    appVersion: `${__APP_VERSION__} (${__APP_BUILD__})`,
     audio: audio.status,
     source: running ? (e?.clockSource ?? null) : null,
     offsetMs: running ? (e?.mappingOffsetMs() ?? null) : null,
@@ -435,7 +435,7 @@ export function saveRecentSlot(startUtcMs: number): Promise<SaveResult> | null {
     dialHz: dialHz(settings.band, slot.mode) ?? 0,
     input: audio.report?.inputLabel ?? 'Microphone',
     captureRateHz: audio.report?.contextRate ?? 0,
-    appVersion: __APP_VERSION__,
+    appVersion: `${__APP_VERSION__} (${__APP_BUILD__})`,
     offsetS: engine?.mapper.inputOffsetS ?? 0,
   });
   return saveSlot(files);

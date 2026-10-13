@@ -10,6 +10,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Work dupes in Run, in Settings, is now Work dupes.
 - Choosing a practice scenario shows its name in the status line: "Practice · Pile-up".
 - While transmitting, the waterfall shows the transmitted tones in their slot over an even floor, and Tune shows its tone. Halt ends them where the audio stopped. In 0.10.1 those slots were blank.
+- About in Settings has one Version history row with the version, and the reload rows. The Licence row is removed, and the Decoder row moves to Settings › Radio and audio › Timing.
 
 ## 0.10.1 · 2026-10-13
 
