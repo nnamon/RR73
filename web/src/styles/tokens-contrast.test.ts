@@ -140,6 +140,7 @@ add('rr-chev', [SURFACE, CARD], 'chevrons', 3);
 
 add('rr-accent', GROUNDS, 'links, Back, bar buttons, row actions');
 add('rr-accent', [['rr-accent-soft', ...DOCK], ['rr-accent-soft', ...SURFACE], ['rr-accent-soft', ...SHEET]], 'tinted buttons: Tx on, Share, Download');
+add('rr-accent', [['rr-accent-soft', ...BG]], 'the This version badge');
 add('rr-accent', [['rr-fill2', ...SURFACE], ['rr-fill2', ...CARD]], 'Use GPS');
 add('rr-accent', [['rr-fill', ...PLAIN]], 'the countdown in the Next row');
 
