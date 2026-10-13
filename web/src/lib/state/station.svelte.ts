@@ -25,6 +25,8 @@ import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
 import { TransmittedSlots } from '../slots/transmitted';
+import type { TxWave } from '../waterfall/renderer';
+import { DISPLAY_RATE } from '../waterfall/spectrum';
 import { settings } from './settings.svelte';
 import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
@@ -114,6 +116,52 @@ export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode =
   }
   tx.slots = transmitted.list();
   if (band.slots.some((s) => transmitted.has(s.startUtcMs))) band.slots = band.slots.filter((s) => !transmitted.has(s.startUtcMs));
+}
+
+/** RR73's recent transmissions as the waterfall draws them, oldest first. */
+let txWaves: TxWave[] = [];
+const txWaveListeners = new Set<(w: TxWave) => void>();
+
+/** Recent transmissions, oldest first, for a waterfall that starts now. */
+export function recentTxWaves(): readonly TxWave[] {
+  return txWaves;
+}
+
+/** Calls `fn` for each transmission to draw, and again when Halt cuts one short. Returns the unsubscribe. */
+export function onTxWave(fn: (w: TxWave) => void): () => void {
+  txWaveListeners.add(fn);
+  return () => txWaveListeners.delete(fn);
+}
+
+function emitTxWave(w: TxWave) {
+  txWaves = [...txWaves.filter((x) => x.startUtcMs !== w.startUtcMs), w].slice(-8);
+  for (const fn of txWaveListeners) fn(w);
+}
+
+/**
+ * Draws a transmission on the waterfall from its start. The audio is made again at 12 kHz for the
+ * display: the same tones the radio sends, at the waterfall's rate.
+ */
+export async function showTx(startUtcMs: number, text: string, mode: Mode, f0Hz: number): Promise<void> {
+  try {
+    const samples = await codec().synthesize(text, mode, f0Hz, DISPLAY_RATE);
+    emitTxWave({ startUtcMs, endUtcMs: startUtcMs + (samples.length / DISPLAY_RATE) * 1000, samples });
+  } catch {
+    // Without the audio the slot stays blank.
+  }
+}
+
+/** Ends the transmission on the air at `atUtcMs` on the waterfall, after Halt or the end of Tune. */
+export function cutTx(atUtcMs: number) {
+  const w = txWaves.find((x) => atUtcMs > x.startUtcMs && atUtcMs < x.endUtcMs);
+  if (w) emitTxWave({ ...w, endUtcMs: atUtcMs });
+}
+
+/** The Tune tone at 12 kHz for the waterfall. */
+function toneWave(startUtcMs: number, hz: number, seconds: number): TxWave {
+  const samples = new Float32Array(Math.round(seconds * DISPLAY_RATE));
+  for (let i = 0; i < samples.length; i++) samples[i] = 0.5 * Math.sin((2 * Math.PI * hz * i) / DISPLAY_RATE);
+  return { startUtcMs, endUtcMs: startUtcMs + seconds * 1000, samples };
 }
 
 let engine: CaptureEngine | null = null;
@@ -402,7 +450,9 @@ function median(xs: number[]): number | null {
 /** Plays the Tune tone at the Tx frequency for 10 s. Call from the tap. */
 export function startTune() {
   playClip(silentClipUri());
-  markTransmitted(Date.now(), Date.now() + TUNE.seconds * 1000);
+  const now = Date.now();
+  markTransmitted(now, now + TUNE.seconds * 1000);
+  emitTxWave(toneWave(now, settings.txHz, TUNE.seconds));
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();
@@ -413,6 +463,7 @@ export function startTune() {
   wake?.set(true);
   void handle.done.then((end: TuneEnd) => {
     tx.tuning = false;
+    cutTx(Date.now());
     wake?.set(audio.status === 'running');
     const during = median(levelLog.filter(([t]) => t > t0 + 1000).map(([, db]) => db));
     const long = performance.now() - t0 > 3000;
