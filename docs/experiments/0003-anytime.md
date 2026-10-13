@@ -42,4 +42,56 @@ Keep a stage only if it adds true decodes on the recorded sets or lowers SNR50, 
 
 ## Results
 
+Measured with `rr73-bench run`, `compare` and Python over the results files in the `rust` container on the Apple M4 (Docker Desktop, 10 CPUs), release build, with other workloads on the host. Sets: the 60 ft8_lib public files; the 350 SARTS slots (4210 `jt9 -8 -d 3` decodes, list in `results/sarts-all.txt`); 5000 noise slots; `crowded`, `smoke` and `noise-ci`.
+
+### Part 1: early decoding
+
+`--audio-s` keeps the first 11.8 s or 13.5 s of each slot. "Share" counts how many of the shipped preset's full-slot decodes (1221 on the public files, 3120 on SARTS) the early pass already finds (same text within 10 Hz). Recall is against the reference lists.
+
+| `subtract-3-osd2` | Share, public | Share, SARTS | Recall, public | Recall, SARTS | False, 5000 noise slots |
+| --- | --- | --- | --- | --- | --- |
+| Full slot | 1.000 | 1.000 | 0.894 | 0.739 | 0 |
+| 11.8 s, audio absent, erased bits counted as OSD errors (shipped) | 0.898 | 0.884 | 0.821 | 0.658 | 0 |
+| 11.8 s, audio absent, OSD rule as for full slots | 0.932 | 0.920 | 0.848 | 0.687 | 1 |
+| 11.8 s, zeros after 11.8 s | 0.898 | 0.868 | 0.820 | 0.647 | 1 |
+| 13.5 s, audio absent, erased bits counted (shipped) | 0.986 | 0.998 | 0.891 | 0.739 | 0 |
+| 13.5 s, audio absent, OSD rule as for full slots | 0.988 | 0.998 | 0.892 | 0.739 | 0 |
+| 13.5 s, zeros after 13.5 s | 0.974 | 0.997 | 0.881 | 0.738 | 1 |
+| `subtract-3` (no OSD) at 11.8 s, share of the `subtract-3-osd2` full slot | 0.888 | 0.862 | 0.812 | 0.641 | 0 |
+| `subtract-3` at 13.5 s | 0.956 | 0.948 | 0.867 | 0.702 | 0 |
+
+With the audio absent, the spectrogram stops at the last frame that lies wholly inside the audio and the missing symbols become zero LLRs. Zero-filling the rest of the slot instead makes the cut symbols look like weak ones: it finds fewer decodes, breaks the SNR estimate of signals that run into the silence (the false decode at 11.8 s read +22.5 dB), and lets one OSD codeword through on noise at both cut points.
+
+With the audio absent and the full-slot OSD rule, one noise slot gives a false OSD decode at 11.8 s (`3E7AJI LY8UAG/P RQ09`, DT 2.06 s, -23.9 dB). At DT 2.06 s the signal would lack its last 21 symbols, 42 code bits. The full-slot rule counts an erased bit as a hard error only when the codeword has a 1 there, so a codeword resting on 132 received bits passes the same limit of 30. Counting every erased bit as a hard error (`ldpc.osd_erasures_as_errors`, now part of the OSD presets) removes it. The stress test (sync threshold 0 dB, 140 candidates per noise slot, 700000 LDPC attempts at each cut point) gives 0 false decodes at 11.8 s and 13.5 s with the rule, and the same 1 at 11.8 s without it. The rule costs 3.4 points of share at 11.8 s on the public files and 3.6 on SARTS, and 0.2 and 0 points at 13.5 s. Full slots have no erased bits: their decodes do not change on any of the 5720 slots.
+
+Early decodes that the full slot does not have: 7 on the public files and 16 on SARTS at 11.8 s, 11 and 5 at 13.5 s. Most match the reference lists; the 6 at 11.8 s and the 6 at 13.5 s that do not carry only callsigns that other slots decode, so they look like real stations whose decode order changed with the cut.
+
+Share at 11.8 s by the full-slot decode's DT and SNR (SARTS and public together, 4341 decodes):
+
+| DT | Decodes | Share | | SNR | Decodes | Share |
+| --- | --- | --- | --- | --- | --- | --- |
+| below 0 s | 356 | 0.975 | | below -18 dB | 113 | 0.540 |
+| 0 to 0.5 s | 2718 | 0.885 | | -18 to -12 dB | 915 | 0.764 |
+| 0.5 to 1 s | 842 | 0.893 | | -12 to -6 dB | 1152 | 0.914 |
+| 1 to 1.5 s | 260 | 0.881 | | -6 dB and up | 2161 | 0.944 |
+| 1.5 s and later | 165 | 0.727 | | | | |
+
+Weak signals lose most: the 6 to 15 erased bits take the last margin that belief propagation and OSD had. Signals of -6 dB and up that the early pass misses (121) are mostly in crowded SARTS slots, overlapped by other signals; the pass without the erasure rule finds 43 of them. At 13.5 s every DT and SNR bucket keeps 95.8 % or more.
+
+Time per slot, single-threaded native, each slot's best of 3 runs over the 410 recorded slots:
+
+| | Full slot | 11.8 s | 13.5 s |
+| --- | --- | --- | --- |
+| `public/ft8_lib` p50 | 68.5 ms | 71.9 ms | 70.0 ms |
+| SARTS p50 | 19.9 ms | 25.1 ms | 22.0 ms |
+| Slowest slot | 110 ms | 90 ms | 105 ms |
+
+An early pass costs about the same as a full-slot decode: fewer frames to search, more candidates that fail. With the factor of 1.6 to 3.2 from native M4 to WebAssembly on phones from A18 Pro to A13 (experiments 0001 and 0002), the slowest early pass takes about 145 to 290 ms on a phone. Not tested on a device.
+
+Against the hypothesis: the share at 11.8 s (0.898 public, 0.884 SARTS) is above the expected 75 to 85 % and above the 85 % WSJT-X reports for its own early pass; at 13.5 s (0.986, 0.998) it is at the top of the expected 93 to 98 %. No false decodes with the erasure rule, as expected; the rule was not part of the hypothesis.
+
+The session refactor that carries both parts changes no decode: `compare` against the commit before it gives 0 gained and 0 lost over the 5410 recorded and noise slots and the 310 other synthetic slots, and single-threaded time per slot is unchanged (best of 3 per slot over 490 slots: p50 29.0 ms before, 28.6 ms after; mean 40.4 ms and 40.1 ms).
+
+### Part 2: deeper passes after the deadline
+
 Pending.

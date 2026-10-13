@@ -42,11 +42,12 @@ Signals are random standard QSO messages (CQ with a grid, call pairs with a grid
 
 ## Running
 
-`rr73-bench run --preset <name> [--set key=value ...] [--threads N] [--reference KEY] [--out FILE] <paths>...`
+`rr73-bench run --preset <name> [--set key=value ...] [--threads N] [--reference KEY] [--audio-s SECONDS [--audio-fill absent|zero]] [--out FILE] <paths>...`
 
 - Finds every slot under the paths, decodes them in parallel (one decoder context per thread, callsign hashes cleared before each slot), and scores each slot.
 - `--set` overrides a preset value by dotted key: `--set ldpc.max_iterations=50`, `--set ldpc.kind=min-sum`. `rr73-bench presets baseline` prints every key.
 - `--threads 1` gives single-thread timing. The default uses every CPU.
+- `--audio-s 11.8` decodes only the first 11.8 s of each slot (early decoding). With `--audio-fill absent` (the default) the audio ends there and the decoder treats the slot as partial: cut symbols become erasures. `--audio-fill zero` pads the slot with zeros instead.
 - Writes `results/<git-sha>-<preset>.json`; with overrides the name gains `-<hash>` of the override list. `--out` names the file instead.
 - The commit comes from `RR73_GIT_SHA` when set, else from `git` (with `-dirty` for uncommitted changes to tracked files), else `unknown`. Inside the container a worktree's git metadata is outside the mount, so pass the variable.
 
@@ -68,6 +69,7 @@ A decode matches an expected entry when the message text is equal after trimming
 | `preset`, `overrides` | The preset and the `key=value` overrides, in order. |
 | `config` | The full decoder configuration that ran. |
 | `reference_key` | `--reference`, or `null`. |
+| `audio_s`, `audio_fill` | `--audio-s` and `--audio-fill`, or `null` for whole slots. |
 | `environment` | `os`, `arch`, `cpus`, `threads` used, build `profile`, `bench_version`. |
 | `wall_s` | Wall time of the run, including reading files and scoring, in seconds. |
 | `slim` | `true` when per-slot lists were removed (`rr73-bench slim`). |
@@ -154,7 +156,7 @@ docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --o
 
 `subtract-3` is `baseline` with up to 3 passes. After each pass that finds new messages, each new decode is rebuilt with a complex GFSK model matched to `rr73_ft8::synth::gfsk`, its start and frequency are refined from its known tones, its complex amplitude is estimated with a 0.16 s moving average, and the rebuilt signal is subtracted; the next pass decodes the residual. A pass that finds nothing new ends decoding. `docs/experiments/0001-subtraction.md` has the measurements. Overrides: `subtract.smooth_s`, `subtract.refine`, `passes`.
 
-`subtract-3-osd1` and `subtract-3-osd2` are `subtract-3` with ordered-statistics decoding (OSD) when belief propagation fails: order 1 over all 91 information positions, or order 2 over the 40 least reliable ones, with reliabilities from the channel LLRs. An OSD codeword is accepted only with at most 30 hard errors, a reliability-weighted distance of at most 0.07 of the total, an estimated SNR of at least -24 dB, and a standard message whose callsigns are sent in full and could have been issued (not starting with Q or 0, and starting with 1 only as 1A or 1S). `docs/experiments/0002-osd.md` has the measurements. Overrides: `ldpc.kind=bp-osd`, `ldpc.osd_order`, `ldpc.osd_window`, `ldpc.osd_source` (`channel` or `bp`), `ldpc.osd_max_hard_errors`, `ldpc.osd_max_distance`, `validate.osd_messages` (`any`, `standard`, `standard-known`), `validate.osd_min_snr_db`.
+`subtract-3-osd1` and `subtract-3-osd2` are `subtract-3` with ordered-statistics decoding (OSD) when belief propagation fails: order 1 over all 91 information positions, or order 2 over the 40 least reliable ones, with reliabilities from the channel LLRs. An OSD codeword is accepted only with at most 30 hard errors, a reliability-weighted distance of at most 0.07 of the total, an estimated SNR of at least -24 dB, and a standard message whose callsigns are sent in full and could have been issued (not starting with Q or 0, and starting with 1 only as 1A or 1S). `docs/experiments/0002-osd.md` has the measurements. In a partial slot every erased bit counts as a hard error (`docs/experiments/0003-anytime.md`). Overrides: `ldpc.kind=bp-osd`, `ldpc.osd_order`, `ldpc.osd_window`, `ldpc.osd_source` (`channel` or `bp`), `ldpc.osd_max_hard_errors`, `ldpc.osd_max_distance`, `ldpc.osd_erasures_as_errors`, `validate.osd_messages` (`any`, `standard`, `standard-known`), `validate.osd_min_snr_db`.
 
 The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth.
 
