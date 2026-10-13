@@ -11,6 +11,7 @@ repository = "https://github.com/nnamon/RR73"
 
 [workspace.dependencies]
 rr73-ft8 = { path = "crates/rr73-ft8" }
+rr73-wspr = { path = "crates/rr73-wspr" }
 rr73-dsp = { path = "crates/rr73-dsp" }
 rr73-decode = { path = "crates/rr73-decode" }
 rr73-chansim = { path = "crates/rr73-chansim" }

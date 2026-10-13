@@ -451,6 +451,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr73-wspr"
+version = "0.8.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rustfft"
 version = "6.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

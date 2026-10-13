@@ -31,6 +31,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | Path | Contents |
 | --- | --- |
 | `crates/rr73-ft8` | FT8 and FT4 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis. No decoding logic. |
+| `crates/rr73-wspr` | WSPR protocol: message types 1 to 3, 50-bit packing, the 15-bit callsign hash, the K = 32 rate 1/2 convolutional code, bit-reversal interleaving, the sync vector, 4-FSK synthesis. No decoding logic. |
 | `crates/rr73-dsp` | Shared DSP: FFT plans, windows, spectrogram with configurable bin and time resolution, resampling. |
 | `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. |
 | `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes. |
@@ -39,7 +40,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app. |
 | `web/` | The app. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |
-| `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`) in a container, used as the decoder reference. Never linked or copied. |
+| `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`, `wsprd`, `wsprsim`, `wsprcode`) in a container, used as the decoder and codec reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
@@ -60,6 +61,15 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 - `synth::gfsk(mode, &tones, f0_hz, sample_rate, amplitude) -> Vec<f32>`: phase-continuous GFSK with the protocol's BT and ramps.
 
 Every function is checked bit for bit against ft8_lib (`tools/ft8lib`) using vectors in `fixtures/ft8/`.
+
+### rr73-wspr
+
+- `Message { Standard, Compound, Hashed }`: types 1, 2 and 3. `Message::parse(&str)` reads operator text (`K1ABC FN42 37`, `PJ4/K1ABC 33`, `K1ABC/P 33`, `<K1ABC> FN42AB 37`) and refuses what cannot be sent; `Display` writes the text WSJT-X shows.
+- `pack(&Message) -> Result<Packed, PackError>` and `unpack(&Packed, &CallsignHashes) -> Result<Message, UnpackError>`. `Packed` holds the 28-bit callsign field and the 22-bit locator and power field.
+- `code::convolve`, `code::interleave`, `code::deinterleave`, `code::SYNC`, `code::symbols(&Packed) -> [u8; 162]`, and the polynomials and branch function that decoders use.
+- `synth::fsk(&symbols, centre_hz, drift_hz_per_s, sample_rate, amplitude)`: phase-continuous 4-FSK, 1.4648 Hz tone spacing, 8192 samples per symbol at 12 kHz, 110.6 s. The frequency is the signal's centre, midway between tones 1 and 2.
+
+Every message in `fixtures/wspr/wsjtx.json` packs to the bytes and symbols WSJT-X's `wsprsim` prints (`tools/wsjtx`).
 
 ### rr73-decode
 
