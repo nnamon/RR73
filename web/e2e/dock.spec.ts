@@ -105,7 +105,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Run Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Run Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -123,6 +123,12 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await menu.getByRole('menuitemcheckbox', { name: /^Run/ }).click();
   await expect(menu.getByRole('menuitemcheckbox', { name: /^Run/ })).toHaveText('Run On');
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+  // Hound is a switch for the band: the top bar shows it.
+  await menu.getByRole('menuitemcheckbox', { name: /^Hound/ }).click();
+  await expect(menu.getByRole('menuitemcheckbox', { name: /^Hound/ })).toHaveText('Hound On');
+  await expect(page.locator('header.top .mode')).toHaveText('FT8 Hound');
+  await menu.getByRole('menuitemcheckbox', { name: /^Hound/ }).click();
+  await expect(page.locator('header.top .mode')).toHaveText('FT8');
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(more).toBeFocused();

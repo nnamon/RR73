@@ -148,7 +148,7 @@ for (const theme of ['light', 'dark'] as const) {
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
     const items = menu.getByRole('menuitemradio');
-    await expect(items).toHaveCount(10);
+    await expect(items).toHaveCount(11);
     await expect(items.first()).toHaveText('Practice: Random band');
     await expect(items.first()).toHaveAttribute('aria-checked', 'true');
     expect(await smallTargets(page, '[role=menu]')).toEqual([]);
