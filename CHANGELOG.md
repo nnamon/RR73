@@ -9,14 +9,14 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Rows from slots older than the newest slot with decodes fade to grey text and a lighter tint.
 - The next transmission shows at the top of the list as soon as it is planned, as Next with a countdown to its slot. On air it reads Sending, with a red line growing to the end of the transmission, and then Sent in its slot.
 - The waterfall has a ruler with a tick every 100 Hz, a taller tick every 500 Hz and labels from 500 to 3000 Hz.
-- The Tx and Rx markers are two lines at the lowest and highest tone of a signal (50 Hz in FT8, 83 Hz in FT4) with a light fill. The drag label shows the lowest tone.
+- The Tx and Rx markers span a signal's width, from its lowest to its highest tone (50 Hz in FT8, 83 Hz in FT4), with a line at each edge and a light fill. The drag label shows the lowest tone.
 - The waterfall levels each frequency against its own noise floor, so the edges of the radio's passband read like the middle, and a signal 3 dB over the noise shows cyan.
 - Settings › Radio and audio › Waterfall contrast sets Low, Normal or High.
 - The waterfall leaves the slots RR73 transmitted in blank, where the radio's own audio showed as a band. The Tx marker stays.
-- The bottom bar keeps one height while receiving, calling CQ, calling a station and in a QSO, so the list stays put. Calling CQ has its own steps: CQ, Report, R-report, RR73 and Logged.
+- The bar at the bottom of Operate keeps one height while receiving, calling CQ, calling a station and in a QSO, so the list stays put. Calling CQ has its own steps: CQ, Report, R-report, RR73 and Logged.
 - The Tx button shows the state: Tx off in grey, Tx on in a light blue tint, and On air in solid red with a blinking white dot, still with Reduce Motion on. The On air tag in the status line is removed.
 - Halt is a red outline in every state.
-- The bottom bar buttons are 36 pt high, inside 44 pt targets.
+- The buttons at the bottom of Operate are 36 pt high, inside 44 pt targets.
 
 ## 0.9.0 · 2026-10-13
 
