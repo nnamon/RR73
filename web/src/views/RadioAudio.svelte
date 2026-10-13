@@ -45,14 +45,23 @@
     r ? `Echo cancellation ${onOff(r.echoCancellation)}, noise suppression ${onOff(r.noiseSuppression)}, auto gain ${onOff(r.autoGainControl)}` : 'Unknown until audio starts',
   );
   const screenText = $derived(
-    audio.wake === 'held' ? 'Stays on while audio runs' : audio.wake === 'refused' ? 'Follows Auto-Lock: the browser refused to keep it on' : audio.wake === 'unsupported' ? 'Follows Auto-Lock: this browser cannot keep it on' : 'Stays on while audio runs',
+    audio.wake === 'refused' || audio.wake === 'unsupported' ? 'Follows Auto-Lock. Set it to Never.' : 'Stays on while audio runs',
   );
 
-  const checks: { key: keyof Checklist; title: string; sub: string }[] = [
-    { key: 'focus', title: 'Focus mode on', sub: 'iOS sounds go out through the cable and key the radio’s VOX.' },
-    { key: 'clicks', title: 'Keyboard clicks off', sub: 'RR73 can’t see this setting.' },
-    { key: 'volume', title: 'Phone volume at maximum', sub: 'It sets the transmit level.' },
+  const checks: { key: keyof Checklist; title: string; sub?: string }[] = [
+    { key: 'focus', title: 'Focus mode on', sub: 'Stops iOS sounds keying the radio' },
+    { key: 'clicks', title: 'Keyboard clicks off' },
+    { key: 'volume', title: 'Phone volume at maximum' },
   ];
+
+  const keyingText = $derived.by(() => {
+    const k = tx.keying;
+    if (k === null) return 'Not checked yet. Start audio, then run Tune.';
+    const at = utcHm(k.atUtcMs);
+    if (k.passed === null)
+      return k.source === 'tune' ? `Not checked at ${at}: receive audio was off. Start audio, then run Tune.` : `Not checked at ${at}: receive audio started after the chime. Start audio again.`;
+    return k.passed ? `Passed at ${at}: receive audio dropped ${Math.round(k.dropDb ?? 0)} dB.` : `Failed at ${at}: receive audio did not drop. Check the radio’s VOX and the cable.`;
+  });
 
   // Timing: measurements for checking receive and transmit timing on the air.
   let timing = $state<TimingSnapshot>(timingSnapshot());
@@ -77,11 +86,11 @@
 
   const secs = (v: number) => `${v > 0 && v.toFixed(2) !== '0.00' ? '+' : ''}${signed(v, 2)} s`;
   const medianText = $derived(
-    timing.medianDtS === null ? 'Shows once decodes at −10 dB or stronger arrive' : `${secs(timing.medianDtS)} from ${timing.strongDecodes} decodes at −10 dB or stronger`,
+    timing.medianDtS === null ? 'Waiting for strong decodes' : `${secs(timing.medianDtS)} from ${timing.strongDecodes} decodes`,
   );
-  const offsetText = $derived(timing.inputOffsetS === 0 ? 'None. It is set from the median DT once 8 decodes are in.' : `${secs(timing.inputOffsetS)} on receive audio`);
+  const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
   const sourceText = $derived(
-    timing.source === 'output' ? 'Output timestamps' : timing.source === 'current-time' ? 'Audio clock time: the output timestamps are unusable' : 'Unknown until audio starts',
+    timing.source === 'output' ? 'Output timestamps' : timing.source === 'current-time' ? 'Audio clock time' : 'Unknown until audio starts',
   );
   const driftText = $derived.by(() => {
     if (timing.driftPpm === null) return timing.source ? 'Measured after 1 minute of audio' : 'Unknown until audio starts';
@@ -93,14 +102,14 @@
       ? 'Unknown until audio starts'
       : timing.gaps === 0
         ? 'None since audio started'
-        : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total. Receive timing stays on the audio clock across them.`,
+        : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total`,
   );
   const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
   const heardText = $derived.by(() => {
     const h = timing.heardBack;
-    if (!h.length) return 'Shows after RR73 transmits';
+    if (!h.length) return 'Shows after you transmit';
     const last = h.find((x) => x.dtS !== null);
-    if (!last) return `Not heard back. The radio returned no decodable signal in the last ${h.length === 1 ? 'transmission' : `${h.length} transmissions`}.`;
+    if (!last) return `Not heard back in the last ${h.length === 1 ? 'transmission' : `${h.length} transmissions`}`;
     return `DT ${secs(last.dtS!)} at ${utcTime(last.slotStartUtcMs)} UTC, ${signed(last.snrDb ?? 0)} dB`;
   });
   const resumeLines = $derived(
@@ -162,9 +171,8 @@
       <div class="start">
         <button class="btn primary" onclick={() => void startAudio()}>Start audio</button>
       </div>
-      <p class="section-foot">Once audio runs, these rows show what the browser applied to the microphone.</p>
     {:else}
-      <p class="section-foot">Peak {signed(Math.round(audio.peakDb))} dBFS. Aim for band noise inside the green zone with the radio’s AGC on.</p>
+      <p class="section-foot">Set the level with the radio’s AGC on.</p>
     {/if}
   </div>
 
@@ -189,7 +197,7 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">Start audio plays a short rising chime (659 and 880 Hz, 0.45 s) at the output level. The chime keys the radio and runs the keying check. It also stops iOS muting output on the silent switch.</span>
+            <span class="row-sub">Keys the radio when audio starts</span>
           </span>
         </label>
       </div>
@@ -202,11 +210,10 @@
       >
         <span class="row-main">
           <span class="row-title acc">Tune for 10 s</span>
-          <span class="row-sub">Transmits at {settings.txHz} Hz for 10 s with a countdown. Halt stops it.</span>
         </span>
       </button>
     </div>
-    <p class="section-foot">Raise the level until the radio shows 4 to 5 ALC bars during Tune. Above 5 bars the signal distorts.</p>
+    <p class="section-foot">Set the level for 4 to 5 ALC bars during Tune, no more.</p>
   </div>
 
   <div class="section">
@@ -218,7 +225,7 @@
             <input type="checkbox" class="box" checked={settings.checklist[c.key]} onchange={() => toggle(c.key)} />
             <span class="row-main">
               <span class="row-title">{c.title}</span>
-              <span class="row-sub">{c.sub}</span>
+              {#if c.sub}<span class="row-sub">{c.sub}</span>{/if}
             </span>
           </label>
         </li>
@@ -229,19 +236,7 @@
         </span>
         <span class="row-main">
           <span class="row-title">Keying check</span>
-          <span class="row-sub">
-            {#if tx.keying === null}
-              Not checked yet. Start audio with the start chime on, or run Tune. The check passes when receive audio drops as the radio keys.
-            {:else if tx.keying.passed === null && tx.keying.source === 'tune'}
-              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio was off during Tune. Start audio, then run Tune again.
-            {:else if tx.keying.passed === null}
-              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio had not started when the start chime played. Start audio again.
-            {:else if tx.keying.passed}
-              Passed at {utcHm(tx.keying.atUtcMs)}. Receive audio dropped {Math.round(tx.keying.dropDb ?? 0)} dB during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}, so the radio keyed.
-            {:else}
-              Failed at {utcHm(tx.keying.atUtcMs)}. Receive audio did not drop during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}. Check the radio’s VOX setting and the cable.
-            {/if}
-          </span>
+          <span class="row-sub">{keyingText}</span>
         </span>
       </li>
     </ul>
@@ -290,10 +285,7 @@
       <p class="section-foot">The phone refused to copy. Select the report below and copy it.</p>
       <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
     {/if}
-    <p class="section-foot">
-      DT reads about 0 s for stations with correct clocks. The input offset moves receive audio toward a median DT of 0, by at most 0.08 s per slot. Transmit timing does not use it. Your Tx, heard back
-      decodes your own transmission when the radio returns it to the phone, and measures transmit timing directly.
-    </p>
+    <p class="section-foot">Transmit timing shows only in Your Tx, heard back.</p>
   </div>
 </section>
 

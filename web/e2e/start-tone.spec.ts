@@ -37,7 +37,7 @@ test('Start audio plays the start chime inside the tap and reports the keying ch
   await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
 
   await page.evaluate(() => (location.hash = '#/settings/radio'));
-  await expect(page.getByText(/did not drop during the start chime/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Failed at \d\d:\d\d: receive audio did not drop\./)).toBeVisible({ timeout: 10_000 });
 });
 
 test('with the start chime off, Start audio plays only silence and runs no keying check', async ({ page }) => {

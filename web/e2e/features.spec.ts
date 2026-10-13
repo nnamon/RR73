@@ -48,7 +48,6 @@ test('a new install shows three tabs, every feature off, and Spots opens Optiona
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
-  await expect(page.getByText('Operate shows a Spots button while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
   for (const name of ['Activations', 'POTA spots', 'Cluster spots', 'LoTW users']) await expect(feature(page, name)).not.toBeChecked();
 });
 
@@ -66,7 +65,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await openScreen(page, 'Log');
   await expect(views(page)).toHaveText(['All', 'To do', 'Activations']);
   await page.goto('./#/settings/logging');
-  await expect(page.getByText('A file per park and UTC day, to upload at pota.app')).toBeVisible();
+  await expect(page.getByText('File to upload at pota.app')).toBeVisible();
 
   // It survives a reload, then turns off again.
   await page.goto('./#/settings');
@@ -78,7 +77,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await expect(views(page)).toHaveText(['All', 'To do']);
   await page.goto('./#/settings/logging');
   await expect(page.getByRole('heading', { level: 1, name: 'Logging' })).toBeVisible();
-  await expect(page.getByText('A file per park and UTC day, to upload at pota.app')).toHaveCount(0);
+  await expect(page.getByText('File to upload at pota.app')).toHaveCount(0);
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
 });
@@ -102,8 +101,8 @@ test('a phone that ran 0.5.0 with an activation running ends up with every featu
   // 0.5.0 stored settings without a schema; it always showed activations.
   await seed(page, mockupLog({ running: true }));
   await expect.poll(() => screenNames(page)).toEqual(['Log', 'Settings']);
-  // Schema 3: the features migration (2) and decode colours (3) in one step.
-  await expect.poll(async () => (await stored(page))?.schema).toBe(3);
+  // Schema 5: the features migration (2), decode colours (3) and the sequencer settings (5) in one step.
+  await expect.poll(async () => (await stored(page))?.schema).toBe(5);
   expect((await stored(page))?.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
   // Operate shows no activation line; the log keeps every QSO.
   await expect(page.getByRole('link', { name: /^Activation / })).toHaveCount(0);

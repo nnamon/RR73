@@ -7,8 +7,8 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('./#/settings/radio');
   await expect(page.getByTestId('timing-source')).toHaveText('Unknown until audio starts');
-  await expect(page.getByTestId('timing-median')).toHaveText('Shows once decodes at −10 dB or stronger arrive');
-  await expect(page.getByTestId('timing-heard')).toHaveText('Shows after RR73 transmits');
+  await expect(page.getByTestId('timing-median')).toHaveText('Waiting for strong decodes');
+  await expect(page.getByTestId('timing-heard')).toHaveText('Shows after you transmit');
 
   await page.getByRole('button', { name: 'Start audio' }).click();
   // Chromium gives usable output timestamps.
@@ -17,7 +17,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   const lagMs = Number((await page.getByTestId('timing-lag').textContent())!.replace(' ms', ''));
   expect(lagMs).toBeLessThan(50);
   await expect(page.getByTestId('timing-drift')).toHaveText('Measured after 1 minute of audio');
-  await expect(page.getByTestId('timing-gaps')).toHaveText(/^(None since audio started|\d+ gaps?, \d+ ms in total\. Receive timing stays on the audio clock across them\.)$/);
+  await expect(page.getByTestId('timing-gaps')).toHaveText(/^(None since audio started|\d+ gaps?, \d+ ms in total)$/);
 
   // 10 decodes at −5 dB read DT −0.80 s; 2 at −15 dB read +1.5 s and do not count.
   await page.evaluate(() => {
@@ -25,14 +25,14 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
     const d = (dt_s: number, snr_db: number, i: number) => ({ text: `CQ K${i}ABC FN42`, freq_hz: 500 + i * 100, dt_s, snr_db });
     window.__rr73!.decoded(slot, [...Array.from({ length: 10 }, (_, i) => d(-0.8 + ((i % 3) - 1) * 0.05, -5, i)), d(1.5, -15, 11), d(1.5, -18, 12)]);
   });
-  await expect(page.getByTestId('timing-median')).toHaveText('−0.80 s from 10 decodes at −10 dB or stronger');
+  await expect(page.getByTestId('timing-median')).toHaveText('−0.80 s from 10 decodes');
   // The first step toward +0.80 s is the largest allowed, 0.08 s.
   await expect(page.getByTestId('timing-offset')).toHaveText('+0.08 s on receive audio');
 
   // A transmission that did not come back, then one that did.
   const heard = page.getByTestId('timing-heard');
   await page.evaluate(() => window.__rr73!.heardBack(Date.UTC(2026, 9, 13, 13, 35, 0), 'CQ N0CALL EM12', 1200, []));
-  await expect(heard).toHaveText('Not heard back. The radio returned no decodable signal in the last transmission.');
+  await expect(heard).toHaveText('Not heard back in the last transmission');
   await page.evaluate(() =>
     window.__rr73!.heardBack(Date.UTC(2026, 9, 13, 13, 35, 30), 'CQ N0CALL EM12', 1200, [{ text: 'CQ N0CALL EM12', freq_hz: 1200, dt_s: -0.7, snr_db: 24 }]),
   );

@@ -96,7 +96,7 @@ test('Tune stops by itself after 10 s', async ({ page }) => {
   const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toBeVisible();
   await expect(sheet).toBeHidden({ timeout: 13_000 });
-  await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off during Tune/)).toBeVisible();
+  await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off\./)).toBeVisible();
 });
 
 test('Escape closes the Tune sheet and halts', async ({ page }) => {
@@ -120,7 +120,6 @@ test('Tune transmits at the Tx frequency set on the waterfall', async ({ page })
   await page.waitForTimeout(300);
 
   await page.goto('./#/settings/radio');
-  await expect(page.getByRole('button', { name: /^Tune for 10 s/ })).toContainText(`Transmits at ${hz} Hz for 10 s`);
   await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toContainText(`${hz} Hz on 14.074 MHz`);

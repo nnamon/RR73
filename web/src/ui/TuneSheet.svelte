@@ -38,7 +38,7 @@
 
 <Sheet bind:open title="Tuning" onclose={() => (started || tx.tuning) && stop()}>
   <p class="count mono" role="timer" aria-live="off">{left} s</p>
-  <p class="body centre">{playingHz} Hz on {where}. Stops by itself at 0 s.</p>
+  <p class="body centre">{playingHz} Hz on {where}</p>
   <button class="btn halt" onclick={stop}>Halt</button>
 </Sheet>
 
