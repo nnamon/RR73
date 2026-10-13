@@ -110,3 +110,29 @@ describe('shipped preset', () => {
     expect(JSON.parse(readFileSync(gate, 'utf8')).preset).toBe(PRESET);
   });
 });
+
+describe('WorkerDecoder encoder', () => {
+  it('packs and synthesises through the worker, without the decode limit', async () => {
+    const { d, workers } = setup();
+    void d.decodeSlot(slot());
+    void d.decodeSlot(slot());
+    const packed = d.pack('cq 9v1ne oj11', 'FT8');
+    const audio = d.synthesize('CQ 9V1NE OJ11', 'FT8', 1500, 48000);
+    const [p, s] = workers[0].sent.slice(-2).map((x) => x.m);
+    expect(p).toEqual({ type: 'pack', id: 3, text: 'cq 9v1ne oj11', mode: 'FT8' });
+    expect(s).toEqual({ type: 'synth', id: 4, text: 'CQ 9V1NE OJ11', mode: 'FT8', f0Hz: 1500, sampleRate: 48000 });
+    workers[0].reply({ type: 'packed', id: 3, packed: { ok: true, text: 'CQ 9V1NE OJ11', i3n3: '1.0', error: null } });
+    workers[0].reply({ type: 'synthesized', id: 4, samples: new Float32Array(10), ms: 4 });
+    await expect(packed).resolves.toMatchObject({ ok: true, text: 'CQ 9V1NE OJ11' });
+    await expect(audio).resolves.toHaveLength(10);
+  });
+
+  it('rejects encoder requests that fail', async () => {
+    const { d, workers } = setup();
+    const audio = d.synthesize('X', 'FT8', 1500, 48000);
+    workers[0].reply({ type: 'error', id: 1, detail: 'bad' });
+    await expect(audio).rejects.toThrow('bad');
+    workers[0].reply({ type: 'failed', reason: 'load', detail: 'gone' });
+    await expect(d.pack('X', 'FT8')).rejects.toBeInstanceOf(DecoderUnavailableError);
+  });
+});

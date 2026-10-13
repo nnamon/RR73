@@ -12,6 +12,7 @@ import { buildLut, type WaterfallPalette } from './colormap';
 import { LevelMapper } from './levels';
 import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
 import { SLOT_MS, type Mode } from '../clock/slots';
+import { QuietTracker, quietestHz } from './pick';
 
 /** The parts of a 2D context the renderer uses, shared by canvas and OffscreenCanvas. */
 export type Context2D = Pick<CanvasRenderingContext2D, 'drawImage' | 'putImageData' | 'createImageData' | 'fillRect'> & {
@@ -99,11 +100,13 @@ export class WaterfallRenderer {
   private rowCount = 0;
   private marks: { utcMs: number; row: number }[] = [];
   private lastRowUtc: number | null = null;
+  private readonly quiet: QuietTracker;
 
   constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
     this.ctx = ctx;
     this.palette = palette;
     this.mode = mode;
+    this.quiet = new QuietTracker(mode);
     this.lut = buildLut(palette.stops);
     this.resize(width, height);
   }
@@ -115,7 +118,13 @@ export class WaterfallRenderer {
 
   setMode(mode: Mode) {
     this.mode = mode;
+    this.quiet.setMode(mode);
     this.redraw();
+  }
+
+  /** The quietest Tx frequency from the last 2 to 4 slots, nearest `nearHz` among equals, Hz; or null. */
+  quietest(nowMs: number, nearHz: number): number | null {
+    return quietestHz(this.quiet.slots(nowMs), this.mode, nearHz);
   }
 
   /** Sets the canvas size in device pixels and redraws the history. */
@@ -139,6 +148,7 @@ export class WaterfallRenderer {
     this.expectedUtc = null;
     this.anchor = null;
     this.nextIndex = -1;
+    this.quiet.reset();
     this.frame.fill(0);
     this.valid = 0;
     this.sinceRow = 0;
@@ -197,6 +207,7 @@ export class WaterfallRenderer {
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
+        this.quiet.add(this.db, t);
         rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
       }
     }

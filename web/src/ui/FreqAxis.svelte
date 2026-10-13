@@ -1,25 +1,31 @@
 <script lang="ts">
-  /** Frequency axis under the waterfall: 100 Hz and 500 Hz ticks, green Rx and red Tx brackets as in WSJT-X. */
-  import { MARKER_HZ, bracket, ticks } from '../lib/waterfall/axis';
+  /**
+   * Frequency axis under the waterfall: 100 Hz and 500 Hz ticks, green Rx and red Tx brackets as
+   * in WSJT-X. A tap on it picks the frequency under the finger (the waterfall handles the
+   * pointer); screen readers get the frequencies from the waterfall's Set frequencies button.
+   */
+  import { bracket, ticks } from '../lib/waterfall/axis';
+  import { SIGNAL_HZ } from '../lib/waterfall/pick';
+  import type { Mode } from '../lib/clock/slots';
 
-  let { rxHz, txHz }: { rxHz: number; txHz: number } = $props();
+  let { rxHz, txHz, mode }: { rxHz: number; txHz: number; mode: Mode } = $props();
   const all = ticks();
-  const rx = $derived(bracket(rxHz));
-  const tx = $derived(bracket(txHz));
+  const width = $derived(SIGNAL_HZ[mode]);
+  const rx = $derived(bracket(rxHz, width));
+  const tx = $derived(bracket(txHz, width));
   // When the brackets overlap, Tx sits lower with shorter legs so both stay visible.
-  const same = $derived(Math.abs(rxHz - txHz) < MARKER_HZ);
+  const same = $derived(Math.abs(rxHz - txHz) < width);
 </script>
 
-<div class="axis">
-  <p class="visually-hidden">Receive frequency {rxHz} Hz, transmit frequency {txHz} Hz.</p>
-  <div class="marks" aria-hidden="true">
+<div class="axis" data-testid="freq-axis" aria-hidden="true">
+  <span class="marks">
     {#each all as t (t.hz)}
       <i class="tick" class:major={t.major} style:left="{t.x * 100}%"></i>
       {#if t.label}<span class="label" style:left="{t.x * 100}%">{t.label}</span>{/if}
     {/each}
-    <i class="bracket tx" class:same style:left="{tx.x0 * 100}%" style:width="{(tx.x1 - tx.x0) * 100}%"></i>
-    <i class="bracket rx" class:same style:left="{rx.x0 * 100}%" style:width="{(rx.x1 - rx.x0) * 100}%"></i>
-  </div>
+    <i class="bracket tx" class:same data-testid="tx-bracket" style:left="{tx.x0 * 100}%" style:width="{(tx.x1 - tx.x0) * 100}%"></i>
+    <i class="bracket rx" class:same data-testid="rx-bracket" style:left="{rx.x0 * 100}%" style:width="{(rx.x1 - rx.x0) * 100}%"></i>
+  </span>
 </div>
 
 <style>

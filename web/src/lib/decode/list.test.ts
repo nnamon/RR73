@@ -20,6 +20,21 @@ describe('slotHeader', () => {
   });
 });
 
+describe('buildList with our transmissions', () => {
+  it('shows what we sent as an amber row between the slots, by time', () => {
+    const sent = [{ slotStartMs: T + 15000, text: 'JA1KXM 9V1NE R-10', freqHz: 1500 }];
+    const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent);
+    const sentAt = items.findIndex((i) => i.kind === 'row' && i.row.mark === 'sent');
+    expect(sentAt).toBe(0);
+    const r = items[0];
+    expect(r.kind === 'row' && r.row).toMatchObject({ mark: 'sent', key: 'JA1KXM', time: '13:14:30', meta: 'You sent' });
+    // A transmission in the slot before the newest decoded slot sorts below that slot's decodes.
+    const earlier = buildList([NEWER], '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]);
+    expect(earlier.at(-1)).toMatchObject({ kind: 'row', id: `s${T}` });
+    expect(buildList([], '9V1NE', 'cq', 1500, sent)).toEqual([]);
+  });
+});
+
 describe('buildList', () => {
   it('puts the newest slot first, each under its header, with the rows marked', () => {
     const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500);

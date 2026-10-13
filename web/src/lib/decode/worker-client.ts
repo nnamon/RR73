@@ -5,7 +5,8 @@
  * a queue.
  */
 
-import type { FromDecoder, ToDecoder, DecoderFailure } from './protocol';
+import type { FromDecoder, ToDecoder, DecoderFailure, Packed } from './protocol';
+import type { Mode } from '../clock/slots';
 import type { Decode, DecoderClient, DecoderStatus, SlotAudio } from './types';
 
 export class DecoderBusyError extends Error {
@@ -29,6 +30,11 @@ interface Pending {
   reject: (e: Error) => void;
 }
 
+interface Request<T> {
+  resolve: (v: T) => void;
+  reject: (e: Error) => void;
+}
+
 /**
  * The decoder preset operators get. `subtract-3-osd2` decodes up to 3 passes, subtracting each
  * decoded signal before the next (docs/experiments/0001-subtraction.md), and retries candidates
@@ -41,6 +47,8 @@ export const PRESET = 'subtract-3-osd2';
 export class WorkerDecoder implements DecoderClient {
   private worker: WorkerLike | null = null;
   private readonly pending = new Map<number, Pending>();
+  /** Encoder requests (pack, synthesize): not limited, they are small and come one per slot. */
+  private readonly requests = new Map<number, Request<Packed> | Request<Float32Array>>();
   private nextId = 1;
   private statusValue: DecoderStatus = { state: 'idle' };
   private readonly listeners = new Set<(s: DecoderStatus) => void>();
@@ -103,17 +111,46 @@ export class WorkerDecoder implements DecoderClient {
     return done;
   }
 
+  /** Checks text for transmission: canonical form and type, or why it cannot be sent. */
+  pack(text: string, mode: Mode): Promise<Packed> {
+    return this.request<Packed>({ type: 'pack', id: 0, text, mode });
+  }
+
+  /** Synthesises a transmission at `sampleRate`, peak 1. */
+  synthesize(text: string, mode: Mode, f0Hz: number, sampleRate: number): Promise<Float32Array> {
+    return this.request<Float32Array>({ type: 'synth', id: 0, text, mode, f0Hz, sampleRate });
+  }
+
+  private request<T>(m: Extract<ToDecoder, { type: 'pack' | 'synth' }>): Promise<T> {
+    if (this.statusValue.state === 'failed') return Promise.reject(new DecoderUnavailableError(this.statusValue.detail));
+    this.load();
+    if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
+    const id = this.nextId++;
+    const done = new Promise<T>((resolve, reject) => this.requests.set(id, { resolve, reject } as Request<Packed> | Request<Float32Array>));
+    this.worker.postMessage({ ...m, id });
+    return done;
+  }
+
   dispose() {
     this.worker?.terminate();
     this.worker = null;
     for (const p of this.pending.values()) p.reject(new DecoderUnavailableError('disposed'));
+    for (const r of this.requests.values()) r.reject(new DecoderUnavailableError('disposed'));
     this.pending.clear();
+    this.requests.clear();
   }
 
   private onMessage(m: FromDecoder) {
     if (m.type === 'ready') this.setStatus({ state: 'ready', version: m.version, loadMs: m.loadMs });
     else if (m.type === 'failed') this.fail(m.reason, m.detail);
-    else {
+    else if (m.type === 'packed' || m.type === 'synthesized' || (m.type === 'error' && this.requests.has(m.id))) {
+      const r = this.requests.get(m.id);
+      if (!r) return;
+      this.requests.delete(m.id);
+      if (m.type === 'packed') (r as Request<Packed>).resolve(m.packed);
+      else if (m.type === 'synthesized') (r as Request<Float32Array>).resolve(m.samples);
+      else r.reject(new Error(m.detail));
+    } else {
       const p = this.pending.get(m.id);
       if (!p) return;
       this.pending.delete(m.id);
@@ -127,7 +164,9 @@ export class WorkerDecoder implements DecoderClient {
     this.worker = null;
     this.setStatus({ state: 'failed', reason, detail });
     for (const p of this.pending.values()) p.reject(new DecoderUnavailableError(detail));
+    for (const r of this.requests.values()) r.reject(new DecoderUnavailableError(detail));
     this.pending.clear();
+    this.requests.clear();
   }
 
   private setStatus(s: DecoderStatus) {

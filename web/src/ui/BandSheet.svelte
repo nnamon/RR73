@@ -6,7 +6,7 @@
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
 
-  let { open = $bindable(false) }: { open: boolean } = $props();
+  let { open = $bindable(false), onconfirm }: { open: boolean; onconfirm?: (band: BandId, mode: Mode) => void } = $props();
 
   let band = $state<BandId>(settings.band);
   let mode = $state<Mode>(settings.mode);
@@ -27,6 +27,7 @@
 
   function confirm() {
     void updateSettings({ band, mode });
+    onconfirm?.(band, mode);
     open = false;
   }
 </script>
@@ -55,7 +56,7 @@
     <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
     <p class="m">USB</p>
   </div>
-  <p class="note">RR73 can’t read the radio’s dial. Saved slots record the band you confirm here.</p>
+  <p class="note">RR73 can’t read the radio’s dial. Tx stays off until you confirm, and saved slots and QSOs record the band you confirm here.</p>
   <button class="btn primary confirm" onclick={confirm}>Use {band} {mode}</button>
   <button class="btn cancel" onclick={() => (open = false)}>Cancel</button>
 </Sheet>

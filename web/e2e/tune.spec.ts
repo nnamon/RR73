@@ -116,3 +116,26 @@ test('Escape closes the Tune sheet and halts', async ({ page }) => {
   expect(stopsAtOnce((await log(page)).at(-1)), (await log(page)).at(-1)).toBe(true);
   await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeHidden();
 });
+
+test('Tune transmits at the Tx frequency set on the waterfall', async ({ page }) => {
+  await instrument(page);
+  await page.goto('./#/operate');
+  const wf = (await page.getByTestId('waterfall').boundingBox())!;
+  const x = Math.round(wf.x + (wf.width * 1846) / 3000);
+  const hz = Math.round(((x - wf.x) / wf.width) * 3000);
+  await page.mouse.click(x, Math.round(wf.y + wf.height / 2));
+  await page.getByRole('button', { name: `Transmit here, ${hz} Hz` }).click();
+  await page.waitForTimeout(300);
+
+  await page.goto('./#/settings/radio');
+  await expect(page.getByRole('button', { name: /^Tune/ })).toContainText(`Asks first, then transmits at ${hz} Hz for 10 s`);
+  await page.getByRole('button', { name: /^Tune/ }).click();
+  const confirm = page.getByRole('dialog', { name: 'Transmit a tune tone?' });
+  await expect(confirm).toContainText(`${hz} Hz for 10 s`);
+  await confirm.getByRole('button', { name: 'Start tune' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Transmitting' });
+  await expect(sheet).toContainText(`${hz} Hz on 14.074 MHz`);
+  expect(await log(page)).toContain(`start ${hz} Hz`);
+  await sheet.getByRole('button', { name: 'Halt' }).click();
+  await expect(sheet).toBeHidden();
+});
