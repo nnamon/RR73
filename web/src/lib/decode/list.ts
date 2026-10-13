@@ -2,7 +2,7 @@
  * Builds the decode list: newest slot first, a bar per slot, rows marked as in WSJT-X, the
  * callers in Run, and the chip filters. Our own transmission sits at the top as soon as it is
  * planned (Next), then while on air (Sending), then stays in its slot (Sent). Rows of slots older
- * than the newest decoded slot are marked old, so they fade.
+ * than the newest slot with decodes are marked old, so they fade.
  */
 
 import { utcTime } from '../clock/format';
@@ -65,7 +65,7 @@ export interface RowItem {
   id: string;
   row: DecodeRowData;
   slotStartMs: number;
-  /** From a slot older than the newest decoded slot: drawn faded. */
+  /** From a slot older than the newest slot with decodes: drawn faded. */
   old?: boolean;
   /** Our own transmission. */
   out?: OutInfo;
@@ -134,8 +134,9 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
 export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify, outgoing: Outgoing = {}): ListItem[] {
   type Group = { at: number; items: ListItem[] };
   const groups: Group[] = [];
-  // The newest decoded slot keeps full contrast; anything older fades.
-  const newest = slots.reduce((m, s) => (s.skipped ? m : Math.max(m, s.startUtcMs)), -Infinity);
+  // The newest slot with decodes keeps full contrast; anything older fades. An empty slot after
+  // it leaves it as the latest news.
+  const newest = slots.reduce((m, s) => (s.decodes.length ? Math.max(m, s.startUtcMs) : m), -Infinity);
   const old = (slotStartMs: number) => slotStartMs < newest;
   for (const s of slots) {
     const rows = s.decodes

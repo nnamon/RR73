@@ -68,7 +68,7 @@ describe('buildList with our transmissions', () => {
     expect(outText(rows(done)[0].out!, T + 15000, 1499.6, T + 40000)).toEqual({ tag: 'Sent', meta: '1500 Hz', progress: null });
   });
 
-  it('fades every slot older than the newest decoded slot, our older transmissions included', () => {
+  it('fades every slot older than the newest slot with decodes, our older transmissions included', () => {
     const sent = [
       { slotStartMs: T + 15000, text: 'CQ 9V1NE OJ11', freqHz: 1500 },
       { slotStartMs: T - 15000, text: 'CQ 9V1NE OJ11', freqHz: 1500 },
@@ -82,8 +82,9 @@ describe('buildList with our transmissions', () => {
       'old CQ K1ABC FN42',
       'old sent',
     ]);
-    // A slot the decoder skipped is not the newest decoded slot.
+    // A slot the decoder skipped, or one with no decodes, leaves the slot before it at full contrast.
     expect(rows(buildList([OLDER, { ...NEWER, decodes: [], skipped: true }], '9V1NE', 'all', 1500))[0].old).toBe(false);
+    expect(rows(buildList([OLDER, { ...NEWER, decodes: [] }], '9V1NE', 'all', 1500))[0].old).toBe(false);
   });
 });
 

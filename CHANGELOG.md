@@ -6,7 +6,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - Decode rows are 32 pt and lead with the message in 16 pt proportional type, with the calling station of a CQ in bold. SNR and audio frequency follow on the right in grey: "−12 dB · 766 Hz".
 - DT is in the station's details, opened by touch and hold, with its unit: "DT −0.8 s". In 0.8 the DT column ran into the frequency at values such as −0.8.
-- Rows from slots older than the newest decoded slot fade to grey text and a lighter tint.
+- Rows from slots older than the newest slot with decodes fade to grey text and a lighter tint.
 - The next transmission shows at the top of the list as soon as it is planned, as Next with a countdown to its slot. On air it reads Sending, with a red line growing to the end of the transmission, and then Sent in its slot.
 - The waterfall has a ruler with a tick every 100 Hz, a taller tick every 500 Hz and labels from 500 to 3000 Hz.
 - The Tx and Rx markers are two lines at the lowest and highest tone of a signal (50 Hz in FT8, 83 Hz in FT4) with a light fill. The drag label shows the lowest tone.

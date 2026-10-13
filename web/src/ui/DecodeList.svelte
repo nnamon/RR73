@@ -15,7 +15,7 @@
    * coloured as in WSJT-X by the first matching decode colour (Settings › Decode colours): a 4 px
    * bar and a tint. Worked before greys the text over any tint. The colours ride on the row as
    * classes, data-hl and data-ink, so the markup can change without touching the matcher. Rows of
-   * slots older than the newest decoded slot fade: grey text, a lighter tint. Slot bars alternate
+   * slots older than the newest slot with decodes fade: grey text, a lighter tint. Slot bars alternate
    * slate (even) and blue (odd).
    *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
