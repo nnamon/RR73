@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.8.0 · 2026-10-13
 
 - Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.
 - Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
