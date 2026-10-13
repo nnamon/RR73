@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, callerItems, filterCounts, outText, slotHeader, type RowItem, type SlotDecodes } from './list';
+import { buildList, callerItems, filterCounts, outText, slotHeader, type ListItem, type RowItem, type SlotDecodes } from './list';
 import type { Caller } from '../qso/sequencer';
 
 const T = Date.UTC(2026, 9, 13, 13, 14, 15);
@@ -76,8 +76,8 @@ describe('buildList with our transmissions', () => {
     const r = rows(buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent));
     expect(r.map((x) => `${x.old ? 'old' : 'new'} ${x.out?.stage ?? x.row.decode.text}`)).toEqual([
       'new sent',
-      'new CQ 9M2TRX OJ02',
       'new 9V1NE JA1KXM PM95',
+      'new CQ 9M2TRX OJ02',
       'new JH1RRT YB0AZK RR73',
       'old CQ K1ABC FN42',
       'old sent',
@@ -89,12 +89,12 @@ describe('buildList with our transmissions', () => {
 });
 
 describe('buildList', () => {
-  it('puts the newest slot first, each under its header, with the rows marked', () => {
+  it('puts the newest slot first, each under its header, with the rows marked and messages to you first', () => {
     const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500);
     expect(items.map((i) => (i.kind === 'header' ? i.text.slice(0, 12) : `${i.row.mark ?? '-'} ${i.row.decode.text}`))).toEqual([
       '13:14:15 UTC',
-      'cq CQ 9M2TRX OJ02',
       'me 9V1NE JA1KXM PM95',
+      'cq CQ 9M2TRX OJ02',
       '- JH1RRT YB0AZK RR73',
       '13:14:00 UTC',
       'cq CQ K1ABC FN42',
@@ -122,6 +122,39 @@ describe('buildList', () => {
   });
 });
 
+describe('buildList with messages to you', () => {
+  const rows = (items: ListItem[]) => items.filter((i): i is RowItem => i.kind === 'row');
+  const slot = (startUtcMs: number, texts: string[]): SlotDecodes => ({ startUtcMs, mode: 'FT8', decodes: texts.map((t, i) => d(t, 500 + 100 * i)), ms: 40 });
+
+  it('puts messages to you first within their slot, the rest in the decoder\'s order', () => {
+    const s = slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09', 'JA1KXM 9V1NE R-14', 'JH1RRT YB0AZK RR73', '9V1NE/P ZL1TQK RF73', 'CQ 9V1NE OJ11']);
+    const r = rows(buildList([s], 'VK3/9V1NE', 'all', 1500));
+    expect(r.map((x) => `${x.toYou ? 'to you' : '-'} ${x.row.decode.text}`)).toEqual([
+      'to you 9V1NE JA1KXM -09',
+      'to you 9V1NE/P ZL1TQK RF73',
+      '- CQ K1ABC FN42',
+      '- JA1KXM 9V1NE R-14',
+      '- JH1RRT YB0AZK RR73',
+      '- CQ 9V1NE OJ11',
+    ]);
+    // A row keeps the id of its place in the decoder's order.
+    expect(r.map((x) => x.id)).toEqual([1, 4, 0, 2, 3, 5].map((i) => `${T}-${i}`));
+  });
+
+  it('sorts within each slot only, in every filter that shows them', () => {
+    const items = buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09']), slot(T - 15_000, ['CQ VJ6X OF78', '9V1NE VJ6X -12'])], '9V1NE', 'all', 1500);
+    expect(items.map((i) => (i.kind === 'header' ? i.time : i.row.decode.text))).toEqual(['13:14:15', '9V1NE JA1KXM -09', 'CQ K1ABC FN42', '13:14:00', '9V1NE VJ6X -12', 'CQ VJ6X OF78']);
+    expect(rows(buildList([slot(T, ['JA1KXM 9V1NE R-14', '9V1NE JA1KXM -09'])], '9V1NE', 'me', 1500)).map((x) => x.row.decode.text)).toEqual(['9V1NE JA1KXM -09', 'JA1KXM 9V1NE R-14']);
+    expect(rows(buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09'])], '9V1NE', 'rx', 600))[0]).toMatchObject({ toYou: true });
+  });
+
+  it('marks nothing without a callsign, and never our own rows', () => {
+    expect(rows(buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09'])], '', 'all', 1500)).some((x) => x.toYou)).toBe(false);
+    const sent = [{ slotStartMs: T + 15_000, text: 'JA1KXM 9V1NE R-14', freqHz: 1500 }];
+    expect(rows(buildList([], '9V1NE', 'all', 1500, sent))[0].toYou).toBeUndefined();
+  });
+});
+
 describe('callerItems', () => {
   const caller = (call: string, over: Partial<Caller> = {}): Caller => ({
     call,
@@ -145,7 +178,7 @@ describe('callerItems', () => {
     const working = { call: 'K1ABC', grid: 'FN42', snrDb: -12, dtS: 0.2, freqHz: 2341 };
     const items = callerItems(slots, '9V1NE', 'FT8', working, [caller('ZL1TQK'), caller('DU1XYZ', { grid: 'PK04', heardMs: T - 30_000 })], false);
     expect(show(items)).toEqual(['[13:14:15 callers, in answering order]', '9V1NE K1ABC R-15 Working', '9V1NE ZL1TQK RF73 Next', '9V1NE DU1XYZ PK04 3rd']);
-    expect(items.slice(1).every((i) => i.kind === 'row' && i.row.mark === 'me')).toBe(true);
+    expect(items.slice(1).every((i) => i.kind === 'row' && i.row.mark === 'me' && i.toYou)).toBe(true);
   });
 
   it('marks dupes and skips them in the order unless dupes are worked', () => {

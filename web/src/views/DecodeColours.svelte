@@ -15,6 +15,7 @@
   import { href } from '../lib/app/router.svelte';
   import { PRESETS, category, highlightDecode, isBackground, moveBackground, presetHighlights, presetOf, type HighlightEntry, type HighlightId, type PresetId } from '../lib/decode/highlight';
   import { inkFor } from '../lib/decode/highlight-colour';
+  import { toYou } from '../lib/decode/focus';
   import { markDecode } from '../lib/decode/marking';
   import { buildLogIndex } from '../lib/log/worked';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
@@ -52,7 +53,7 @@
     return rows.map(([text, snr_db, dt_s, freq_hz, sent], i) => {
       const decode = { text, snr_db, dt_s, freq_hz };
       const h = highlightDecode({ text, sent }, me, SAMPLE_LOG, SAMPLE_AT, settings.highlights);
-      return { kind: 'row' as const, id: `x${i}`, slotStartMs: 0, row: { decode, ...markDecode(decode, me, sent), hl: h.bg, ink: h.ink, time: sent ? '13:14:30' : undefined } };
+      return { kind: 'row' as const, id: `x${i}`, slotStartMs: 0, toYou: !sent && toYou(text, me), row: { decode, ...markDecode(decode, me, sent), hl: h.bg, ink: h.ink, time: sent ? '13:14:30' : undefined } };
     });
   });
 

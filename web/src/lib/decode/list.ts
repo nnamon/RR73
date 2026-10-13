@@ -2,13 +2,15 @@
  * Builds the decode list: newest slot first, a bar per slot, rows marked as in WSJT-X, the
  * callers in Run, and the chip filters. Our own transmission sits at the top as soon as it is
  * planned (Next), then while on air (Sending), then stays in its slot (Sent). Rows of slots older
- * than the newest slot with decodes are marked old, so they fade.
+ * than the newest slot with decodes are marked old, so they fade. Messages to you lead their
+ * slot.
  */
 
 import { utcTime } from '../clock/format';
 import { SLOT_MS, parity, type Mode, type Parity } from '../clock/slots';
 import { bare, formatReport, parseExchange, sameCall } from '../qso/messages';
 import type { Caller } from '../qso/sequencer';
+import { toYou } from './focus';
 import type { DecodeHighlight } from './highlight';
 import { markDecode, type DecodeRowData } from './marking';
 import type { Decode } from './types';
@@ -69,6 +71,8 @@ export interface RowItem {
   old?: boolean;
   /** Our own transmission. */
   out?: OutInfo;
+  /** Addressed to the operator's callsign: leads its slot, with a red edge and bold text. */
+  toYou?: boolean;
 }
 
 export type ListItem = HeaderItem | RowItem;
@@ -128,8 +132,9 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
 /**
  * List items for `slots` and our own transmissions, newest first. A transmission sorts by its
  * start (slot + 0.5 s) under a bar that says next, sending or sent, a decoded slot by its end. With a filter, slots
- * with no matching decode are left out; with none, every slot shows its bar. Transmissions show
- * with All and To me; `mode` gives their slot parity.
+ * with no matching decode are left out; with none, every slot shows its bar. Within a slot,
+ * messages to `myCall` come first, the rest in the decoder's order. Transmissions show with All
+ * and To me; `mode` gives their slot parity.
  */
 export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify, outgoing: Outgoing = {}): ListItem[] {
   type Group = { at: number; items: ListItem[] };
@@ -139,13 +144,17 @@ export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, 
   const newest = slots.reduce((m, s) => (s.decodes.length ? Math.max(m, s.startUtcMs) : m), -Infinity);
   const old = (slotStartMs: number) => slotStartMs < newest;
   for (const s of slots) {
+    // Ids follow the decoder's order, so a row keeps its id when it moves up.
     const rows = s.decodes
-      .map((d) => ({ decode: d, ...markDecode(d, myCall) }))
-      .filter((r) => passes(r, filter, rxHz))
-      .map((r) => ({ ...r, ...colours(classify, r.decode, false) }));
+      .map((d, i) => ({ i, toYou: toYou(d.text, myCall), row: { decode: d, ...markDecode(d, myCall) } }))
+      .filter((r) => passes(r.row, filter, rxHz))
+      .map((r) => ({ ...r, row: { ...r.row, ...colours(classify, r.row.decode, false) } }));
     if (!rows.length && filter !== 'all') continue;
     const items: ListItem[] = [slotHeader(s)];
-    rows.forEach((row, i) => items.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) }));
+    for (const r of [...rows.filter((x) => x.toYou), ...rows.filter((x) => !x.toYou)]) {
+      const item: RowItem = { kind: 'row', id: `${s.startUtcMs}-${r.i}`, row: r.row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) };
+      items.push(r.toYou ? { ...item, toYou: true } : item);
+    }
     groups.push({ at: s.startUtcMs + SLOT_MS[s.mode], items });
   }
   if (filter === 'all' || filter === 'me') {
@@ -217,7 +226,8 @@ export function callerItems(slots: SlotDecodes[], myCall: string, mode: Mode, wo
     const d = found?.d ?? fallback;
     const at = found?.slotStartMs ?? heardMs;
     newest = Math.max(newest, at);
-    rows.push({ kind: 'row', id: `c-${bare(call)}`, row: { decode: d, ...markDecode(d, myCall), meta, ...colours(classify, d, false) }, slotStartMs: at });
+    const item: RowItem = { kind: 'row', id: `c-${bare(call)}`, row: { decode: d, ...markDecode(d, myCall), meta, ...colours(classify, d, false) }, slotStartMs: at };
+    rows.push(toYou(d.text, myCall) ? { ...item, toYou: true } : item);
   };
   if (working) add(working.call, 'Working', made(working.call, working.grid, working.snrDb, working.dtS, working.freqHz), 0);
   let n = working ? 1 : 0;

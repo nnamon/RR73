@@ -218,6 +218,12 @@
   --rr-wf-c4: #8AF0C8;
   --rr-wf-c5: #FFF060;
   --rr-wf-c6: #FFF8E6;
+
+  /*
+   * Decode list: messages to you have a solid red edge and heavy text.
+   */
+  --rr-weight-heavy: 800;
+  --rr-to-you-edge: var(--rr-tx);
 }
 
 /*

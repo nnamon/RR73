@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Messages to your callsign lead their slot, with a solid red edge and bold text over their decode colour. 9V1NE matches VK3/9V1NE and 9V1NE/P.
+
 ## 0.10.1 · 2026-10-13
 
 - Decode rows are 32 pt and lead with the message in 16 pt proportional type, with the calling station of a CQ in bold. SNR and audio frequency follow on the right in grey: "−12 dB · 766 Hz".

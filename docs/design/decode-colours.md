@@ -8,6 +8,7 @@ Operate colours each decode as WSJT-X does. Settings › Decode colours sets the
 - Worked before is a text layer outside the order. It greys the text of any decode whose sender is in the log on this band and mode, over whatever background the row has. A CQ from a station already worked shows green with grey text.
 - New call, new grid and ending a QSO look at the station sending a CQ, 73 or RR73. Worked before looks at the sender of any message. No category treats the operator's own callsign as a sender.
 - My call matches the operator's callsign in any position, with prefixes and suffixes (9V1NE/P, VK3/9V1NE) and as a hashed call.
+- A message addressed to the operator's callsign (its first callsign, by base call) also leads its slot, with a solid red edge in place of the category's bar and heavier text. This sits outside the categories and holds with My call turned off (`web/src/lib/decode/focus.ts`).
 - Own transmissions match only Sent, and received decodes never match it, so its place in the order changes nothing.
 - Calls compare by base callsign: a QSO with ZL1TQK/P counts for ZL1TQK. Grids compare by their first 4 characters.
 - Every category is on by default. Settings schema 3 turns them all on, at the defaults below, on phones that ran 0.7.

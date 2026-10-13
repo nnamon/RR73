@@ -18,6 +18,8 @@
    * slots older than the newest slot with decodes fade: grey text, a lighter tint. Slot bars alternate
    * slate (even) and blue (odd).
    *
+   * A message to you has a solid red edge and heavier text, over its decode colour.
+   *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
    * with a red progress line while on air, then Sent in its slot.
    *
@@ -85,7 +87,17 @@
     const r = item.row;
     const bg = !!r.hl && colours.has(r.hl);
     const ink = !!r.ink && colours.has(r.ink);
-    return ['dr', r.mark ? `k-${r.mark}` : '', r.worked ? 'worked' : '', bg ? 'rr-hl hl-background' : '', ink ? 'rr-ink hl-ink' : '', item.old ? 'old' : '', item.out ? `out ${item.out.stage}` : '', selected ? 'sel' : '']
+    return [
+      'dr',
+      r.mark ? `k-${r.mark}` : '',
+      r.worked ? 'worked' : '',
+      bg ? 'rr-hl hl-background' : '',
+      ink ? 'rr-ink hl-ink' : '',
+      item.old ? 'old' : '',
+      item.out ? `out ${item.out.stage}` : '',
+      item.toYou ? 'to-you' : '',
+      selected ? 'sel' : '',
+    ]
       .filter(Boolean)
       .join(' ');
   }
@@ -439,6 +451,17 @@
   .dr.old.hl-background .c-meta,
   .dr.old.hl-background .c-tag {
     color: var(--rr-hl-old-ink);
+  }
+
+  /* A message to you: a solid red edge over the decode colour's bar, and heavier text. */
+  .dr.to-you::after,
+  .dr.old.hl-background.to-you::after {
+    background: var(--rr-to-you-edge);
+    opacity: 1;
+  }
+
+  .dr.to-you .c-msg {
+    font-weight: var(--rr-weight-heavy);
   }
 
   /* After the decode colours and the fading, so a selected row shows as selected. */

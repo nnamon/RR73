@@ -232,3 +232,17 @@ describe('decode colours', () => {
     expect(c.className).not.toMatch(/hl-/);
   });
 });
+
+describe('messages to you', () => {
+  it('gives a message to you its own class over its decode colour', () => {
+    const target = render([
+      { kind: 'row', id: 'a', slotStartMs, row: row(d('9V1NE JA1KXM -09', -9, 0.2, 1418), { hl: 'myCall' }), toYou: true },
+      { kind: 'row', id: 'b', slotStartMs, row: row(d('JA1KXM 9V1NE R-14', -9, 0.2, 1418)), old: true, toYou: true },
+      { kind: 'row', id: 'c', slotStartMs, row: row(d('CQ A41ZZ LL93', -4, 0.2, 956), { hl: 'cq' }) },
+    ]);
+    const [a, b, c] = [...target.querySelectorAll<HTMLElement>('button.dr')];
+    expect(a.classList.contains('to-you') && a.classList.contains('hl-background')).toBe(true);
+    expect(b.classList.contains('to-you') && b.classList.contains('old')).toBe(true);
+    expect(c.classList.contains('to-you')).toBe(false);
+  });
+});
