@@ -111,6 +111,11 @@ a {
   padding: var(--rr-safe-top) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
 }
 
+/* Content scrolled into view stops under the pinned 44 pt bar (BackLink). */
+.screen * {
+  scroll-margin-top: var(--rr-tap);
+}
+
 /*
  * Navigation bar buttons: 44 pt targets side by side, as UIKit places bar items, around 24 px
  * glyphs whose ink is 18 px wide, in the tint: about 26 pt between glyphs. The last button runs
