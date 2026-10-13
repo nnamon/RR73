@@ -30,6 +30,9 @@ const iphone = (width: number, height: number, scale: number) => ({
   userAgent: IPHONE_UA,
 });
 
+/** Projects that finish before the transmit timing tests start. */
+const QUIET = ['mic', 'decode', 'chromium', 'webkit-375x667', 'webkit-393x852'];
+
 export default defineConfig({
   testDir: here('./e2e'),
   outputDir: here('./test-results/output'),
@@ -49,11 +52,6 @@ export default defineConfig({
       },
   projects: [
     { name: 'mic', testMatch: /(audio|start-tone)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
-    // need the looped fake microphone to start near a slot boundary. On a loaded machine
-    // (load average 14 to 17 seen) the fake audio device lags; 2 retries, as for decode.
-    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
     // The decode test aligns Chromium's looped fake microphone with UTC slots from the tap; on a heavily
     // loaded host the capture can start late enough to put the signals outside the decoder's DT
     // window. Retries bound that; a decoding regression still fails all three attempts.
@@ -61,5 +59,12 @@ export default defineConfig({
     { name: 'chromium', testMatch: /(a11y|shell|tune|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
+    // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
+    // need the looped fake microphone to start near a slot boundary. On a loaded machine
+    // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
+    // after the other projects, so the rest of the suite does not load the machine meanwhile
+    // (locally: --no-deps to run them alone), with 2 retries, as for decode.
+    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
   ],
 });

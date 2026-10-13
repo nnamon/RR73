@@ -42,6 +42,13 @@ export async function startAudioAtBoundary(page: Page) {
   await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
 }
 
+/** Waits until the current slot is between `fromS` and `toS` seconds old. */
+export async function waitForSlotPhase(page: Page, fromS: number, toS: number) {
+  const phase = Date.now() % SLOT_MS;
+  if (phase >= fromS * 1000 && phase <= toS * 1000) return;
+  await page.waitForTimeout((fromS * 1000 - phase + SLOT_MS) % SLOT_MS);
+}
+
 export async function waitForTransmissions(page: Page, n: number, timeout: number): Promise<Captured[]> {
   await expect.poll(() => page.evaluate(() => window.__tx.length), { timeout, intervals: [500] }).toBeGreaterThanOrEqual(n);
   return captured(page);

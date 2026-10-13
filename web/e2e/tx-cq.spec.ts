@@ -3,7 +3,7 @@
 import { expect, test } from '@playwright/test';
 import { decodeCaptured, slotOf, SLOT_MS } from './tap';
 import { loadWasm } from './wasm';
-import { prepare, startError, waitForTransmissions } from './txhelp';
+import { prepare, startError, waitForSlotPhase, waitForTransmissions } from './txhelp';
 
 test.describe.configure({ mode: 'serial' });
 
@@ -18,6 +18,9 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt 
   const txHz = Math.round(((x - wf.x) / wf.width) * 3000);
   await page.mouse.click(x, Math.round(wf.y + wf.height / 2));
   await page.getByRole('button', { name: `Transmit here, ${txHz} Hz` }).click();
+  // Tapped in the first 1.5 s of an even slot, CQ would start late in it; this test wants a CQ
+  // on time, so it taps 3 to 12 s into a slot.
+  await waitForSlotPhase(page, 3, 12);
   await dock.getByRole('button', { name: 'Call CQ' }).click();
 
   const [first] = await waitForTransmissions(page, 1, 50_000);
