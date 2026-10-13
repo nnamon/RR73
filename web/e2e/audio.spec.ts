@@ -49,7 +49,8 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   const wf = page.getByTestId('waterfall');
   const px = await elementPixels(page, wf);
   // The newest 6 s of rows: audio has run for all of them. With the colour map steepened in 0.9.2,
-  // noise peaks show navy to cyan, so the tones are checked for near white as well.
+  // noise peaks show navy to cyan, brighter still here at 1 px per 7.6 Hz, where each pixel takes
+  // the strongest of its 2 or 3 bins; the tones are checked for near white as well.
   const rows = Math.max(4, Math.floor((px.height * 6) / 45));
   const col = (hz: number) => Math.round((hz / 3000) * px.width);
   const at = (hz: number) => brightness(px, col(hz) - 1, col(hz) + 1, 2, rows);
@@ -59,10 +60,10 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   test.info().annotations.push({ type: 'waterfall', description: JSON.stringify(report) });
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-operate-running.png` });
   for (const hz of TONES_HZ) {
-    expect(at(hz), `${hz} Hz`).toBeGreaterThan(background * 2);
+    expect(at(hz), `${hz} Hz`).toBeGreaterThan(background * 1.5);
     expect(at(hz), `${hz} Hz`).toBeGreaterThan(600);
   }
-  expect(at(ALIAS_AT_HZ)).toBeLessThan(at(TONES_HZ[1]) / 2);
+  expect(at(ALIAS_AT_HZ)).toBeLessThan(at(TONES_HZ[1]) / 1.5);
 
   // Save slot: the first slot is kept at the next slot boundary. Audio that started just before
   // a boundary leaves that slot too short to measure ("started late, 3 % recorded"), so wait,
