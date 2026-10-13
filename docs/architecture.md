@@ -42,6 +42,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`) in a container, used as the decoder reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
+| `tools/refdata` | Build-time download and conversion of the country file, LoTW, POTA and SOTA lists into `web/public/data/`. See `docs/reference-data.md`. |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
 | `docs/decisions/` | Architecture decision records. |
@@ -110,6 +111,7 @@ SlotAudio (12 kHz f32, start time, mode)
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
+| `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
 | `lib/state` | Settings and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
 
