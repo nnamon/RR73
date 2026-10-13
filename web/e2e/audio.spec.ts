@@ -48,7 +48,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   await page.waitForTimeout(8000);
   const wf = page.getByTestId('waterfall');
   const px = await elementPixels(page, wf);
-  // The newest 6 s of rows: audio has run for all of them. With the colour map steepened in 0.9.1,
+  // The newest 6 s of rows: audio has run for all of them. With the colour map steepened in 0.9.2,
   // noise peaks show navy to cyan, so the tones are checked for near white as well.
   const rows = Math.max(4, Math.floor((px.height * 6) / 45));
   const col = (hz: number) => Math.round((hz / 3000) * px.width);
