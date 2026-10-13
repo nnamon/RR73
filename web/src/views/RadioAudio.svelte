@@ -128,8 +128,8 @@
         <label class="check-label">
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
-            <span class="row-title">Start tone</span>
-            <span class="row-sub">Start audio plays 1500 Hz for 0.4 s at the output level. It keys the radio, runs the keying check, and stops iOS muting output on the silent switch.</span>
+            <span class="row-title">Start chime</span>
+            <span class="row-sub">Start audio plays a short rising chime (659 and 880 Hz, 0.45 s) at the output level. It keys the radio, runs the keying check, and stops iOS muting output on the silent switch.</span>
           </span>
         </label>
       </div>
@@ -165,15 +165,15 @@
           <span class="row-title">Keying check</span>
           <span class="row-sub">
             {#if tx.keying === null}
-              Not checked yet. Start audio with the start tone on, or run Tune: receive audio drops when the radio keys.
+              Not checked yet. Start audio with the start chime on, or run Tune: receive audio drops when the radio keys.
             {:else if tx.keying.passed === null && tx.keying.source === 'tune'}
               Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio was off during Tune. Start audio, then run Tune again.
             {:else if tx.keying.passed === null}
-              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio had not started when the start tone played. Start audio again.
+              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio had not started when the start chime played. Start audio again.
             {:else if tx.keying.passed}
-              Passed at {utcHm(tx.keying.atUtcMs)}. Receive audio dropped {Math.round(tx.keying.dropDb ?? 0)} dB during {tx.keying.source === 'start' ? 'the start tone' : 'Tune'}, so the radio keyed.
+              Passed at {utcHm(tx.keying.atUtcMs)}. Receive audio dropped {Math.round(tx.keying.dropDb ?? 0)} dB during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}, so the radio keyed.
             {:else}
-              Failed at {utcHm(tx.keying.atUtcMs)}. Receive audio did not drop during {tx.keying.source === 'start' ? 'the start tone' : 'Tune'}. Check the radio’s VOX setting and the cable.
+              Failed at {utcHm(tx.keying.atUtcMs)}. Receive audio did not drop during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}. Check the radio’s VOX setting and the cable.
             {/if}
           </span>
         </span>

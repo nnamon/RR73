@@ -44,7 +44,7 @@ export interface DecodedSlot {
 export interface KeyingResult {
   /** When the check finished, UTC ms. */
   atUtcMs: number;
-  /** What played: the start tone or Tune. */
+  /** What played: the start chime or Tune. */
   source: 'start' | 'tune';
   /** True when receive audio dropped by 10 dB or more; null when there was no audio to compare. */
   passed: boolean | null;
@@ -178,7 +178,7 @@ export function onAudioChunk(fn: (c: Chunk) => void): () => void {
 let startToneUri: { level: number; uri: string } | null = null;
 
 /**
- * Plays the start tone, or silence when it is off, through a media element. Both stop iOS from
+ * Plays the start chime, or silence when it is off, through a media element. Both stop iOS from
  * muting output on the silent switch; the tone also keys the radio for the keying check.
  * Returns when the tone starts, as performance.now() ms, or null when no tone plays.
  */
@@ -193,7 +193,7 @@ function playStartClip(): number | null {
   return playClip(startToneUri.uri) + START_TONE.leadS * 1000;
 }
 
-/** Compares receive level before and during the start tone once it has played. */
+/** Compares receive level before and during the start chime once it has played. */
 function checkKeyingAt(toneStartMs: number) {
   const toneMs = START_TONE.toneS * 1000;
   const wait = Math.max(0, toneStartMs + toneMs + 300 - performance.now());
