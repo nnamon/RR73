@@ -73,12 +73,12 @@
     scrolls.set(prev, scrollNow);
     const back = prev.startsWith(`${path}/`);
     const own = path === 'settings/features' || (path.startsWith('settings/versions/') && path !== 'settings/versions');
-    void tick().then(() => {
-      const pane = document.querySelector<HTMLElement>('main .pane.scroll');
-      if (!pane || own) return;
-      pane.scrollTop = back ? (scrolls.get(path) ?? 0) : 0;
-      scrollNow = pane.scrollTop;
-    });
+    // Effects run after the DOM update and before paint, so the new screen never shows at the old
+    // offset and anything measuring it afterwards sees the final position.
+    const pane = document.querySelector<HTMLElement>('main .pane.scroll');
+    if (!pane || own) return;
+    pane.scrollTop = back ? (scrolls.get(path) ?? 0) : 0;
+    scrollNow = pane.scrollTop;
   });
   const track = (e: Event) => (scrollNow = (e.currentTarget as HTMLElement).scrollTop);
 
