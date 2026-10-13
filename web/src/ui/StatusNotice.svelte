@@ -18,7 +18,7 @@
   });
 </script>
 
-<div class="wrap" role="alert">
+<div class="wrap" role="status">
   {#if line}
     <div class="toast" data-testid="status-notice">
       <span class="msg">{line.text}</span>

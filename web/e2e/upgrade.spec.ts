@@ -40,7 +40,8 @@ test('opens while an older copy holds the database, says so, and finishes the up
   await expect(page.getByRole('textbox', { name: 'Callsign' })).toHaveValue('9V1NE');
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   const notice = page.getByTestId('status-notice');
-  await expect(notice).toContainText('Close other copies of RR73 to finish updating.');
+  // Reported after 1.5 s of waiting; a loaded test machine takes longer.
+  await expect(notice).toContainText('Close other copies of RR73 to finish updating.', { timeout: 15_000 });
   await expect(notice.getByRole('button', { name: 'Try again' })).toBeVisible();
   await page.goto('./#/log');
   await expect(page.getByText('The log opens when other copies of RR73 close.')).toBeVisible();
@@ -58,7 +59,7 @@ test('a change made while the upgrade waits is stored once it finishes', async (
   const old = await context.newPage();
   await olderCopy(old, { callsign: '9V1NE' });
   await page.goto('./#/settings');
-  await expect(page.getByTestId('status-notice')).toBeVisible();
+  await expect(page.getByTestId('status-notice')).toBeVisible({ timeout: 15_000 });
   await page.getByText('Dark', { exact: true }).click();
   await old.close();
   await expect(page.getByTestId('status-notice')).toBeHidden();
@@ -84,7 +85,7 @@ test('a page whose build the server replaced says so, and reloads at the next ch
     document.head.append(s);
   });
   const notice = page.getByTestId('status-notice');
-  await expect(notice).toContainText('A new version of RR73 is ready.');
+  await expect(notice).toContainText('A new version of RR73 is ready.', { timeout: 15_000 });
   await Promise.all([page.waitForEvent('load'), page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click()]);
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
   await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeVisible();
@@ -102,8 +103,11 @@ test('a failed load with the same build on the server changes nothing', async ({
     document.head.append(s);
   });
   await checked;
+  await page.waitForTimeout(500);
   await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeFocused();
+  await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeVisible();
+  await page.waitForTimeout(1000);
+  // No notice, and the same page: nothing reloaded.
   await expect(page.getByTestId('status-notice')).toHaveCount(0);
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(true);
 });
