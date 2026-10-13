@@ -1,0 +1,23 @@
+/* The app shell around a screen, as App.svelte sets it: a full-height column and a scrolling pane. */
+.frame {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--rr-bg);
+}
+
+.main {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.pane {
+  position: absolute;
+  inset: 0;
+}
+
+.scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
