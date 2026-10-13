@@ -153,8 +153,8 @@ export type SeqEvent =
   | { type: 'runMode'; on: boolean; nowMs: number }
   | { type: 'stopAfterQso'; on: boolean; nowMs: number }
   | { type: 'halt'; nowMs: number }
-  | { type: 'txStarted'; slotStartMs: number; nowMs: number }
-  | { type: 'txEnded'; slotStartMs: number; complete: boolean; nowMs: number }
+  | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
+  | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
   | { type: 'audioStopped'; nowMs: number }
   | { type: 'audioResumed'; nowMs: number }
@@ -688,7 +688,15 @@ class Machine {
   txStarted(e: Extract<SeqEvent, { type: 'txStarted' }>) {
     const st = this.st;
     const n = st.next;
-    if (!n || n.slotStartMs !== e.slotStartMs) return;
+    // A transmission other than the planned one (replaced after it reached the audio graph)
+    // is on air: note it, and keep the plan, which the audio layer reports as missed.
+    if (!n || n.slotStartMs !== e.slotStartMs || n.text !== e.text) {
+      const tx = (Object.entries(messages(st)).find(([, t]) => t === e.text)?.[0] ?? '6') as unknown as TxNum;
+      st.onAir = { tx: Number(tx) as TxNum, text: e.text, slotStartMs: e.slotStartMs };
+      if (e.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
+      st.lastTxText = e.text;
+      return;
+    }
     st.onAir = { tx: n.tx, text: n.text, slotStartMs: n.slotStartMs };
     if (n.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
     st.lastTxText = n.text;
@@ -699,7 +707,7 @@ class Machine {
   txEnded(e: Extract<SeqEvent, { type: 'txEnded' }>) {
     const st = this.st;
     const sent = st.onAir;
-    if (!sent || sent.slotStartMs !== e.slotStartMs) return;
+    if (!sent || sent.slotStartMs !== e.slotStartMs || sent.text !== e.text) return;
     st.onAir = null;
     if (!e.complete) return;
     st.lastSent = sent;
@@ -786,7 +794,9 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
     case 'txMissed':
       if (st.next?.slotStartMs === e.slotStartMs && st.current) {
         st.next.scheduled = false;
-        m.plan(st.current, e.nowMs);
+        // Not the same slot again: it went by, or another transmission holds the output.
+        const len = SLOT_MS[st.config.mode];
+        m.plan(st.current, Math.max(e.nowMs, e.slotStartMs + len + 1));
       }
       break;
     case 'audioStopped':

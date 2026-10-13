@@ -83,15 +83,15 @@ export class Sim {
     const p = this.pending;
     if (!p || p.slotStartMs !== this.at(i)) return;
     this.pending = null;
-    this.send({ type: 'txStarted', slotStartMs: p.slotStartMs, nowMs: p.slotStartMs + p.startOffsetS * 1000 });
+    this.send({ type: 'txStarted', slotStartMs: p.slotStartMs, text: p.text, nowMs: p.slotStartMs + p.startOffsetS * 1000 });
     this.sent.push({ slot: i, tx: p.tx, text: p.text, offsetS: p.startOffsetS });
     if (haltAtS !== undefined) {
       this.send({ type: 'halt', nowMs: this.at(i, haltAtS) });
-      this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, complete: false, nowMs: this.at(i, haltAtS) });
+      this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: false, nowMs: this.at(i, haltAtS) });
       return;
     }
     const dur = this.mode === 'FT8' ? 12.64 : 5.04;
-    this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, complete: true, nowMs: p.slotStartMs + (p.startOffsetS + dur) * 1000 });
+    this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: true, nowMs: p.slotStartMs + (p.startOffsetS + dur) * 1000 });
   }
 
   /** The decodes of slot i arrive `delayS` after it ends. */

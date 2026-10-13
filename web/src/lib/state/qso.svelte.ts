@@ -4,7 +4,8 @@
  * Completed QSOs are kept in memory for this session; lib/log subscribes with subscribeQsos.
  */
 
-import { initialState, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState } from '../qso/sequencer';
+import { untrack } from 'svelte';
+import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import type { QsoRecord } from '../qso/record';
 import { parity as parityOf, type Parity } from '../clock/slots';
@@ -135,18 +136,14 @@ export function dispatch(e: SeqEvent) {
 function onTxReport(r: TxReport) {
   const now = Date.now();
   if (r.type === 'started') {
-    const next = qso.st.next;
-    const text = next?.slotStartMs === r.slotStartMs ? next.text : '';
-    const txn = next?.tx ?? 6;
-    dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, nowMs: now });
-    if (text) {
-      const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
-      qso.onAir = { text, tx: txn, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
-      qso.sent = [{ slotStartMs: r.slotStartMs, text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
-    }
+    const txn = (Object.entries(messages(qso.st)).find(([, t]) => t === r.text)?.[0] ?? '6') as unknown as TxNum;
+    dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
+    const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
+    qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
+    qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
   } else if (r.type === 'ended') {
     qso.onAir = null;
-    dispatch({ type: 'txEnded', slotStartMs: r.slotStartMs, complete: r.complete, nowMs: now });
+    dispatch({ type: 'txEnded', slotStartMs: r.slotStartMs, text: r.text, complete: r.complete, nowMs: now });
   } else if (r.type === 'missed') {
     if (r.reason === 'encode') qso.notice = { kind: 'encode', text: 'The message could not be encoded. Check it in Messages.', atMs: now };
     dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
@@ -291,11 +288,9 @@ export function startQso() {
   $effect.root(() => {
     $effect(() => {
       const c = configNow();
-      dispatch({
-        type: 'configure',
-        patch: { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity },
-        nowMs: Date.now(),
-      });
+      const patch = { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
+      // The dispatch reads and writes the sequencer state; only Settings should re-run this.
+      untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });
   });
 }

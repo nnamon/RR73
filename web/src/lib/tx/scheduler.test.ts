@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { TxScheduler, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
+import { PRE_ROLL_MS, TxScheduler, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
+
+/** Lets promises and the scheduler's async steps run. */
+const settle = () => new Promise((r) => setTimeout(r, 0));
 
 const T0 = Date.UTC(2026, 9, 13, 13, 14, 0);
 
@@ -86,19 +89,27 @@ const req = (over: Partial<Parameters<TxScheduler['schedule']>[0]> = {}) => ({
 });
 
 describe('TxScheduler', () => {
-  it('synthesises at the output rate and starts at slot + 0.5 s on the audio clock', async () => {
+  it('synthesises at once, hands the sound over 0.5 s ahead, and starts at slot + 0.5 s', async () => {
     const { clock, reports, texts, sched } = setup();
-    clock.advanceTo(T0 + 14000);
-    await sched.schedule(req());
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await settle();
     expect(texts).toEqual(['CQ 9V1NE OJ11@1500/48000/FT8']);
+    expect(clock.played).toEqual([]);
+    expect(sched.busy).toBe(true);
+    clock.advanceTo(T0 + 15500 - PRE_ROLL_MS - 1);
+    await settle();
+    expect(clock.played).toEqual([]);
+    clock.advanceTo(T0 + 15500 - PRE_ROLL_MS);
+    await done;
     expect(clock.played).toHaveLength(1);
     expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 15500)!, 9);
     expect(clock.played[0].level).toBe(0.5);
     expect(reports).toEqual([]);
     clock.advanceTo(T0 + 15500);
-    expect(reports).toEqual([{ type: 'started', slotStartMs: T0 + 15000, startUtcMs: T0 + 15500, lateS: 0 }]);
+    expect(reports).toEqual([{ type: 'started', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', startUtcMs: T0 + 15500, lateS: 0 }]);
     clock.advanceTo(T0 + 15000 + 13200);
-    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, complete: true });
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', complete: true });
     expect(sched.busy).toBe(false);
   });
 
@@ -118,11 +129,37 @@ describe('TxScheduler', () => {
     clock.advanceTo(T0 + 15000 + 2000);
     await sched.schedule(req());
     expect(clock.played).toEqual([]);
-    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, reason: 'late' }]);
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'late' }]);
     const ft4 = setup();
     ft4.clock.advanceTo(T0 + 15000 + 1490);
     await ft4.sched.schedule(req({ mode: 'FT4' }));
-    expect(ft4.reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, reason: 'late' }]);
+    expect(ft4.reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'late' }]);
+  });
+
+  it('uses the clock mapping of the moment it hands the sound over', async () => {
+    const { clock, sched } = setup();
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await settle();
+    // The audio clock has drifted 120 ms against UTC by the time of the pre-roll.
+    const drifted = clock.toContextTime.bind(clock);
+    clock.toContextTime = (ms: number) => drifted(ms)! - 0.12;
+    clock.advanceTo(T0 + 15200);
+    await done;
+    expect(clock.played[0].when).toBeCloseTo(drifted(T0 + 15500)! - 0.12, 9);
+  });
+
+  it('cancel during the wait drops the transmission', async () => {
+    const { clock, reports, sched } = setup();
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await settle();
+    sched.cancel();
+    await done;
+    clock.advanceTo(T0 + 20000);
+    expect(clock.played).toEqual([]);
+    expect(reports).toEqual([]);
+    expect(sched.busy).toBe(false);
   });
 
   it('counts the time synthesis took', async () => {
@@ -139,7 +176,7 @@ describe('TxScheduler', () => {
   it('refuses while the gate is closed or the clock has no mapping', async () => {
     const closed = setup(() => 'Confirm the band in the band sheet to transmit.');
     await closed.sched.schedule(req());
-    expect(closed.reports).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, reason: 'Confirm the band in the band sheet to transmit.' }]);
+    expect(closed.reports).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'Confirm the band in the band sheet to transmit.' }]);
     expect(closed.clock.played).toEqual([]);
     const unmapped = setup();
     unmapped.clock.mapped = false;
@@ -149,49 +186,81 @@ describe('TxScheduler', () => {
 
   it('Halt stops a transmission on air at once and reports it incomplete', async () => {
     const { clock, reports, sched } = setup();
-    clock.advanceTo(T0 + 14000);
+    clock.advanceTo(T0 + 15100);
     await sched.schedule(req());
     clock.advanceTo(T0 + 18000);
     sched.halt();
     expect(clock.played[0].stoppedAt).toBeCloseTo(clock.toContextTime(T0 + 18000)!, 9);
-    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, complete: false });
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', complete: false });
     clock.advanceTo(T0 + 30000);
     expect(reports.filter((r) => r.type === 'ended')).toHaveLength(1);
   });
 
   it('Halt before the start stops the scheduled sound and reports it missed', async () => {
     const { clock, reports, sched } = setup();
-    clock.advanceTo(T0 + 14000);
+    clock.advanceTo(T0 + 15100);
     await sched.schedule(req());
     sched.halt();
     expect(clock.played[0].stoppedAt).not.toBeNull();
     clock.advanceTo(T0 + 16000);
-    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, reason: 'late' }]);
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'late' }]);
   });
 
   it('cancel withdraws a transmission that has not started and leaves one on air alone', async () => {
     const { clock, reports, sched } = setup();
-    clock.advanceTo(T0 + 14000);
+    clock.advanceTo(T0 + 15100);
     await sched.schedule(req());
     sched.cancel();
     expect(clock.played[0].stoppedAt).not.toBeNull();
     clock.advanceTo(T0 + 16000);
     expect(reports).toEqual([]);
+    clock.advanceTo(T0 + 45100);
     await sched.schedule(req({ slotStartMs: T0 + 45000 }));
     clock.advanceTo(T0 + 46000);
     sched.cancel();
     expect(clock.played[1].stoppedAt).toBeNull();
     clock.advanceTo(T0 + 60000);
-    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 45000, complete: true });
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 45000, text: 'CQ 9V1NE OJ11', complete: true });
   });
 
   it('drops a synthesis that finishes after a cancel', async () => {
     const { clock, sched } = setup(() => null, 200);
-    clock.advanceTo(T0 + 14000);
+    clock.advanceTo(T0 + 15100);
     const pending = sched.schedule(req());
     sched.cancel();
     await pending;
     expect(clock.played).toEqual([]);
+  });
+
+  it('never cuts a transmission the audio clock has started, and turns away another for the same slot', async () => {
+    const { clock, reports, sched } = setup();
+    clock.advanceTo(T0 + 15100);
+    await sched.schedule(req());
+    // The audio clock passes the start before the started timer has run.
+    clock.currentTime = clock.toContextTime(T0 + 15600)!;
+    await sched.schedule(req({ text: 'JA1KXM 9V1NE R-10' }));
+    expect(clock.played).toHaveLength(1);
+    expect(clock.played[0].stoppedAt).toBeNull();
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'JA1KXM 9V1NE R-10', reason: 'busy' }]);
+    sched.cancel();
+    expect(clock.played[0].stoppedAt).toBeNull();
+    // Halt still stops it, and reports it started and cut.
+    sched.halt();
+    expect(clock.played[0].stoppedAt).not.toBeNull();
+    expect(reports.slice(1).map((r) => r.type)).toEqual(['started', 'ended']);
+    expect(reports.at(-1)).toMatchObject({ complete: false, text: 'CQ 9V1NE OJ11' });
+  });
+
+  it('replaces a transmission that has not started yet', async () => {
+    const { clock, reports, sched } = setup();
+    clock.advanceTo(T0 + 15100);
+    await sched.schedule(req());
+    await sched.schedule(req({ text: 'JA1KXM 9V1NE R-10' }));
+    expect(clock.played).toHaveLength(2);
+    expect(clock.played[0].stoppedAt).not.toBeNull();
+    expect(clock.played[1].stoppedAt).toBeNull();
+    clock.advanceTo(T0 + 15600);
+    expect(reports).toMatchObject([{ type: 'started', text: 'JA1KXM 9V1NE R-10' }]);
   });
 
   it('reports a message that cannot be synthesised as missed', async () => {
@@ -199,6 +268,6 @@ describe('TxScheduler', () => {
     const clock = new FakeClock();
     const sched = new TxScheduler({ audio: () => clock, encoder: { synthesize: async () => Promise.reject(new Error('bad')) }, gate: () => null, report: (r) => reports.push(r) });
     await sched.schedule(req());
-    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, reason: 'encode' }]);
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'encode' }]);
   });
 });

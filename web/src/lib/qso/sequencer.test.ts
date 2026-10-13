@@ -558,6 +558,22 @@ describe('safety', () => {
   });
 });
 
+describe('the audio layer', () => {
+  it('notes a transmission other than the planned one and keeps the plan for the missed report', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.hear(-1, ['9V1NE K1ABC FN42']);
+    // The reply to K1ABC replaced CQ for slot 0, but the CQ was already on air.
+    s.send({ type: 'txStarted', slotStartMs: s.at(0), text: 'CQ 9V1NE OJ11', nowMs: s.at(0, 0.5) });
+    expect(s.st.onAir).toEqual({ tx: 6, text: 'CQ 9V1NE OJ11', slotStartMs: s.at(0) });
+    expect(s.st.next).toMatchObject({ tx: 2, slotStartMs: s.at(0) });
+    s.send({ type: 'txMissed', slotStartMs: s.at(0), nowMs: s.at(0, 0.6) });
+    expect(s.st.next).toMatchObject({ tx: 2, slotStartMs: s.at(2) });
+    s.send({ type: 'txEnded', slotStartMs: s.at(0), text: 'CQ 9V1NE OJ11', complete: true, nowMs: s.at(0, 13.2) });
+    expect(s.st.lastSent?.tx).toBe(6);
+  });
+});
+
 describe('messages and planning', () => {
   it('lets the operator choose and edit the next message', () => {
     const s = new Sim();
