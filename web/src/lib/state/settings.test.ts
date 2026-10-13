@@ -15,6 +15,17 @@ describe('settings', () => {
     expect(normaliseCallsign('ABCDEFGHIJKLMNOP')).toHaveLength(13);
   });
 
+  it('reads and normalises the grid and the operating choices', () => {
+    expect(validate({ grid: 'oj11AB', ack: 'RRR', workDupes: true, cqParity: 'odd', queueOrder: 'strongest' })).toMatchObject({
+      grid: 'OJ11ab',
+      ack: 'RRR',
+      workDupes: true,
+      cqParity: 'odd',
+      queueOrder: 'strongest',
+    });
+    expect(validate({ grid: 'ZZ99', ack: 'R', cqParity: 'third', queueOrder: 'random' })).toMatchObject({ grid: '', ack: 'RR73', cqParity: 'even', queueOrder: 'first' });
+  });
+
   it('keeps only valid stored values', () => {
     expect(validate({ callsign: '9v1ne', band: '2m', mode: 'JT65', outputLevel: 3, rxHz: 50, txHz: 1180, theme: 'dark', checklist: { focus: true, clicks: 'yes' } })).toEqual({
       ...DEFAULTS,
