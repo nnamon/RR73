@@ -14,6 +14,7 @@ import type { Decode } from '../decode/types';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
+import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
 import { settings, updateSettings } from './settings.svelte';
 import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
@@ -105,10 +106,10 @@ export function dispatch(e: SeqEvent) {
   const before = qso.st.partner?.call ?? null;
   const r = reduce(qso.st, e);
   qso.st = r.state;
-  // A new partner, called by hand or answered in Run: Rx moves to their frequency, and Tx too
-  // when Hold Tx is off. Done before the effects so the first transmission uses it.
+  // A station called by hand, or a new partner answered in Run: Rx moves to their frequency,
+  // and Tx too when Hold Tx is off. Done before the effects so the first transmission uses it.
   const p = r.state.partner;
-  if (p && p.call !== before) {
+  if (p && (p.call !== before || e.type === 'callStation')) {
     const hz = clampHz(p.freqHz, r.state.config.mode);
     void updateSettings(settings.holdTx ? { rxHz: hz } : { rxHz: hz, txHz: hz });
   }
@@ -203,20 +204,36 @@ export function select(s: Selected | null) {
   qso.selected = s;
 }
 
+/**
+ * iOS keeps Web Audio silent on the ring switch's silent setting until a media clip plays inside
+ * a tap. Every tap that can lead to a transmission plays the silent clip first, before any await.
+ */
+function unmute() {
+  playClip(silentClipUri());
+}
+
+/** Calls a station. Call from the tap (or double-tap). */
 export function callStation(decode: Decode, slotStartMs: number) {
+  unmute();
   dispatch({ type: 'callStation', decode, slotStartMs, nowMs: Date.now() });
   qso.selected = null;
 }
 
+/** Calls CQ. Call from the tap. */
 export function callCq() {
+  unmute();
   dispatch({ type: 'callCq', nowMs: Date.now() });
 }
 
+/** Turns Tx on or off. Call from the tap. */
 export function setTxEnabled(on: boolean) {
+  if (on) unmute();
   dispatch({ type: 'enableTx', on, nowMs: Date.now() });
 }
 
+/** Turns Run on or off. Call from the tap. */
 export function setRun(on: boolean) {
+  if (on) unmute();
   dispatch({ type: 'runMode', on, nowMs: Date.now() });
 }
 
