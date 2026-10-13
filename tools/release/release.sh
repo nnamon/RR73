@@ -5,8 +5,9 @@
 #       On a branch: dates "## Unreleased" in CHANGELOG.md, bumps Cargo.toml and
 #       web/package.json, and commits "Release x.y.z". Merge it to main once CI is green.
 #   tools/release/release.sh publish
-#       On main, after the merge: checks that CI passed on HEAD, tags v<version>, pushes the
-#       tag (which deploys the app) and publishes the GitHub release with the changelog notes.
+#       On main, after a fast-forward merge: checks that a CI run passed on HEAD (the branch's
+#       run counts, since it is the same commit), tags v<version>, pushes the tag (which deploys
+#       the app) and publishes the GitHub release with the changelog notes.
 #
 # Node and cargo run in containers; git and gh run on the host.
 set -eu
@@ -38,8 +39,10 @@ publish() {
   version="$(node_run tools/release/version.mjs current | tail -n 1)"
   ! git rev-parse -q --verify "refs/tags/v$version" >/dev/null || die "v$version is already tagged."
   sha="$(git rev-parse HEAD)"
-  conclusion="$(gh run list --commit "$sha" --workflow CI --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)"
-  [ "$conclusion" = success ] || die "CI on $sha is '${conclusion:-not found}'; publish only after it passes."
+  # main is fast-forwarded to the branch commit, so the branch's CI run tested this exact tree;
+  # any successful CI run on this commit is enough, and main's own run is not awaited.
+  passed="$(gh run list --commit "$sha" --workflow CI --json conclusion --jq '[.[] | select(.conclusion == "success")] | length' 2>/dev/null || echo 0)"
+  [ "${passed:-0}" -gt 0 ] || die "No CI run on $sha has passed yet; publish only after one does."
   notes="$(node_run tools/release/version.mjs notes "$version")"
   git tag -a "v$version" -m "RR73 $version" -m "$notes"
   git push -q origin "v$version"
