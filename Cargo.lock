@@ -447,6 +447,7 @@ dependencies = [
  "rr73-decode",
  "rr73-dsp",
  "rr73-ft8",
+ "rr73-wspr",
  "serde",
  "serde_json",
  "wasm-bindgen",
