@@ -12,6 +12,8 @@ const micPlaying = (file: string) => ({
 const fakeMic = micPlaying('./e2e/.fixtures/tones.wav');
 // One FT8 slot with 4 known messages (e2e/fixtures/ft8-four-signals.json).
 const ft8Mic = micPlaying('./e2e/fixtures/ft8-four-signals.wav');
+// The other station of a QSO, written by e2e/global-setup.ts (e2e/qso-script.ts).
+const qsoMic = micPlaying('./e2e/.fixtures/qso-script.wav');
 
 // Paths are absolute so the suite runs the same from web/ (npm --prefix web run e2e) and from the
 // repository root (npx --prefix web playwright test, through the root playwright.config.ts).
@@ -46,7 +48,8 @@ export default defineConfig({
         reuseExistingServer: true,
       },
   projects: [
-    { name: 'mic', testMatch: /audio\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'mic', testMatch: /(audio|tx-cq)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'transmit', testMatch: /transmit\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
