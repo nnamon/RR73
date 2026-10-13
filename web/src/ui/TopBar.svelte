@@ -44,7 +44,7 @@
   const dial = $derived(dialHz === null ? '' : mhz(dialHz).replace(/\sMHz$/, ''));
 </script>
 
-<header class="top" class:onair class:crowded={spots}>
+<header class="top" class:onair>
   <button class="band" onclick={onband} aria-label="Change band. Now {band} {mode}, {dialHz === null ? '' : mhz(dialHz)} USB.">
     <b class="b">{band}</b>
     <span class="mode">{mode}</span>
@@ -79,15 +79,32 @@
     box-shadow: inset 0 3px 0 var(--rr-tx);
   }
 
+  /*
+   * The band button gives way first when the bar is short of room (Spots on, a 375 pt screen):
+   * it wraps, and whatever no longer fits on its one 44 pt line, the dial first, drops out of
+   * sight whole. The band sheet shows the dial.
+   */
   .band {
     display: flex;
-    gap: var(--rr-space-1-5);
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    column-gap: var(--rr-space-1-5);
     align-items: center;
     min-width: 0;
     height: var(--rr-tap);
+    overflow: hidden;
     padding: 0 var(--rr-space-1-5);
     border-radius: var(--rr-radius-l);
     white-space: nowrap;
+  }
+
+  /* Holds the first line at the full 44 pt, so the items stay centred when the dial wraps away. */
+  .band::before {
+    content: '';
+    width: 0;
+    height: var(--rr-tap);
+    margin-right: calc(-1 * var(--rr-space-1-5));
   }
 
   .b {
@@ -136,12 +153,5 @@
     display: flex;
     flex: none;
     margin-left: var(--rr-space-1);
-  }
-
-  /* With Spots shown, a 375 pt screen has no room for the dial; the band sheet shows it. */
-  @media (max-width: 389px) {
-    .crowded .dial {
-      display: none;
-    }
   }
 </style>

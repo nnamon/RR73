@@ -108,6 +108,32 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
+  test(`the top bar fits its buttons with Spots shown in ${theme}`, async ({ page }) => {
+    await open(page, '#/operate', theme, undefined, { activations: true });
+    const height = page.viewportSize()!.height;
+    // iOS fonts run wider than the test browser's, so the bar is checked down to 350 pt as well.
+    for (const vw of [393, 375, 360, 350]) {
+      await page.setViewportSize({ width: vw, height });
+      const band = (await page.getByRole('button', { name: /^Change band/ }).boundingBox())!;
+      const clock = (await page.getByRole('timer').boundingBox())!;
+      const screens = page.getByRole('navigation', { name: 'Screens' }).getByRole('link');
+      await expect(screens).toHaveCount(3);
+      const icons = await Promise.all([0, 1, 2].map(async (i) => (await screens.nth(i).boundingBox())!));
+      const at = `at ${vw} pt`;
+      // Left to right with no overlaps, all inside the screen.
+      expect(band.x + band.width, at).toBeLessThanOrEqual(clock.x + 0.5);
+      expect(clock.x + clock.width, at).toBeLessThanOrEqual(icons[0].x + 0.5);
+      for (let i = 1; i < 3; i++) expect(icons[i - 1].x + icons[i - 1].width, at).toBeLessThanOrEqual(icons[i].x + 0.5);
+      expect(icons[2].x + icons[2].width, at).toBeLessThanOrEqual(vw + 0.5);
+      for (const b of icons) expect(b.width, at).toBeGreaterThanOrEqual(43.5);
+      // The dial shows whole inside the band button or not at all (wrapped below its one line).
+      const dial = (await page.locator('header.top .dial').boundingBox())!;
+      const inside = dial.x >= band.x - 0.5 && dial.x + dial.width <= band.x + band.width + 0.5 && dial.y + dial.height <= band.y + band.height + 0.5;
+      const away = dial.y >= band.y + band.height - 0.5;
+      expect(inside || away, `${at}: ${JSON.stringify({ band, dial })}`).toBe(true);
+    }
+  });
+
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);
     await page.getByRole('button', { name: /^Change band/ }).click();

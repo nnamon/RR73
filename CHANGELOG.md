@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- With Spots on, the dial frequency in the top bar ran into the slot ring. The dial now drops out when the bar is short of room; the band sheet shows it.
+
 ## 0.7.0 · 2026-10-13
 
 - Operate is the main screen and gives the decodes the space: 15 decode rows show on a 393 × 852 iPhone while receiving and 12 in a QSO, up from 5; 12 on an iPhone SE.
