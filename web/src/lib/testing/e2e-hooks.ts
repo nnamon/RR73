@@ -1,11 +1,13 @@
 // Hooks for the Playwright tests, in builds made with VITE_E2E=1 only (the Playwright web server
 // sets it; the GitHub Pages build does not). They put the app into states that need a band full
-// of stations: decodes arrive as if from the decoder, and a QSO goes to the log. They also read
+// of stations: decodes arrive as if from the decoder, a QSO goes to the log, and a transmission
+// shows as sent. They also read
 // the audio clock mapping, for the timing tests.
 
 import { logQso } from '../log/log.svelte';
 import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
+import { qso } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
 import { audioOut, deliverDecodes, noteHeardBack, onAudioChunk } from '../state/station.svelte';
 
@@ -14,6 +16,8 @@ export interface E2eHooks {
   decoded(slotStartMs: number, decodes: Decode[]): void;
   /** Logs a QSO as the sequencer does, with the Logged notice. */
   logged(record: LogQsoRecord): Promise<void>;
+  /** Shows `text` as sent in the slot starting at `slotStartMs`, as the scheduler does once it is on air. */
+  sent(slotStartMs: number, text: string): void;
   /** UTC the clock mapping gives the audio clock now, minus Date.now(), ms; null without a mapping. */
   clockErrorMs(): number | null;
   /** UTC stamped on the end of the last captured chunk, minus Date.now() when it arrived, ms. */
@@ -37,6 +41,9 @@ export function installE2eHooks() {
     decoded: (slotStartMs, decodes) => deliverDecodes({ startUtcMs: slotStartMs, mode: settings.mode, decodes, ms: 40 }),
     logged: async (record) => {
       await logQso(record);
+    },
+    sent: (slotStartMs, text) => {
+      qso.sent = [{ slotStartMs, text, freqHz: settings.txHz }, ...qso.sent];
     },
     clockErrorMs: () => {
       const out = audioOut();

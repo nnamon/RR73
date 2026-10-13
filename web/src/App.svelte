@@ -5,6 +5,7 @@
   import StatusNotice from './ui/StatusNotice.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
   import Log from './views/Log.svelte';
+  import DecodeColours from './views/DecodeColours.svelte';
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
@@ -80,6 +81,8 @@
           <WavelogSettings />
         {:else if sub === 'logging'}
           <Logging />
+        {:else if sub === 'colours'}
+          <DecodeColours />
         {:else if sub === 'versions'}
           <VersionHistory focus={route.path[2] ?? null} />
         {:else}

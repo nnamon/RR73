@@ -8,7 +8,15 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - When the browser stops giving output timestamps, RR73 times audio from the audio clock. The timing used to drift with the audio clock, 0.6 s in 10 minutes at 1000 ppm.
 - After a start or Resume audio, receive audio waits about 0.2 s until 5 clock readings agree, so one bad reading no longer moves a slot.
 - RR73 corrects receive timing from the median DT of decodes at −10 dB or stronger, once 8 are in, by at most 0.08 s per slot. Transmit timing does not use this correction.
-- Settings › Radio and audio › Timing shows the median DT, the receive correction, your own transmission heard back through the radio, the clock source, clock drift, capture lag and the clock offset around each resume. Copy timing report puts them on the clipboard as text.
+- Settings › Radio and audio › Timing shows the median DT, the receive correction, your own transmission heard back through the radio, the clock source, clock drift, capture lag, the audio gaps bridged and the clock offset around each resume. Copy timing report puts them on the clipboard as text.
+
+## 0.8.0 · 2026-10-13
+
+- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.
+- Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
+- Decodes from stations in the log on this band and mode show grey text over any colour.
+- Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore WSJT-X colours puts the defaults back, with Undo.
+- Decode text keeps 4.5:1 contrast on every colour in light and dark.
 
 ## 0.7.2 · 2026-10-13
 

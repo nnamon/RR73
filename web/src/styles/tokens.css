@@ -5,8 +5,8 @@
  * Each colour is light-dark(light, dark). The theme follows the system unless Settings sets
  * data-theme on the root element, which pins color-scheme.
  *
- * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a marked decode
- * row's tint 1.35:1 or more against the list, badge text 4.5:1 or more on its fill.
+ * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a decode row's
+ * text 4.5:1 or more on its decode colour, badge text 4.5:1 or more on its fill.
  */
 
 :root {
@@ -141,10 +141,20 @@
   --rr-warn: light-dark(#A84D08, #F0A23B);
   --rr-warn-soft: light-dark(rgb(217 119 6 / 13%), rgb(240 162 59 / 16%));
 
-  /* Colour: decode row marking (WSJT-X style: bar, tint, bold callsign) */
-  --rr-cq-tint: light-dark(rgb(23 138 80 / 25%), rgb(52 199 123 / 22%));
-  --rr-me-tint: light-dark(rgb(210 58 47 / 23%), rgb(255 90 78 / 26%));
-  --rr-sent-tint: light-dark(rgb(201 138 26 / 32%), rgb(224 169 59 / 22%));
+  /*
+   * Colour: decode colours (Settings › Decode colours). A row's category colour, chosen by the
+   * operator, shows as a tint: the colour mixed with a base in sRGB. The limits hold for any
+   * colour, so the row's text stays at 4.5:1 or more in both themes (highlight-contrast.test.ts):
+   * - light: at most 45% colour over #FFF, so every channel is 140 or more, and #0E1116 text is
+   *   5.6:1 or more;
+   * - dark: at most 30% colour over #0B0D10, so every channel is 88 or less, and #ECEEF2 text is
+   *   6.1:1 or more. 30% leaves room for worked-before grey text over a tint.
+   * lib/decode/highlight-colour.ts mirrors these four values for the worked-before text colour.
+   */
+  --rr-hl-tint-light: 45%;
+  --rr-hl-tint-dark: 30%;
+  --rr-hl-base-light: #FFF;
+  --rr-hl-base-dark: #0B0D10;
   --rr-sel-tint: light-dark(rgb(40 81 216 / 21%), rgb(110 149 255 / 25%));
 
   /*
@@ -196,6 +206,23 @@
   --rr-wf-c4: #4CC3A3;
   --rr-wf-c5: #F0D25A;
   --rr-wf-c6: #FFF8E6;
+}
+
+/*
+ * A decode-coloured element sets --rr-hl to its category's colour (#RRGGBB) and takes the class
+ * rr-hl, which gives it the tint in --rr-hl-bg for both themes. A worked-before text colour comes
+ * worked out for each theme (highlight-colour.ts) in --rr-ink-light and --rr-ink-dark, and the
+ * class rr-ink gives it in --rr-hl-ink.
+ */
+.rr-hl {
+  --rr-hl-bg: light-dark(
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-light), var(--rr-hl-base-light)),
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-dark), var(--rr-hl-base-dark))
+  );
+}
+
+.rr-ink {
+  --rr-hl-ink: light-dark(var(--rr-ink-light), var(--rr-ink-dark));
 }
 
 :root[data-theme='light'] {

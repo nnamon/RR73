@@ -162,3 +162,22 @@ describe('DecodeList gestures', () => {
     expect(sel[0].getAttribute('aria-pressed')).toBe('true');
   });
 });
+
+describe('decode colours', () => {
+  it('puts the background and the text layer on the row as classes, data and colours', () => {
+    const target = render([
+      { kind: 'row', id: 'a', slotStartMs, row: row(d('CQ 9M2TRX OJ02', -12, 0.3, 1310), { hl: 'cq', ink: 'worked' }) },
+      { kind: 'row', id: 'b', slotStartMs, row: row(d('CQ A41ZZ LL93', -4, 0.2, 956), { hl: 'newGrid' }) },
+      { kind: 'row', id: 'c', slotStartMs, row: row(d('JG1FVM E27CJS RRR', 3, 0.1, 531)) },
+    ]);
+    const [a, b, c] = [...target.querySelectorAll<HTMLElement>('button.dr')];
+    expect(a.dataset).toMatchObject({ hl: 'cq', ink: 'worked' });
+    expect(a.classList.contains('hl-background') && a.classList.contains('hl-ink')).toBe(true);
+    expect(a.style.getPropertyValue('--rr-hl')).toBe('#66FF66');
+    expect(a.style.getPropertyValue('--rr-ink-light')).toMatch(/^#[0-9A-F]{6}$/);
+    expect(a.getAttribute('aria-label')).toContain('calling CQ, worked before');
+    expect(b.dataset.ink).toBeUndefined();
+    expect(b.getAttribute('aria-label')).toContain('new grid');
+    expect(c.className).not.toMatch(/hl-/);
+  });
+});
