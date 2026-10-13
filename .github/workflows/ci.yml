@@ -146,15 +146,40 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
 
+  refdata:
+    name: Reference data
+    runs-on: ubuntu-latest
+    container: node:24-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Today's date, UTC
+        id: day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      # One cache entry per UTC day. Later runs that day restore it and make no requests, so
+      # frequent pushes and releases do not download the sources again. The first run of a day
+      # restores the newest entry and asks each source once, conditionally where it can
+      # (tools/refdata/build.mjs).
+      - uses: actions/cache@v4
+        with:
+          path: .refdata-cache
+          key: refdata-${{ steps.day.outputs.day }}
+          restore-keys: refdata-
+      - name: Build reference data
+        run: node tools/refdata/build.mjs --out web/public/data --cache .refdata-cache
+      - uses: actions/upload-artifact@v4
+        with: { name: refdata, path: web/public/data }
+
   web:
     name: Web
     runs-on: ubuntu-latest
-    needs: wasm
+    needs: [wasm, refdata]
     container: node:24-slim
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
+      - uses: actions/download-artifact@v4
+        with: { name: refdata, path: web/public/data }
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
       - name: Type check
@@ -167,6 +192,8 @@ jobs:
         run: npm --prefix web run build:pages
         env:
           GITHUB_SHA: ${{ github.sha }}
+      - name: Check the reference data in the build
+        run: node tools/refdata/verify-dist.mjs web/dist
       - uses: actions/upload-pages-artifact@v3
         if: startsWith(github.ref, 'refs/tags/v')
         with: { path: web/dist }
@@ -174,12 +201,14 @@ jobs:
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
-    needs: wasm
+    needs: [wasm, refdata]
     container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
+      - uses: actions/download-artifact@v4
+        with: { name: refdata, path: web/public/data }
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
       - name: Playwright

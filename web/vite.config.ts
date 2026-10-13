@@ -64,7 +64,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,wasm}'],
+        // Reference data (tools/refdata): the country file and the data manifest install with the
+        // app. The LoTW list and the park and summit lists belong to optional features; the app
+        // fetches and keeps them itself only when the feature is on (src/lib/reference/store.ts).
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,wasm}', 'data/manifest.json', 'data/cty.json'],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
       },
