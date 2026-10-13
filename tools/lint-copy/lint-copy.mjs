@@ -20,7 +20,7 @@ const ERROR_RULES = [
   },
   {
     id: 'corporate',
-    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
+    re: /\b(leverag\w*|unlock(?:s|ed|ing)? (?:the|your|new|more|real|its|their) (?:power|potential|value|possibilit\w+|growth|insights?|opportunit\w+)|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
     message: 'corporate verb; name the specific action',
   },
   {
@@ -42,6 +42,7 @@ const ERROR_RULES = [
 ];
 
 const WARN_RULES = [
+  { id: 'unlock', re: /\bunlock\w*/gi, message: '"unlock"; fine as the iOS audio term, not as marketing' },
   { id: 'x-not-y', re: /, not\b/gi, message: '", not" contrast; check it is factual, not rhetorical' },
   { id: 'rather-than', re: /\brather than\b/gi, message: '"rather than"; check it is needed' },
   { id: 'instead-of', re: /\binstead of\b/gi, message: '"instead of"; check it is needed' },

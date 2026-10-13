@@ -8,6 +8,7 @@
  */
 
 import { CaptureEngine, type Chunk, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
+import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } from '../audio/unlock';
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import type { CaptureReport } from '../audio/report';
@@ -42,12 +43,27 @@ export interface DecodedSlot {
 }
 
 export interface KeyingResult {
-  /** When Tune ended, UTC ms. */
+  /** When the check finished, UTC ms. */
   atUtcMs: number;
+  /** What played: the start tone or Tune. */
+  source: 'start' | 'tune';
   /** True when receive audio dropped by 10 dB or more; null when there was no audio to compare. */
   passed: boolean | null;
-  /** Drop in receive level during Tune, dB. */
+  /** Drop in receive level while the tone played, dB. */
   dropDb: number | null;
+}
+
+/** Receive audio drops at least this much while the radio transmits, dB. */
+const KEYED_DROP_DB = 10;
+
+function keyingResult(source: KeyingResult['source'], baseline: number | null, during: number | null): KeyingResult {
+  if (baseline === null || during === null) return { atUtcMs: Date.now(), source, passed: null, dropDb: null };
+  const drop = baseline - during;
+  return { atUtcMs: Date.now(), source, passed: drop >= KEYED_DROP_DB, dropDb: drop };
+}
+
+function levelsBetween(fromMs: number, toMs: number): number | null {
+  return median(levelLog.filter(([t]) => t >= fromMs && t <= toMs).map(([, db]) => db));
 }
 
 export const audio = $state({
@@ -198,14 +214,47 @@ export function onAudioChunk(fn: (c: Chunk) => void): () => void {
   return () => chunkListeners.delete(fn);
 }
 
-/** Starts audio, and loads the decoder the first time. Call from a tap. */
+let startToneUri: { level: number; uri: string } | null = null;
+
+/**
+ * Plays the start tone, or silence when it is off, through a media element. Both stop iOS from
+ * muting output on the silent switch; the tone also keys the radio for the keying check.
+ * Returns when the tone starts, as performance.now() ms, or null when no tone plays.
+ */
+function playStartClip(): number | null {
+  if (!settings.startTone) {
+    playClip(silentClipUri());
+    return null;
+  }
+  if (startToneUri?.level !== settings.outputLevel) {
+    startToneUri = { level: settings.outputLevel, uri: wavDataUri(startToneSamples(settings.outputLevel)) };
+  }
+  return playClip(startToneUri.uri) + START_TONE.leadS * 1000;
+}
+
+/** Compares receive level before and during the start tone once it has played. */
+function checkKeyingAt(toneStartMs: number) {
+  const toneMs = START_TONE.toneS * 1000;
+  const wait = Math.max(0, toneStartMs + toneMs + 300 - performance.now());
+  setTimeout(() => {
+    const baseline = levelsBetween(toneStartMs - 1000, toneStartMs - 100);
+    const during = levelsBetween(toneStartMs + 150, toneStartMs + toneMs - 50);
+    tx.keying = keyingResult('start', baseline, during);
+  }, wait);
+}
+
+/** Starts audio, and loads the decoder the first time. Call from a tap: the start clip must play inside it. */
 export function startAudio() {
+  const toneAt = playStartClip();
   decoder.load();
-  return getEngine().start(settings.inputDeviceId);
+  const started = getEngine().start(settings.inputDeviceId);
+  if (toneAt !== null) checkKeyingAt(toneAt);
+  return started;
 }
 
 /** Resumes audio after an interruption. Call from a tap. */
 export function resumeAudio() {
+  playClip(silentClipUri());
   return getEngine().resume();
 }
 
@@ -241,6 +290,7 @@ function median(xs: number[]): number | null {
 
 /** Plays the Tune tone at the Tx frequency for 10 s. Call from the confirming tap. */
 export function startTune() {
+  playClip(silentClipUri());
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();
@@ -254,10 +304,8 @@ export function startTune() {
     wake?.set(audio.status === 'running');
     const during = median(levelLog.filter(([t]) => t > t0 + 1000).map(([, db]) => db));
     const long = performance.now() - t0 > 3000;
-    if (baseline !== null && during !== null && long) {
-      const drop = baseline - during;
-      tx.keying = { atUtcMs: Date.now(), passed: drop >= 10, dropDb: drop };
-    } else if (end === 'finished') tx.keying = { atUtcMs: Date.now(), passed: null, dropDb: null };
+    if (baseline !== null && during !== null && long) tx.keying = keyingResult('tune', baseline, during);
+    else if (end === 'finished') tx.keying = keyingResult('tune', null, null);
   });
 }
 

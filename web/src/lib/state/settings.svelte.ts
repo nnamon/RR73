@@ -23,6 +23,8 @@ export interface Settings {
   inputDeviceId: string | null;
   /** Tune output level, 0 to 1. */
   outputLevel: number;
+  /** Play the start tone (1500 Hz, 0.4 s) through the radio when audio starts. */
+  startTone: boolean;
   checklist: Checklist;
   /** Receive and transmit audio frequencies (lowest tone), Hz. */
   rxHz: number;
@@ -50,6 +52,7 @@ export const DEFAULTS: Settings = {
   mode: 'FT8',
   inputDeviceId: null,
   outputLevel: 0.5,
+  startTone: true,
   checklist: { focus: false, clicks: false, volume: false },
   rxHz: 1500,
   txHz: 1500,
@@ -90,6 +93,7 @@ export function validate(raw: unknown): Settings {
   if (r.mode === 'FT8' || r.mode === 'FT4') s.mode = r.mode;
   if (typeof r.inputDeviceId === 'string' && r.inputDeviceId) s.inputDeviceId = r.inputDeviceId;
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;
+  if (typeof r.startTone === 'boolean') s.startTone = r.startTone;
   const c = r.checklist as Partial<Checklist> | undefined;
   if (c && typeof c === 'object') for (const k of ['focus', 'clicks', 'volume'] as const) if (typeof c[k] === 'boolean') s.checklist[k] = c[k];
   if (typeof r.grid === 'string' && /^[A-R]{2}\d{2}([A-X]{2})?$/i.test(r.grid.trim())) s.grid = normaliseGrid(r.grid);
