@@ -17,7 +17,7 @@
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
 
-  const TITLES: Record<string, string> = { operate: 'Operate', log: 'Log', activate: 'Activate', spots: 'Spots', settings: 'Settings' };
+  const TITLES: Record<string, string> = { operate: 'Operate', log: 'Log', spots: 'Spots', settings: 'Settings' };
 
   // The theme follows the system unless Settings pins it.
   $effect(() => {
@@ -59,20 +59,12 @@
       <div class="pane scroll">
         <Placeholder title="Log" heading="No QSOs yet" text="QSOs you log on Operate will appear here, newest first. Logging arrives in a later version." />
       </div>
-    {:else if tab === 'activate'}
-      <div class="pane scroll">
-        <Placeholder
-          title="Activate"
-          heading="No activation running"
-          text="Activations for POTA, SOTA, WWFF and IOTA references will appear here with their progress. Activations arrive in a later version."
-        />
-      </div>
     {:else if tab === 'spots'}
       <div class="pane scroll">
         <Placeholder
           title="Spots"
-          heading="No spots yet"
-          text="POTA, SOTA and WWFF spots on your bands will appear here and refresh every minute while online. Spots arrive in a later version."
+          heading="No spots or activation yet"
+          text="POTA, SOTA and WWFF spots on your bands will appear here, refreshed every minute while online. The activation you are running sits at the top, with its progress and what is left to submit. Both arrive in a later version."
         />
       </div>
     {:else if tab === 'settings'}

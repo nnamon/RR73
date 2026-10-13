@@ -51,3 +51,72 @@ export function reloadIfIdle(busy: boolean, reload: () => void = () => location.
   reload();
   return true;
 }
+
+/** What reloading needs from the browser; injected so tests can drive it. */
+export interface ReloadDeps {
+  registration(): Promise<ServiceWorkerRegistration | undefined>;
+  registrations(): Promise<readonly ServiceWorkerRegistration[]>;
+  cacheKeys(): Promise<string[]>;
+  deleteCache(key: string): Promise<boolean>;
+  reload(): void;
+  /** Longest wait for a new version to take over, ms. */
+  timeoutMs: number;
+}
+
+export function browserReloadDeps(): ReloadDeps {
+  const sw = typeof navigator !== 'undefined' && 'serviceWorker' in navigator ? navigator.serviceWorker : null;
+  const store = typeof caches !== 'undefined' ? caches : null;
+  return {
+    registration: async () => (sw ? sw.getRegistration() : undefined),
+    registrations: async () => (sw ? sw.getRegistrations() : []),
+    cacheKeys: async () => (store ? store.keys() : []),
+    deleteCache: async (key) => (store ? store.delete(key) : false),
+    reload: () => location.reload(),
+    timeoutMs: 15_000,
+  };
+}
+
+/** Resolves when `worker` is active (or gone), or after `timeoutMs`. */
+function settled(worker: ServiceWorker, timeoutMs: number): Promise<void> {
+  if (worker.state === 'activated' || worker.state === 'redundant') return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      worker.removeEventListener('statechange', onChange);
+      resolve();
+    };
+    const onChange = () => {
+      if (worker.state === 'activated' || worker.state === 'redundant') done();
+    };
+    const timer = setTimeout(done, timeoutMs);
+    worker.addEventListener('statechange', onChange);
+  });
+}
+
+/**
+ * Asks the service worker for a newer build, waits for it to take over, then reloads. Offline,
+ * or without a service worker, it reloads the build already on the phone.
+ */
+export async function reloadApp(deps: ReloadDeps = browserReloadDeps()): Promise<void> {
+  const reg = await deps.registration().catch(() => undefined);
+  if (reg) {
+    try {
+      await reg.update();
+    } catch {
+      // Offline or the server is unreachable: reload what the phone has.
+    }
+    const incoming = reg.installing ?? reg.waiting;
+    if (incoming) await settled(incoming, deps.timeoutMs);
+  }
+  deps.reload();
+}
+
+/**
+ * Removes the service worker and every cache, then reloads, so the next load comes from the
+ * network. IndexedDB (settings, saved slots, the log) is left alone.
+ */
+export async function clearCacheAndReload(deps: ReloadDeps = browserReloadDeps()): Promise<void> {
+  for (const r of await deps.registrations().catch(() => [])) await r.unregister().catch(() => false);
+  for (const key of await deps.cacheKeys().catch(() => [])) await deps.deleteCache(key).catch(() => false);
+  deps.reload();
+}

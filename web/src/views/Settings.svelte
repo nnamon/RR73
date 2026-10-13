@@ -3,7 +3,8 @@
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
-  import { audio, band } from '../lib/state/station.svelte';
+  import { audio, band, busy } from '../lib/state/station.svelte';
+  import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
 
   let callsign = $state(settings.callsign);
   $effect(() => {
@@ -47,6 +48,55 @@
     if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
     return 'Loads when audio starts';
   });
+
+  type ReloadKind = 'reload' | 'clear';
+  /** A reload stops audio, so with audio running the first tap asks and a second tap within 5 s reloads. */
+  let confirming = $state<ReloadKind | null>(null);
+  let reloading = $state<ReloadKind | null>(null);
+  let online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
+  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
+
+  $effect(() => {
+    const set = () => (online = navigator.onLine);
+    window.addEventListener('online', set);
+    window.addEventListener('offline', set);
+    return () => {
+      window.removeEventListener('online', set);
+      window.removeEventListener('offline', set);
+      clearTimeout(confirmTimer);
+    };
+  });
+
+  function tapReload(kind: ReloadKind) {
+    if (reloading) return;
+    if (busy() && confirming !== kind) {
+      confirming = kind;
+      clearTimeout(confirmTimer);
+      confirmTimer = setTimeout(() => (confirming = null), 5000);
+      return;
+    }
+    confirming = null;
+    reloading = kind;
+    void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
+  }
+
+  const reloadSub = $derived(
+    reloading === 'reload'
+      ? 'Checking for a newer version.'
+      : confirming === 'reload'
+        ? 'Audio is running. Tap again to stop it and reload.'
+        : 'Checks for a newer version, installs it and reloads.',
+  );
+
+  const clearSub = $derived(
+    !online
+      ? 'Needs a connection: the app loads fresh from the network.'
+      : reloading === 'clear'
+        ? 'Removing the stored copy.'
+        : confirming === 'clear'
+          ? 'Audio is running. Tap again to stop it and reload.'
+          : 'Removes the stored copy and loads the app fresh. Settings and saved data stay on this phone.',
+  );
 
   const themes: { id: Theme; label: string }[] = [
     { id: 'system', label: 'System' },
@@ -157,6 +207,12 @@
         <span class="row-main"><span class="row-title">Decoder</span></span>
         <span class="row-value" data-testid="decoder-status">{decoderText}</span>
       </div>
+      <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
+        <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
+      </button>
+      <button class="row reload" disabled={reloading !== null || !online} onclick={() => tapReload('clear')}>
+        <span class="row-main"><span class="row-title acc">Clear cached copy and reload</span><span class="row-sub" aria-live="polite">{clearSub}</span></span>
+      </button>
     </div>
     <p class="section-foot">RR73 is free software under the MIT or Apache 2.0 licence.</p>
   </div>
@@ -181,6 +237,18 @@
     height: 26px;
     margin: 0;
     accent-color: var(--rr-accent-fill);
+  }
+
+  .reload {
+    color: var(--rr-label);
+  }
+
+  .acc {
+    color: var(--rr-accent);
+  }
+
+  .reload:disabled .acc {
+    color: var(--rr-label3);
   }
 
   .link :global(.row-chevron) {

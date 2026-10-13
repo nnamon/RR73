@@ -10,7 +10,6 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
   await expect(nav.getByRole('link', { name: 'Operate' })).toHaveAttribute('aria-current', 'page');
   for (const [name, heading] of [
     ['Log', 'Log'],
-    ['Activate', 'Activate'],
     ['Spots', 'Spots'],
     ['Settings', 'Settings'],
   ] as const) {
@@ -24,10 +23,16 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
 test('the empty tabs say what will appear', async ({ page }) => {
   await page.goto('./#/log');
   await expect(page.getByText('No QSOs yet')).toBeVisible();
-  await page.goto('./#/activate');
-  await expect(page.getByText('No activation running')).toBeVisible();
   await page.goto('./#/spots');
-  await expect(page.getByText('No spots yet')).toBeVisible();
+  await expect(page.getByText('No spots or activation yet')).toBeVisible();
+});
+
+test('four tabs, and an old Activate link opens Spots', async ({ page }) => {
+  await page.goto('./#/activate');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Spots', 'Settings']);
+  await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Spots' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('Operate shows the band, the frequency and the empty decode list', async ({ page }) => {
@@ -122,4 +127,25 @@ test('after an update, a notice opens the version history at the new version', a
   await expect(notice).toBeHidden();
   await page.reload();
   await expect(page.getByText(`Updated to ${VERSION}`)).toBeHidden();
+});
+
+test('Reload app and Clear cached copy and reload both reload the page', async ({ page }) => {
+  for (const name of [/^Reload app/, /^Clear cached copy and reload/]) {
+    await page.goto('./#/settings');
+    await page.evaluate(() => ((window as unknown as { __marker: boolean }).__marker = true));
+    const button = page.getByRole('button', { name });
+    await expect(button).toBeEnabled();
+    await Promise.all([page.waitForEvent('load'), button.click()]);
+    expect(await page.evaluate(() => (window as unknown as { __marker?: boolean }).__marker ?? false)).toBe(false);
+    await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  }
+});
+
+test('Clear cached copy waits for a connection', async ({ page, context }) => {
+  await page.goto('./#/settings');
+  await context.setOffline(true);
+  await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeDisabled();
+  await expect(page.getByText('Needs a connection: the app loads fresh from the network.')).toBeVisible();
+  await context.setOffline(false);
+  await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
 });
