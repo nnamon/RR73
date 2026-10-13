@@ -28,10 +28,16 @@ pub struct Decode {
     pub hard_errors: u32,
     /// Candidate sync score, in dB.
     pub score: f32,
+    /// `true` when ordered-statistics decoding found the codeword.
+    pub osd: bool,
+    /// For OSD decodes, the reliability-weighted distance to the received LLRs as a fraction
+    /// of the total reliability; 0 otherwise.
+    pub osd_distance: f32,
 }
 
 /// Counters for one slot.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct DecodeStats {
     /// Candidates from the search, summed over passes.
     pub candidates: u32,
@@ -39,6 +45,8 @@ pub struct DecodeStats {
     pub ldpc_attempts: u32,
     /// LDPC decodes that produced a codeword.
     pub ldpc_converged: u32,
+    /// Of those, codewords from ordered-statistics decoding.
+    pub osd_codewords: u32,
     /// Codewords with a wrong CRC.
     pub crc_failures: u32,
     /// Codewords with an all-zero payload.
@@ -47,6 +55,8 @@ pub struct DecodeStats {
     pub unpack_failures: u32,
     /// Valid messages already decoded in the slot.
     pub duplicates: u32,
+    /// OSD codewords whose message failed the plausibility checks.
+    pub implausible: u32,
 }
 
 /// Wall time per stage for one slot, in seconds, summed over passes and candidates.

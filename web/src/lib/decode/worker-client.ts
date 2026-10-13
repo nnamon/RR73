@@ -36,11 +36,13 @@ interface Request<T> {
 }
 
 /**
- * The decoder preset operators get. `subtract-3` decodes up to 3 passes, subtracting each decoded
- * signal before the next; docs/experiments/0001-subtraction.md has the measurements, and CI gates
- * this preset against bench/subtract-3.json.
+ * The decoder preset operators get. `subtract-3-osd2` decodes up to 3 passes, subtracting each
+ * decoded signal before the next (docs/experiments/0001-subtraction.md), and retries candidates
+ * that belief propagation fails with ordered-statistics decoding of order 2
+ * (docs/experiments/0002-osd.md has the measurements). CI gates this preset against
+ * bench/subtract-3-osd2.json.
  */
-export const PRESET = 'subtract-3';
+export const PRESET = 'subtract-3-osd2';
 
 export class WorkerDecoder implements DecoderClient {
   private worker: WorkerLike | null = null;

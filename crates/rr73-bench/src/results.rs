@@ -126,6 +126,16 @@ pub struct DecodeRecord {
     pub score: f64,
     /// `true` when it matched an expected entry.
     pub matched: bool,
+    /// `true` when ordered-statistics decoding found it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub osd: bool,
+    /// For OSD decodes, the weighted distance as a fraction of the total reliability.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub osd_distance: f64,
+}
+
+fn is_zero(x: &f64) -> bool {
+    *x == 0.0
 }
 
 /// An expected entry as recorded in results.

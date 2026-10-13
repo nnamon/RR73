@@ -172,6 +172,8 @@ fn process(
             hard_errors: d.hard_errors,
             score: round(f64::from(d.score), 3),
             matched: m.is_some(),
+            osd: d.osd,
+            osd_distance: round(f64::from(d.osd_distance), 4),
         })
         .collect();
     let entries = expected
