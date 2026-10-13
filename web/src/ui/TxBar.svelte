@@ -255,18 +255,19 @@
     gap: var(--rr-space-1-5);
     height: 18px;
     margin: 0;
-    padding: var(--rr-space-half) 0 0;
+    padding: var(--rr-space-px) 0 0;
     list-style: none;
   }
 
+  /* Caption 2 at its 13 pt leading, so descenders show: 1 + 3 + 1 + 13 pt fill the 18 pt row. */
   .step {
     display: flex;
     flex: 1;
     flex-direction: column;
-    gap: var(--rr-space-half);
+    gap: var(--rr-space-px);
     min-width: 0;
     font-size: var(--rr-text-axis);
-    line-height: 11px;
+    line-height: var(--rr-leading-tag);
     color: var(--rr-label3);
   }
 
