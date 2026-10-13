@@ -131,6 +131,9 @@ test('the order decides which colour a decode takes', async ({ page }) => {
 
   // A mouse drags at once: Ending a QSO above New call.
   await toColours(page);
+  // The screen opens at the top; bring both rows into view before measuring them.
+  await page.locator('.hl-list > li[data-id="ending"]').scrollIntoViewIfNeeded();
+  await page.locator('.hl-list > li[data-id="newCall"]').scrollIntoViewIfNeeded();
   const grip = (await page.locator('.hl-list > li[data-id="ending"] .grip').boundingBox())!;
   const target = (await page.locator('.hl-list > li[data-id="newCall"]').boundingBox())!;
   await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);

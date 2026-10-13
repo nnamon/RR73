@@ -16,6 +16,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Practice scenario Hunt: busy band carries at least 6 CQs a slot. Stations weaker than −10 dB do not hear you.
 - In the practice scenario Station works another, the station ends its QSO with RR73 or 73 and answers your next call.
 
+## 0.9.2 · 2026-10-13
+
+- The "Updated to" notice floats over the screen without moving it, and goes by itself after 4 s.
+- Version history and the other Settings screens open at the top. Back returns to where you were.
+
 ## 0.9.1 · 2026-10-13
 
 - Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.
