@@ -95,13 +95,14 @@ export default defineConfig({
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
     // after the other projects, so the rest of the suite does not load the machine meanwhile
-    // (locally: --no-deps to run them alone), with 2 retries.
-    { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
+    // (locally: --no-deps to run them alone), with 2 retries. The QSO comes first: it is the
+    // longest of the three.
+    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
+    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
-    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
     // The practice band: synthesised in the page, decoded in real time, no microphone. It loads
     // the machine as the transmit tests do, so it runs after them, with 2 retries.
-    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['tx-cq', 'webkit-tx', 'transmit'], use: desktop },
+    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
   ],
 });

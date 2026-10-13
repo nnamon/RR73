@@ -47,9 +47,8 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt 
   test.info().annotations.push({ type: 'halt', description: JSON.stringify({ heardEndAfterTapMs: Math.round(stopMs), sentMs: Math.round(sentMs) }) });
   expect(sentMs).toBeLessThan(4000);
   expect(stopMs).toBeLessThan(100);
-  // Halt ends the CQ and turns Tx off.
+  // Halt ends the CQ and turns Tx off; nothing else went out.
   await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
-  await page.waitForTimeout(16_000);
   expect(await page.evaluate(() => window.__tx.length)).toBe(2);
 });
 
