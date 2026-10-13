@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Slots and transmissions stay on UTC when the browser's output timestamps disagree with its audio clock. In Playwright's WebKit they gained 1 s every second, so slots drifted and no call went on air. Not tested on an iPhone.
+
 ## 0.6.0 · 2026-10-13
 
 - Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.

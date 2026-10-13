@@ -9,7 +9,7 @@
  */
 
 import workletUrl from './capture.worklet.ts?worker&url';
-import { AudioClockMapper } from '../clock/mapping';
+import { AudioClockMapper, plausibleTimestamp } from '../clock/mapping';
 import { FLOOR_DB } from './level';
 import { CAPTURE_PROCESSOR, type CaptureMessage } from './messages';
 import { RateMeter, captureConstraints, readReport, type CaptureReport } from './report';
@@ -58,6 +58,9 @@ export interface EngineDeps {
 
 const loaded = new WeakSet<BaseAudioContext>();
 
+/** Implausible output timestamps in a row, about 0.2 s of chunks, before the engine stops using them. */
+const IMPLAUSIBLE_RUN = 5;
+
 export function browserDeps(): EngineDeps {
   return {
     createContext: () => new AudioContext({ latencyHint: 'interactive' }),
@@ -103,6 +106,10 @@ export class CaptureEngine {
   private trackCleanup: (() => void) | null = null;
   /** The mapper holds observations from currentTime, without output timestamps. */
   private fallbackClock = false;
+  /** Output timestamps in a row that disagree with currentTime. */
+  private implausible = 0;
+  /** The browser's output timestamps are wrong: the mapper uses currentTime until the next start or resume. */
+  private distrustTimestamps = false;
 
   constructor(deps: EngineDeps = browserDeps()) {
     this.deps = deps;
@@ -176,8 +183,7 @@ export class CaptureEngine {
     } catch {
       // A context that will not run shows as a stop below.
     }
-    this.mapper.reset();
-    this.fallbackClock = false;
+    this.resetClock();
     this.rate.reset();
     this.lastUtcMs = null;
     if (ctx.state !== 'running') {
@@ -199,7 +205,7 @@ export class CaptureEngine {
     } catch {
       // Checked below.
     }
-    this.mapper.reset();
+    this.resetClock();
     this.rate.reset();
     if (ctx.state !== 'running') {
       this.set({ status: 'stopped', reason: 'suspended', stoppedAtUtcMs: this.deps.dateNow(), error: null });
@@ -295,20 +301,35 @@ export class CaptureEngine {
     for (const l of this.chunkListeners) l(chunk);
   }
 
+  private resetClock() {
+    this.mapper.reset();
+    this.fallbackClock = false;
+    this.implausible = 0;
+    this.distrustTimestamps = false;
+  }
+
   private observeClock(ctx: AudioContext) {
     const perfNow = this.deps.perfNow();
     const dateNow = this.deps.dateNow();
-    const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
-    const valid = !!ts && (ts.performanceTime ?? 0) > 0 && (ts.contextTime ?? 0) > 0;
-    if (ts && valid) {
-      // Output timestamps differ from the fallback by the output latency: start over on them.
-      if (this.fallbackClock) this.mapper.reset();
-      this.fallbackClock = false;
-      this.mapper.observe({ contextTime: ts.contextTime!, performanceTime: ts.performanceTime! }, perfNow, dateNow);
-      return;
+    const raw = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+    const ts = raw && (raw.performanceTime ?? 0) > 0 && (raw.contextTime ?? 0) > 0 ? { contextTime: raw.contextTime!, performanceTime: raw.performanceTime! } : null;
+    if (ts && !this.distrustTimestamps) {
+      if (plausibleTimestamp(ts, ctx.currentTime, perfNow)) {
+        // Output timestamps differ from the fallback by the output latency: start over on them.
+        if (this.fallbackClock) this.mapper.reset();
+        this.fallbackClock = false;
+        this.implausible = 0;
+        this.mapper.observe(ts, perfNow, dateNow);
+        return;
+      }
+      // A few bad timestamps are skipped. A run of them means the browser's are wrong (Playwright's
+      // WebKit on Linux): drop the observations made from them and use currentTime.
+      if (++this.implausible < IMPLAUSIBLE_RUN) return;
+      this.distrustTimestamps = true;
+      if (!this.fallbackClock) this.mapper.reset();
     }
-    // Until output timestamps arrive, or where the browser has none, pair currentTime with now:
-    // off by the output latency, which the DT-based correction removes later.
+    // Until output timestamps arrive, or where the browser has none or wrong ones, pair currentTime
+    // with now: off by the output latency.
     if (this.mapper.ready && !this.fallbackClock) return;
     this.fallbackClock = true;
     this.mapper.observe({ contextTime: ctx.currentTime, performanceTime: perfNow }, perfNow, dateNow);

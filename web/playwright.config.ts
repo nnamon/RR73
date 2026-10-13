@@ -44,7 +44,8 @@ export default defineConfig({
   webServer: process.env.BASE_URL
     ? undefined
     : {
-        command: 'npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
+        // VITE_E2E adds the hooks the tests use (src/lib/testing/e2e-hooks.ts).
+        command: 'VITE_E2E=1 npm run build && npx vite preview --host 127.0.0.1 --port 4173 --strictPort',
         cwd: here('.'),
         url: 'http://127.0.0.1:4173',
         timeout: 180_000,
@@ -64,7 +65,9 @@ export default defineConfig({
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
     // after the other projects, so the rest of the suite does not load the machine meanwhile
     // (locally: --no-deps to run them alone), with 2 retries, as for decode.
-    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
+    { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: { ...iphone(393, 852, 3), permissions: ['microphone'] } },
     { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
   ],
 });

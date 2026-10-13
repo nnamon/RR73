@@ -12,11 +12,12 @@ declare global {
 
 /**
  * Sets the callsign and grid and confirms 20m FT8. `setup` runs first on a loaded page, for
- * seeding the log; it may reload, as the tap is installed for every page load.
+ * seeding the log; it may reload, as the tap is installed for every page load. `tap: false`
+ * leaves the output tap out, for WebKit: a WebKit page with the tap stopped responding.
  */
-export async function prepare(page: Page, setup?: (page: Page) => Promise<void>) {
+export async function prepare(page: Page, setup?: (page: Page) => Promise<void>, opts: { tap?: boolean } = {}) {
   test.skip(!(await loadWasm()), 'The wasm package is not built (src/wasm/pkg).');
-  await installTap(page);
+  if (opts.tap ?? true) await installTap(page);
   await page.addInitScript(() => {
     window.addEventListener('click', (e) => {
       if ((e.target as Element).closest('button')?.textContent?.trim() === 'Halt') window.__haltAt = Date.now();

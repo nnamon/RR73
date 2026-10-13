@@ -14,3 +14,6 @@ void loadSettings().finally(() => {
   mount(App, { target: document.getElementById('app')! });
   void loadLog();
 });
+
+// The Playwright screen review drives the app through these; other builds leave them out.
+if (import.meta.env.VITE_E2E === '1') void import('./lib/testing/e2e-hooks').then((m) => m.installE2eHooks());
