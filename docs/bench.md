@@ -1,6 +1,6 @@
 # Decoder bench
 
-`rr73-bench` measures decoder configurations against the corpus (`docs/corpus.md`): it writes synthetic slots with exact truth, decodes every slot with a named preset, scores the decodes, compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
+`rr73-bench` measures decoder presets against the corpus (`docs/corpus.md`). It writes synthetic slots with exact truth, decodes every slot with a named preset and scores the decodes. It also compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
 
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh             # public test files

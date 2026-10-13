@@ -130,7 +130,7 @@ describe('ADIF from other loggers to QSOs', () => {
     const r = recordToQso({ CALL: 'K1A', QSO_DATE: '20261012', TIME_ON: '1200', FREQ: 'abc', BAND: '33m', TIME_OFF: '99' }, ctx);
     if (!r.ok) throw new Error(r.reason);
     expect(r.warnings).toEqual([
-      'The QSO with K1A has an unreadable TIME_OFF; it ends at its start.',
+      'The QSO with K1A has an unreadable TIME_OFF. RR73 ends it at its start time.',
       'The QSO with K1A has an unreadable FREQ.',
       'The QSO with K1A has an unknown BAND "33m".',
     ]);

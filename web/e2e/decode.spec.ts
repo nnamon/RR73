@@ -223,7 +223,7 @@ test('without the decoder module, the list says so and receive carries on', asyn
   await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
   const alert = page.getByRole('alert');
   await expect(alert).toContainText('No decodes: the decoder did not load', { timeout: 15_000 });
-  await expect(alert).toContainText('Receive still works');
+  await expect(alert).toContainText('The waterfall and Save slot still work');
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/);
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');

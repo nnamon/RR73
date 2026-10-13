@@ -469,7 +469,7 @@ class Machine {
       this.notice('no-reply', `No reply from ${bare(call)} after ${n} repeats. Tap Call to try again.`);
       return;
     }
-    this.notice('dropped', `${bare(call)} went quiet after ${n} repeats and was not logged.`);
+    this.notice('dropped', `${bare(call)} went quiet after ${n} repeats. RR73 did not log the QSO.`);
     st.partner = null;
     st.retries = 0;
     this.nextCaller(nowMs);
@@ -600,7 +600,7 @@ class Machine {
         return;
       }
       if (r === 'incomplete') {
-        this.notice('incomplete', `${bare(p.call)} ended the QSO before the reports were exchanged. It was not logged.`);
+        this.notice('incomplete', `${bare(p.call)} ended the QSO before the report exchange finished. RR73 did not log it.`);
         this.endQso();
         if (st.phase === 'cq') this.nextCaller(e.nowMs);
         return;
@@ -814,7 +814,7 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       }
       break;
     case 'audioStopped':
-      if (st.txEnabled || st.run) m.notice('audio', 'Tx stopped because the audio stopped. The QSO keeps its place; resume audio, then enable Tx.');
+      if (st.txEnabled || st.run) m.notice('audio', 'Tx stopped because the audio stopped. The QSO keeps its place. Resume audio, then enable Tx.');
       m.stopAll(e.nowMs);
       st.audioOk = false;
       break;

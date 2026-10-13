@@ -101,7 +101,7 @@
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendEdits} onchange={(e) => void setLoggingSettings({ sendEdits: e.currentTarget.checked })} />
       </label>
     </div>
-    <p class="section-foot">Wavelog takes no changes through its API: an edit to a QSO it holds shows as changed in the log, for you to make in Wavelog too.</p>
+    <p class="section-foot">Wavelog takes no changes through its API. When you edit a QSO that Wavelog holds, the log marks it changed. Make the same edit in Wavelog.</p>
   </div>
 
   <div class="section">

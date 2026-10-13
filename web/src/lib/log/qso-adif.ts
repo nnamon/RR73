@@ -111,7 +111,7 @@ export function recordToQso(rec: AdifRecord, ctx: ReadContext): ReadResult {
   let end = start;
   if (get('TIME_OFF')) {
     const off = parseDateTime(get('QSO_DATE_OFF') || get('QSO_DATE'), get('TIME_OFF'));
-    if (off === null) warnings.push(`The QSO with ${call} has an unreadable TIME_OFF; it ends at its start.`);
+    if (off === null) warnings.push(`The QSO with ${call} has an unreadable TIME_OFF. RR73 ends it at its start time.`);
     // A TIME_OFF before TIME_ON without QSO_DATE_OFF crossed midnight UTC.
     else end = off < start && !get('QSO_DATE_OFF') ? off + 86_400_000 : Math.max(off, start);
   }

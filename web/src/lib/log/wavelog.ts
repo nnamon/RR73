@@ -97,7 +97,7 @@ export const say = {
   noStation: 'Choose a Wavelog station location in Settings › Logging.',
   noStations: 'Wavelog has no station locations for this key. Create one in Wavelog, then test again.',
   notWavelog: (host: string) => `${host} does not answer as Wavelog. Check the address in Settings › Logging.`,
-  badRequest: 'Wavelog could not read the request from RR73. Send it again; if it is refused again, export the QSO as ADIF and import it in Wavelog.',
+  badRequest: 'Wavelog could not read the request from RR73. Send the QSO again. If Wavelog refuses it again, export the QSO as ADIF and import it in Wavelog.',
   stationCall: (call: string, station: string, stationCall: string) =>
     `Wavelog refused the QSO: it was made as ${call} and the station location ${station} is for ${stationCall}. Choose a station location for ${call}.`,
   stationGrid: (grid: string, station: string, stationGrid: string) =>

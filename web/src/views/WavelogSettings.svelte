@@ -133,7 +133,7 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Use Wavelog</span>
-          <span class="row-sub">Off: RR73 sends nothing to Wavelog. QSOs not sent wait on this phone; those Wavelog has stay there.</span>
+          <span class="row-sub">Off: RR73 sends nothing to Wavelog. QSOs not sent wait on this phone. QSOs already in Wavelog stay there.</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={w.enabled} onchange={(e) => void setWavelog({ enabled: e.currentTarget.checked })} />
       </label>
@@ -148,7 +148,7 @@
 </section>
 
 <Sheet bind:open={removing} title="Remove Wavelog?">
-  <p class="confirm-text">The address and API key are deleted from this phone. QSOs stay in the log with their delivery history.</p>
+  <p class="confirm-text">RR73 deletes the address and API key from this phone. QSOs stay in the log with their delivery history.</p>
   <button class="btn tx full" onclick={() => void remove()}>Remove Wavelog</button>
   <button class="btn full keep" onclick={() => (removing = false)}>Keep Wavelog</button>
 </Sheet>

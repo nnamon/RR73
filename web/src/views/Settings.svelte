@@ -167,14 +167,14 @@
       </div>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Decodes to this callsign are marked in red. Transmitting needs both the callsign and the grid. Stored on this phone.</p>
+    <p class="section-foot">Decodes addressed to this callsign show in red. Transmitting needs the callsign and the grid. Both stay on this phone.</p>
   </div>
 
   <div class="section">
-    <h2 class="section-head" id="ack">Operating</h2>
+    <h2 class="section-head">FT8 and FT4</h2>
     <div class="group">
       <div class="row">
-        <span class="row-main"><span class="row-title">Confirm with</span></span>
+        <span class="row-main"><span class="row-title" id="ack">Confirm with</span></span>
         <span class="seg ack" role="radiogroup" aria-labelledby="ack">
           {#each ['RR73', 'RRR'] as const as a (a)}
             <label class="seg-i" class:on={settings.ack === a}>
@@ -232,7 +232,7 @@
         </label>
       {/each}
     </div>
-    <p class="section-foot">Spots shows in Operate's top bar while Activations, POTA spots or Cluster spots is on. Each is off until you turn it on. Nothing downloads for a feature that is off, and turning one off keeps what it stored.</p>
+    <p class="section-foot">Operate shows a Spots button while Activations, POTA spots or Cluster spots is on. Each feature is off until you turn it on. A feature that is off downloads nothing. Turning one off keeps what it stored.</p>
   </div>
 
   <div class="section">

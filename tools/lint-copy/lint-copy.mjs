@@ -39,6 +39,35 @@ const ERROR_RULES = [
     message: 'contrast cliché; state the point directly',
   },
   { id: 'hedge', re: /\b(may potentially|could possibly|might possibly)\b/gi, message: 'stacked hedge' },
+  {
+    id: 'contrast-semicolon',
+    re: /\b(?:no longer|(?:is|are) (?:gone|removed))\b[^.;:!?\n]*;/gi,
+    message: 'contrast across a semicolon; state the new behaviour in a sentence of its own',
+  },
+];
+
+/**
+ * Errors for text that reaches the screen: interface strings in web/src, and CHANGELOG.md, which
+ * the app shows as Version history. Documents may name components and quote measurements as tools
+ * print them; the screen may not.
+ */
+const SCREEN_RULES = [
+  {
+    id: 'internal-name',
+    re: /\b(top bar|bottom bar|BackLink|feature flags?|calling card|dock)\b/gi,
+    message: 'internal name on screen; name what the operator sees',
+  },
+  { id: 'semicolon', re: /(?<!&#?\w+);/g, message: 'semicolon; one idea per sentence, so split it' },
+  {
+    id: 'number-word',
+    re: /\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) [a-z]+s\b/gi,
+    message: 'number in words; write digits',
+  },
+  {
+    id: 'minus-sign',
+    re: /(?<![\w.\u2212-])-\d+(?:\.\d+)?(?= ?dB| to [\u2212-]?\d+(?:\.\d+)? ?dB)/g,
+    message: 'hyphen-minus in a dB value; write \u2212 (U+2212)',
+  },
 ];
 
 const WARN_RULES = [
@@ -112,15 +141,29 @@ export function sourceProse(text, ext) {
   };
   const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
   let m;
-  let code = src;
+  let code = stripComments(src);
   if (ext === '.svelte') {
-    code = src.replace(/<style[\s\S]*?<\/style>/g, (s) => s.replace(/[^\n]/g, ' '));
+    const blank = (s) => s.replace(/[^\n]/g, ' ');
+    code = src
+      .replace(/<style[\s\S]*?<\/style>/g, blank)
+      .replace(/<!--[\s\S]*?-->/g, blank)
+      .replace(/(<script[^>]*>)([\s\S]*?)(<\/script>)/g, (_, open, body, close) => open + stripComments(body) + close);
     const markup = code.replace(/<script[\s\S]*?<\/script>/g, (s) => s.replace(/[^\n]/g, ' '));
     const text = />([^<>{}]+)</g;
     while ((m = text.exec(markup))) if (/[A-Za-z]{2}/.test(m[1])) put(m.index + 1, m[1]);
   }
   while ((m = literal.exec(code))) if (isProse(m[2])) put(m.index, m[2]);
   return lines.join('\n');
+}
+
+/**
+ * Blanks JavaScript comments, keeping string literals and line breaks. An apostrophe in a comment
+ * would otherwise open a string literal that runs to the next one.
+ */
+export function stripComments(js) {
+  return js.replace(/([\'"`])(?:\\.|(?!\1)[^\\])*?\1|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) =>
+    m[0] === '/' ? m.replace(/[^\n]/g, ' ') : m,
+  );
 }
 
 /**
@@ -140,11 +183,17 @@ export function stripQuoted(line) {
   return line.replace(/"[^"\n]*"|\u201c[^\u201d\n]*\u201d/g, (m) => ' '.repeat(m.length));
 }
 
-export function lintText(prose, file) {
+/** True for files whose text reaches the screen. */
+export function isScreenFile(rel) {
+  return rel === 'CHANGELOG.md' || (/^web\/src\/.*\.(svelte|ts)$/.test(rel) && !rel.endsWith('.test.ts'));
+}
+
+export function lintText(prose, file, { screen = false } = {}) {
   const findings = [];
   const lines = prose.split('\n').map(stripQuoted);
+  const sets = [['error', screen ? [...ERROR_RULES, ...SCREEN_RULES] : ERROR_RULES], ['warning', WARN_RULES]];
   lines.forEach((line, i) => {
-    for (const [level, rules] of [['error', ERROR_RULES], ['warning', WARN_RULES]]) {
+    for (const [level, rules] of sets) {
       for (const rule of rules) {
         rule.re.lastIndex = 0;
         let m;
@@ -160,10 +209,9 @@ export function lintText(prose, file) {
 export function lintFile(root, rel) {
   const ext = extname(rel);
   const text = readFileSync(join(root, rel), 'utf8');
-  if (ext === '.md') return lintText(markdownProse(text), rel);
-  if ((ext === '.svelte' || ext === '.ts') && rel.startsWith('web/src/') && !rel.endsWith('.test.ts')) {
-    return lintText(sourceProse(text, ext), rel);
-  }
+  const screen = isScreenFile(rel);
+  if (ext === '.md') return lintText(markdownProse(text), rel, { screen });
+  if (screen) return lintText(sourceProse(text, ext), rel, { screen });
   return [];
 }
 

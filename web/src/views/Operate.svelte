@@ -74,7 +74,7 @@
       return;
     }
     setFrequencies({ txHz: hz });
-    showNotice(`Tx ${hz} Hz: the quietest ${SIGNAL_HZ[settings.mode]} Hz in the last slots.`);
+    showNotice(`Tx moved to ${hz} Hz, the quietest ${SIGNAL_HZ[settings.mode]} Hz in the last slots.`);
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
@@ -228,7 +228,7 @@
   {#if band.decoder.state === 'failed'}
     <div class="decoder-error" role="alert">
       <p class="t">{band.decoder.reason === 'crashed' ? 'Decoding stopped' : 'No decodes: the decoder did not load'}</p>
-      <p class="s">{FAILED[band.decoder.reason]} Receive still works: the waterfall and Save slot carry on. Reload RR73 to try again.</p>
+      <p class="s">{FAILED[band.decoder.reason]} The waterfall and Save slot still work. Reload RR73 to try again.</p>
     </div>
   {/if}
   <div class="filters">

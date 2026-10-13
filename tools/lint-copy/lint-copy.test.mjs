@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, stripDisabled, stripQuoted } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, isScreenFile, stripComments, stripDisabled, stripQuoted } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
+const screen = (text) => lintText(text, 'x', { screen: true }).map((f) => `${f.level}:${f.rule}`);
 
 test('flags em dashes, exclamation marks and emoji', () => {
   assert.deepEqual(rules('Fast — very fast'), ['error:em-dash']);
@@ -56,4 +57,49 @@ test('quoted phrases are mentions and pass', () => {
   assert.deepEqual(rules('The rule catches \u201csimply\u201d too.'), []);
   assert.deepEqual(rules('Unquoted, simply fails.'), ['error:filler']);
   assert.equal(stripQuoted('a "b" c').length, 7);
+});
+
+test('flags contrast across a semicolon anywhere', () => {
+  assert.deepEqual(rules('The tab bar is gone; Log opens over Operate.'), ['error:contrast-semicolon']);
+  assert.deepEqual(rules('Updating no longer blanks the app; it opens.'), ['error:contrast-semicolon']);
+  assert.deepEqual(rules('Updating no longer blanks the app. It opens; then it updates.'), []);
+});
+
+test('screen text flags internal names, semicolons, number words and hyphen-minus dB', () => {
+  assert.deepEqual(screen("Spots shows in Operate's top bar."), ['error:internal-name']);
+  assert.deepEqual(screen('The dock shows the steps.'), ['error:internal-name']);
+  assert.deepEqual(screen('Send it again; if it fails, export it.'), ['error:semicolon']);
+  assert.deepEqual(screen('The app has three tabs.'), ['error:number-word']);
+  assert.deepEqual(screen('Band noise at -15 dB.'), ['error:minus-sign']);
+  assert.deepEqual(screen('Signals from -16 to -6 dB.'), ['error:minus-sign', 'error:minus-sign']);
+});
+
+test('screen text passes the formats and entities the style guide asks for', () => {
+  assert.deepEqual(screen('Band noise at −15 dB, 1500 Hz, 2026-10-13 13:14 UTC.'), []);
+  assert.deepEqual(screen('The app has 3 tabs. Tx moved to 1500 Hz.'), []);
+  assert.deepEqual(screen('Add&nbsp;QSO and &#8722;15'), []);
+  assert.deepEqual(screen('Twice a day, once in a while.'), []);
+});
+
+test('screen rules stay off for documents and commit messages', () => {
+  assert.deepEqual(rules("Operate's top bar holds three tabs; SNR50 -18.9 dB."), []);
+});
+
+test('screen files are interface sources and the changelog', () => {
+  assert.equal(isScreenFile('CHANGELOG.md'), true);
+  assert.equal(isScreenFile('web/src/views/Settings.svelte'), true);
+  assert.equal(isScreenFile('web/src/lib/log/wavelog.ts'), true);
+  assert.equal(isScreenFile('web/src/lib/log/wavelog.test.ts'), false);
+  assert.equal(isScreenFile('docs/bench.md'), false);
+  assert.equal(isScreenFile('AGENTS.md'), false);
+});
+
+test('source prose skips comments, so an apostrophe in one opens no string', () => {
+  const ts = "// the sequencer's settings; the log's QSOs\nconst a = 'Send it again; then export it.';\n/* it's; here's */";
+  const found = lintText(sourceProse(ts, '.ts'), 'x', { screen: true }).map((f) => `${f.line}:${f.rule}`);
+  assert.deepEqual(found, ['2:semicolon']);
+  const svelte = "<script>\n  // Rx's list; Tx's list\n</script>\n<!-- don't; won't -->\n<p>Tx moved to 1500 Hz.</p>";
+  assert.deepEqual(lintText(sourceProse(svelte, '.svelte'), 'x', { screen: true }), []);
+  assert.equal(stripComments("a // b\nc").split('\n').length, 2);
+  assert.equal(stripComments("const u = 'https://x'; // c"), "const u = 'https://x';     ");
 });

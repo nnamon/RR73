@@ -29,7 +29,7 @@
           <span class="ic" aria-hidden="true"><Icon name="mountain" size={20} /></span>
           <span class="row-main">
             <span class="row-title">Start activation</span>
-            <span class="row-sub">POTA, SOTA, WWFF or IOTA. QSOs logged while it runs count towards it.</span>
+            <span class="row-sub">An activation takes POTA, SOTA, WWFF and IOTA references. QSOs you log while it runs count towards it.</span>
           </span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </button>
@@ -41,7 +41,7 @@
     <div class="section">
       <h2 class="section-head">Spots</h2>
       <div class="group">
-        <p class="none">No spots yet. {sources} spots on your bands will appear here, refreshed every minute while online. Spots arrive in a later version.</p>
+        <p class="none">No spots yet. {sources} spots on your bands will appear here in a later version, refreshed every minute while online.</p>
       </div>
     </div>
   {/if}

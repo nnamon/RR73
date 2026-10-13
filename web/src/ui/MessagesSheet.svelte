@@ -67,7 +67,7 @@
       {#if errors[tx]}<p class="err" role="alert">{errors[tx]}</p>{/if}
     {/each}
   </fieldset>
-  <p class="note">Choosing a message sends it next. Edits to Tx1 to Tx5 last until you call another station; Tx6 keeps its text.</p>
+  <p class="note">Choosing a message sends it next. Edits to Tx1 to Tx5 last until you call another station. Tx6 keeps its text.</p>
 </Sheet>
 
 <style>

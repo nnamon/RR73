@@ -44,7 +44,7 @@
     r ? `Echo cancellation ${onOff(r.echoCancellation)}, noise suppression ${onOff(r.noiseSuppression)}, auto gain ${onOff(r.autoGainControl)}` : 'Unknown until audio starts',
   );
   const screenText = $derived(
-    audio.wake === 'held' ? 'Stays on while audio runs' : audio.wake === 'refused' ? 'Can lock: the browser refused to keep it on' : audio.wake === 'unsupported' ? 'Can lock: this browser cannot keep it on' : 'Stays on while audio runs',
+    audio.wake === 'held' ? 'Stays on while audio runs' : audio.wake === 'refused' ? 'Follows Auto-Lock: the browser refused to keep it on' : audio.wake === 'unsupported' ? 'Follows Auto-Lock: this browser cannot keep it on' : 'Stays on while audio runs',
   );
 
   const checks: { key: keyof Checklist; title: string; sub: string }[] = [
@@ -129,7 +129,7 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">Start audio plays a short rising chime (659 and 880 Hz, 0.45 s) at the output level. It keys the radio, runs the keying check, and stops iOS muting output on the silent switch.</span>
+            <span class="row-sub">Start audio plays a short rising chime (659 and 880 Hz, 0.45 s) at the output level. The chime keys the radio and runs the keying check. It also stops iOS muting output on the silent switch.</span>
           </span>
         </label>
       </div>
@@ -171,7 +171,7 @@
           <span class="row-title">Keying check</span>
           <span class="row-sub">
             {#if tx.keying === null}
-              Not checked yet. Start audio with the start chime on, or run Tune: receive audio drops when the radio keys.
+              Not checked yet. Start audio with the start chime on, or run Tune. The check passes when receive audio drops as the radio keys.
             {:else if tx.keying.passed === null && tx.keying.source === 'tune'}
               Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio was off during Tune. Start audio, then run Tune again.
             {:else if tx.keying.passed === null}

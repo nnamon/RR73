@@ -33,7 +33,7 @@ test('Log and Settings on a new install, and an old Activate link opens Optional
   await page.goto('./#/activate');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.getByText("Spots shows in Operate's top bar while Activations, POTA spots or Cluster spots is on.", { exact: false })).toBeVisible();
+  await expect(page.getByText('Operate shows a Spots button while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
   await page.getByRole('link', { name: 'Operate' }).click();
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link')).toHaveCount(2);
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toHaveCount(0);
@@ -166,7 +166,7 @@ test('after an update, a notice opens the version history at the new version', a
   await page.goto('./');
   const notice = page.getByRole('status').filter({ hasText: `Updated to ${VERSION}` });
   await expect(notice).toBeVisible();
-  await notice.getByRole('link', { name: /What.s new/ }).click();
+  await notice.getByRole('link', { name: 'Show changes' }).click();
   await expect(page).toHaveURL(new RegExp(`#/settings/versions/${VERSION.replace(/\./g, '\\.')}$`));
   await expect(page.locator(`[id="v${VERSION}"]`)).toBeFocused();
   await expect(notice).toBeHidden();

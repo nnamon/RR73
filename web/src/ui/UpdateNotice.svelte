@@ -8,7 +8,7 @@
 
 <div class="toast" role="status">
   <span class="msg">Updated to {version}</span>
-  <a class="act" href={href('settings', 'versions', version)} onclick={dismissNotice}>What’s new</a>
+  <a class="act" href={href('settings', 'versions', version)} onclick={dismissNotice}>Show changes</a>
   <button class="close" aria-label="Dismiss the update notice" onclick={dismissNotice}><Icon name="xmark" size={18} /></button>
 </div>
 

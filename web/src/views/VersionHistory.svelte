@@ -28,7 +28,7 @@
   {#if releases.length === 0}
     <div class="empty">
       <h2>No version history in this build</h2>
-      <p>Each version lists its changes here when the build includes CHANGELOG.md.</p>
+      <p>Each version and its changes appear here in builds that include the changelog.</p>
     </div>
   {/if}
 

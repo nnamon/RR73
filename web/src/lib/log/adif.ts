@@ -169,7 +169,7 @@ export function parseAdif(input: string): AdifFile {
     else if (byBytes !== null) end = byBytes;
     else if (byChars !== null) end = byChars;
     else {
-      warnings.push(`${name} is shorter than its length of ${len}; kept what was there.`);
+      warnings.push(`${name} is shorter than its length of ${len}. RR73 kept what was there.`);
       end = text.length;
     }
     fields[name] = text.slice(from, end);
@@ -177,7 +177,7 @@ export function parseAdif(input: string): AdifFile {
   }
 
   if (Object.keys(fields).length) {
-    warnings.push('The last record has no <EOR>; it was read anyway.');
+    warnings.push('The last record has no <EOR>. RR73 read it anyway.');
     records.push(fields);
   }
   return { headerText, header, records, warnings };

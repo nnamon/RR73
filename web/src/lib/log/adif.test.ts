@@ -167,7 +167,7 @@ describe('reading ADIF', () => {
   it('reads a BOM, and a last record without <EOR> with a warning', () => {
     const f = parseAdif('﻿<CALL:3>K1A <EOR> <CALL:3>K1B <BAND:3>20m');
     expect(f.records).toEqual([{ CALL: 'K1A' }, { CALL: 'K1B', BAND: '20m' }]);
-    expect(f.warnings).toEqual(['The last record has no <EOR>; it was read anyway.']);
+    expect(f.warnings).toEqual(['The last record has no <EOR>. RR73 read it anyway.']);
   });
 
   it('skips tags without a length and survives a truncated file', () => {
@@ -175,7 +175,7 @@ describe('reading ADIF', () => {
     expect(f.records[0]).toEqual({ CALL: 'K1A', MODE: 'FT8' });
     expect(f.records[1]).toEqual({ CALL: 'K1B', COMMENT: 'short' });
     expect(f.warnings).toContain('Skipped "<BAD>": it has no length.');
-    expect(f.warnings).toContain('COMMENT is shorter than its length of 20; kept what was there.');
+    expect(f.warnings).toContain('COMMENT is shorter than its length of 20. RR73 kept what was there.');
     expect(parseAdif('<CALL:3>K1A <EOR> <MODE').warnings).toEqual(['The file ends inside a field name.']);
   });
 
