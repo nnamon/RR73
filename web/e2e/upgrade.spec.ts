@@ -66,3 +66,44 @@ test('a change made while the upgrade waits is stored once it finishes', async (
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await expect(page.getByRole('textbox', { name: 'Callsign' })).toHaveValue('9V1NE');
 });
+
+test('a page whose build the server replaced says so, and reloads at the next change of screen', async ({ page }) => {
+  await page.goto('./');
+  await expect(page.getByRole('heading', { level: 1, name: 'Operate' })).toBeAttached();
+  // The server now has a newer build: its index.html names another main script, and this build's files are gone.
+  await page.route('**/index.html', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()).replace(/\/assets\/index-[\w-]+\.js/, '/assets/index-N3wBu1ld.js') });
+  });
+  await page.route('**/assets/gone-*.js', (route) => route.fulfill({ status: 404, body: 'File not found' }));
+  await page.evaluate(() => {
+    (window as unknown as { marker: boolean }).marker = true;
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.src = 'assets/gone-Q1w2e3.js';
+    document.head.append(s);
+  });
+  const notice = page.getByTestId('status-notice');
+  await expect(notice).toContainText('A new version of RR73 is ready.');
+  await Promise.all([page.waitForEvent('load'), page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click()]);
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
+  await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeVisible();
+});
+
+test('a failed load with the same build on the server changes nothing', async ({ page }) => {
+  await page.goto('./');
+  await page.route('**/assets/gone-*.js', (route) => route.fulfill({ status: 404, body: 'File not found' }));
+  const checked = page.waitForResponse('**/index.html');
+  await page.evaluate(() => {
+    (window as unknown as { marker: boolean }).marker = true;
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.src = 'assets/gone-Q1w2e3.js';
+    document.head.append(s);
+  });
+  await checked;
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Log' })).toBeFocused();
+  await expect(page.getByTestId('status-notice')).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(true);
+});

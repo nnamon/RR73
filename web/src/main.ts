@@ -1,7 +1,7 @@
 import './styles/base.css';
 import { mount } from 'svelte';
 import App from './App.svelte';
-import { checkUpdated, watchServiceWorker } from './lib/app/update.svelte';
+import { checkUpdated, noteLoadFailure, registerServiceWorker } from './lib/app/update.svelte';
 import { loadLog } from './lib/log/log.svelte';
 import { loadSettings } from './lib/state/settings.svelte';
 
@@ -9,7 +9,17 @@ import { loadSettings } from './lib/state/settings.svelte';
 const SETTINGS_WAIT_MS = 500;
 
 checkUpdated(__APP_VERSION__);
-watchServiceWorker();
+void registerServiceWorker();
+
+// A lazy chunk, script or stylesheet of this build failed: a newer build may have replaced it.
+window.addEventListener('vite:preloadError', () => void noteLoadFailure());
+window.addEventListener(
+  'error',
+  (e) => {
+    if (e.target instanceof HTMLScriptElement || e.target instanceof HTMLLinkElement) void noteLoadFailure();
+  },
+  true,
+);
 
 // Settings load before the first render, so the theme and callsign never flash their defaults,
 // but the first render never waits on storage longer than SETTINGS_WAIT_MS: while an older copy

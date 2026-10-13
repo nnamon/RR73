@@ -133,3 +133,33 @@ test('a hidden page stops audio, says when, and a tap resumes it', async ({ page
   await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/, { timeout: 10_000 });
 });
+
+test('a decoder gone from the server says a new version is ready, waits for audio to stop, then reloads at the next change of screen', async ({ page }) => {
+  // A newer build replaced this one on the server: its decoder worker is gone, and index.html names another main script.
+  await page.route('**/assets/decoder.worker-*.js', (route) => route.fulfill({ status: 404, body: 'File not found' }));
+  await page.route('**/index.html', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()).replace(/\/assets\/index-[\w-]+\.js/, '/assets/index-N3wBu1ld.js') });
+  });
+  await page.goto('./');
+  await page.evaluate(() => ((window as unknown as { marker: boolean }).marker = true));
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  const notice = page.getByTestId('status-notice');
+  await expect(notice).toContainText('A new version of RR73 is ready. It loads when audio stops.');
+
+  // Audio runs: a change of screen does not reload.
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await nav.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker)).toBe(true);
+
+  // Audio stops when the page is hidden; the next change of screen reloads.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(notice).toHaveText(/^A new version of RR73 is ready\.\s*Reload$/);
+  await Promise.all([page.waitForEvent('load'), nav.getByRole('link', { name: 'Log' }).click()]);
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
+});

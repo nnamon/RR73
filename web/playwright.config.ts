@@ -51,7 +51,7 @@ export default defineConfig({
     // loaded host the capture can start late enough to put the signals outside the decoder's DT
     // window. Retries bound that; a decoding regression still fails all three attempts.
     { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|upgrade)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|upgrade|service-worker)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
