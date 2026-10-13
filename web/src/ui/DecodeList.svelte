@@ -18,7 +18,8 @@
    * slots older than the newest slot with decodes fade: grey text, a lighter tint. Slot bars alternate
    * slate (even) and blue (odd).
    *
-   * A message to you has a solid red edge and heavier text, over its decode colour.
+   * A message to you has a solid red edge and heavier text, over its decode colour. During a QSO,
+   * rows unrelated to the station being worked dim (lib/decode/focus.ts); a selected row does not.
    *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
    * with a red progress line while on air, then Sent in its slot.
@@ -96,6 +97,7 @@
       item.old ? 'old' : '',
       item.out ? `out ${item.out.stage}` : '',
       item.toYou ? 'to-you' : '',
+      item.dim ? 'dim' : '',
       selected ? 'sel' : '',
     ]
       .filter(Boolean)
@@ -309,6 +311,7 @@
     white-space: nowrap;
     user-select: none;
     -webkit-touch-callout: none;
+    transition: opacity var(--rr-transition);
   }
 
   .dr::after {
@@ -425,7 +428,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .prog {
+    .prog,
+    .dr {
       transition: none;
     }
   }
@@ -462,6 +466,11 @@
 
   .dr.to-you .c-msg {
     font-weight: var(--rr-weight-heavy);
+  }
+
+  /* During a QSO, rows unrelated to the station being worked dim. A selected row stays clear. */
+  .dr.dim:not(.sel) {
+    opacity: var(--rr-focus-dim);
   }
 
   /* After the decode colours and the fading, so a selected row shows as selected. */

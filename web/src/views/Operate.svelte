@@ -17,6 +17,7 @@
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
   import { buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../lib/decode/list';
+  import { applyFocus, focusCall } from '../lib/decode/focus';
   import { highlightDecode } from '../lib/decode/highlight';
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
@@ -198,7 +199,10 @@
       onAir: air ? { slotStartMs: Math.floor(air.startMs / slot) * slot, startMs: air.startMs, endMs: air.endMs } : null,
     };
   });
-  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)]);
+  // While calling a station or in a QSO, rows unrelated to it dim. The focus is a callsign or
+  // null, so the sequencer's 1 s tick does not rebuild the list.
+  const focus = $derived(focusCall(qso.st));
+  const items = $derived(applyFocus([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)], focus));
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },

@@ -73,6 +73,8 @@ export interface RowItem {
   out?: OutInfo;
   /** Addressed to the operator's callsign: leads its slot, with a red edge and bold text. */
   toYou?: boolean;
+  /** Unrelated to the station being worked: drawn dimmed (focus.ts). */
+  dim?: boolean;
 }
 
 export type ListItem = HeaderItem | RowItem;

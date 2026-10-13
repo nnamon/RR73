@@ -220,10 +220,20 @@
   --rr-wf-c6: #FFF8E6;
 
   /*
-   * Decode list: messages to you have a solid red edge and heavy text.
+   * Decode list: messages to you and the focus during a QSO. A message to you has a solid red
+   * edge and heavy text. During a QSO, rows unrelated to the station being worked show at
+   * --rr-focus-dim (label text 2.6:1 on white); with Increase Contrast at 0.6, which keeps it
+   * at 5:1.
    */
   --rr-weight-heavy: 800;
   --rr-to-you-edge: var(--rr-tx);
+  --rr-focus-dim: 0.4;
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --rr-focus-dim: 0.6;
+  }
 }
 
 /*
