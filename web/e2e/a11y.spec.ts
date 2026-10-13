@@ -1,4 +1,6 @@
 // Accessibility: axe-core (WCAG 2.0 to 2.2, A and AA) on every screen and sheet in both themes.
+// Dark adds the colour contrast of the dark theme. audio.spec.ts scans the Save slot sheet, which
+// needs recorded slots, and decode.spec.ts the list with decodes.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { LOG_SHEETS, SCREENS, open } from './screens';
@@ -8,8 +10,11 @@ async function axe(page: Page) {
   return r.violations.map((v) => `${v.id} (${v.impact}): ${v.nodes.length}× ${v.nodes.slice(0, 3).map((n) => n.target.join(' ')).join(' | ')}`);
 }
 
+// settings-features is Settings scrolled to Optional features: the same page as settings.
+const PAGES = SCREENS.filter((s) => s.name !== 'settings-features');
+
 for (const theme of ['light', 'dark'] as const) {
-  for (const s of SCREENS) {
+  for (const s of PAGES) {
     test(`${s.name} in ${theme}`, async ({ page }) => {
       await open(page, s.path, theme, s.seed, s.features, s.practice);
       expect(await axe(page)).toEqual([]);
@@ -21,12 +26,6 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: /^Change band/ }).click();
     await expect(page.getByRole('dialog', { name: 'Change band' })).toBeVisible();
     expect(await axe(page)).toEqual([]);
-  });
-
-  test(`save slot sheet in ${theme}`, async ({ page }) => {
-    await open(page, '#/operate', theme);
-    // No slots yet, so the button is disabled; open the sheet through its own state is not possible.
-    await expect(page.getByRole('button', { name: 'Save slot' })).toBeDisabled();
   });
 
   for (const c of LOG_SHEETS) {

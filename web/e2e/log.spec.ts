@@ -370,19 +370,8 @@ test('exports a POTA file by download, marks it submitted, and shares through th
   expect(text).toContain('<MY_SIG:4>POTA <MY_SIG_INFO:7>VK-0921 <MY_POTA_REF:7>VK-0921');
   expect(text).toContain('<STATION_CALLSIGN:9>VK3/9V1NE');
 
-  await card.getByRole('button', { name: 'Mark the POTA VK-0921, 11 Oct 2026 file submitted' }).click();
-  await expect(card).toContainText('POTA VK-0921, 11 Oct 2026: submitted 13 Oct');
-  await expect(seg(page, 'To do')).toHaveText(/To do\s*2$/);
-
-  // The whole log as ADIF from the toolbar.
-  await seg(page, 'All').click();
-  const [all] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export ADIF' }).click()]);
-  expect(all.suggestedFilename()).toBe('RR73 9V1NE 20261013.adi');
-  expect(readFileSync((await all.path())!, 'utf8').split('<EOR>').length - 1).toBe(11);
-});
-
-test('hands files to the share sheet where the browser can share them', async ({ page }) => {
-  await page.addInitScript(() => {
+  // Where the browser can share files, the same button hands the file to the share sheet.
+  await page.evaluate(() => {
     const w = window as unknown as { shared: { name: string; type: string; text: string }[] };
     w.shared = [];
     Object.defineProperty(Navigator.prototype, 'canShare', { value: () => true, configurable: true });
@@ -393,9 +382,20 @@ test('hands files to the share sheet where the browser can share them', async ({
       },
     });
   });
-  await start(page, '#/log/activations', activations(mockupLog()));
-  await page.getByRole('button', { name: 'Share the POTA VK-0921, 11 Oct 2026 file' }).click();
+  await card.getByRole('button', { name: 'Share the POTA VK-0921, 11 Oct 2026 file' }).click();
   await expect.poll(() => page.evaluate(() => (window as unknown as { shared: { name: string; type: string }[] }).shared.map((f) => [f.name, f.type]))).toEqual([['VK3-9V1NE@VK-0921-20261011.adi', 'text/plain']]);
+  // Without Web Share again, for the downloads below.
+  await page.evaluate(() => Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true }));
+
+  await card.getByRole('button', { name: 'Mark the POTA VK-0921, 11 Oct 2026 file submitted' }).click();
+  await expect(card).toContainText('POTA VK-0921, 11 Oct 2026: submitted 13 Oct');
+  await expect(seg(page, 'To do')).toHaveText(/To do\s*2$/);
+
+  // The whole log as ADIF from the toolbar.
+  await seg(page, 'All').click();
+  const [all] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: 'Export ADIF' }).click()]);
+  expect(all.suggestedFilename()).toBe('RR73 9V1NE 20261013.adi');
+  expect(readFileSync((await all.path())!, 'utf8').split('<EOR>').length - 1).toBe(11);
 });
 
 test('fixes a station location refusal by choosing another station location', async ({ page }) => {
