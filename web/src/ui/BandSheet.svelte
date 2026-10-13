@@ -84,7 +84,7 @@
     align-items: center;
     justify-content: center;
     height: var(--rr-tap);
-    border-radius: var(--rr-radius-l);
+    border-radius: var(--rr-radius-button);
     background: var(--rr-sheet-card);
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-semibold);
@@ -136,7 +136,7 @@
   .m {
     font-size: var(--rr-text-sideband);
     font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-title);
+    line-height: var(--rr-leading-sideband);
   }
 
   .note {

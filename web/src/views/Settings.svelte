@@ -343,14 +343,6 @@
     margin-top: var(--rr-space-4);
   }
 
-  .switch {
-    flex: none;
-    width: 44px;
-    height: 26px;
-    margin: 0;
-    accent-color: var(--rr-accent-fill);
-  }
-
   .reload {
     color: var(--rr-label);
   }
@@ -360,7 +352,7 @@
   }
 
   .reload:disabled .acc {
-    color: var(--rr-label3);
+    opacity: 0.4;
   }
 
   .link :global(.row-chevron) {
