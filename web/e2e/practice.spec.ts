@@ -265,8 +265,8 @@ test('Hound works the practice Fox: call, report, R-report, RR73, logged', async
   await page.getByRole('menuitemcheckbox', { name: /^Hound/ }).click();
   await page.keyboard.press('Escape');
   await expect(page.locator('header.top .mode')).toHaveText('FT8 Hound');
-  // The Fox calls CQ in its first slot.
-  const cq = row(page, /^CQ [A-Z0-9]+ [A-R]{2}\d{2}$/).first();
+  // The Fox calls CQ in its first slot. The list still holds CQs from before the scenario.
+  const cq = row(page, /^CQ (VP8|3Y0|FT5|VK0|ZL9|KH1)[A-Z]{2} [A-R]{2}\d{2}$/).first();
   await expect(cq).toBeVisible({ timeout: 50_000 });
   const fox = (await cq.locator('.c-msg').textContent())!.split(' ')[1];
   await cq.dblclick();
