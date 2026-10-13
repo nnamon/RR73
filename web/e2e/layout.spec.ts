@@ -59,17 +59,20 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
-  test(`operate fits without scrolling and keeps the decode list on screen in ${theme}`, async ({ page }) => {
-    await open(page, '#/operate', theme);
-    const vh = await page.evaluate(() => window.innerHeight);
-    const wf = (await page.getByTestId('waterfall').boundingBox())!;
-    const list = (await page.locator('.operate .list').boundingBox())!;
-    const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
-    expect(wf.height).toBeGreaterThanOrEqual(120);
-    expect(list.height).toBeGreaterThanOrEqual(120);
-    expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
-    expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
-  });
+  for (const running of [false, true]) {
+    test(`operate fits without scrolling and keeps the decode list on screen${running ? ' with an activation running' : ''} in ${theme}`, async ({ page }) => {
+      await open(page, '#/operate', theme, running ? 'running' : undefined);
+      if (running) await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 7 of 10\./ })).toBeVisible();
+      const vh = await page.evaluate(() => window.innerHeight);
+      const wf = (await page.getByTestId('waterfall').boundingBox())!;
+      const list = (await page.locator('.operate .list').boundingBox())!;
+      const bar = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
+      expect(wf.height).toBeGreaterThanOrEqual(120);
+      expect(list.height).toBeGreaterThanOrEqual(120);
+      expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
+      expect(await page.evaluate(() => document.scrollingElement!.scrollHeight)).toBeLessThanOrEqual(vh);
+    });
+  }
 
   test(`band sheet in ${theme}`, async ({ page }, info) => {
     await open(page, '#/operate', theme);

@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * References, the callsign used on air, the grid (typed, or from GPS when permitted) and the
-   * Wavelog station location for an activation. Used to start one and to edit the running one.
+   * Wavelog station location for an activation, in the start and edit sheet (ActivationSheet).
    */
   import Icon from './Icon.svelte';
   import { checkRef, checkRefs, gridFromLatLon, refExample } from '../lib/log/activation';
@@ -124,9 +124,9 @@
     </ul></div>
   {/if}
 
-  <div class="section">
-    <h2 class="section-head" id="refs-head">References</h2>
-    <div class="group" role="group" aria-labelledby="refs-head">
+  <div class="block">
+    <h3 class="section-head" id="refs-head">References</h3>
+    <div class="group card" role="group" aria-labelledby="refs-head">
       {#each refs as r, i (`${r.programme} ${r.ref}`)}
         <div class="row">
           <span class="prog">{r.programme}</span>
@@ -153,15 +153,15 @@
           spellcheck="false"
           onkeydown={(e) => e.key === 'Enter' && addRef(e)}
         />
-        <button type="button" class="btn compact tint" onclick={() => addRef()}>Add</button>
+        <button type="button" class="btn compact soft" onclick={() => addRef()}>Add</button>
       </div>
     </div>
     {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else}<p class="section-foot">POTA parks, SOTA summits, WWFF references and IOTA groups. One activation can hold several parks.</p>{/if}
   </div>
 
-  <div class="section">
-    <h2 class="section-head">Station</h2>
-    <div class="group">
+  <div class="block">
+    <h3 class="section-head">Station</h3>
+    <div class="group card">
       <label class="row">
         <span class="row-title">Callsign on air</span>
         <input class="row-field mono up" bind:value={callsign} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="Required" />
@@ -169,7 +169,7 @@
       <div class="row">
         <label class="row-title" for="act-grid">Grid</label>
         <input id="act-grid" class="row-field mono" bind:value={grid} oninput={() => (gridSource = 'typed')} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8" placeholder="Optional" />
-        <button type="button" class="btn compact tint gps" disabled={gps === 'finding'} onclick={useGps}>
+        <button type="button" class="btn compact soft gps" disabled={gps === 'finding'} onclick={useGps}>
           <Icon name="locate" size={18} /><span>{gps === 'finding' ? 'Finding' : 'Use GPS'}</span>
         </button>
       </div>
@@ -186,7 +186,7 @@
     {#if mismatch}<p class="section-foot err">{mismatch}</p>{:else if stations.length}<p class="section-foot">QSOs of this activation go to this Wavelog station location.</p>{/if}
   </div>
 
-  <div class="section buttons">
+  <div class="block buttons">
     <button type="submit" class="btn primary" disabled={busy}>{submitLabel}</button>
     {#if oncancel}<button type="button" class="btn cancel" onclick={oncancel}>Cancel</button>{/if}
   </div>
@@ -294,6 +294,12 @@
     text-align-last: right;
   }
 
+  /* On the sheet's card the tinted fill is too light for its text in dark mode. */
+  .soft {
+    background: var(--rr-fill2);
+    color: var(--rr-accent);
+  }
+
   .gps {
     gap: var(--rr-space-1);
     padding: 0 var(--rr-space-2);
@@ -303,8 +309,16 @@
     color: var(--rr-tx-text);
   }
 
+  .block {
+    margin-top: var(--rr-space-4);
+  }
+
+  .card {
+    background: var(--rr-sheet-card);
+  }
+
   .errors {
-    margin: var(--rr-space-3) var(--rr-space-4) 0;
+    margin: var(--rr-space-3) 0 0;
     padding: var(--rr-space-2) var(--rr-space-4);
     border-radius: var(--rr-radius-xl);
     background: var(--rr-tx-soft);

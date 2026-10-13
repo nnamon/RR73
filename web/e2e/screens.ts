@@ -27,8 +27,8 @@ export const SCREENS: readonly Screen[] = [
   { name: 'log-all', path: '#/log', heading: 'Log', seed: 'log' },
   { name: 'log-todo', path: '#/log/todo', heading: 'Log', seed: 'log' },
   { name: 'log-activations', path: '#/log/activations', heading: 'Log', seed: 'log' },
-  { name: 'activate-last', path: '#/activate', heading: 'Activate', seed: 'log' },
-  { name: 'activate-running', path: '#/activate', heading: 'Activation', seed: 'running' },
+  { name: 'spots-running', path: '#/spots', heading: 'Spots', seed: 'running' },
+  { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running' },
   { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log' },
   { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
 ];
@@ -55,7 +55,9 @@ export interface SheetCase {
 export const LOG_SHEETS: readonly SheetCase[] = [
   { name: 'add-qso', path: '#/log', title: 'Add QSO', open: (page) => page.getByRole('button', { name: 'Add QSO' }).click() },
   { name: 'edit-qso', path: '#/log', seed: 'log', title: 'Edit QSO', open: (page) => page.getByRole('button', { name: /^VK2ESN/ }).first().click() },
-  { name: 'end-activation', path: '#/activate', seed: 'running', title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
+  { name: 'start-activation', path: '#/spots', title: 'Start activation', open: (page) => page.getByRole('button', { name: /^Start activation/ }).click() },
+  { name: 'edit-activation', path: '#/spots', seed: 'running', title: 'Edit activation', open: (page) => page.getByRole('button', { name: 'Edit activation' }).click() },
+  { name: 'end-activation', path: '#/spots', seed: 'running', title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
   { name: 'station', path: '#/log', seed: 'station', title: 'Choose a station location', open: (page) => page.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click() },
   { name: 'remove-wavelog', path: '#/settings/logging/wavelog', seed: 'log', title: 'Remove Wavelog?', open: (page) => page.getByRole('button', { name: 'Remove Wavelog…' }).click() },
 ];

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { tick } from 'svelte';
+  import ActivationChip from '../ui/ActivationChip.svelte';
   import AudioBanner from '../ui/AudioBanner.svelte';
   import BandSheet from '../ui/BandSheet.svelte';
   import DecodeList from '../ui/DecodeList.svelte';
@@ -144,6 +145,7 @@
       </div>
     </div>
   </header>
+  <ActivationChip />
 
   <AudioBanner
     status={audio.status}

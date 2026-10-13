@@ -178,7 +178,7 @@
   {:else if !activations.length}
     <div class="empty">
       <h2>No activations yet</h2>
-      <p>Activations you start on Activate appear here with their QSOs and files.</p>
+      <p>Activations you start in Spots appear here with their QSOs and files.</p>
     </div>
   {:else}
     {#each activations as a (a.id)}

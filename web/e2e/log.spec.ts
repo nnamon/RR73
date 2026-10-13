@@ -191,34 +191,41 @@ test('sends nothing by itself when sending automatically is off, until Send now'
   await expect(row(page, 'VK3ARR').getByText('Wavelog: delivered')).toBeAttached();
 });
 
-test('starts an activation, counts its QSOs and ends it', async ({ page }) => {
-  await start(page, '#/activate');
-  await expect(page.getByText('No activation running')).toBeVisible();
-  const refInput = page.getByRole('textbox', { name: 'Reference' });
+test('starts an activation from Spots, counts its QSOs and ends it', async ({ page }) => {
+  await start(page, '#/spots');
+  await page.getByRole('button', { name: /^Start activation/ }).click();
+  const form = page.getByRole('dialog', { name: 'Start activation' });
+  const refInput = form.getByRole('textbox', { name: 'Reference' });
   await refInput.fill('VK0921');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await expect(page.getByRole('alert')).toHaveText('VK0921 is not a POTA reference. They look like VK-0921.');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(form.getByRole('alert')).toHaveText('VK0921 is not a POTA reference. They look like VK-0921.');
   await refInput.fill('vk-0921');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.getByLabel('Programme').selectOption('SOTA');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await form.getByLabel('Programme').selectOption('SOTA');
   await refInput.fill('vk3/vc-012');
   await refInput.press('Enter');
-  await expect(page.getByRole('button', { name: 'Remove SOTA VK3/VC-012' })).toBeVisible();
-  await page.getByRole('textbox', { name: 'Callsign on air' }).fill('vk3/9v1ne');
-  await page.getByRole('textbox', { name: 'Grid' }).fill('qf22lb');
-  await page.getByRole('button', { name: 'Start activation' }).click();
+  await expect(form.getByRole('button', { name: 'Remove SOTA VK3/VC-012' })).toBeVisible();
+  await form.getByRole('textbox', { name: 'Callsign on air' }).fill('vk3/9v1ne');
+  await form.getByRole('textbox', { name: 'Grid' }).fill('qf22lb');
+  await form.getByRole('button', { name: 'Start activation' }).click();
+  await expect(form).toBeHidden();
 
-  await expect(page.getByRole('heading', { level: 1, name: 'Activation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Activation' })).toBeVisible();
+  await expect(page.getByText('POTA VK-0921 · SOTA VK3/VC-012', { exact: true })).toBeVisible();
   await expect(page.getByText('Operating as VK3/9V1NE · QF22lb')).toBeVisible();
   await expect(page.getByText('0 of 10 · 10 more')).toBeVisible();
   await expect(page.getByText('0 of 4 stations · 4 more')).toBeVisible();
   await expect(page.getByText(/^UTC day ends in 10 h 4[45] min$/)).toBeVisible();
 
+  // Operate shows one line for the activation.
+  await page.goto('./#/operate');
+  await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 0 of 10\./ })).toBeVisible();
+
   await addQso(page, 'VK2ESN');
   await addQso(page, 'ZL1TQK', { grid: 'RF72' });
   await addQso(page, 'ZL1TQK', { grid: 'RF72' });
   await expect(row(page, 'VK2ESN')).toBeVisible();
-  await page.goto('./#/activate');
+  await page.goto('./#/spots');
   await expect(page.getByText('2 of 10 · 8 more')).toBeVisible();
   await expect(page.getByText('2 of 4 stations · 2 more')).toBeVisible();
   await expect(page.getByRole('progressbar', { name: /POTA VK-0921/ })).toHaveAttribute('aria-valuenow', '2');
@@ -226,20 +233,32 @@ test('starts an activation, counts its QSOs and ends it', async ({ page }) => {
   await expect(page.getByRole('button', { name: /^ZL1TQK/ })).toHaveCount(2);
   await expect(page.getByText('POTA and SOTA files ready')).toBeVisible();
 
+  // Edit: a second park joins, and the QSOs take it.
+  await page.getByRole('button', { name: 'Edit activation' }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit activation' });
+  await edit.getByLabel('Programme').selectOption('POTA');
+  await edit.getByRole('textbox', { name: 'Reference' }).fill('VK-0922');
+  await edit.getByRole('button', { name: 'Add', exact: true }).click();
+  await edit.getByRole('button', { name: 'Save activation' }).click();
+  await expect(edit).toBeHidden();
+  await expect(page.getByText('POTA VK-0921 · SOTA VK3/VC-012 · POTA VK-0922', { exact: true })).toBeVisible();
+  await expect(page.getByRole('progressbar', { name: /POTA VK-0922/ })).toHaveAttribute('aria-valuenow', '2');
+
   await page.getByRole('button', { name: 'End activation…' }).click();
   const confirm = page.getByRole('dialog', { name: 'End activation?' });
   await expect(confirm).toContainText('The 3 QSOs stay on this phone.');
   await confirm.getByRole('button', { name: 'Keep operating' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Activation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Activation' })).toBeVisible();
   await page.getByRole('button', { name: 'End activation…' }).click();
   await page.getByRole('dialog', { name: 'End activation?' }).getByRole('button', { name: 'End activation' }).click();
-  await expect(page.getByRole('heading', { level: 1, name: 'Activate' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'Last activation' })).toBeVisible();
-  await expect(page.getByRole('heading', { name: 'POTA VK-0921 · SOTA VK3/VC-012' })).toBeVisible();
+  await expect(page.getByRole('button', { name: /^Start activation/ })).toBeVisible();
+  await page.goto('./#/operate');
+  await expect(page.getByRole('link', { name: /^Activation / })).toHaveCount(0);
 
-  // QSOs after the end belong to no activation.
+  // QSOs after the end belong to no activation; the ended one is in the log with its files.
   await addQso(page, 'W1AW', { grid: 'FN31' });
   await seg(page, 'Activations').click();
+  await expect(page.getByRole('heading', { name: 'POTA VK-0921 · SOTA VK3/VC-012 · POTA VK-0922' })).toBeVisible();
   await expect(page.locator('li.lr')).toHaveCount(3);
 });
 
@@ -298,12 +317,15 @@ test('fixes a station location refusal by choosing another station location', as
     body.station_profile_id === '7'
       ? { status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0 } }
       : { status: 400, body: { status: 'abort', adif_count: 1, adif_errors: 1, messages: ['', 'Differing station callsign <b>VK3/9V1NE</b> while importing QSO with VK2ESN for <b>9V1NE</b>: SKIPPED<br>'] } };
-  await start(page, '#/activate', wavelogOnly());
-  await page.getByRole('textbox', { name: 'Reference' }).fill('VK-0921');
-  await page.getByRole('button', { name: 'Add', exact: true }).click();
-  await page.getByRole('textbox', { name: 'Callsign on air' }).fill('VK3/9V1NE');
-  await expect(page.getByText('Wavelog refuses QSOs made as VK3/9V1NE under Home, which is for 9V1NE. Choose a station location for VK3/9V1NE.')).toBeVisible();
-  await page.getByRole('button', { name: 'Start activation' }).click();
+  await start(page, '#/spots', wavelogOnly());
+  await page.getByRole('button', { name: /^Start activation/ }).click();
+  const form = page.getByRole('dialog', { name: 'Start activation' });
+  await form.getByRole('textbox', { name: 'Reference' }).fill('VK-0921');
+  await form.getByRole('button', { name: 'Add', exact: true }).click();
+  await form.getByRole('textbox', { name: 'Callsign on air' }).fill('VK3/9V1NE');
+  await expect(form.getByText('Wavelog refuses QSOs made as VK3/9V1NE under Home, which is for 9V1NE. Choose a station location for VK3/9V1NE.')).toBeVisible();
+  await form.getByRole('button', { name: 'Start activation' }).click();
+  await expect(form).toBeHidden();
   await addQso(page, 'VK2ESN');
   await page.clock.fastForward(11_000);
   const r = row(page, 'VK2ESN');

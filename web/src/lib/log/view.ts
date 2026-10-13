@@ -1,4 +1,4 @@
-// What the Log and Activate screens show, as pure functions of the log: rows, day groups, status
+// What the Log and Spots screens show, as pure functions of the log: rows, day groups, status
 // tags, the To do list and activation summaries.
 
 import { MINUS, utcHm } from '../clock/format';

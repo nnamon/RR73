@@ -7,9 +7,9 @@
   import Log from './views/Log.svelte';
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
-  import Placeholder from './views/Placeholder.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
   import Settings from './views/Settings.svelte';
+  import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
   import WavelogSettings from './views/WavelogSettings.svelte';
   import { route, tabOf } from './lib/app/router.svelte';
@@ -61,13 +61,7 @@
     {#if tab === 'log'}
       <div class="pane scroll"><Log /></div>
     {:else if tab === 'spots'}
-      <div class="pane scroll">
-        <Placeholder
-          title="Spots"
-          heading="No spots or activation yet"
-          text="POTA, SOTA and WWFF spots on your bands will appear here, refreshed every minute while online. The activation you are running sits at the top, with its progress and what is left to submit. Both arrive in a later version."
-        />
-      </div>
+      <div class="pane scroll"><Spots /></div>
     {:else if tab === 'settings'}
       <div class="pane scroll">
         {#if sub === 'radio'}
