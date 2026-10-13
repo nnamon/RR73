@@ -5,8 +5,8 @@
 # the baseline has a fit, and optionally the median time per slot. Time checks are off
 # (0): CI runners and the machine that recorded the baseline differ.
 #
-# CI gates two presets with these limits, each against its own recorded file:
-# baseline against bench/baseline.json and subtract-3 against bench/subtract-3.json.
+# CI gates two presets with these limits, each against its own recorded file: baseline
+# against bench/baseline.json and subtract-3-osd2 against bench/subtract-3-osd2.json.
 
 # CI runs these sets (.github/workflows/ci.yml); each must be present in the results.
 required_sets = ["public/ft8_lib", "synthetic/smoke/ft8", "synthetic/smoke/ft4", "synthetic/noise-ci"]

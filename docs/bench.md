@@ -131,10 +131,12 @@ The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesi
 
 | Preset | Recorded file | Why CI gates it |
 | --- | --- | --- |
-| `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, LDPC, validator) and the bench itself, apart from the subtraction code. |
-| `subtract-3` | `bench/subtract-3.json` | The preset the app ships from 0.3.0. Its numbers are what operators get. |
+| `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, belief propagation, validator) and the bench itself. |
+| `subtract-3-osd2` | `bench/subtract-3-osd2.json` | The preset the app ships from 0.4.0. Its numbers are what operators get. |
 
-The `subtract-3` steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 1.8 s (`subtract-3`) on 4 threads of the dev machine (Apple M4); on a 4-core x86_64 runner, estimated from typical per-core speed, 2 s and 5 s. The release build dominates the job.
+`subtract-3`, shipped in 0.3.0, is no longer gated: `subtract-3-osd2` runs all of its code (subtraction, refinement, passes) and only adds OSD, so a regression in `subtract-3` shows in the shipped preset's gate, and a third run would add CI time without a check of its own.
+
+The shipped preset's steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 3.2 s (`subtract-3-osd2`) on 4 threads of the dev machine (Apple M4); the x86_64 runner took 1.3 s and 3.0 s for `baseline` and `subtract-3` in the last CI run, and `subtract-3-osd2` is expected near 5 s there. The release build dominates the job.
 
 Each recorded file is a slim results file (summaries and per-slot counts) of its preset on the CI sets. To record a new one after an intended change, run the CI sets only (the shared corpus may hold other synthetic sets), slim the results and commit the file with the numbers:
 
@@ -142,8 +144,8 @@ Each recorded file is a slim results file (summaries and per-slot counts) of its
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh
 docker compose run --rm rust rr73-bench synth --set smoke --set noise-ci
 docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
-  --preset subtract-3 --out results/ci-subtract-3.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
-docker compose run --rm rust rr73-bench slim results/ci-subtract-3.json --out bench/subtract-3.json
+  --preset subtract-3-osd2 --out results/ci-subtract-3-osd2.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
+docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --out bench/subtract-3-osd2.json
 ```
 
 ## Decoder presets
@@ -151,6 +153,8 @@ docker compose run --rm rust rr73-bench slim results/ci-subtract-3.json --out be
 `baseline` is the ft8_lib method (`crates/rr73-decode`, `DecoderConfig::baseline`): a spectrogram with 2 frames per symbol and 2 bins per tone spacing (Hann window over 2 symbols, 200 to 3000 Hz), the Costas sync score over 60 time steps (DT -2.3 to 2.5 s for FT8), the 140 best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to variance 24, 25 iterations of sum-product belief propagation, CRC-14 check and unpack, one pass. `rr73-bench presets baseline` prints it.
 
 `subtract-3` is `baseline` with up to 3 passes. After each pass that finds new messages, each new decode is rebuilt with a complex GFSK model matched to `rr73_ft8::synth::gfsk`, its start and frequency are refined from its known tones, its complex amplitude is estimated with a 0.16 s moving average, and the rebuilt signal is subtracted; the next pass decodes the residual. A pass that finds nothing new ends decoding. `docs/experiments/0001-subtraction.md` has the measurements. Overrides: `subtract.smooth_s`, `subtract.refine`, `passes`.
+
+`subtract-3-osd1` and `subtract-3-osd2` are `subtract-3` with ordered-statistics decoding (OSD) when belief propagation fails: order 1 over all 91 information positions, or order 2 over the 40 least reliable ones, with reliabilities from the channel LLRs. An OSD codeword is accepted only with at most 30 hard errors, a reliability-weighted distance of at most 0.07 of the total, an estimated SNR of at least -24 dB, and a standard message whose callsigns are sent in full and could have been issued (not starting with Q or 0, and starting with 1 only as 1A or 1S). `docs/experiments/0002-osd.md` has the measurements. Overrides: `ldpc.kind=bp-osd`, `ldpc.osd_order`, `ldpc.osd_window`, `ldpc.osd_source` (`channel` or `bp`), `ldpc.osd_max_hard_errors`, `ldpc.osd_max_distance`, `validate.osd_messages` (`any`, `standard`, `standard-known`), `validate.osd_min_snr_db`.
 
 The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth.
 
