@@ -62,6 +62,9 @@ export class TimingLog {
   private readingsBuf: ClockReading[] = [];
   private lagsBuf: number[] = [];
   private resumesBuf: ResumeRecord[] = [];
+  /** Gaps in the audio the capture worklet bridged, and their total length, s. */
+  gaps = 0;
+  gapS = 0;
 
   /** Notes one clock reading. */
   reading(r: ClockReading) {
@@ -123,6 +126,9 @@ export interface TimingSnapshot {
   offsetMs: number | null;
   driftPpm: number | null;
   captureLagMs: number | null;
+  /** Gaps the capture worklet bridged since audio started, and their total length, ms. */
+  gaps: number;
+  gapMs: number;
   /** Receive calibration applied to captured audio, s. */
   inputOffsetS: number;
   /** Median DT of the strong decodes the calibration holds, s, as measured. */
@@ -146,6 +152,7 @@ export function timingReport(s: TimingSnapshot): string {
     `Mapping offset: ${ms(s.offsetMs)}`,
     `Clock drift: ${s.driftPpm === null ? 'not measured yet' : `${s.driftPpm.toFixed(0)} ppm`}`,
     `Capture lag: ${ms(s.captureLagMs)}`,
+    `Audio gaps bridged: ${s.gaps}, ${ms(s.gapMs)}`,
     `Input offset: ${signed(s.inputOffsetS, 3)} s`,
     `Median DT: ${s.medianDtS === null ? 'none' : `${signed(s.medianDtS, 3)} s`} from ${s.strongDecodes} decodes at -10 dB or stronger`,
     'Your Tx, heard back:',

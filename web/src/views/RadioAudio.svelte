@@ -88,6 +88,13 @@
     const ppm = Math.round(timing.driftPpm);
     return ppm === 0 ? '0 ppm' : `${Math.abs(ppm)} ppm, audio clock ${ppm > 0 ? 'slow' : 'fast'}`;
   });
+  const gapText = $derived(
+    !timing.source && timing.gaps === 0
+      ? 'Unknown until audio starts'
+      : timing.gaps === 0
+        ? 'None since audio started'
+        : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total. Receive timing stays on the audio clock across them.`,
+  );
   const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
   const heardText = $derived.by(() => {
     const h = timing.heardBack;
@@ -260,6 +267,9 @@
       </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Capture lag</span><span class="row-sub" data-testid="timing-lag">{lagText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Audio gaps</span><span class="row-sub" data-testid="timing-gaps">{gapText}</span></span>
       </div>
       <div class="row">
         <span class="row-main">

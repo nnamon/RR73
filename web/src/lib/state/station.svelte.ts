@@ -245,6 +245,8 @@ export function timingSnapshot(): TimingSnapshot {
     offsetMs: running ? (e?.mappingOffsetMs() ?? null) : null,
     driftPpm: running ? (e?.mapper.driftPpm ?? null) : null,
     captureLagMs: running ? (e?.timing.captureLagMs ?? null) : null,
+    gaps: e?.timing.gaps ?? 0,
+    gapMs: (e?.timing.gapS ?? 0) * 1000,
     inputOffsetS: calibration.offsetS,
     medianDtS: calibration.medianDtS,
     strongDecodes: calibration.count,

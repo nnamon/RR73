@@ -317,6 +317,8 @@ export class CaptureEngine {
     const ctx = this.ctx;
     this.observeClock(ctx);
     this.timing.lag(ctx.currentTime - (m.contextTime + m.samples.length / 12000));
+    this.timing.gaps = m.gaps ?? 0;
+    this.timing.gapS = (m.gapFrames ?? 0) / ctx.sampleRate;
     // A mapping that started over (start, resume, a change of clock source) holds chunks until it settles.
     if (this.mapper.count < SETTLE) {
       this.held.push(m);

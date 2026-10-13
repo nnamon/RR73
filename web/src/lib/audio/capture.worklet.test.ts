@@ -76,6 +76,7 @@ describe('capture worklet stamps', () => {
     expect(Math.abs(errorMs(r, click))).toBeLessThan(0.1);
     // The gap is filled with silence: the stream stays continuous.
     r.chunks.forEach((c, i) => expect(c.index).toBe(i * CHUNK_SAMPLES));
+    expect(r.chunks.at(-1)).toMatchObject({ gaps: 1, gapFrames: 1280 });
   });
 
   it('does not let skipped quanta add up', () => {

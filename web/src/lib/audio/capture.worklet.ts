@@ -40,6 +40,9 @@ class CaptureProcessor extends AudioWorkletProcessor {
   private chunkIndex = 0;
   private channels = 0;
   private used = -1;
+  /** Gaps bridged since the start, and the frames in them. */
+  private gaps = 0;
+  private gapFrames = 0;
 
   process(inputs: Float32Array[][]): boolean {
     const input = inputs[0];
@@ -65,6 +68,8 @@ class CaptureProcessor extends AudioWorkletProcessor {
   /** Bridges frames this processor never saw, from nextFrame to `frame`. */
   private bridge(frame: number) {
     const gap = frame - this.nextFrame;
+    this.gaps++;
+    this.gapFrames += Math.max(0, gap);
     if (gap > 0 && gap <= MAX_FILL_S * sampleRate) {
       for (let left = gap; left > 0; left -= this.silence.length) {
         this.append(this.resampler.process(left >= this.silence.length ? this.silence : this.silence.subarray(0, left)));
@@ -96,7 +101,7 @@ class CaptureProcessor extends AudioWorkletProcessor {
     const index = this.chunkIndex;
     const contextTime = (this.frameOrigin! + this.resampler.inputPosition(index - this.indexOrigin)) / sampleRate;
     const { peakDb, rmsDb } = this.meter.read();
-    this.post({ type: 'chunk', samples, index, contextTime, peakDb, rmsDb }, [samples.buffer]);
+    this.post({ type: 'chunk', samples, index, contextTime, peakDb, rmsDb, gaps: this.gaps, gapFrames: this.gapFrames }, [samples.buffer]);
     this.chunkIndex += this.chunkLen;
     this.chunk = new Float32Array(CHUNK_SAMPLES);
     this.chunkLen = 0;

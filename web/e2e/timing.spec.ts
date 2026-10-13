@@ -17,6 +17,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   const lagMs = Number((await page.getByTestId('timing-lag').textContent())!.replace(' ms', ''));
   expect(lagMs).toBeLessThan(50);
   await expect(page.getByTestId('timing-drift')).toHaveText('Measured after 1 minute of audio');
+  await expect(page.getByTestId('timing-gaps')).toHaveText(/^(None since audio started|\d+ gaps?, \d+ ms in total\. Receive timing stays on the audio clock across them\.)$/);
 
   // 10 decodes at −5 dB read DT −0.80 s; 2 at −15 dB read +1.5 s and do not count.
   await page.evaluate(() => {
@@ -53,6 +54,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   const report = await page.evaluate(() => navigator.clipboard.readText());
   expect(report).toMatch(/^RR73 \d+\.\d+\.\d+ timing report, \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
   expect(report).toContain('Clock source: output timestamps');
+  expect(report).toMatch(/\nAudio gaps bridged: \d+, \d+\.\d ms\n/);
   expect(report).toContain('Input offset: 0.080 s');
   expect(report).toContain('Median DT: −0.800 s from 10 decodes at -10 dB or stronger');
   expect(report).toContain('13:35:30 CQ N0CALL EM12: DT −0.70 s, SNR 24 dB');

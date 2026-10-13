@@ -19,6 +19,10 @@ export interface CaptureChunkMessage {
   peakDb: number;
   /** RMS of the raw input channel in use since the previous chunk, dBFS. */
   rmsDb: number;
+  /** Gaps in the render quanta the worklet saw since it started. */
+  gaps?: number;
+  /** Frames in those gaps, at the context rate. */
+  gapFrames?: number;
 }
 
 /** What arrives at the worklet. Posted at start and whenever it changes. */
