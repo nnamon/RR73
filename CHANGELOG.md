@@ -2,6 +2,21 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Colours follow iOS: Apple's system colours, grouped backgrounds, system greys and hairline separators, in light and dark.
+- The dark theme has a true black background, with groups and sheets in dark grey.
+- Secondary text, placeholders, links and errors keep 4.5:1 contrast: where Apple's colour falls short, they use its Increased Contrast value.
+- Grouped lists follow iOS 18, with 10 pt corners, 44 pt rows and separators inset to the text.
+- Switches are green when on and 51 by 31 pt, as in iOS.
+- Halt is a red tint with red text in every state.
+- Buttons alone or in a row are capsules, the buttons at the bottom of Operate included.
+- Operate's top and bottom bars use the iOS bar material. The mode tag is grey, and the clock uses SF Pro.
+- The selected filter in Operate is blue with white text, and the filters use 15 pt type.
+- The bar at the top of Log, Spots, Settings and their screens stays in place as the screen scrolls, and takes the bar material once content passes under it.
+- Sheets have 10 pt corners.
+- Reload app, Clear cached copy and Send to Wavelog show their blue at reduced opacity while they cannot act.
+
 ## 0.10.1 · 2026-10-13
 
 - Decode rows are 32 pt and lead with the message in 16 pt proportional type, with the calling station of a CQ in bold. SNR and audio frequency follow on the right in grey: "−12 dB · 766 Hz".
