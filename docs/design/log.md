@@ -101,6 +101,7 @@ As built:
 - An activation holds several parks, and one summit, one WWFF reference and one island at most.
 - POTA counts a repeat of the same call, band and mode in the UTC day once, over every activation at the park that day. SOTA counts different callsigns in the UTC day. WWFF counts every activation at the reference, a repeat of the same call, band, mode and UTC day once.
 - Editing an activation restamps its QSOs (references, call on air, grid); QSOs a destination already holds then show as changed.
+- Activations is an optional feature, off by default (Settings › Optional features, `features.activations` in `lib/state/features.svelte.ts`). While it is off, Operate's activation line, the Log's Activations view, activation files in To do and the POTA, SOTA, WWFF and ADIF file destinations are hidden, and new QSOs stay out of a running activation. Activations, their QSOs and the ledger are kept, and show again when it is turned on.
 
 ## Backup
 
@@ -111,6 +112,8 @@ As built: the ADIF export, with `APP_RR73_ID` on each record so a later import c
 ## Storage
 
 The rr73 IndexedDB database is at version 2: `qsos` (indexed by start time, call, band and activation), `ledger` (keyed by QSO and destination), `destinations` and `activations`, beside version 1's `kv` store, which the upgrade keeps. A QSO and its ledger entries are written in one transaction. The log is held in memory as well; if the phone refuses storage, the Log says so and asks for an ADIF export before closing.
+
+An upgrade waits until every other connection closes. Copies from 0.5.0 on close theirs when a newer version asks (`versionchange`), and the current app then reloads into the new version at the next safe moment; 0.4.x never closed. While an older copy holds the database, the app reads its settings without the upgrade (`peekKv`), opens, says "Close other copies of RR73 to finish updating" and finishes the upgrade by itself when that copy closes. The Log and changes to settings wait for it; nothing is deleted or rewritten meanwhile.
 
 ## Open risks
 
