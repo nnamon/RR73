@@ -4,10 +4,20 @@
 // offset to the UTC slots that a loaded host moves by seconds and that drifts from slot to slot.
 // Whatever the offset, a slot with all its audio holds one copy of each message at a DT the
 // decoder accepts.
+//
+// A loaded host also starves the fake microphone: audio goes missing inside a slot, and the
+// missing stretch comes back as zeros, which cuts every transmission in that slot. The test
+// reads the app's record of each slot it judges (slot-record.ts). When every judged slot lost
+// audio, its decodes say nothing about the app: under GitHub Actions the test fails, elsewhere it
+// is skipped with the audio lost and the load average. A slot with all its audio that misses a
+// message fails everywhere. docs/testing.md has the measurements; on a loaded host, run this file
+// alone.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { loadavg } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import { LOST_LIMIT_S, complete, slotRecords } from './slot-record';
 
 interface Truth {
   text: string;
@@ -102,6 +112,12 @@ function findCopies(slots: ListedSlot[]) {
   });
 }
 
+/**
+ * Lost audio fails the test under GitHub Actions and skips it elsewhere. docker-compose.yml sets
+ * CI=1 for local runs too, so CI does not tell them apart.
+ */
+const STRICT_AUDIO = process.env.GITHUB_ACTIONS === 'true';
+
 test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page }) => {
   test.setTimeout(150_000);
   const loadLog: string[] = [];
@@ -123,8 +139,18 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   }
   const found = findCopies(slots);
   const missing = found.filter((f) => !f.row).map((f) => f.text);
-  test.info().annotations.push({ type: 'decodes', description: JSON.stringify({ tapAtMs: TAP_AT_MS, found, slots }) });
-  expect(missing, `messages without a copy within ${FREQ_LIMIT_HZ} Hz and ${SNR_LIMIT_DB} dB in the first two decoded slots`).toEqual([]);
+  const records = await slotRecords(page, judged(slots).map((s) => s.head.slice(0, 8)));
+  test.info().annotations.push({ type: 'decodes', description: JSON.stringify({ tapAtMs: TAP_AT_MS, found, records, slots }) });
+  let message = `messages without a copy within ${FREQ_LIMIT_HZ} Hz and ${SNR_LIMIT_DB} dB in the first two decoded slots`;
+  if (missing.length && records.length === 2 && !records.some(complete)) {
+    const lost = records
+      .map((r) => `${r.lostS.toFixed(2)} s lost in ${r.slot} UTC${r.beforeStartS >= LOST_LIMIT_S ? ` (audio from ${r.beforeStartS.toFixed(2)} s)` : ''}`)
+      .join(', ');
+    message = `Host overloaded: ${lost}, load ${loadavg().map((l) => l.toFixed(1)).join(' ')}. decode.spec needs real-time audio.`;
+    test.info().annotations.push({ type: 'lost audio', description: message });
+    test.skip(!STRICT_AUDIO, message);
+  }
+  expect(missing, message).toEqual([]);
 
   // WSJT-X marking: CQ calls green, the message with my callsign red, the rest plain; the other
   // station's callsign in bold.
