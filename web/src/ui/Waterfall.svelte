@@ -16,12 +16,12 @@
   import { WaterfallClient } from '../lib/waterfall/client';
   import { paletteFrom } from '../lib/waterfall/colormap';
   import type { FrameInfo } from '../lib/waterfall/renderer';
-  import { FREQ_LIMITS, SIGNAL_HZ, xOfHz } from '../lib/waterfall/pick';
+  import { FREQ_LIMITS, xOfHz } from '../lib/waterfall/pick';
   import { STEP_HZ, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
   import { bracket, rulerLabels, ticks } from '../lib/waterfall/axis';
   import type { Contrast } from '../lib/waterfall/levels';
   import { utcTime } from '../lib/clock/format';
-  import { SLOT_MS, type Mode } from '../lib/clock/slots';
+  import type { Mode } from '../lib/clock/slots';
   import { onAudioChunk } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
 
@@ -58,7 +58,6 @@
   let started = $state(false);
   let announce = $state('');
 
-  const slotMs = $derived(SLOT_MS[mode]);
   const marks = $derived((frame?.boundaries ?? []).map((b) => ({ utcMs: b.utcMs, y: b.y / dpr })));
   const sent = $derived(new Set(txSlots));
   // Each label sits 14 px above its line; a label that would cross the top edge is dropped.
