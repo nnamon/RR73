@@ -81,8 +81,8 @@
         <li class="step {s.state}"><i><b></b></i><span>{s.label}</span></li>
       {/each}
     </ol>
-  {:else if st.phase === 'cq'}
-    <div class="q1"><span class="call">{st.run ? 'Run' : 'Calling CQ'}</span><span class="sub">{st.run ? `${rate.total} QSOs · ${rate.hour} in the last hour` : `${ord(st.config.cqParity)} slots`}</span></div>
+  {:else if st.phase === 'cq' && !st.run}
+    <div class="q1"><span class="call">Calling CQ</span><span class="sub">{ord(st.config.cqParity)} slots</span></div>
   {:else}
     <p class="hint">Tap a decode to choose a station; double-tap calls at once. Touch and hold for details.</p>
   {/if}
@@ -145,7 +145,8 @@
 
 <style>
   .dock {
-    position: relative;
+    position: sticky;
+    bottom: 0;
     z-index: 2;
     flex: none;
     padding: var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-right)) var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-left));

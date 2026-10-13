@@ -288,10 +288,14 @@
 <QsoEditSheet bind:open={editOpen} record={editing} />
 
 <style>
+  /* On short screens with a banner and a tall dock, Operate scrolls; the dock stays at the
+     bottom, so Halt never leaves the screen. */
   .operate {
     display: flex;
     flex-direction: column;
     height: 100%;
+    overflow-y: auto;
+    overscroll-behavior: contain;
     padding-top: var(--rr-safe-top);
     background: var(--rr-plain);
   }
@@ -428,7 +432,7 @@
     display: flex;
     flex: 1;
     flex-direction: column;
-    min-height: 0;
+    min-height: calc(3 * var(--rr-row-decode) + var(--rr-tap));
   }
 
   .list {

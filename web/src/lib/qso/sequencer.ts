@@ -784,6 +784,13 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       break;
     case 'halt':
       m.stopAll(e.nowMs);
+      // Calling CQ with nobody in a QSO has no state worth keeping: back to idle.
+      if (st.phase === 'cq' && !st.partner) {
+        st.phase = 'idle';
+        st.current = null;
+        st.next = null;
+        st.queue = [];
+      }
       break;
     case 'txStarted':
       m.txStarted(e);

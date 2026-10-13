@@ -68,7 +68,7 @@
     {#if stoppedAtUtcMs !== null}
       <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
     {:else if !started}
-      <span class="gap">The waterfall starts with the audio.</span>
+      <span class="gap">The waterfall starts with the audio. RR73 listens to the radio through the headset microphone contact.</span>
     {/if}
   </div>
   <FreqAxis {rxHz} {txHz} />
@@ -112,8 +112,8 @@
   .gap {
     position: absolute;
     top: var(--rr-space-4);
-    right: 0;
-    left: 0;
+    right: var(--rr-space-4);
+    left: var(--rr-space-4);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-medium);
     line-height: var(--rr-leading-caption);

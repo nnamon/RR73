@@ -497,6 +497,20 @@ describe('safety', () => {
     expect(texts(s).at(-1)).toBe('6:K1ABC 9V1NE -10');
   });
 
+  it('Halt ends a CQ with nobody in a QSO; the watchdog and audio stops keep it for Enable Tx', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.send({ type: 'halt', nowMs: s.at(0, 1) });
+    expect(s.st).toMatchObject({ phase: 'idle', current: null, next: null });
+    const w = new Sim({ watchdogMs: 60_000 });
+    w.send({ type: 'callCq', nowMs: w.at(0, 0.1) });
+    w.send({ type: 'tick', nowMs: w.at(4, 0.2) });
+    expect(w.st).toMatchObject({ phase: 'cq', current: 6, txEnabled: false });
+    w.send({ type: 'enableTx', on: true, nowMs: w.at(5, 1) });
+    w.run(6, 6);
+    expect(texts(w)).toEqual(['6:CQ 9V1NE OJ11']);
+  });
+
   it('Enable Tx off lets the current transmission finish and cancels the next', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
