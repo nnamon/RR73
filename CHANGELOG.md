@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.6.2 · 2026-10-13
 
 - Updating no longer leaves RR73 blank or without its decoder. While an older copy of RR73 holds the log, the app opens, says "Close other copies of RR73 to finish updating" and finishes the update once that copy closes. A new version takes over at the next change of screen with audio off.
 - Optional features in Settings, each off until turned on: Activations, POTA spots, Cluster spots and LoTW users. With Activations and both spot sources off, the Spots tab is hidden and the app has three tabs. Activations and QSOs already logged stay on the phone.
