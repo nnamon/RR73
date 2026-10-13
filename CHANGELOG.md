@@ -5,7 +5,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.
-- In loopback tests in desktop Chromium, transmissions started within START ms of slot + 0.5 s, and Halt silenced the output HALT ms after the tap.
+- In loopback tests in desktop Chromium, CQ started 20 to 40 ms after slot + 0.5 s and Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
 - The sequencer sends Tx1 to Tx6 as WSJT-X does and logs the QSO when it completes. The dock shows the steps, the next message and when it starts.
 - A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and the dock says which.
 - Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Dupes are marked and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
