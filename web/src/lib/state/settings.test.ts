@@ -1,6 +1,13 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULTS, loadSettings, normaliseCallsign, settings, updateSettings, validate } from './settings.svelte';
-import { getKv } from './db';
+import { deleteDB, openDB } from 'idb';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { DEFAULTS, loadSettings, normaliseCallsign, resetSettings, settings, updateSettings, validate } from './settings.svelte';
+import { closeDb, DB_NAME, getKv, setKv } from './db';
+
+beforeEach(async () => {
+  await closeDb();
+  await deleteDB(DB_NAME);
+  resetSettings();
+});
 
 describe('settings', () => {
   it('starts with an empty callsign on 20m FT8', () => {
@@ -30,8 +37,31 @@ describe('settings', () => {
     await updateSettings({ callsign: '9V1NE' });
     expect(settings.callsign).toBe('9V1NE');
     expect(await getKv<{ callsign: string }>('settings')).toMatchObject({ callsign: '9V1NE' });
-    settings.callsign = '';
+    resetSettings();
     await loadSettings();
     expect(settings.callsign).toBe('9V1NE');
+  });
+
+  it('keeps a change made before the stored settings arrived, and the stored values it did not change', async () => {
+    await setKv('settings', { callsign: '9V1NE', theme: 'dark' });
+    void updateSettings({ band: '40m' });
+    await loadSettings();
+    expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m' });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m' });
+  });
+});
+
+describe('loading beside an older copy of RR73', () => {
+  it('loads the settings while a 0.4.x copy holds the database, and writes changes after it closes', async () => {
+    const old = await openDB(DB_NAME, 1, { upgrade: (d) => d.createObjectStore('kv', { keyPath: 'key' }) });
+    await old.put('kv', { key: 'settings', value: { callsign: '9V1NE', theme: 'dark' } });
+    await loadSettings();
+    expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark' });
+    // A change waits for the upgrade, then keeps what the older copy stored.
+    const saved = updateSettings({ band: '40m' });
+    expect(settings.band).toBe('40m');
+    old.close();
+    await saved;
+    expect(await getKv('settings')).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m' });
   });
 });

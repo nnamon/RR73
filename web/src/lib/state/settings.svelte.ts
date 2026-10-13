@@ -1,6 +1,6 @@
 // Settings, kept in IndexedDB. Loaded once at start; every change is written at once.
 
-import { getKv, setKv } from './db';
+import { getKv, mergeKv, peekKv } from './db';
 import { isBand, type BandId } from '../radio/bands';
 import type { Mode } from '../clock/slots';
 
@@ -76,19 +76,46 @@ export function validate(raw: unknown): Settings {
   return s;
 }
 
+/** Changes made before the stored settings arrived; they win over the stored values. */
+let early: Partial<Settings>[] | null = [];
+
+function apply(stored: unknown) {
+  if (!early) return;
+  Object.assign(settings, validate(stored));
+  const mine = early;
+  early = null;
+  for (const p of mine) Object.assign(settings, p);
+}
+
+/**
+ * Loads the stored settings. The first read does not wait for a database upgrade (peekKv), so
+ * the first screen shows them even while an older copy of RR73 holds the database; when even
+ * that read cannot answer, this waits for the shared connection.
+ */
 export async function loadSettings(): Promise<void> {
   try {
-    Object.assign(settings, validate(await getKv(KEY)));
+    const peeked = await peekKv(KEY);
+    apply(peeked ? peeked.value : await getKv(KEY));
   } catch {
     // No IndexedDB (a private window): the defaults stay and changes last until the page closes.
+    early = null;
   }
 }
 
+/** Changes settings at once and stores only the changed values, so stored values this copy has not read are kept. */
 export async function updateSettings(patch: Partial<Settings>): Promise<void> {
   Object.assign(settings, patch);
+  const plain = $state.snapshot(patch) as Partial<Settings>;
+  early?.push(plain);
   try {
-    await setKv(KEY, $state.snapshot(settings));
+    await mergeKv(KEY, plain);
   } catch {
     // As in loadSettings.
   }
+}
+
+/** Forgets what was loaded; tests use it to start again. */
+export function resetSettings() {
+  Object.assign(settings, structuredClone(DEFAULTS));
+  early = [];
 }

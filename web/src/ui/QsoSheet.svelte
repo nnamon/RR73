@@ -27,6 +27,8 @@
   let comment = $state('');
   let join = $state(true);
   let errors = $state<string[]>([]);
+  /** True while a save waits for storage, so a second tap cannot log the QSO twice. */
+  let saving = $state(false);
 
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
@@ -87,6 +89,7 @@
 
   async function save(e: SubmitEvent) {
     e.preventDefault();
+    if (saving) return;
     const problems: string[] = [];
     const c = normaliseCall(call);
     if (!/[A-Z0-9]/.test(c)) problems.push('Type the other station’s callsign.');
@@ -102,38 +105,43 @@
     errors = problems;
     if (problems.length) return;
 
-    if (original) {
-      const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
-      await updateQso(original.id, {
-        call: c,
-        gridsquare: normaliseGrid(grid),
-        band: band.toLowerCase(),
-        ...keepMode,
-        freqHz: hz,
-        start,
-        end: start + Math.max(0, original.end - original.start),
-        rstSent: formatReport(sent),
-        rstRcvd: formatReport(rcvd),
-        comment: comment.trim(),
-        ...theirFields(parsed.refs),
-      });
-    } else {
-      await logQso({
-        call: c,
-        grid: normaliseGrid(grid),
-        mode: mode === 'FT4' ? 'FT4' : 'FT8',
-        band: band.toLowerCase(),
-        dialHz: hz ?? 0,
-        audioHz: 0,
-        startUtcMs: start,
-        endUtcMs: start,
-        reportSent: formatReport(sent),
-        reportRcvd: formatReport(rcvd),
-        comment: comment.trim(),
-        theirRefs: parsed.refs,
-        source: 'manual',
-        activationId: log.current && join ? log.current.id : null,
-      });
+    saving = true;
+    try {
+      if (original) {
+        const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
+        await updateQso(original.id, {
+          call: c,
+          gridsquare: normaliseGrid(grid),
+          band: band.toLowerCase(),
+          ...keepMode,
+          freqHz: hz,
+          start,
+          end: start + Math.max(0, original.end - original.start),
+          rstSent: formatReport(sent),
+          rstRcvd: formatReport(rcvd),
+          comment: comment.trim(),
+          ...theirFields(parsed.refs),
+        });
+      } else {
+        await logQso({
+          call: c,
+          grid: normaliseGrid(grid),
+          mode: mode === 'FT4' ? 'FT4' : 'FT8',
+          band: band.toLowerCase(),
+          dialHz: hz ?? 0,
+          audioHz: 0,
+          startUtcMs: start,
+          endUtcMs: start,
+          reportSent: formatReport(sent),
+          reportRcvd: formatReport(rcvd),
+          comment: comment.trim(),
+          theirRefs: parsed.refs,
+          source: 'manual',
+          activationId: log.current && join ? log.current.id : null,
+        });
+      }
+    } finally {
+      saving = false;
     }
     open = false;
     closeEditor();
@@ -235,7 +243,7 @@
     {#if original?.deletedAt != null}
       <button type="button" class="btn primary wide" onclick={() => void restore()}>Restore QSO</button>
     {:else}
-      <button type="submit" class="btn primary wide">{original ? 'Save QSO' : 'Add QSO'}</button>
+      <button type="submit" class="btn primary wide" disabled={saving}>{original ? 'Save QSO' : 'Add QSO'}</button>
     {/if}
     <button type="button" class="btn wide cancel" onclick={closed}>Cancel</button>
     {#if original && original.deletedAt === null}

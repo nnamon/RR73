@@ -16,6 +16,7 @@
   import type { LedgerEntry, Qso } from '../lib/log/types';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
+  import { storageWaiting } from '../lib/state/storage.svelte';
 
   type View = 'all' | 'todo' | 'activations';
   const PAGE = 100;
@@ -117,7 +118,7 @@
   </div>
 
   {#if !log.ready}
-    <p class="loading">Loading the log</p>
+    <p class="loading">{storageWaiting() ? 'The log opens when other copies of RR73 close.' : 'Loading the log'}</p>
   {:else if view === 'all'}
     {#if !log.live.length}
       <div class="empty">

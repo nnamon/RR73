@@ -2,6 +2,7 @@
   import { onMount, tick } from 'svelte';
   import LogNotice from './ui/LogNotice.svelte';
   import QsoSheet from './ui/QsoSheet.svelte';
+  import StatusNotice from './ui/StatusNotice.svelte';
   import TabBar from './ui/TabBar.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
   import Log from './views/Log.svelte';
@@ -79,6 +80,7 @@
     {/if}
   </main>
   {#if update.notice}<UpdateNotice version={update.notice} />{/if}
+  <StatusNotice />
   <LogNotice />
   <TabBar active={tab} />
 </div>
