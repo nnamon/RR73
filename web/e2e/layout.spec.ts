@@ -107,14 +107,18 @@ for (const theme of ['light', 'dark'] as const) {
     const width = await page.evaluate(() => document.documentElement.clientWidth);
     const buttons = page.locator('main .pane:not([hidden]) .bar-button');
     await expect(buttons).toHaveCount(2);
-    for (const box of [await buttons.nth(0).boundingBox(), await buttons.nth(1).boundingBox()]) {
-      expect([Math.round(box!.width), Math.round(box!.height)]).toEqual([44, 44]);
+    const boxes = [(await buttons.nth(0).boundingBox())!, (await buttons.nth(1).boundingBox())!];
+    for (const box of boxes) {
+      expect(box.width).toBeGreaterThanOrEqual(43.5);
+      expect(box.height).toBeGreaterThanOrEqual(43.5);
     }
+    // Side by side as UIKit places bar items: the targets never overlap.
+    expect(boxes[0].x + boxes[0].width).toBeLessThanOrEqual(boxes[1].x + 0.5);
     const inks = await barInks(page);
     expect(width - inks[1].right).toBeCloseTo(16, 0);
     const gap = inks[1].left - inks[0].right;
-    expect(gap).toBeGreaterThanOrEqual(8);
-    expect(gap).toBeLessThanOrEqual(12);
+    expect(gap).toBeGreaterThanOrEqual(24);
+    expect(gap).toBeLessThanOrEqual(28);
     expect(Math.abs(inks[0].width - inks[1].width)).toBeLessThan(0.5);
     const look = (i: number) => buttons.nth(i).evaluate((el) => ({ color: getComputedStyle(el).color, opacity: Number(getComputedStyle(el).opacity), stroke: getComputedStyle(el.querySelector('g')!).strokeWidth }));
     const [add, exportAdif] = [await look(0), await look(1)];

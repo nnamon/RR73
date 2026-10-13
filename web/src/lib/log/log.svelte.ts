@@ -354,7 +354,7 @@ function show(n: Omit<LogNotice, 'seq'>, ms = UNDO_MS) {
 
 /** "Logged ZL1TQK 20m FT8 −08 / −11" with Edit and Undo, for UNDO_MS. */
 export function showLogged(q: Qso) {
-  show({ kind: 'logged', qsoId: q.id, text: `Logged ${q.call} ${q.band} ${displayMode(q)} ${reportsText(q)}` });
+  show({ kind: 'logged', qsoId: q.id, text: ['Logged', q.call, q.band, displayMode(q), reportsText(q)].filter(Boolean).join(' ') });
 }
 
 export function dismissNotice() {

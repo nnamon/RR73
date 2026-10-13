@@ -122,6 +122,23 @@ describe('the log store', () => {
     expect(unsentForWavelog().map((e) => e.qsoId).sort()).toEqual([first.id, q.id].sort());
   });
 
+  it('keeps a QSO from the sequencer not sent, and leaves unknown reports out of the notice', async () => {
+    const before = wavelog.posts.length;
+    const q = await logQso({ ...RECORD, call: 'JH1RRT', source: 'sequencer' });
+    expect(q.source).toBe('sequencer');
+    expect(entry(q.id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });
+    expect(log.notice?.text).toBe('Logged JH1RRT 20m FT8 −12 / −10');
+    const hand = await logQso({ ...RECORD, call: 'VK4TMZ', source: 'manual', reportSent: '', reportRcvd: '' });
+    expect(log.notice?.text).toBe('Logged VK4TMZ 20m FT8');
+    await logQso({ ...RECORD, call: 'VK5PAS', source: 'manual', reportSent: '-07', reportRcvd: '' });
+    expect(log.notice?.text).toBe('Logged VK5PAS 20m FT8 sent −07');
+    await outbox.sendNow();
+    expect(wavelog.posts.length).toBe(before);
+    expect(entry(hand.id)?.state).toBe('not-sent');
+    expect(await sendToWavelog([q.id, hand.id, log.qsos.find((x) => x.call === 'VK5PAS')!.id])).toMatchObject({ total: 3, delivered: 3 });
+    wavelog.posts.splice(before);
+  });
+
   it('sends every QSO not sent on Send to Wavelog, oldest first, with progress and a summary', async () => {
     const older = await addQso({ ...RECORD, call: 'ZL1TQK', startUtcMs: T - 3_600_000, endUtcMs: T - 3_590_000 });
     const progress: string[] = [];

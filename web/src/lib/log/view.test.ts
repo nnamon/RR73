@@ -15,6 +15,7 @@ import {
   matches,
   qsoLine,
   reportText,
+  reportsText,
   rowProblem,
   rowTags,
   shortDate,
@@ -59,11 +60,16 @@ describe('rows', () => {
     expect(reportText('-12')).toBe('−12');
     expect(reportText('+05')).toBe('+05');
     expect(reportText('')).toBe('?');
+    expect(reportsText({ rstSent: '-12', rstRcvd: '-10' })).toBe('−12 / −10');
+    expect(reportsText({ rstSent: '-12', rstRcvd: '' })).toBe('sent −12');
+    expect(reportsText({ rstSent: ' ', rstRcvd: '+05' })).toBe('received +05');
+    expect(reportsText({ rstSent: '', rstRcvd: '' })).toBe('');
     expect(freqText(14_075_500)).toBe('14.076');
     expect(freqText(null)).toBe('');
     const x = q('VK2ESN', NOW);
     expect(qsoLine(x)).toBe('20m FT8 · 14.076 · QF56 · −12 / −10');
     expect(qsoLine({ ...x, mode: 'MFSK', submode: 'FT4', freqHz: null, gridsquare: '', rstSent: '', rstRcvd: '' })).toBe('20m FT4');
+    expect(qsoLine({ ...x, rstRcvd: '' })).toBe('20m FT8 · 14.076 · QF56 · sent −12');
   });
 
   it('labels UTC days', () => {

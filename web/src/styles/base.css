@@ -103,9 +103,10 @@ a {
 }
 
 /*
- * Navigation bar buttons: 44 pt targets around 24 px glyphs whose ink is 18 px wide, in the tint.
- * Adjacent buttons overlap so the glyphs sit 12 pt apart, as iOS spaces bar items, and the last
- * glyph's ink ends 16 pt from the screen edge. Disabled: the tint at reduced opacity, as iOS.
+ * Navigation bar buttons: 44 pt targets side by side, as UIKit places bar items, around 24 px
+ * glyphs whose ink is 18 px wide, in the tint: about 26 pt between glyphs. The last button runs
+ * into the margin so its glyph's ink ends 16 pt from the screen edge. Disabled: the tint at
+ * reduced opacity, as iOS. Focus: a rounded ring that follows the button.
  */
 .bar-buttons {
   display: flex;
@@ -120,11 +121,13 @@ a {
   justify-content: center;
   width: var(--rr-tap);
   height: var(--rr-tap);
+  border-radius: var(--rr-radius-l);
   color: var(--rr-accent);
 }
 
-.bar-button + .bar-button {
-  margin-left: calc(-1 * (var(--rr-space-3) + var(--rr-space-half)));
+.bar-button:focus-visible {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: -2px;
 }
 
 .bar-button:disabled {

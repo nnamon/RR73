@@ -44,7 +44,7 @@
         <span class="ic blue" data-letter="W" aria-hidden="true"></span>
         <span class="row-main">
           <span class="row-title">Wavelog</span>
-          <span class="row-sub">{w.url ? `${hostOf(w.url)} · sends each QSO` : 'Sends each QSO to your Wavelog'}</span>
+          <span class="row-sub">{w.url ? `${hostOf(w.url)}${log.settings.sendAutomatically ? ' · sends automatically' : ''}` : 'Your Wavelog server'}</span>
           {#if refusal && (!w.lastTest || (refusal.lastAttemptAt ?? 0) >= w.lastTest.at)}
             <span class="row-sub badt">Refused at {utcHm(refusal.lastAttemptAt ?? 0)} UTC: {refusal.lastError}</span>
           {:else if w.lastTest}

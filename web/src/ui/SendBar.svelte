@@ -23,7 +23,7 @@
   /** Why the button cannot send now, in plain words. */
   const reason = $derived.by(() => {
     if (!w.url || !w.apiKey) return 'Set up Wavelog in Settings › Logging to send QSOs.';
-    if (!w.enabled) return 'Sending to Wavelog is off in Settings › Logging.';
+    if (!w.enabled) return 'Use Wavelog is off in Settings › Logging › Wavelog.';
     if (!w.stationId) return 'Run Test connection in Settings › Logging › Wavelog to choose a station location.';
     if (!log.online) return 'No connection. Send when the phone is online.';
     return null;

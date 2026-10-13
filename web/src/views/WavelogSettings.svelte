@@ -132,8 +132,8 @@
     <div class="group">
       <label class="row">
         <span class="row-main">
-          <span class="row-title">Send QSOs to Wavelog</span>
-          <span class="row-sub">Off keeps them on this phone only</span>
+          <span class="row-title">Use Wavelog</span>
+          <span class="row-sub">Off: RR73 sends nothing to Wavelog. QSOs not sent wait on this phone; those Wavelog has stay there.</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={w.enabled} onchange={(e) => void setWavelog({ enabled: e.currentTarget.checked })} />
       </label>

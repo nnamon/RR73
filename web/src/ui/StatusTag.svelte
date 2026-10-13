@@ -19,8 +19,8 @@
     align-items: center;
     gap: var(--rr-space-half);
     height: 21px;
-    padding: 0 var(--rr-space-1-5);
-    border-radius: var(--rr-radius-s);
+    padding: 0 var(--rr-space-2);
+    border-radius: var(--rr-radius-pill);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-bold);
     line-height: 21px;
@@ -34,12 +34,12 @@
   }
 
   .wait {
-    box-shadow: inset 0 0 0 1.5px var(--rr-warn);
+    background: var(--rr-warn-soft);
     color: var(--rr-warn);
   }
 
   .idle {
-    box-shadow: inset 0 0 0 1.5px var(--rr-label3);
+    background: var(--rr-fill2);
     color: var(--rr-label2);
   }
 

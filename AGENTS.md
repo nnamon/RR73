@@ -54,8 +54,9 @@ Check every UI change against these before it ships, and compare the screen side
 
 - Every tab root starts with `LargeTitleHeader` and every sub-screen with `BackLink`: one 44 pt bar, so titles and content line up across screens.
 - Content sits 16 pt from the screen edges; text in groups, section headers and footers sits 32 pt in.
-- Bar glyphs are 44 pt targets with equal size and stroke weight, 12 pt apart, the last one ending 16 pt from the edge.
+- Bar buttons are 44 pt targets side by side, never overlapping, with glyphs of equal size and stroke weight; the last glyph ends 16 pt from the edge, and focus shows a rounded ring.
 - Disabled controls show the tint at reduced opacity, never a different grey.
+- Status badges share one shape: filled tint capsules of one height.
 - Grouped lists follow iOS: 44 pt rows at least, separators inset to the row's text, chevrons on rows that open a screen, a trailing checkmark on the chosen row.
 - Placeholders say Required, Optional or the format (YYYY-MM-DD), never a sample value that reads as entered. Fields open the keyboard their values need.
 - Values on screen use the style guide's formats, 24-hour UTC times included.

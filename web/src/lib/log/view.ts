@@ -14,9 +14,17 @@ export function reportText(r: string): string {
   return r ? r.replace(/^-/, MINUS) : '?';
 }
 
-/** "−12 / −10": sent, then received. */
+/**
+ * "−12 / −10": sent, then received. "sent −12" or "received −10" when only one is known, and ''
+ * when neither is, as for a QSO added by hand without reports.
+ */
 export function reportsText(q: Pick<Qso, 'rstSent' | 'rstRcvd'>): string {
-  return `${reportText(q.rstSent)} / ${reportText(q.rstRcvd)}`;
+  const sent = q.rstSent.trim();
+  const rcvd = q.rstRcvd.trim();
+  if (sent && rcvd) return `${reportText(sent)} / ${reportText(rcvd)}`;
+  if (sent) return `sent ${reportText(sent)}`;
+  if (rcvd) return `received ${reportText(rcvd)}`;
+  return '';
 }
 
 /** "14.076" for 14075500 Hz: MHz to the nearest kHz, as on the radio's display. */
@@ -26,7 +34,7 @@ export function freqText(hz: number | null): string {
 
 /** "20m FT8 · 14.076 · QF56 · −12 / −10". */
 export function qsoLine(q: Qso): string {
-  return [`${q.band} ${displayMode(q)}`.trim(), freqText(q.freqHz), q.gridsquare, q.rstSent || q.rstRcvd ? reportsText(q) : ''].filter(Boolean).join(' · ');
+  return [`${q.band} ${displayMode(q)}`.trim(), freqText(q.freqHz), q.gridsquare, reportsText(q)].filter(Boolean).join(' · ');
 }
 
 const DAY_MS = 86_400_000;
