@@ -2,41 +2,74 @@
  * iOS mutes Web Audio while the ring switch is on silent until a media element has played
  * during a user gesture. Setting the audio session type alone did not unmute output on the
  * owner's iPhone. Each tap that needs output plays one clip through an <audio> element: the
- * start tone when audio starts, a short silent clip for Resume audio and Tune.
+ * start chime when audio starts, a short silent clip for Resume audio and Tune.
  *
- * The start tone is audible on purpose. It keys the radio's VOX for 0.4 s, which the keying
- * check uses to confirm the radio transmits when RR73 plays audio.
+ * The start chime is audible on purpose. It keys the radio's VOX, which the keying check uses
+ * to confirm the radio transmits when RR73 plays audio.
  */
 
 /** Sample rate of generated clips, Hz. */
 export const CLIP_RATE = 12000;
 
-export interface StartTone {
-  /** Silence before the tone, s: the microphone opens during it and gives the receive baseline. */
-  leadS: number;
-  /** Tone length, s. */
-  toneS: number;
-  /** Tone frequency, Hz. */
+export interface ChimeNote {
+  /** Frequency, Hz. */
   hz: number;
-  /** Raised-cosine ramp at each end, s, so the tone does not click or splatter. */
-  rampS: number;
+  /** Start within the chime, s. */
+  atS: number;
+  /** Length, s. */
+  lengthS: number;
 }
 
-export const START_TONE: StartTone = { leadS: 1.5, toneS: 0.4, hz: 1500, rampS: 0.005 };
+export interface StartTone {
+  /** Silence before the chime, s: the microphone opens during it and gives the receive baseline. */
+  leadS: number;
+  /** Chime length, s: the keying check reads receive audio while it plays. */
+  toneS: number;
+  /** The notes: a soft rising fifth, E5 then A5. */
+  notes: ChimeNote[];
+  /** Fade-in of each note, s. */
+  attackS: number;
+  /** Fade-out at the end of each note, s, so nothing clicks. */
+  releaseS: number;
+  /** Exponential decay time constant of each note, s: a struck sound rather than a held beep. */
+  decayS: number;
+}
 
-/** Samples of the start tone clip at `level` peak (0 to 1): lead silence, tone, 0.2 s tail. */
+export const START_TONE: StartTone = {
+  leadS: 1.5,
+  toneS: 0.45,
+  notes: [
+    { hz: 659.25, atS: 0, lengthS: 0.22 },
+    { hz: 880, atS: 0.14, lengthS: 0.31 },
+  ],
+  attackS: 0.015,
+  releaseS: 0.04,
+  decayS: 0.25,
+};
+
+/** Samples of the start clip at `level` peak (0 to 1): lead silence, the chime, a 0.2 s tail. */
 export function startToneSamples(level: number, t: StartTone = START_TONE, rate = CLIP_RATE): Float32Array {
   const lead = Math.round(t.leadS * rate);
   const tone = Math.round(t.toneS * rate);
   const tail = Math.round(0.2 * rate);
-  const ramp = Math.max(1, Math.round(t.rampS * rate));
-  const out = new Float32Array(lead + tone + tail);
-  const amp = Math.min(1, Math.max(0, level));
-  for (let i = 0; i < tone; i++) {
-    const edge = Math.min(i, tone - 1 - i);
-    const gain = edge < ramp ? 0.5 - 0.5 * Math.cos((Math.PI * edge) / ramp) : 1;
-    out[lead + i] = amp * gain * Math.sin((2 * Math.PI * t.hz * i) / rate);
+  const chime = new Float32Array(tone);
+  for (const n of t.notes) {
+    const from = Math.round(n.atS * rate);
+    const length = Math.min(tone - from, Math.round(n.lengthS * rate));
+    const attack = Math.max(1, Math.round(t.attackS * rate));
+    const release = Math.max(1, Math.round(t.releaseS * rate));
+    for (let i = 0; i < length; i++) {
+      const rise = i < attack ? 0.5 - 0.5 * Math.cos((Math.PI * i) / attack) : 1;
+      const left = length - 1 - i;
+      const fall = left < release ? 0.5 - 0.5 * Math.cos((Math.PI * left) / release) : 1;
+      const decay = Math.exp(-i / rate / t.decayS);
+      chime[from + i] += rise * fall * decay * Math.sin((2 * Math.PI * n.hz * i) / rate);
+    }
   }
+  const peak = chime.reduce((m, x) => Math.max(m, Math.abs(x)), 0) || 1;
+  const gain = Math.min(1, Math.max(0, level)) / peak;
+  const out = new Float32Array(lead + tone + tail);
+  for (let i = 0; i < tone; i++) out[lead + i] = chime[i] * gain;
   return out;
 }
 

@@ -16,6 +16,10 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Export ADIF in the Log shares the QSOs it shows.
 - Settings › Logging holds the destinations, Send automatically and Send edits to QSOs already sent.
 
+## 0.4.3 · 2026-10-13
+
+- The start sound is now a soft rising chime, E5 then A5 (659 and 880 Hz, 0.45 s), in place of the 1500 Hz beep. It still keys the radio for the keying check. The setting is now called Start chime.
+
 ## 0.4.2 · 2026-10-13
 
 - Reload app in Settings, under About, checks for a newer version, installs it and reloads, for when the app runs from the home screen and has no reload button. Clear cached copy and reload loads the app fresh from the network; settings and saved data stay on the phone.

@@ -33,28 +33,46 @@ describe('startToneSamples', () => {
   const lead = Math.round(START_TONE.leadS * CLIP_RATE);
   const tone = Math.round(START_TONE.toneS * CLIP_RATE);
 
+  /** Amplitude at `hz` over [from, from + n) samples of the clip (Hann-windowed single-bin DFT). */
+  function at(hz: number, from: number, n: number): number {
+    let re = 0;
+    let im = 0;
+    let w = 0;
+    for (let i = 0; i < n; i++) {
+      const h = 0.5 - 0.5 * Math.cos((2 * Math.PI * (i + 0.5)) / n);
+      const a = (2 * Math.PI * hz * i) / CLIP_RATE;
+      re += h * s[from + i] * Math.cos(a);
+      im -= h * s[from + i] * Math.sin(a);
+      w += h;
+    }
+    return (2 * Math.hypot(re, im)) / w;
+  }
+
   it('is silent for the lead so the microphone can open first', () => {
     expect(s.subarray(0, lead).every((x) => x === 0)).toBe(true);
   });
 
-  it('plays the tone at the output level for its length, then stops', () => {
-    const body = s.subarray(lead, lead + tone);
-    const peak = body.reduce((m, x) => Math.max(m, Math.abs(x)), 0);
-    expect(peak).toBeGreaterThan(0.49);
-    expect(peak).toBeLessThanOrEqual(0.5);
+  it('peaks at the output level and is silent after the chime', () => {
+    const peak = s.subarray(lead, lead + tone).reduce((m, x) => Math.max(m, Math.abs(x)), 0);
+    expect(peak).toBeCloseTo(0.5, 6);
     expect(s.subarray(lead + tone).every((x) => x === 0)).toBe(true);
   });
 
-  it('is a 1500 Hz tone', () => {
-    const body = s.subarray(lead + 200, lead + tone - 200);
-    let crossings = 0;
-    for (let i = 1; i < body.length; i++) if (body[i - 1] < 0 && body[i] >= 0) crossings++;
-    expect((crossings / body.length) * CLIP_RATE).toBeCloseTo(START_TONE.hz, -1);
+  it('rises from E5 to A5', () => {
+    const n = Math.round(0.1 * CLIP_RATE);
+    const first = lead + Math.round(0.02 * CLIP_RATE);
+    const second = lead + Math.round(0.24 * CLIP_RATE);
+    expect(at(659.25, first, n)).toBeGreaterThan(5 * at(880, first, n));
+    expect(at(880, second, n)).toBeGreaterThan(5 * at(659.25, second, n));
   });
 
-  it('ramps in and out without a step', () => {
+  it('fades in and out without a step', () => {
     expect(Math.abs(s[lead])).toBeLessThan(0.01);
     expect(Math.abs(s[lead + tone - 1])).toBeLessThan(0.01);
+    let jump = 0;
+    for (let i = lead + 1; i < lead + tone; i++) jump = Math.max(jump, Math.abs(s[i] - s[i - 1]));
+    // A 880 Hz sine at 0.5 peak moves at most 0.23 per sample at 12 kHz; a click would be larger.
+    expect(jump).toBeLessThan(0.25);
   });
 });
 

@@ -26,7 +26,7 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 
 - Every bug fix comes with a test that fails on the old code.
 - Decoder changes carry `rr73-bench compare` output (decodes, false decodes, SNR50, time per slot) in the commit message.
-- Run the checks for the code you touched before committing, and state which checks ran.
+- Run the checks for the code you touched before committing, and state which checks ran. While iterating, run the affected tests and Playwright projects; run the full local suite once before pushing, and let CI do the rest.
 - `corpus/` holds recordings and is never committed. Small fixtures go in `fixtures/`.
 - GPL code (WSJT-X and its forks, JTDX, MSHV, Decodium, PyFT8, ft8ts, mfsk-core, webft8) is never read or copied. WSJT-X binaries may be run as a reference. ft8_lib (MIT) may be ported with attribution in the file header.
 - RR73 never allows unattended operation: Tx and Run start by hand, and the watchdog always runs for QSO modes.
@@ -38,7 +38,7 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Every user-visible change adds a line under `## Unreleased` in `CHANGELOG.md`, in the style guide's voice. The app shows the file as Version history.
 - Release often: every merge that changes the app or the decoder is followed by a release.
 - A minor version (0.x.0) marks a substantial new capability: a new screen or workflow, transmitting, the log, a log destination, a new mode. A patch (0.x.y) covers fixes and improvements to what already exists: decoder accuracy and speed, UI polish, copy, settings. 0.3.0 and 0.4.0 were decoder improvements released as minors before this rule was written down; they stay as published.
-- Releases take two steps so CI tests the exact release commit. On the branch, `tools/release/release.sh prepare patch|minor|x.y.z` dates the changelog, bumps both versions and commits "Release x.y.z". After CI is green and the branch is merged, `tools/release/release.sh publish` on `main` checks CI on that commit, tags `v<version>`, pushes the tag and publishes the GitHub release with the changelog entries. The tag deploys the app to GitHub Pages.
+- Releases take two steps so CI tests the exact release commit. On the branch, `tools/release/release.sh prepare patch|minor|x.y.z` dates the changelog, bumps both versions and commits "Release x.y.z". After CI is green on the branch and `main` is fast-forwarded to it, `tools/release/release.sh publish` on `main` checks that a CI run passed on that exact commit (the branch's run counts), tags `v<version>`, pushes the tag and publishes the GitHub release with the changelog entries. The tag deploys the app to GitHub Pages.
 
 ## Code
 
