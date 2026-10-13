@@ -5,7 +5,12 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - CQ rows name the calling station's country before the numbers: "Australia". When the row is short of room, the country ends in "…" or drops out, and the message stays whole.
-- Practice band stations get callsigns of their own country. In 0.10.2 an Australian station could get a VK9 call, which belongs to Norfolk Island, and a Russian one a UA9 call, from Asiatic Russia.
+- Practice band stations get callsigns of their own country. In 0.10.3 an Australian station could get a VK9 call, which belongs to Norfolk Island, and a Russian one a UA9 call, from Asiatic Russia.
+
+## 0.10.3 · 2026-10-13
+
+- Hunt moves on to the next CQ as soon as the station it calls answers another station. It used to wait for that QSO to end and call once more, as Tail-end does for a call by hand.
+- The frequency ruler lies over the bottom edge of the waterfall, with its ticks on the edge and the numbers above them, so the picture is 22 pt taller. The Tx and Rx markers pass behind the numbers.
 
 ## 0.10.2 · 2026-10-13
 
