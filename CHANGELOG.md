@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.7.0 · 2026-10-13
 
 - Operate is the main screen and gives the decodes the space: 15 decode rows show on a 393 × 852 iPhone while receiving and 12 in a QSO, up from 5; 12 on an iPhone SE.
 - One 44 pt top bar holds band, mode, dial, the slot ring, the UTC clock and the buttons for Log and Settings (and Spots while it is on). The audio level is a 2 pt line along its bottom edge. The tab bar is gone; Log, Spots and Settings open over Operate with a back link to it, and old links still work.
