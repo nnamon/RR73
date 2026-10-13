@@ -102,7 +102,10 @@
     {#if !log.online}
       <div class="notice" role="status">
         <Icon name="cloudoff" size={22} class="notice-i" />
-        <p>No phone signal{log.offlineSince ? ` since ${utcHm(log.offlineSince)} UTC` : ''}. All {qsos.length} {qsos.length === 1 ? 'QSO is' : 'QSOs are'} stored on this phone.</p>
+        <p>
+          No phone signal{log.offlineSince ? ` since ${utcHm(log.offlineSince)} UTC` : ''}.
+          {qsos.length === 0 ? 'QSOs you log are stored on this phone.' : qsos.length === 1 ? 'The QSO is stored on this phone.' : `All ${qsos.length} QSOs are stored on this phone.`}
+        </p>
       </div>
     {/if}
 

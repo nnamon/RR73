@@ -159,9 +159,9 @@
 <Sheet bind:open {title} onclose={closed}>
   <form class="form" onsubmit={save} novalidate>
     {#if errors.length}
-      <ul class="errors" role="alert">
+      <div role="alert"><ul class="errors">
         {#each errors as m (m)}<li>{m}</li>{/each}
-      </ul>
+      </ul></div>
     {/if}
     <div class="card">
       <label class="row">

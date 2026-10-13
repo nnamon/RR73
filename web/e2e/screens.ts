@@ -6,7 +6,7 @@ import { FIXED_TIME } from './time';
 
 export { FIXED_TIME };
 
-export type SeedName = 'log' | 'running';
+export type SeedName = 'log' | 'running' | 'station';
 
 export interface Screen {
   name: string;
@@ -39,6 +39,24 @@ export async function open(page: Page, path: string, theme: 'light' | 'dark', wi
   await page.clock.setFixedTime(FIXED_TIME);
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
-  if (withSeed) await seed(page, mockupLog({ running: withSeed === 'running' }));
+  if (withSeed) await seed(page, mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }));
   await page.waitForTimeout(300);
 }
+
+export interface SheetCase {
+  name: string;
+  path: string;
+  seed?: SeedName;
+  title: string;
+  /** Opens the sheet from the screen at `path`. */
+  open(page: Page): Promise<void>;
+}
+
+/** The log's sheets, opened as an operator would. */
+export const LOG_SHEETS: readonly SheetCase[] = [
+  { name: 'add-qso', path: '#/log', title: 'Add QSO', open: (page) => page.getByRole('button', { name: 'Add QSO' }).click() },
+  { name: 'edit-qso', path: '#/log', seed: 'log', title: 'Edit QSO', open: (page) => page.getByRole('button', { name: /^VK2ESN/ }).first().click() },
+  { name: 'end-activation', path: '#/activate', seed: 'running', title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
+  { name: 'station', path: '#/log', seed: 'station', title: 'Choose a station location', open: (page) => page.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click() },
+  { name: 'remove-wavelog', path: '#/settings/logging/wavelog', seed: 'log', title: 'Remove Wavelog?', open: (page) => page.getByRole('button', { name: 'Remove Wavelog…' }).click() },
+];

@@ -1,7 +1,7 @@
 // Accessibility: axe-core (WCAG 2.0 to 2.2, A and AA) on every screen and sheet in both themes.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
-import { SCREENS, open } from './screens';
+import { LOG_SHEETS, SCREENS, open } from './screens';
 
 async function axe(page: Page) {
   const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
@@ -27,6 +27,30 @@ for (const theme of ['light', 'dark'] as const) {
     await open(page, '#/operate', theme);
     // No slots yet, so the button is disabled; open the sheet through its own state is not possible.
     await expect(page.getByRole('button', { name: 'Save slot' })).toBeDisabled();
+  });
+
+  for (const c of LOG_SHEETS) {
+    test(`${c.name} sheet in ${theme}`, async ({ page }) => {
+      await open(page, c.path, theme, c.seed);
+      await c.open(page);
+      await expect(page.getByRole('dialog', { name: c.title })).toBeVisible();
+      expect(await axe(page)).toEqual([]);
+    });
+  }
+
+  test(`QSO sheet with errors and the logged notice in ${theme}`, async ({ page }) => {
+    await open(page, '#/log', theme);
+    await page.getByRole('button', { name: 'Add QSO' }).click();
+    const sheet = page.getByRole('dialog', { name: 'Add QSO' });
+    await sheet.getByRole('textbox', { name: 'Their grid' }).fill('QF5');
+    await sheet.getByRole('button', { name: 'Add QSO' }).click();
+    await expect(sheet.getByRole('alert')).toBeVisible();
+    expect(await axe(page)).toEqual([]);
+    await sheet.getByRole('textbox', { name: 'Callsign' }).fill('VK2ESN');
+    await sheet.getByRole('textbox', { name: 'Their grid' }).fill('QF56');
+    await sheet.getByRole('button', { name: 'Add QSO' }).click();
+    await expect(page.getByTestId('log-notice')).toBeVisible();
+    expect(await axe(page)).toEqual([]);
   });
 
   test(`tune sheet in ${theme}`, async ({ page }) => {

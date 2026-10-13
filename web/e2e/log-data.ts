@@ -69,8 +69,22 @@ function entries(q: Qso, a: Activation | null, wavelog: 'waiting' | 'delivered' 
   return out;
 }
 
+/** Wavelog set up and sending automatically, with no QSOs yet. */
+export function wavelogOnly(opts: { sendAutomatically?: boolean } = {}): Seed {
+  return {
+    qsos: [],
+    ledger: [],
+    activations: [],
+    destinations: [WAVELOG],
+    kv: [
+      { key: 'logging', value: { sendAutomatically: opts.sendAutomatically ?? true, sendEdits: true } },
+      { key: 'settings', value: { callsign: '9V1NE' } },
+    ],
+  };
+}
+
 /** The log in the approved mockup: four QSOs today, one ended activation on 11 October. */
-export function mockupLog(opts: { running?: boolean } = {}): Seed {
+export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } = {}): Seed {
   n = 0;
   const day1 = FIXED_TIME - 2 * DAY;
   const act: Activation = {
@@ -112,6 +126,11 @@ export function mockupLog(opts: { running?: boolean } = {}): Seed {
     qso('YB0AZK', FIXED_TIME - 52 * MIN, { band: '30m', dialHz: 10_136_000, audioHz: 1100, grid: 'OI33', reportSent: -11, reportRcvd: -13 }, null),
   ];
   ledger.push(...entries(today[0], null, 'waiting'), ...entries(today[1], null, 'delivered'), ...entries(today[2], null, 'delivered'), ...entries(today[3], null, 'refused'));
+  if (opts.stationRefusal) {
+    const e = ledger.find((x) => x.qsoId === today[3].id && x.destinationId === 'wavelog')!;
+    e.lastError = 'Wavelog refused the QSO: it was made as 9V1NE and the station location VK3 portable is for VK3/9V1NE. Choose a station location for 9V1NE.';
+    e.refusal = { fix: 'wavelog-station', scope: 'qso' };
+  }
   const activations = [act];
   const qsos = [...qa, ...today];
   if (opts.running) {
@@ -168,8 +187,8 @@ export async function seed(page: Page, data: Seed) {
 
 export interface MockWavelog {
   requests: { method: string; path: string; body: Record<string, unknown> | null }[];
-  /** The answer to POST /api/qso; tests swap it. */
-  qso: () => { status: number; body: unknown };
+  /** The answer to POST /api/qso, from the request body; tests swap it. */
+  qso: (body: Record<string, unknown>) => { status: number; body: unknown };
   rights: 'r' | 'rw' | 'invalid';
 }
 
@@ -192,7 +211,7 @@ export async function mockWavelog(page: Page): Promise<MockWavelog> {
     if (path === '/api/qso/true') return mock.rights === 'r' ? json(403, { status: 'failed', reason: 'API key does not have write permissions' }) : json(201, { status: 'created', adif_count: 0, adif_errors: 0, messages: ['Dryrun works'] });
     if (path === '/api/version') return json(200, { status: 'ok', version: '2.1' });
     if (path === '/api/qso') {
-      const r = mock.qso();
+      const r = mock.qso(mock.requests.at(-1)?.body ?? {});
       return json(r.status, r.body);
     }
     return route.fulfill({ status: 404, headers: cors, body: 'Not found' });
