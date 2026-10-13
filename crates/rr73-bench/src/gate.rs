@@ -398,7 +398,7 @@ mod recorded_baselines {
     #[test]
     fn each_committed_baseline_holds_its_preset() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../bench");
-        for preset in ["baseline", "subtract-3"] {
+        for preset in ["baseline", "subtract-3-osd2"] {
             let r = load(&dir.join(format!("{preset}.json"))).expect(preset);
             assert_eq!(r.preset, preset);
             assert!(r.overrides.is_empty(), "{preset}");

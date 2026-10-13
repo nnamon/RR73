@@ -156,6 +156,8 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
                     hard_errors: 0,
                     score: 0.0,
                     matched: m.is_some(),
+                    osd: false,
+                    osd_distance: 0.0,
                 })
                 .collect(),
             entries: expected

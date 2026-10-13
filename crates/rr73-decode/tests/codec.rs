@@ -6,7 +6,7 @@ use rand_chacha::ChaCha8Rng;
 use rand_distr::StandardNormal;
 use rr73_chansim::{Noise, Scene, SimSignal, Watterson, messages};
 use rr73_decode::layout::CODEWORD_BITS;
-use rr73_decode::ldpc::{LdpcDecoder, LdpcScratch, MinSum, ParityGraph, SumProduct};
+use rr73_decode::ldpc::{LdpcDecoder, LdpcOutcome, LdpcScratch, MinSum, ParityGraph, SumProduct};
 use rr73_decode::validate::{CrcUnpack, Rejection, Validator};
 use rr73_decode::{DecodeContext, DecoderConfig, FrameLayout, SlotAudio, decode};
 use rr73_ft8::message::{self, Message};
@@ -105,11 +105,12 @@ fn ldpc_decoders_correct_noisy_codewords() {
 
 #[test]
 fn validator_checks_crc_and_descrambles_ft4() {
-    let v = CrcUnpack;
+    let v = CrcUnpack::default();
+    let bp = LdpcOutcome::default();
     let mut hashes = CallsignHashes::new();
     let payload = payload_of("CQ K1ABC FN42");
     let cw = codeword_of(&payload);
-    let ok = v.validate(Mode::Ft8, &cw, &mut hashes).expect("valid");
+    let ok = v.validate(Mode::Ft8, &cw, &bp, &mut hashes).expect("valid");
     assert_eq!(ok.payload, payload);
     assert_eq!(ok.text, "CQ K1ABC FN42");
     assert!(v.is_duplicate(&ok, &[payload]));
@@ -117,7 +118,7 @@ fn validator_checks_crc_and_descrambles_ft4() {
     let mut bad = cw;
     bad[3] ^= 1;
     assert_eq!(
-        v.validate(Mode::Ft8, &bad, &mut hashes).err(),
+        v.validate(Mode::Ft8, &bad, &bp, &mut hashes).err(),
         Some(Rejection::Crc)
     );
 
@@ -131,12 +132,12 @@ fn validator_checks_crc_and_descrambles_ft4() {
         rr73_ft8::tones::codeword(Mode::Ft4, &payload)
     );
     let ft4 = v
-        .validate(Mode::Ft4, &codeword_of(&scrambled), &mut hashes)
+        .validate(Mode::Ft4, &codeword_of(&scrambled), &bp, &mut hashes)
         .expect("ft4");
     assert_eq!(ft4.payload, payload);
     // Read as FT8, the same codeword passes its CRC (computed over the scrambled bits) and
     // carries the scrambled payload, if that unpacks at all.
-    if let Ok(as_ft8) = v.validate(Mode::Ft8, &codeword_of(&scrambled), &mut hashes) {
+    if let Ok(as_ft8) = v.validate(Mode::Ft8, &codeword_of(&scrambled), &bp, &mut hashes) {
         assert_eq!(as_ft8.payload, scrambled);
     }
 }
@@ -328,4 +329,72 @@ fn subtraction_stops_when_a_pass_finds_nothing() {
     assert!(sub.decodes.is_empty());
     assert_eq!(sub.stats.candidates, base.stats.candidates);
     assert_eq!(sub.timings.subtract_s, 0.0);
+}
+
+#[test]
+fn bp_osd_recovers_codewords_belief_propagation_misses() {
+    use rr73_decode::osd::{BpOsd, OsdParams, OsdSource};
+    let graph = ParityGraph::ft8();
+    let bp = SumProduct { max_iterations: 25 };
+    let osd = BpOsd {
+        bp: bp.clone(),
+        osd: OsdParams {
+            order: 2,
+            window: 40,
+            source: OsdSource::Channel,
+            max_hard_errors: 30,
+            max_distance: 0.07,
+        },
+    };
+    let mut rng = ChaCha8Rng::seed_from_u64(31);
+    let mut scratch = LdpcScratch::default();
+    let (mut bp_ok, mut osd_ok, mut osd_used) = (0, 0, 0);
+    for _ in 0..300 {
+        let cw = codeword_of(&payload_of(&messages::message(&mut rng)));
+        // About 11 % raw bit errors: belief propagation fails on a good share.
+        let llr: Vec<f32> = cw
+            .iter()
+            .map(|&b| {
+                let n: f64 = rng.sample(StandardNormal);
+                ((if b == 1 { 1.0 } else { -1.0 }) + 0.82 * n) as f32 * 3.0
+            })
+            .collect();
+        let mut out = [0u8; CODEWORD_BITS];
+        if bp.decode(graph, &llr, &mut scratch, &mut out).converged {
+            assert_eq!(out, cw);
+            bp_ok += 1;
+        }
+        let r = osd.decode(graph, &llr, &mut scratch, &mut out);
+        if r.converged {
+            assert_eq!(out, cw, "OSD returned a wrong codeword");
+            osd_ok += 1;
+            osd_used += usize::from(r.osd);
+            assert!(!r.osd || (r.hard_errors <= 30 && r.distance <= 0.07));
+        }
+    }
+    assert!(
+        osd_used > 0 && osd_ok == bp_ok + osd_used,
+        "bp {bp_ok} osd {osd_ok} via osd {osd_used}"
+    );
+}
+
+#[test]
+fn osd_presets_decode_nothing_from_noise_even_with_every_candidate() {
+    let (noise, _) = rr73_chansim::render(&rr73_chansim::noise_only(Mode::Ft8), 23).expect("render");
+    for preset in ["subtract-3-osd1", "subtract-3-osd2"] {
+        let config = DecoderConfig::preset(preset)
+            .and_then(|c| c.with_overrides(&["search.min_score_db=0"]))
+            .expect("config");
+        let r = decode(
+            &SlotAudio::new(&noise, Mode::Ft8),
+            &config,
+            &mut DecodeContext::new(),
+        );
+        assert!(r.decodes.is_empty(), "{preset}: {:?}", r.decodes);
+        assert!(
+            r.stats.ldpc_attempts >= 100,
+            "{preset}: {}",
+            r.stats.ldpc_attempts
+        );
+    }
 }

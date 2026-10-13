@@ -6,7 +6,7 @@
 //!           -> CandidateSearch   Costas sync score         -> Vec<Candidate>
 //!           -> SyncRefine        time and frequency        -> Candidate
 //!           -> Demodulator       symbol energies to LLRs   -> [f32; 174]
-//!           -> LdpcDecoder       belief propagation        -> codeword
+//!           -> LdpcDecoder       belief propagation, OSD   -> codeword
 //!           -> Validator         CRC, unpack, duplicates   -> message
 //!           -> Subtractor        rebuild and remove decodes, next pass
 //!           -> DecodeReport
@@ -21,6 +21,7 @@ pub mod config;
 pub mod demod;
 pub mod layout;
 pub mod ldpc;
+pub mod osd;
 pub mod pipeline;
 pub mod report;
 pub mod search;

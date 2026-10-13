@@ -16,6 +16,15 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Export ADIF in the Log shares the QSOs it shows.
 - Settings › Logging holds the destinations, Send automatically and Send edits to QSOs already sent.
 
+## 0.4.1 · 2026-10-13
+
+- Start audio plays 1500 Hz for 0.4 s at the output level, after 1.5 s of silence. The tone stops iOS muting output while the ring switch is on silent, keys the radio's VOX, and runs the keying check. Turn it off under Start tone in Radio and audio.
+- The keying check says whether receive audio dropped during the start tone or during Tune, by how much, and what to check if it did not.
+
+## 0.4.0 · 2026-10-13
+
+- The decoder retries weak signals with ordered-statistics decoding when the first attempt fails. On 350 recorded slots it now finds 74% of WSJT-X's decodes, up from 70%, with no false decodes in 5000 noise-only slots.
+
 ## 0.3.0 · 2026-10-12
 
 - The decoder now makes up to 3 passes over each slot, removing each decoded signal before the next. On recorded test slots it finds 88% of WSJT-X's decodes, up from 72%, with no false decodes in 200 noise-only slots.

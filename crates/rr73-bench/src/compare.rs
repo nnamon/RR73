@@ -236,6 +236,8 @@ mod tests {
             hard_errors: 2,
             score: 8.0,
             matched,
+            osd: false,
+            osd_distance: 0.0,
         }
     }
 
