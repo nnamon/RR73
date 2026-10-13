@@ -11,6 +11,7 @@
   import { log } from '../lib/log/log.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
   import { practice } from '../lib/state/practice.svelte';
+  import { isDefault } from '../lib/decode/highlight';
 
   /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
   let { section = null }: { section?: string | null } = $props();
@@ -257,6 +258,13 @@
         </label>
       {/each}
     </div>
+    <div class="group colours">
+      <a class="row link" href={href('settings', 'colours')}>
+        <span class="row-main"><span class="row-title">Decode colours</span></span>
+        <span class="row-value">{isDefault(settings.highlights) ? 'WSJT-X' : 'Custom'}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
   </div>
 
   <div class="section">
@@ -293,6 +301,10 @@
 
   .ack {
     width: 160px;
+  }
+
+  .colours {
+    margin-top: var(--rr-space-4);
   }
 
   .switch {

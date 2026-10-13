@@ -2,6 +2,7 @@ import { deleteDB, openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULTS, FEATURES_OFF, loadSettings, migration, normaliseCallsign, resetSettings, settings, settingsStatus, SETTINGS_SCHEMA, updateSettings, validate } from './settings.svelte';
 import { closeDb, DB_NAME, getKv, setKv } from './db';
+import { defaultHighlights } from '../decode/highlight';
 
 beforeEach(async () => {
   await closeDb();
@@ -81,7 +82,7 @@ describe('the optional features migration', () => {
     await setKv('settings', { callsign: '9V1NE', theme: 'dark', band: '40m' });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF });
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), schema: SETTINGS_SCHEMA });
   });
 
   it('keeps the features of a current record', async () => {
@@ -95,7 +96,7 @@ describe('the optional features migration', () => {
     await loadSettings();
     expect(settings).toEqual(DEFAULTS);
     expect(await getKv('settings')).toBeUndefined();
-    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF });
+    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights() });
   });
 
   it('keeps a feature turned on before the stored settings arrived', async () => {
@@ -104,6 +105,27 @@ describe('the optional features migration', () => {
     await loadSettings();
     expect(settings.features.potaSpots).toBe(true);
     await expect.poll(() => getKv('settings')).toMatchObject({ callsign: '9V1NE', features: { potaSpots: true }, schema: SETTINGS_SCHEMA });
+  });
+});
+
+describe('the decode colours migration', () => {
+  it('turns every category on at the WSJT-X defaults on a phone that ran 0.7, and stores that once', async () => {
+    await setKv('settings', { callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, schema: 2 });
+    await loadSettings();
+    expect(settings.highlights).toEqual(defaultHighlights());
+    expect(settings.highlights.every((h) => h.on)).toBe(true);
+    expect(settings.features.activations).toBe(true);
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), schema: 3 });
+  });
+
+  it('keeps a stored order, colours and switches', async () => {
+    const mine = [...defaultHighlights()].reverse().map((h, i) => ({ ...h, on: i % 2 === 0, colour: i === 0 ? '#123abc' : h.colour }));
+    await setKv('settings', { callsign: '9V1NE', highlights: mine, schema: SETTINGS_SCHEMA });
+    await loadSettings();
+    expect(settings.highlights.map((h) => h.id)).toEqual(mine.map((h) => h.id));
+    expect(settings.highlights.map((h) => h.on)).toEqual(mine.map((h) => h.on));
+    expect(settings.highlights[0].colour).toBe('#123ABC');
+    expect(migration(await getKv('settings'))).toEqual({});
   });
 });
 

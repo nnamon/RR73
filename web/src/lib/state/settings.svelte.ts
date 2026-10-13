@@ -3,6 +3,7 @@
 import { getKv, mergeKv, peekKv } from './db';
 import { isBand, type BandId } from '../radio/bands';
 import type { Mode } from '../clock/slots';
+import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -65,6 +66,8 @@ export interface Settings {
   /** Order Run mode answers callers in. */
   queueOrder: 'first' | 'strongest' | 'farthest' | 'new';
   features: Features;
+  /** Decode colours in priority order: the first enabled match colours a decode. */
+  highlights: HighlightEntry[];
 }
 
 export const DEFAULTS: Settings = {
@@ -86,6 +89,7 @@ export const DEFAULTS: Settings = {
   cqParity: 'even',
   queueOrder: 'first',
   features: { ...FEATURES_OFF },
+  highlights: defaultHighlights(),
 };
 
 const KEY = 'settings';
@@ -95,8 +99,9 @@ const KEY = 'settings';
  *
  * 1. 0.5.0 and earlier, with no `schema` field and no optional features.
  * 2. Optional features. Every feature starts off, including activations, which 0.5.0 always showed.
+ * 3. Decode colours. Every category starts on, in WSJT-X's order and colours.
  */
-export const SETTINGS_SCHEMA = 2;
+export const SETTINGS_SCHEMA = 3;
 
 function schemaOf(raw: unknown): number {
   const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).schema : undefined;
@@ -109,6 +114,7 @@ export function migration(raw: unknown): Record<string, unknown> {
   if (from >= SETTINGS_SCHEMA) return {};
   const patch: Record<string, unknown> = { schema: SETTINGS_SCHEMA };
   if (from < 2) patch.features = { ...FEATURES_OFF };
+  if (from < 3) patch.highlights = defaultHighlights();
   return patch;
 }
 
@@ -157,6 +163,7 @@ export function validate(raw: unknown): Settings {
   }
   const f = r.features as Partial<Features> | undefined;
   if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
+  if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
   return s;
 }
 
