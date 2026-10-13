@@ -6,6 +6,7 @@
 import type { Page } from '@playwright/test';
 import { Resampler } from '../src/lib/audio/resampler';
 import type { Wasm } from './wasm';
+import { PRESET } from '../src/lib/decode/worker-client';
 
 declare global {
   interface Window {
@@ -128,5 +129,5 @@ export function decodeCaptured(wasm: Wasm, t: Captured): { text: string; dt_s: n
   const slot = new Float32Array(180000);
   const offset = Math.round(((t.startUtc - slotOf(t)) / 1000) * 12000);
   slot.set(at12.subarray(0, Math.max(0, 180000 - offset)), offset);
-  return JSON.parse(wasm.decode_slot(slot, 'FT8', 'subtract-3')) as { text: string; dt_s: number; freq_hz: number }[];
+  return JSON.parse(wasm.decode_slot(slot, 'FT8', PRESET)) as { text: string; dt_s: number; freq_hz: number }[];
 }

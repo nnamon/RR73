@@ -48,8 +48,12 @@ export default defineConfig({
         reuseExistingServer: true,
       },
   projects: [
-    { name: 'mic', testMatch: /(audio|tx-cq)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    { name: 'transmit', testMatch: /transmit\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
+    { name: 'mic', testMatch: /audio\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
+    // need the looped fake microphone to start near a slot boundary. On a loaded machine
+    // (load average 14 to 17 seen) the fake audio device lags; 2 retries, as for decode.
+    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...qsoMic } },
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
