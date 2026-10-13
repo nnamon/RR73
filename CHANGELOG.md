@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.5.0 · 2026-10-13
 
 - Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.
 - In loopback tests in desktop Chromium, CQ started 20 to 40 ms after slot + 0.5 s and Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
