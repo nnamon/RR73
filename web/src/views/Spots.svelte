@@ -6,13 +6,14 @@
   import ActivationPanel from '../ui/ActivationPanel.svelte';
   import ActivationSheet from '../ui/ActivationSheet.svelte';
   import Icon from '../ui/Icon.svelte';
+  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
   import { log } from '../lib/log/log.svelte';
 
   let starting = $state(false);
 </script>
 
 <section class="screen" aria-labelledby="spots-title">
-  <h1 id="spots-title" class="large-title">Spots</h1>
+  <LargeTitleHeader title="Spots" id="spots-title" />
 
   {#if log.ready && log.current}
     <ActivationPanel activation={log.current} />

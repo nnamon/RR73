@@ -1,5 +1,6 @@
 <script lang="ts">
   import Icon from '../ui/Icon.svelte';
+  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
   import { href } from '../lib/app/router.svelte';
   import { normaliseCallsign, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { audio, band, busy } from '../lib/state/station.svelte';
@@ -95,7 +96,7 @@
 </script>
 
 <section class="screen" aria-labelledby="settings-title">
-  <h1 id="settings-title" class="large-title">Settings</h1>
+  <LargeTitleHeader title="Settings" id="settings-title" />
 
   <div class="section">
     <h2 class="section-head">Station</h2>

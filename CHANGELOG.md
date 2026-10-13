@@ -8,6 +8,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Send to Wavelog, at the top of the Log, sends every QSO not sent, oldest first, shows "Sending 2 of 4", then what happened: "3 delivered. 1 refused: see To do." The QSO sheet sends one QSO.
 - To do counts QSOs not sent to Wavelog.
 - QSOs logged in the same second go to Wavelog in the order they were logged.
+- Log, Spots and Settings put their large titles in the same place, under the same 44 pt bar. Add QSO and Export ADIF are equal glyphs in the tint, 16 pt from the edge, and Export ADIF dims when there is nothing to export.
 
 ## 0.5.0 · 2026-10-13
 

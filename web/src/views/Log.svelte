@@ -6,6 +6,7 @@
    */
   import ActivationCard from '../ui/ActivationCard.svelte';
   import Icon from '../ui/Icon.svelte';
+  import LargeTitleHeader from '../ui/LargeTitleHeader.svelte';
   import QsoRow from '../ui/QsoRow.svelte';
   import StationSheet from '../ui/StationSheet.svelte';
   import { go, route } from '../lib/app/router.svelte';
@@ -66,11 +67,12 @@
 </script>
 
 <section class="screen" aria-labelledby="log-title">
-  <div class="topbar">
-    <button class="icon-btn" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
-    <button class="icon-btn" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
-  </div>
-  <h1 id="log-title" class="large-title">Log</h1>
+  <LargeTitleHeader title="Log" id="log-title">
+    {#snippet trailing()}
+      <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
+      <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
+    {/snippet}
+  </LargeTitleHeader>
 
   {#if log.storageError}
     <p class="banner" role="alert">{log.storageError}</p>
@@ -174,26 +176,8 @@
 <StationSheet bind:open={stationOpen} qso={stationQso} />
 
 <style>
-  .topbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: var(--rr-space-1);
-    padding: 0 var(--rr-space-2);
-  }
 
-  .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--rr-tap);
-    height: var(--rr-tap);
-    color: var(--rr-accent);
-  }
 
-  .icon-btn:disabled {
-    color: var(--rr-label3);
-  }
 
   .search {
     display: flex;

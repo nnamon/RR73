@@ -93,10 +93,42 @@ a {
   letter-spacing: 0;
 }
 
-/* Screens that scroll: a large title, then inset grouped sections, as in iOS Settings. */
+/*
+ * Screens that scroll: a 44 pt navigation bar (LargeTitleHeader on tab roots, BackLink on
+ * sub-screens) right under the status bar, then inset grouped sections, as in iOS Settings.
+ */
 .screen {
   min-height: 100%;
-  padding: calc(var(--rr-safe-top) + var(--rr-space-2)) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+  padding: var(--rr-safe-top) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+}
+
+/*
+ * Navigation bar buttons: 44 pt targets around 24 px glyphs whose ink is 18 px wide, in the tint.
+ * Adjacent buttons overlap so the glyphs sit 12 pt apart, as iOS spaces bar items, and the last
+ * glyph's ink ends 16 pt from the screen edge. Disabled: the tint at reduced opacity, as iOS.
+ */
+.bar-buttons {
+  display: flex;
+  align-items: center;
+  padding-right: calc(var(--rr-space-half) + var(--rr-space-px));
+}
+
+.bar-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--rr-tap);
+  height: var(--rr-tap);
+  color: var(--rr-accent);
+}
+
+.bar-button + .bar-button {
+  margin-left: calc(-1 * (var(--rr-space-3) + var(--rr-space-half)));
+}
+
+.bar-button:disabled {
+  opacity: 0.35;
 }
 
 .large-title {
@@ -155,6 +187,11 @@ a {
   background: var(--rr-sep-strong);
   transform: scaleY(0.5);
   transform-origin: 0 0;
+}
+
+/* After a row with a leading 30 pt icon, the separator starts at the text, as iOS insets it. */
+.row:has(> .ic) + .row::before {
+  left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
 }
 
 .row-main {
