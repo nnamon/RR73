@@ -1,10 +1,23 @@
 import { describe, expect, it } from 'vitest';
-import { nextLine, statusLine, steps } from './view';
+import { nextLine, runTally, statusLine, steps, watchdogText } from './view';
 import { Sim } from '../testing/qso-sim';
 
 const M = '−';
 
 describe('dock view', () => {
+  it('leaves out the Run tally until the first QSO, then counts per hour', () => {
+    expect(runTally({ total: 0, hour: 0 })).toBeNull();
+    expect(runTally({ total: 1, hour: 1 })).toBe('1 QSO · 1 per hour');
+    expect(runTally({ total: 14, hour: 9 })).toBe('14 QSOs · 9 per hour');
+  });
+
+  it('shows the watchdog time left while Tx is on', () => {
+    const s = new Sim({ watchdogMs: 360_000 });
+    expect(watchdogText(s.st, s.at(0))).toBe('Tx off');
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    expect(watchdogText(s.st, s.at(0, 20.1))).toBe('Watchdog 5:40');
+  });
+
   it('shows the next message, its start and its parity', () => {
     const s = new Sim();
     s.call(1, 'CQ JA1KXM PM95');

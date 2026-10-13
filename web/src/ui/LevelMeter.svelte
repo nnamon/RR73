@@ -30,7 +30,8 @@
 {#if variant === 'mini'}
   <div class="mini {tone}" role="meter" aria-label="Input level" aria-valuemin={MIN} aria-valuemax={0} aria-valuenow={hasSignal ? Math.round(rmsDb) : MIN} aria-valuetext={text}>
     <i><b style:width="{hasSignal ? pct(rmsDb) : 0}%"></b></i>
-    <span>{text}</span>
+    <!-- With audio off the audio banner says so; the meter only shows the empty bar. -->
+    {#if live}<span>{text}</span>{/if}
   </div>
 {:else}
   <div class="full">

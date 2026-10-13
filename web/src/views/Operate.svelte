@@ -3,7 +3,7 @@
   import ActivationChip from '../ui/ActivationChip.svelte';
   import AudioBanner from '../ui/AudioBanner.svelte';
   import BandSheet from '../ui/BandSheet.svelte';
-  import DecodeList from '../ui/DecodeList.svelte';
+  import DecodeList, { DOUBLE_TAP_MS } from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
   import LevelMeter from '../ui/LevelMeter.svelte';
   import SaveSlotSheet from '../ui/SaveSlotSheet.svelte';
@@ -13,7 +13,7 @@
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import QsoDock from '../ui/QsoDock.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
-  import { callStation, confirmBand, qso, select, setFrequencies, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, confirmBand, qso, setFrequencies, setRun, tapRow, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import { mhz, utcTime } from '../lib/clock/format';
   import { SLOT_MS, parity, slotProgress } from '../lib/clock/slots';
@@ -21,7 +21,7 @@
   import { buildList, filterCounts, type Filter } from '../lib/decode/list';
   import { dialHz } from '../lib/radio/bands';
   import { clock } from '../lib/state/now.svelte';
-  import { settings } from '../lib/state/settings.svelte';
+  import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio, band, recent, resumeAudio, startAudio, tx, type DecodedSlot } from '../lib/state/station.svelte';
 
   let bandOpen = $state(false);
@@ -35,12 +35,20 @@
 
   type RowItem = Extract<ListItem, { kind: 'row' }>;
   const asSelected = (i: RowItem): Selected => ({ decode: i.row.decode, slotStartMs: i.slotStartMs, id: i.id });
-  // Our own rows say what we sent; selecting one selects the station we sent it to.
+  // Our own rows say what we sent; selecting one selects the station we sent it to. A tap on
+  // the selected row clears the selection.
+  // The dock's gesture hint goes once both gestures have been used. A tap counts once no second
+  // tap follows it: the first tap of a double-tap is part of the call.
+  let tapTimer: ReturnType<typeof setTimeout> | undefined;
   function onselect(i: RowItem) {
-    select(asSelected(i));
+    tapRow(asSelected(i));
+    clearTimeout(tapTimer);
+    if (!settings.tapUsed) tapTimer = setTimeout(() => void updateSettings({ tapUsed: true }), DOUBLE_TAP_MS + 50);
   }
   function oncall(i: RowItem) {
+    clearTimeout(tapTimer);
     callStation(i.row.decode, i.slotStartMs);
+    if (!settings.doubleTapUsed) void updateSettings({ doubleTapUsed: true });
   }
   function ondetail(i: RowItem) {
     detail = asSelected(i);
@@ -211,12 +219,23 @@
     {/if}
     <div class="toolbar">
       {#if queueView}
-        <span class="info">Run · callers in answering order</span>
+        <!-- Run's controls: Run off and the CQ slots. Halt and Stop after this QSO are in the dock. -->
+        <div class="runbar">
+          <button class="btn compact run-on" aria-pressed="true" onclick={() => setRun(false)}><span class="dot" aria-hidden="true"></span>Run</button>
+          <span class="seg parity" role="radiogroup" aria-label="CQ slots">
+            {#each ['even', 'odd'] as const as p (p)}
+              <label class="seg-i" class:on={settings.cqParity === p}>
+                <input class="visually-hidden" type="radio" name="cq-parity" value={p} checked={settings.cqParity === p} onchange={() => void updateSettings({ cqParity: p })} />
+                {p === 'even' ? '1st' : '2nd'}
+              </label>
+            {/each}
+          </span>
+        </div>
       {:else if shown.length}
         <div class="chips" role="radiogroup" aria-label="Show decodes">
           {#each chips as c (c.id)}
             <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
-              {c.label} <span class="n">{counts[c.id]}</span>
+              <span class="cap">{c.label} <span class="n">{counts[c.id]}</span></span>
             </button>
           {/each}
         </div>
@@ -231,7 +250,7 @@
           {/if}
         </p>
       {/if}
-      <button class="btn tint compact save" disabled={!recent.slots.length} onclick={() => (saveOpen = true)}>Save slot</button>
+      <button class="bar-button save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" /></button>
     </div>
     {#if unseen > 0}
       <button class="newpill" onclick={showNewest}><Icon name="chevdown" size={13} class="up" />{unseen} new {unseen === 1 ? 'decode' : 'decodes'}</button>
@@ -377,7 +396,8 @@
     gap: var(--rr-space-2);
     align-items: center;
     min-height: var(--rr-tap);
-    padding-right: calc(var(--rr-space-4) + var(--rr-safe-right));
+    /* The Save slot glyph ends 16 pt from the edge, as bar buttons do. */
+    padding-right: calc(var(--rr-space-half) + var(--rr-space-px) + var(--rr-safe-right));
   }
 
   .toolbar .info {
@@ -388,6 +408,36 @@
 
   .toolbar .save {
     flex: none;
+  }
+
+  .runbar {
+    display: flex;
+    flex: 1;
+    gap: var(--rr-space-2);
+    align-items: center;
+    min-width: 0;
+    padding-left: calc(var(--rr-space-4) + var(--rr-safe-left));
+  }
+
+  /* As tall as the CQ slots control beside it. */
+  .run-on {
+    min-height: calc(var(--rr-tap) + 2 * var(--rr-space-half));
+    gap: var(--rr-space-1-5);
+    background: var(--rr-run);
+    color: var(--rr-on-strong);
+  }
+
+  .run-on .dot {
+    width: 8px;
+    height: 8px;
+    border-radius: 4px;
+    background: currentcolor;
+  }
+
+  /* CQ slots: two 44 pt segments. */
+  .parity {
+    flex: none;
+    width: calc(2 * (var(--rr-tap) + var(--rr-space-1)) + 2 * var(--rr-space-half));
   }
 
   .back-queue {
@@ -473,17 +523,28 @@
     display: flex;
     flex: 1;
     min-width: 0;
-    gap: var(--rr-space-2);
+    gap: var(--rr-space-1-5);
     align-items: center;
     height: var(--rr-tap);
     padding: 0 var(--rr-space-4);
     overflow-x: auto;
+    scrollbar-width: none;
   }
 
+  /* A 44 pt target around the 30 pt capsule. */
   .chip {
     display: flex;
     flex: none;
     align-items: center;
+    min-width: var(--rr-tap);
+    height: var(--rr-tap);
+  }
+
+  .chip .cap {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: center;
     height: var(--rr-chip);
     padding: 0 var(--rr-space-3);
     border-radius: var(--rr-radius-m);
@@ -491,6 +552,16 @@
     font-size: var(--rr-text-row);
     font-weight: var(--rr-weight-semibold);
     letter-spacing: -0.01em;
+    white-space: nowrap;
+  }
+
+  .chip:focus-visible {
+    outline: none;
+  }
+
+  .chip:focus-visible .cap {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: 2px;
   }
 
   .chip .n {
@@ -499,7 +570,7 @@
     color: var(--rr-label2);
   }
 
-  .chip.on {
+  .chip.on .cap {
     background: var(--rr-label);
     color: var(--rr-on-strong);
   }

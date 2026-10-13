@@ -150,6 +150,7 @@ export type SeqEvent =
   | { type: 'runMode'; on: boolean; nowMs: number }
   | { type: 'stopAfterQso'; on: boolean; nowMs: number }
   | { type: 'halt'; nowMs: number }
+  | { type: 'endQso'; nowMs: number }
   | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
   | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
@@ -779,6 +780,24 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         st.current = null;
         st.next = null;
         st.queue = [];
+      }
+      break;
+    case 'endQso':
+      // The operator gives up on the QSO: Tx and Run stop and the dock goes back to idle. Nothing
+      // is logged; a QSO already logged stays in the log.
+      m.stopAll(e.nowMs);
+      st.partner = null;
+      st.phase = 'idle';
+      st.current = null;
+      st.next = null;
+      st.retries = 0;
+      {
+        const tx6 = st.edits[6];
+        st.edits = tx6 ? { 6: tx6 } : {};
+      }
+      if (st.queue.length) {
+        st.queue = [];
+        m.fx.push({ type: 'queueChanged', callers: [] });
       }
       break;
     case 'txStarted':

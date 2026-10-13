@@ -1,17 +1,19 @@
 <script lang="ts">
   /**
    * The transmit dock: where the QSO stands, the next message and when it starts, and the
-   * controls. Halt is the largest control in every state and always enabled.
+   * controls. Halt is the largest control in every state and always enabled, at the right of the
+   * bottom row; at most 3 buttons share a row.
    */
   import { utcTime, signed } from '../lib/clock/format';
   import { parseExchange, bare } from '../lib/qso/messages';
   import { pathBetween } from '../lib/qso/grid';
   import { notReady } from '../lib/qso/sequencer';
-  import { nextLine, statusLine, steps } from '../lib/qso/view';
+  import { nextLine, runTally, statusLine, steps, watchdogText } from '../lib/qso/view';
   import { clock } from '../lib/state/now.svelte';
-  import { settings, updateSettings } from '../lib/state/settings.svelte';
-  import { callCq, callStart, callStation, haltTx, qso, runRate, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
+  import { settings } from '../lib/state/settings.svelte';
+  import { callCq, callStart, callStation, endQso, haltTx, qso, runRate, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { href } from '../lib/app/router.svelte';
+  import Icon from './Icon.svelte';
 
   let { onconfirmband, onmessages, ondetail }: { onconfirmband: () => void; onmessages: () => void; ondetail: () => void } = $props();
 
@@ -43,7 +45,10 @@
   const elapsed = $derived(onAir ? Math.max(0, Math.min(onAir.endMs, clock.ms) - onAir.startMs) / 1000 : 0);
   const total = $derived(onAir ? (onAir.endMs - onAir.startMs) / 1000 : 0);
   const notice = $derived(qso.notice && clock.ms - qso.notice.atMs < 20_000 ? qso.notice : null);
-  const rate = $derived(runRate(clock.ms));
+  const tally = $derived(runTally(runRate(clock.ms)));
+  const watchdog = $derived(watchdogText(st, clock.ms));
+  /** The gesture hint goes for good once the operator has tapped and double-tapped a decode. */
+  const gesturesKnown = $derived(settings.tapUsed && settings.doubleTapUsed);
   const ord = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
 </script>
 
@@ -64,6 +69,7 @@
       <div class="l1">
         <span class="call mono">{bare(selCall)}</span>
         {#if selEx?.kind === 'cq'}<span class="tag cq">CQ{selEx.modifier ? ` ${selEx.modifier}` : ''}</span>{/if}
+        <button class="info" aria-label="Show station details" onclick={ondetail}><Icon name="info" size={24} /></button>
       </div>
       <p class="sub">{where(selEx?.grid ?? null) || `${signed(Math.round(sel.decode.snr_db))} dB · ${Math.round(sel.decode.freq_hz)} Hz`}</p>
     </div>
@@ -79,8 +85,6 @@
     </ol>
   {:else if st.phase === 'cq' && !st.run}
     <div class="q1"><span class="call">Calling CQ</span><span class="sub">{ord(st.config.cqParity)} slots</span></div>
-  {:else if !blocked}
-    <p class="hint">Double-tap a decode to call. Touch and hold for details.</p>
   {/if}
 
   {#if next && !showSelection && !needsSetup}
@@ -97,19 +101,21 @@
   {/if}
 
   {#if st.phase !== 'idle' && !showSelection}
-    <p class="dstat">{status}</p>
+    <!-- In Run, the tally replaces Auto Seq and Hold Tx once the first QSO is logged. -->
+    <p class="dstat">{#if st.run && tally}<b class="run">Run</b> · {tally} · {watchdog}{:else}{status}{/if}</p>
   {/if}
-  {#if st.run}
-    <div class="runstat">
-      <span><b>Run</b> · {rate.total} QSOs · {rate.hour} an hour</span>
-      <span class="seg small" role="radiogroup" aria-label="CQ slots">
-        {#each ['even', 'odd'] as const as p (p)}
-          <label class="seg-i" class:on={settings.cqParity === p}>
-            <input class="visually-hidden" type="radio" name="cq-parity" value={p} checked={settings.cqParity === p} onchange={() => void updateSettings({ cqParity: p })} />
-            {ord(p)}
-          </label>
-        {/each}
-      </span>
+
+  <!-- Secondary controls sit above the main row, so Halt keeps its place at the bottom right.
+       Run's own controls (Run off, CQ slots) sit above the caller queue, so the dock stays one row. -->
+  {#if !needsSetup && st.bandConfirmed && !showSelection && !st.run}
+    <div class="row2">
+      {#if st.phase === 'idle' && !blocked && !gesturesKnown}
+        <p class="hint">Tap a decode to select it, double-tap to call. Touch and hold for details.</p>
+      {/if}
+      <button class="btn compact sec" onclick={onmessages}>Edit messages</button>
+      {#if st.phase !== 'idle' && partner}
+        <button class="btn compact sec" onclick={endQso}>End QSO</button>
+      {/if}
     </div>
   {/if}
 
@@ -123,17 +129,13 @@
         <b>Call {bare(selCall)}</b>
         <span>Starts {utcTime(selStart.startMs)} ({ord(selStart.parity)})</span>
       </button>
-      <button class="btn sec compact-btn" onclick={ondetail}>Details</button>
     {:else if st.run}
-      <button class="btn run-on" aria-pressed="true" onclick={() => setRun(false)}><span class="dot" aria-hidden="true"></span>Run</button>
       <button class="btn sec stopafter" aria-pressed={st.stopAfter} class:on={st.stopAfter} onclick={() => setStopAfter(!st.stopAfter)}>Stop after this QSO</button>
     {:else if st.phase === 'idle'}
       <button class="btn sec" onclick={callCq}>Call CQ</button>
       <button class="btn sec" onclick={() => setRun(true)}>Run</button>
-      <button class="btn sec compact-btn" onclick={onmessages}>Messages</button>
     {:else}
       <button class="btn" class:en-on={st.txEnabled} aria-pressed={st.txEnabled} onclick={() => setTxEnabled(!st.txEnabled)}>Enable Tx</button>
-      <button class="btn sec compact-btn" onclick={onmessages}>Messages</button>
     {/if}
     <button class="btn halt" onclick={haltTx}>Halt</button>
   </div>
@@ -230,6 +232,32 @@
 
   .sel .l1 {
     align-items: center;
+    overflow: visible;
+  }
+
+  .sel .call {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Station details: a 44 pt target on the 22 pt call line. The margins keep the line's height,
+     and the glyph ends 16 pt from the edge, as bar buttons do. */
+  .info {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--rr-tap);
+    height: var(--rr-tap);
+    margin: calc((var(--rr-leading-body) - var(--rr-tap)) / 2) calc(-1 * (var(--rr-space-3) + var(--rr-space-px))) calc((var(--rr-leading-body) - var(--rr-tap)) / 2) auto;
+    border-radius: var(--rr-radius-l);
+    color: var(--rr-accent);
+  }
+
+  .info:focus-visible {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: -2px;
   }
 
   .call {
@@ -267,7 +295,7 @@
   .steps {
     display: flex;
     gap: var(--rr-space-1);
-    margin-top: var(--rr-space-1-5);
+    margin-top: var(--rr-space-1);
   }
 
   .step {
@@ -318,8 +346,8 @@
   }
 
   .next {
-    margin-top: var(--rr-space-2);
-    padding: var(--rr-space-1-5) var(--rr-space-3);
+    margin-top: var(--rr-space-1-5);
+    padding: var(--rr-space-1) var(--rr-space-3);
     border-radius: var(--rr-radius-l);
     background: var(--rr-fill);
   }
@@ -357,21 +385,22 @@
     text-overflow: ellipsis;
   }
 
-  .runstat {
+  .row2 {
     display: flex;
+    gap: var(--rr-space-2);
     align-items: center;
-    justify-content: space-between;
-    margin-top: var(--rr-space-1);
-    font-size: var(--rr-text-foot);
-    color: var(--rr-label2);
+    justify-content: flex-end;
+    margin-top: var(--rr-space-2);
   }
 
-  .runstat b {
+  .row2 .hint {
+    flex: 1;
+    min-width: 0;
+    line-height: var(--rr-leading-foot);
+  }
+
+  .dstat .run {
     color: var(--rr-ok);
-  }
-
-  .seg.small {
-    width: 128px;
   }
 
   .ctl {
@@ -384,11 +413,6 @@
     min-width: var(--rr-tap);
   }
 
-  .compact-btn {
-    flex: none;
-    padding: 0 var(--rr-space-3);
-  }
-
   .sec {
     background: var(--rr-fill);
   }
@@ -398,29 +422,21 @@
     color: var(--rr-on-fill);
   }
 
-  .run-on {
+  /* One line at 375 pt; Halt takes the rest of the row. */
+  .ctl .stopafter {
     flex: none;
-    gap: var(--rr-space-1-5);
-    padding: 0 var(--rr-space-4);
-    background: var(--rr-run);
-    color: var(--rr-on-strong);
-  }
-
-  .run-on .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
-    background: currentcolor;
-  }
-
-  .stopafter {
-    white-space: normal;
-    font-size: var(--rr-text-row);
-    line-height: var(--rr-leading-row);
+    padding: 0 var(--rr-space-3);
+    font-size: var(--rr-text-sub);
+    white-space: nowrap;
   }
 
   .stopafter.on {
     box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  /* As wide as "Starts 13:15:00 (2nd)" needs; Halt takes the rest and stays larger. */
+  .ctl .call-btn {
+    min-width: max-content;
   }
 
   .call-btn {

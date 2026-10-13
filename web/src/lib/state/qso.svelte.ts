@@ -187,6 +187,11 @@ export function select(s: Selected | null) {
   qso.selected = s;
 }
 
+/** A tap on a decode row: selects it, or clears the selection when the row is already selected. */
+export function tapRow(s: Selected) {
+  qso.selected = qso.selected?.id === s.id ? null : s;
+}
+
 /**
  * iOS keeps Web Audio silent on the ring switch's silent setting until a media clip plays inside
  * a tap. Every tap that can lead to a transmission plays the silent clip first, before any await.
@@ -206,6 +211,11 @@ export function callStation(decode: Decode, slotStartMs: number) {
 export function callCq() {
   unmute();
   dispatch({ type: 'callCq', nowMs: Date.now() });
+}
+
+/** End QSO from the dock: stops Tx and Run and goes back to idle. Nothing is logged. */
+export function endQso() {
+  dispatch({ type: 'endQso', nowMs: Date.now() });
 }
 
 /** Turns Tx on or off. Call from the tap. */

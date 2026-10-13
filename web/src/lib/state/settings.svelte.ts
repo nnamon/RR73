@@ -54,6 +54,9 @@ export interface Settings {
   holdTx: boolean;
   /** The operator has set a frequency from the waterfall, so the hint under it is gone. */
   freqPicked: boolean;
+  /** The operator has selected a decode with a tap, and called one with a double-tap. Once both are true the gesture hint in the dock stays hidden. */
+  tapUsed: boolean;
+  doubleTapUsed: boolean;
   /** Operator grid square, 4 or 6 characters; empty until set. */
   grid: string;
   /** Tx4 acknowledges with RR73 or RRR. */
@@ -80,6 +83,8 @@ export const DEFAULTS: Settings = {
   txHz: 1500,
   holdTx: true,
   freqPicked: false,
+  tapUsed: false,
+  doubleTapUsed: false,
   grid: '',
   ack: 'RR73',
   workDupes: false,
@@ -149,6 +154,8 @@ export function validate(raw: unknown): Settings {
   if (typeof r.workDupes === 'boolean') s.workDupes = r.workDupes;
   if (typeof r.holdTx === 'boolean') s.holdTx = r.holdTx;
   if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
+  if (typeof r.tapUsed === 'boolean') s.tapUsed = r.tapUsed;
+  if (typeof r.doubleTapUsed === 'boolean') s.doubleTapUsed = r.doubleTapUsed;
   if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
   if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
   for (const k of ['rxHz', 'txHz'] as const) {

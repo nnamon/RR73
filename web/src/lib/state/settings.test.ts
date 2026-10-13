@@ -40,6 +40,12 @@ describe('settings', () => {
     expect(validate({ holdTx: 'no', freqPicked: 1 })).toMatchObject({ holdTx: true, freqPicked: false });
   });
 
+  it('reads whether the tap and double-tap on a decode have been used', () => {
+    expect(DEFAULTS).toMatchObject({ tapUsed: false, doubleTapUsed: false });
+    expect(validate({ tapUsed: true, doubleTapUsed: true })).toMatchObject({ tapUsed: true, doubleTapUsed: true });
+    expect(validate({ tapUsed: 'yes', doubleTapUsed: 1 })).toMatchObject({ tapUsed: false, doubleTapUsed: false });
+  });
+
   it('keeps only valid stored values', () => {
     expect(
       validate({

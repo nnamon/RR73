@@ -3,7 +3,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { LOG_SHEETS, SCREENS, open } from './screens';
-import { checkLayout, smallTargets } from './layout-checks';
+import { checkDock, checkLayout, smallTargets } from './layout-checks';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens', import.meta.url));
 
@@ -221,13 +221,11 @@ for (const theme of ['light', 'dark'] as const) {
     const tabs = (await page.getByRole('navigation', { name: 'Main' }).boundingBox())!;
     expect(dockBox.y + dockBox.height).toBeLessThanOrEqual(tabs.y + 0.5);
     await expect(page.getByRole('list', { name: 'Callers' })).toBeInViewport();
-    // Halt is the largest control in the dock.
-    const halt = (await dock.getByRole('button', { name: 'Halt' }).boundingBox())!;
-    for (const b of await dock.getByRole('button').all()) {
-      const box = (await b.boundingBox())!;
-      expect(halt.width * halt.height).toBeGreaterThanOrEqual(box.width * box.height);
-      expect(halt.height).toBeGreaterThanOrEqual(box.height);
-    }
+    // Halt is the largest control in the dock, no row has more than 3 buttons, and Stop after
+    // this QSO stays on one line.
+    await checkDock(page);
+    // Run's tally waits for the first QSO.
+    await expect(dock.getByText(/QSOs? ·/)).toHaveCount(0);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-run.png` });
     await dock.getByRole('button', { name: 'Halt' }).click();

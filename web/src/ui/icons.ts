@@ -69,6 +69,9 @@ export const ICONS = {
   alert: { stroke: ['M10.3 3.9a2 2 0 0 1 3.4 0l7.8 13.6a2 2 0 0 1-1.7 3H4.2a2 2 0 0 1-1.7-3Z', 'M12 9.3V13.4'], dots: [[12, 16.7, 1.15]], width: 1.9 },
   mic: { stroke: ['M12 3A3 3 0 0 1 15 6V11A3 3 0 0 1 9 11V6A3 3 0 0 1 12 3Z', 'M5.8 11a6.2 6.2 0 0 0 12.4 0M12 17.2V20.6'], width: 1.7 },
   doc: { stroke: ['M7 3.2H13.4L17.6 7.4V20.8H7Z', 'M13.4 3.2V7.4H17.6'], width: 1.9 },
+  info: { stroke: ['M12 10.9V16.5'], rings: [[12, 12, 9, 9]], dots: [[12, 7.7, 1.2]], width: 1.8 },
+  // Save slot: the share glyph's tray with the arrow pointing in.
+  save: { stroke: ['M12 3.4V14.3M9 11.3L12 14.3L15 11.3M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
   globe: { stroke: ['M3.6 12H20.4M5 7.6H19M5 16.4H19'], rings: [[12, 12, 8.6, 8.6], [12, 12, 3.6, 8.6]], width: 1.6 },
 } satisfies Record<string, IconShape>;
 

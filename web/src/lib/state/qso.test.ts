@@ -16,7 +16,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 import { silentClipUri } from '../audio/unlock';
 import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
-import { callCq, callStation, dispatch, haltTx, qso, setFrequencies, setRun, setTxEnabled } from './qso.svelte';
+import { callCq, callStation, dispatch, endQso, haltTx, qso, setFrequencies, setRun, setTxEnabled, tapRow } from './qso.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import type { Activation } from '../log/types';
 
@@ -53,6 +53,31 @@ describe('taps that can transmit', () => {
     // Halt plays nothing.
     haltTx();
     expect(played).toHaveLength(4);
+  });
+});
+
+describe('the dock and the decode list', () => {
+  it('End QSO after a Halt goes back to idle and plays nothing', () => {
+    const { d, slot } = heard(1418);
+    callStation(d, slot);
+    haltTx();
+    expect(qso.st.phase).toBe('answering');
+    expect(qso.st.partner?.call).toBe('JA1KXM');
+    played.length = 0;
+    endQso();
+    expect(qso.st).toMatchObject({ phase: 'idle', partner: null, txEnabled: false, next: null });
+    expect(played).toEqual([]);
+  });
+
+  it('a tap on the selected row clears the selection', () => {
+    const { d, slot } = heard(1418);
+    const row = { decode: d, slotStartMs: slot, id: 'r1' };
+    tapRow(row);
+    expect(qso.selected?.id).toBe('r1');
+    tapRow({ ...row, id: 'r2' });
+    expect(qso.selected?.id).toBe('r2');
+    tapRow({ ...row, id: 'r2' });
+    expect(qso.selected).toBeNull();
   });
 });
 

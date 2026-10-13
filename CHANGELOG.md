@@ -2,6 +2,19 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The frequency bar under the waterfall (Receive here, Transmit here, Both) opens as a panel under the axis and pushes the decodes down. It no longer covers them.
+- The Run line in the dock appears after Run's first QSO and reads "Run · 3 QSOs · 12 per hour".
+- The gesture hint in the dock stays until you have tapped a decode to select it and double-tapped one to call, then never shows again.
+- The level meter in the Operate header shows no "No audio" label while audio is off. The audio banner says so.
+- The transmit dock has at most 3 buttons in a row, and Halt stays the largest control in every state. Messages is now Edit messages.
+- End QSO, in the dock after a Halt, stops Tx and goes back to Call CQ and Run. Nothing is logged.
+- In Run the dock takes one row of controls: Stop after this QSO, on one line at 375 pt, and Halt. Run off and the CQ slots are above the caller queue.
+- Filter chips have 44 pt tap targets. Save slot is a glyph button and no longer covers the Rx freq chip.
+- A tap on the selected decode clears the selection.
+- The Call button for a selected decode fits "Starts 13:15:00 (2nd)". Station details is the info button beside the callsign.
+
 ## 0.6.2 · 2026-10-13
 
 - Updating no longer leaves RR73 blank or without its decoder. While an older copy of RR73 holds the log, the app opens, says "Close other copies of RR73 to finish updating" and finishes the update once that copy closes. A new version takes over at the next change of screen with audio off.

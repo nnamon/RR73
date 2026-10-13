@@ -100,11 +100,22 @@ export function nextLine(st: SeqState, nowMs: number): NextLine | null {
   return null;
 }
 
-/** "Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:40"; without Hold Tx, "Tx 1500 Hz". */
-export function statusLine(st: SeqState, nowMs: number, holdTx = true): string {
+/** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */
+export function watchdogText(st: SeqState, nowMs: number): string {
+  if (!st.txEnabled) return 'Tx off';
   const left = Math.max(0, st.config.watchdogMs - (nowMs - st.watchdogFromMs));
   const m = Math.floor(left / 60000);
   const s = Math.floor((left % 60000) / 1000);
-  const wd = st.txEnabled ? `Watchdog ${m}:${String(s).padStart(2, '0')}` : 'Tx off';
-  return `Auto Seq on · ${holdTx ? 'Hold Tx' : 'Tx'} ${st.config.txHz} Hz · ${wd}`;
+  return `Watchdog ${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** "Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:40"; without Hold Tx, "Tx 1500 Hz". */
+export function statusLine(st: SeqState, nowMs: number, holdTx = true): string {
+  return `Auto Seq on · ${holdTx ? 'Hold Tx' : 'Tx'} ${st.config.txHz} Hz · ${watchdogText(st, nowMs)}`;
+}
+
+/** Run's tally after "Run · ": "3 QSOs · 12 per hour". Null until Run has logged a QSO. */
+export function runTally(rate: { total: number; hour: number }): string | null {
+  if (rate.total < 1) return null;
+  return `${rate.total} ${rate.total === 1 ? 'QSO' : 'QSOs'} · ${rate.hour} per hour`;
 }

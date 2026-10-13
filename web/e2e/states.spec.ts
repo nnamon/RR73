@@ -4,12 +4,18 @@
 // container has no radio. Transmissions are real: the scheduler plays them on the audio clock.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { checkLayout as strictLayout, smallTargets } from './layout-checks';
+import { checkDock, checkLayout as strictLayout, smallTargets } from './layout-checks';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/states', import.meta.url));
 const SLOT = 15_000;
+/** The most of the viewport's height the dock may take in Run. */
+const RUN_DOCK_MAX = 1 / 3;
 // REVIEW_BEFORE=1 captures every state without failing on layout, for before-and-after review.
-const checkLayout = (page: Page) => (process.env.REVIEW_BEFORE ? Promise.resolve() : strictLayout(page));
+const checkLayout = async (page: Page) => {
+  if (process.env.REVIEW_BEFORE) return;
+  await strictLayout(page);
+  await checkDock(page);
+};
 
 interface D {
   text: string;
@@ -102,13 +108,21 @@ for (const theme of ['light', 'dark'] as const) {
     await shot('05-decodes');
     await rowOf(page, 'CQ JA1KXM PM95').click();
     await expect(dock.getByRole('button', { name: /^Call JA1KXM/ })).toBeVisible();
+    // A tap on the selected row clears the selection; a second tap within 350 ms would call.
+    await page.waitForTimeout(500);
+    await rowOf(page, 'CQ JA1KXM PM95').click();
+    await expect(dock.getByRole('button', { name: /^Call JA1KXM/ })).toBeHidden();
+    await expect(rowOf(page, 'CQ JA1KXM PM95')).toHaveAttribute('aria-pressed', 'false');
+    await page.waitForTimeout(500);
+    await rowOf(page, 'CQ JA1KXM PM95').click();
+    await expect(dock.getByRole('button', { name: /^Call JA1KXM/ })).toBeVisible();
     await checkLayout(page);
     await shot('06-selected');
 
     // Station details, from Details in the dock (touch and hold is timed, as on a phone, and a
     // loaded test machine can miss it).
     await rowOf(page, 'CQ DX VK2ESN QF56').click();
-    await dock.getByRole('button', { name: 'Details' }).click();
+    await dock.getByRole('button', { name: 'Show station details' }).click();
     const detail = page.getByRole('dialog', { name: 'VK2ESN' });
     await expect(detail).toBeVisible();
     if (!process.env.REVIEW_BEFORE) expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
@@ -116,10 +130,17 @@ for (const theme of ['light', 'dark'] as const) {
     await page.keyboard.press('Escape');
     await expect(detail).toBeHidden();
 
-    // The frequency picker.
+    // The frequency picker: a panel under the axis that pushes the decodes down.
+    const listTop = (await page.getByTestId('decode-list').boundingBox())!.y;
     const wf = (await page.getByTestId('waterfall').boundingBox())!;
     await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
     await expect(page.getByTestId('freq-guide')).toBeVisible();
+    const bar = (await page.getByTestId('freq-bar').boundingBox())!;
+    const axis = (await page.getByTestId('waterfall').boundingBox())!;
+    const list = (await page.getByTestId('decode-list').boundingBox())!;
+    expect(bar.y).toBeGreaterThanOrEqual(axis.y + axis.height);
+    expect(list.y).toBeGreaterThanOrEqual(bar.y + bar.height);
+    expect(list.y - listTop).toBeCloseTo(bar.height, 0);
     await checkLayout(page);
     await shot('08-freq-bar');
     await page.keyboard.press('Escape');
@@ -130,14 +151,21 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(dock.getByText('JA1KXM', { exact: true })).toBeVisible();
     await checkLayout(page);
     await shot('10-calling');
-    await dock.getByRole('button', { name: /Messages|Tx1/ }).click();
+    await dock.getByRole('button', { name: 'Edit messages' }).click();
     const messages = page.getByRole('dialog').last();
     await expect(messages).toBeVisible();
     if (!process.env.REVIEW_BEFORE) expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
     await shot('11-messages');
     await page.keyboard.press('Escape');
     await expect(messages).toBeHidden();
+    // Halt keeps the QSO for Enable Tx; End QSO goes back to idle.
     await dock.getByRole('button', { name: 'Halt' }).click();
+    await expect(dock.getByRole('button', { name: 'End QSO' })).toBeVisible();
+    await checkLayout(page);
+    await shot('16-halted');
+    await dock.getByRole('button', { name: 'End QSO' }).click();
+    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+    await expect(dock.getByText('JA1KXM', { exact: true })).toBeHidden();
 
     // A QSO: a new station's CQ in the slot that just ended, called at once (a late
     // start, or the next slot under load), on air, then their report in the slot after ours.
@@ -196,7 +224,19 @@ for (const theme of ['light', 'dark'] as const) {
     await inject(page, odd, [d('9V1NE K1ABC FN42', -12, 1490), d('9V1NE ZL1TQK RF73', -4, 1620), d('9V1NE DU1XYZ PK04', -18, 1350), d('CQ HL2ZZZ PM37', -20, 2412)]);
     await expect(page.getByRole('list', { name: 'Callers' })).toBeVisible();
     await checkLayout(page);
+    // Run's tally waits for the first QSO, and the dock leaves most of the screen to the callers.
+    await expect(dock.getByText(/QSOs? ·/)).toHaveCount(0);
+    if (!process.env.REVIEW_BEFORE) {
+      // A notice shows for 20 s; it is left out.
+      const vh = page.viewportSize()!.height;
+      const notices = await dock.locator('.notice').evaluateAll((els) => els.reduce((h, el) => h + el.getBoundingClientRect().height + parseFloat(getComputedStyle(el).marginTop), 0));
+      expect((await dock.boundingBox())!.height - notices).toBeLessThanOrEqual(vh * RUN_DOCK_MAX);
+    }
     await shot('09-run-callers');
+    await page.evaluate(() =>
+      window.__rr73!.logged({ call: 'K1ABC', grid: 'FN42', mode: 'FT8', band: '20m', dialHz: 14_074_000, audioHz: 1490, startUtcMs: Date.now() - 60_000, endUtcMs: Date.now(), reportSent: '-12', reportRcvd: '-10', source: 'sequencer' }),
+    );
+    await expect(dock.getByText('Run · 1 QSO · 1 per hour')).toBeVisible();
     await dock.getByRole('button', { name: 'Halt' }).click();
 
     // Interrupted: iOS stops the microphone when RR73 leaves the screen.

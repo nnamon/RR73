@@ -501,6 +501,37 @@ describe('safety', () => {
     expect(texts(w)).toEqual(['6:CQ 9V1NE OJ11']);
   });
 
+  it('End QSO after a Halt goes back to idle, keeps the edited CQ and logs nothing', () => {
+    const s = new Sim();
+    s.send({ type: 'editMessage', tx: 6, text: 'CQ POTA 9V1NE OJ11', nowMs: s.at(0, 0.1) });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'halt', nowMs: s.at(4, 1) });
+    // Halt keeps the QSO for Enable Tx.
+    expect(s.st).toMatchObject({ phase: 'answering', txEnabled: false });
+    expect(s.st.partner?.call).toBe('JA1KXM');
+    const fx = s.send({ type: 'endQso', nowMs: s.at(4, 2) });
+    expect(fx).toContainEqual({ type: 'cancelTx', stopPlaying: true });
+    expect(s.st).toMatchObject({ phase: 'idle', partner: null, current: null, next: null, txEnabled: false, run: false, edits: { 6: 'CQ POTA 9V1NE OJ11' } });
+    expect(s.logged()).toHaveLength(0);
+    // Calling CQ starts from there.
+    s.send({ type: 'callCq', nowMs: s.at(5, 0.1) });
+    s.run(6, 6);
+    expect(texts(s).at(-1)).toBe('6:CQ POTA 9V1NE OJ11');
+  });
+
+  it('End QSO in a CQ with a caller clears the queue', () => {
+    const s = new Sim();
+    s.send({ type: 'runMode', on: true, nowMs: s.at(0, 0.1) });
+    s.run(0, 0);
+    s.hear(1, ['9V1NE K1ABC FN42', '9V1NE ZL1TQK RF73']);
+    s.send({ type: 'halt', nowMs: s.at(2, 1) });
+    expect(s.st.partner).not.toBeNull();
+    const fx = s.send({ type: 'endQso', nowMs: s.at(2, 2) });
+    expect(s.st).toMatchObject({ phase: 'idle', partner: null, queue: [] });
+    expect(fx.map((f) => f.type)).toContain('cancelTx');
+  });
+
   it('Enable Tx off lets the current transmission finish and cancels the next', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });

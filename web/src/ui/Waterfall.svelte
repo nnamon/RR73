@@ -5,8 +5,9 @@
    * feeds it audio and places the labels.
    *
    * A tap on the waterfall or the axis picks the frequency under the finger: a guide line marks
-   * it and a bar below the axis offers Receive here, Transmit here and Both, and a search for a
-   * clear Tx frequency. Without a pointer, the Set frequencies button (hidden until focused)
+   * it and a panel under the axis offers Receive here, Transmit here and Both, and a search for a
+   * clear Tx frequency. The panel takes its place in the page and pushes the decodes down, so it
+   * never covers them. Without a pointer, the Set frequencies button (hidden until focused)
    * opens the bar at the Rx frequency, and its field takes a typed frequency. A tap outside the
    * bar or Escape closes it.
    */
@@ -338,21 +339,14 @@
     text-align: center;
   }
 
+  /* Attached under the axis, in the page flow. */
   .bar {
-    position: absolute;
-    top: calc(var(--rr-waterfall) + var(--rr-axis) + var(--rr-space-1));
-    right: var(--rr-space-2);
-    left: var(--rr-space-2);
-    z-index: 3;
     display: flex;
     flex-direction: column;
     gap: var(--rr-space-1-5);
-    padding: var(--rr-space-2);
-    border-radius: var(--rr-radius-xl);
-    background: var(--rr-surface);
-    box-shadow:
-      0 0 0 var(--rr-hairline) var(--rr-sep-strong),
-      0 6px 20px var(--rr-shadow-thumb);
+    padding: var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-right)) var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-left));
+    background: var(--rr-dock);
+    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep-strong);
   }
 
   .r1,

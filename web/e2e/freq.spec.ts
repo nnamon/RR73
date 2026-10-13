@@ -19,10 +19,18 @@ test('a tap on the waterfall sets Rx and Tx, and they survive a reload', async (
   await expect(page.getByText(HINT)).toBeVisible();
   await expect(axisLabel(page)).toHaveAccessibleName('Set frequencies. Receive 1500 Hz, transmit 1500 Hz.');
 
+  const listTop = (await page.getByTestId('decode-list').boundingBox())!.y;
   const hz = await tapAt(page, 1846);
   expect(Math.abs(hz - 1846)).toBeLessThanOrEqual(8);
   const bar = page.getByRole('group', { name: 'Set the frequency' });
   await expect(bar).toBeVisible();
+  // The bar sits under the axis and pushes the decodes down by its height; it covers nothing.
+  const b = (await bar.boundingBox())!;
+  const canvas = (await page.getByTestId('waterfall').boundingBox())!;
+  const list = (await page.getByTestId('decode-list').boundingBox())!;
+  expect(b.y).toBeGreaterThanOrEqual(canvas.y + canvas.height);
+  expect(list.y).toBeGreaterThanOrEqual(b.y + b.height);
+  expect(list.y - listTop).toBeCloseTo(b.height, 0);
   await expect(bar.getByRole('textbox', { name: 'Frequency, Hz' })).toHaveValue(String(hz));
   await expect(page.getByTestId('freq-guide')).toBeVisible();
   await bar.getByRole('button', { name: `Both, receive and transmit at ${hz} Hz` }).click();

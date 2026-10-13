@@ -2,6 +2,9 @@
   import type { ListItem } from '../lib/decode/list';
 
   export type DecodeListItem = ListItem;
+
+  /** A second tap on the same row within this time is a double-tap, ms. */
+  export const DOUBLE_TAP_MS = 350;
 </script>
 
 <script lang="ts">
@@ -9,7 +12,8 @@
    * Band activity: 40 px rows marked as in WSJT-X. CQ calls green, messages to you red, what
    * you sent amber, each with a 4 px bar, a tint and the callsign in bold.
    *
-   * A tap selects a row, a double-tap calls, and touch and hold opens the station's details.
+   * A tap selects a row (or clears the selection, on the selected row), a double-tap calls, and
+   * touch and hold opens the station's details.
    */
   import { dt, snr } from '../lib/clock/format';
   import { splitKey, type DecodeRowData } from '../lib/decode/marking';
@@ -34,7 +38,6 @@
 
   const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'you sent' } as const;
   const HOLD_MS = 500;
-  const DOUBLE_MS = 350;
 
   function spoken(r: DecodeRowData): string {
     const parts = [
@@ -77,7 +80,7 @@
     }
     press = null;
     const now = performance.now();
-    if (lastTap?.id === item.id && now - lastTap.at < DOUBLE_MS) {
+    if (lastTap?.id === item.id && now - lastTap.at < DOUBLE_TAP_MS) {
       lastTap = null;
       oncall?.(item);
       return;
