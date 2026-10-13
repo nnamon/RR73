@@ -4,6 +4,7 @@
    * location, sending on or off, and removing Wavelog from this phone.
    */
   import BackLink from '../ui/BackLink.svelte';
+  import Icon from '../ui/Icon.svelte';
   import Sheet from '../ui/Sheet.svelte';
   import { href } from '../lib/app/router.svelte';
   import { utcHm } from '../lib/clock/format';
@@ -114,11 +115,12 @@
       <div class="group" role="radiogroup" aria-labelledby="station-head">
         {#each w.stations as s (s.id)}
           <label class="row pick">
-            <input type="radio" name="station" value={s.id} checked={w.stationId === s.id} onchange={() => void setWavelog({ stationId: s.id })} />
+            <input class="visually-hidden" type="radio" name="station" value={s.id} checked={w.stationId === s.id} onchange={() => void setWavelog({ stationId: s.id })} />
             <span class="row-main">
               <span class="row-title">{s.name}</span>
               <span class="row-sub">{s.callsign}{s.grid ? ` · ${s.grid}` : ''}{s.active ? ' · active in Wavelog' : ''}</span>
             </span>
+            {#if w.stationId === s.id}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
           </label>
         {/each}
       </div>
@@ -185,12 +187,13 @@
     cursor: pointer;
   }
 
-  .pick input {
+  .pick:has(:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  .tick {
     flex: none;
-    width: 22px;
-    height: 22px;
-    margin: 0;
-    accent-color: var(--rr-accent-fill);
+    color: var(--rr-accent);
   }
 
   .center {

@@ -133,6 +133,10 @@
     padding-left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
   }
 
+  .indent + :global(.row)::before {
+    left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
+  }
+
   .ic {
     display: flex;
     flex: none;

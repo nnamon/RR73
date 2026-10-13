@@ -77,6 +77,18 @@
     return `${words[0].toUpperCase()}${words.slice(1)}${wavelog.lastError ? `. ${wavelog.lastError}` : ''}`;
   });
 
+  /** "20261013" or "2026-10-13" as 2026-10-13: the number keypad has no dash. */
+  function tidyDate(v: string): string {
+    const m = /^(\d{4})-?(\d{2})-?(\d{2})$/.exec(v.trim());
+    return m ? `${m[1]}-${m[2]}-${m[3]}` : v.trim();
+  }
+
+  /** "131452", "1314" or "13:14:52" as 13:14:52 or 13:14: the number keypad has no colon. */
+  function tidyTime(v: string): string {
+    const m = /^(\d{2}):?(\d{2})(?::?(\d{2}))?$/.exec(v.trim());
+    return m ? `${m[1]}:${m[2]}${m[3] ? `:${m[3]}` : ''}` : v.trim();
+  }
+
   /** Keeps the frequency on the band's dial frequency while the operator has not typed one. */
   function changeBandOrMode(nextBand: string, nextMode: string) {
     if (!freq || freq === defaultFreq(band, mode)) freq = defaultFreq(nextBand, nextMode);
@@ -107,6 +119,8 @@
   async function persist(): Promise<boolean> {
     const problems: string[] = [];
     const c = normaliseCall(call);
+    date = tidyDate(date);
+    time = tidyTime(time);
     if (!/[A-Z0-9]/.test(c)) problems.push('Type the other station’s callsign.');
     const start = Date.parse(`${date}T${time.length === 5 ? `${time}:00` : time}Z`);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}(:\d{2})?$/.test(time) || Number.isNaN(start)) problems.push('Type the date and the time in UTC, such as 2026-10-13 and 13:32.');
@@ -193,15 +207,15 @@
     <div class="card">
       <label class="row">
         <span class="row-title">Callsign</span>
-        <input class="row-field mono up" bind:value={call} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="VK2ESN" />
+        <input class="row-field mono up" bind:value={call} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="Required" />
       </label>
       <label class="row">
         <span class="row-title">Date (UTC)</span>
-        <input class="row-field" type="date" bind:value={date} />
+        <input class="row-field mono" bind:value={date} onblur={() => (date = tidyDate(date))} inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="10" placeholder="YYYY-MM-DD" />
       </label>
       <label class="row">
         <span class="row-title">Time (UTC)</span>
-        <input class="row-field" type="time" step="1" bind:value={time} />
+        <input class="row-field mono" bind:value={time} onblur={() => (time = tidyTime(time))} inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="8" placeholder="HH:MM:SS" />
       </label>
     </div>
 
@@ -220,30 +234,30 @@
       </label>
       <label class="row">
         <span class="row-title">Frequency (MHz)</span>
-        <input class="row-field mono" bind:value={freq} inputmode="decimal" autocomplete="off" placeholder="14.074" />
+        <input class="row-field mono" bind:value={freq} inputmode="decimal" autocomplete="off" placeholder="Optional" />
       </label>
     </div>
 
     <div class="card">
       <label class="row">
         <span class="row-title">Their grid</span>
-        <input class="row-field mono" bind:value={grid} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8" placeholder="QF56" />
+        <input class="row-field mono" bind:value={grid} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="8" placeholder="Optional" />
       </label>
       <label class="row">
         <span class="row-title">Report sent</span>
-        <input class="row-field mono" bind:value={sent} inputmode="numeric" autocomplete="off" maxlength="4" placeholder="-12" />
+        <input class="row-field mono" bind:value={sent} autocomplete="off" spellcheck="false" maxlength="4" placeholder="Optional" />
       </label>
       <label class="row">
         <span class="row-title">Report received</span>
-        <input class="row-field mono" bind:value={rcvd} inputmode="numeric" autocomplete="off" maxlength="4" placeholder="-10" />
+        <input class="row-field mono" bind:value={rcvd} autocomplete="off" spellcheck="false" maxlength="4" placeholder="Optional" />
       </label>
       <label class="row">
         <span class="row-title">Their park or summit</span>
-        <input class="row-field mono up" bind:value={refs} autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="US-1234" />
+        <input class="row-field mono up" bind:value={refs} autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="Optional" />
       </label>
       <label class="row">
         <span class="row-title">Comment</span>
-        <input class="row-field" bind:value={comment} autocomplete="off" maxlength="200" />
+        <input class="row-field" bind:value={comment} autocomplete="off" maxlength="200" placeholder="Optional" />
       </label>
     </div>
 
@@ -311,7 +325,9 @@
     text-transform: uppercase;
   }
 
-  .up::placeholder {
+  .up::placeholder,
+  .row-field::placeholder {
+    font-family: var(--rr-sans);
     text-transform: none;
   }
 

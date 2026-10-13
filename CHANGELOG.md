@@ -9,6 +9,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - To do counts QSOs not sent to Wavelog.
 - QSOs logged in the same second go to Wavelog in the order they were logged.
 - Log, Spots and Settings put their large titles in the same place, under the same 44 pt bar. Add QSO and Export ADIF are equal glyphs in the tint, 16 pt from the edge, and Export ADIF dims when there is nothing to export.
+- The QSO sheet takes the date and time as 24-hour UTC (2026-10-13, 13:14:52), and its report fields open a keyboard with a minus sign.
+- Station location lists mark the one in use with a checkmark.
 
 ## 0.5.0 · 2026-10-13
 

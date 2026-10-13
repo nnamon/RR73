@@ -48,6 +48,18 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Tap targets at least 44 px. Decode rows 40 px. Halt is the largest control in every transmit dock.
 - Layouts work from 375 x 667 points (iPhone SE) upward, in both light and dark themes.
 
+### Visual review
+
+Check every UI change against these before it ships, and compare the screen side by side with its neighbours in both themes at 375 x 667 and 393 x 852.
+
+- Every tab root starts with `LargeTitleHeader` and every sub-screen with `BackLink`: one 44 pt bar, so titles and content line up across screens.
+- Content sits 16 pt from the screen edges; text in groups, section headers and footers sits 32 pt in.
+- Bar glyphs are 44 pt targets with equal size and stroke weight, 12 pt apart, the last one ending 16 pt from the edge.
+- Disabled controls show the tint at reduced opacity, never a different grey.
+- Grouped lists follow iOS: 44 pt rows at least, separators inset to the row's text, chevrons on rows that open a screen, a trailing checkmark on the chosen row.
+- Placeholders say Required, Optional or the format (YYYY-MM-DD), never a sample value that reads as entered. Fields open the keyboard their values need.
+- Values on screen use the style guide's formats, 24-hour UTC times included.
+
 ## Style guide
 
 Applies to every string on screen, the README, docs, changelogs, commit messages and code comments. `npm run lint:copy` enforces the mechanical parts.
