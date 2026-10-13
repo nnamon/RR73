@@ -222,3 +222,27 @@ describe('WaterfallRenderer', () => {
     expect(r.info().boundaries).toEqual([]);
   });
 });
+
+describe('WaterfallRenderer in transmitted slots', () => {
+  const T0 = Date.UTC(2026, 9, 13, 13, 14, 50);
+  const SLOT = Date.UTC(2026, 9, 13, 13, 15, 0);
+  const background = [...PALETTE.background, 255];
+
+  it('draws the slots RR73 transmitted in blank, rows drawn before it was known included', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const x = Math.floor((1000 / 3000) * 300);
+    // 13:14:50 to 13:15:04 with a tone throughout; the transmission in 13:15:00 becomes known after.
+    feed(r, signal(14, [1000]), T0);
+    expect(bright(ctx.pixel(x, 2))).toBeGreaterThan(bright(background));
+    r.setTxSlots([SLOT]);
+    const rows = (s: number) => Math.round((s * 1000) / r.rowMs);
+    // 13:15:03 (1 s before the newest row) is blank; 13:14:57 (7 s before) keeps its tone.
+    expect(ctx.pixel(x, rows(1))).toEqual(background);
+    expect(bright(ctx.pixel(x, rows(7)))).toBeGreaterThan(3 * bright(background));
+    // Rows arriving later in the slot are blank as they are drawn.
+    feed(r, signal(4, [1000], 3), T0 + 14_000, 14 * 12000);
+    expect(ctx.pixel(x, 2)).toEqual(background);
+    expect(ctx.pixel(x, rows(5))).toEqual(background);
+  });
+});

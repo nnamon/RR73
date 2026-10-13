@@ -4,6 +4,7 @@ import { getKv, mergeKv, peekKv } from './db';
 import { isBand, type BandId } from '../radio/bands';
 import type { Mode } from '../clock/slots';
 import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
+import type { Contrast } from '../waterfall/levels';
 import { HUNT_ORDERS, type HuntOrder } from '../qso/sequencer';
 
 export type Theme = 'system' | 'light' | 'dark';
@@ -81,6 +82,8 @@ export interface Settings {
   features: Features;
   /** Decode colours in priority order: the first enabled match colours a decode. */
   highlights: HighlightEntry[];
+  /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
+  waterfallContrast: Contrast;
 }
 
 export const DEFAULTS: Settings = {
@@ -109,6 +112,7 @@ export const DEFAULTS: Settings = {
   houndBands: [],
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
+  waterfallContrast: 'normal',
 };
 
 const KEY = 'settings';
@@ -119,11 +123,12 @@ const KEY = 'settings';
  * 1. 0.5.0 and earlier, with no `schema` field and no optional features.
  * 2. Optional features. Every feature starts off, including activations, which 0.5.0 always showed.
  * 3. Decode colours. Every category starts on, in WSJT-X's order and colours.
- * 4. Waterfall contrast (feat/list-controls).
+ * 4. Never released. It was set aside for the waterfall contrast, which arrived in 6.
  * 5. Run, tail-ending, Hunt's order and the watchdog become settings, stored at their defaults:
- *    Run off, tail-ending on, not worked first, the watchdog on at 6 min. Applies from 3 or 4.
+ *    Run off, tail-ending on, not worked first, the watchdog on at 6 min.
+ * 6. Waterfall contrast, starting at Normal.
  */
-export const SETTINGS_SCHEMA = 5;
+export const SETTINGS_SCHEMA = 6;
 
 /** The sequencer settings schema 5 adds. */
 const SEQUENCER_DEFAULTS = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 } as const;
@@ -141,6 +146,7 @@ export function migration(raw: unknown): Record<string, unknown> {
   if (from < 2) patch.features = { ...FEATURES_OFF };
   if (from < 3) patch.highlights = defaultHighlights();
   if (from < 5) Object.assign(patch, SEQUENCER_DEFAULTS);
+  if (from < 6) patch.waterfallContrast = 'normal';
   return patch;
 }
 
@@ -204,6 +210,7 @@ export function validate(raw: unknown): Settings {
   const f = r.features as Partial<Features> | undefined;
   if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
+  if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
   return s;
 }
 

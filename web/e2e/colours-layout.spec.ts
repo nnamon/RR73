@@ -1,6 +1,6 @@
 // Decode colours on iPhone viewports in WebKit, light and dark: the Decode colours screen and its
-// colour sheet, and Operate with a decode of every category on screen. Operate keeps 30 pt rows,
-// shows its 15 rows at 393 x 852 (12 at 375 x 667), and a colour change moves no row. Screens are
+// colour sheet, and Operate with a decode of every category on screen. Operate keeps 32 pt rows,
+// shows 13 rows at 393 x 852 (10 at 375 x 667), and a colour change moves no row. Screens are
 // saved to test-results/screens/colours. The status bar and home indicator insets are applied,
 // as in states.spec.ts. Decodes, QSOs and the sent row come through the screen-review hooks.
 // states.spec.ts transmits for real and checks the sent row there.
@@ -11,7 +11,7 @@ import { checkLayout, smallTargets } from './layout-checks';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/colours', import.meta.url));
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
-const TARGET: Record<number, number> = { 393: 15, 375: 12 };
+const TARGET: Record<number, number> = { 393: 13, 375: 10 };
 
 /** The log: each QSO puts a call or grid on a band, so the decodes below fall in every category. */
 const LOG: [string, string, string, 'FT8' | 'FT4'][] = [
@@ -142,9 +142,9 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));
     await page.waitForTimeout(400);
 
-    // 30 pt rows, at least as many on screen as before decode colours.
+    // 32 pt rows, as many on screen as option B of the decode list promised.
     const heights = await page.locator('[data-testid=decode-list] button.dr').evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height));
-    expect(new Set(heights.map((h) => Math.round(h)))).toEqual(new Set([30]));
+    expect(new Set(heights.map((h) => Math.round(h)))).toEqual(new Set([32]));
     expect(await rowsOnScreen(page)).toBeGreaterThanOrEqual(TARGET[width]);
     await checkLayout(page);
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-operate.png` });

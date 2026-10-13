@@ -16,7 +16,7 @@
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
-  import { buildList, callerItems, filterCounts, type Classify, type Filter } from '../lib/decode/list';
+  import { buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../lib/decode/list';
   import { highlightDecode } from '../lib/decode/highlight';
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
@@ -185,7 +185,20 @@
     if (!st.config.run || st.phase !== 'cq' || (filter !== 'all' && filter !== 'me')) return [];
     return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes, classify);
   });
-  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify)]);
+  // Our transmission at the top of the list: planned while Tx is on, then on air. Kept to plain
+  // values first, so the sequencer's 1 s tick does not rebuild the list.
+  const planSlot = $derived(qso.st.txEnabled && qso.st.next && !qso.onAir ? qso.st.next.slotStartMs : null);
+  const planStart = $derived(qso.st.next ? qso.st.next.slotStartMs + qso.st.next.offsetS * 1000 : 0);
+  const planText = $derived(qso.st.next?.text ?? '');
+  const outgoing: Outgoing = $derived.by(() => {
+    const air = qso.onAir;
+    const slot = SLOT_MS[settings.mode];
+    return {
+      next: planSlot === null ? null : { slotStartMs: planSlot, startMs: planStart, text: planText, freqHz: settings.txHz },
+      onAir: air ? { slotStartMs: Math.floor(air.startMs / slot) * slot, startMs: air.startMs, endMs: air.endMs } : null,
+    };
+  });
+  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)]);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -236,6 +249,7 @@
     rxHz={settings.rxHz}
     txHz={settings.txHz}
     txSlots={tx.slots}
+    contrast={settings.waterfallContrast}
     stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
     hint={!settings.freqPicked}
     onset={setFrequencies}
@@ -263,7 +277,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}

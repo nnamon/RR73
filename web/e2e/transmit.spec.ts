@@ -44,7 +44,7 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
     const notice = page.getByRole('status').filter({ hasText: `Logged ${DX.call}` });
     await expect(notice).toBeVisible({ timeout: 150_000 });
     const report = row(`9V1NE ${DX.call} -12`);
-    const snr = Number((await report.locator('.c-db').textContent())!.replace('−', '-'));
+    const snr = parseInt((await report.locator('.c-db').textContent())!.replace('−', '-'));
     rpt = `${snr < 0 ? '-' : '+'}${String(Math.abs(snr)).padStart(2, '0')}`;
     await expect(notice).toContainText(`Logged ${DX.call} 20m FT8 −${rpt.slice(1)} / −12`);
     await expect(notice.getByRole('button', { name: `Undo the QSO with ${DX.call}` })).toBeVisible();

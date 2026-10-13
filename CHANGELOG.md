@@ -11,6 +11,24 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Practice scenario Fox (DXpedition): a Fox works 3 Hounds a slot and answers you after a few calls.
 - A multi-call message with a report below −30 dB is refused. It went out as a high report.
 
+## 0.10.1 · 2026-10-13
+
+- Decode rows are 32 pt and lead with the message in 16 pt proportional type, with the calling station of a CQ in bold. SNR and audio frequency follow on the right in grey: "−12 dB · 766 Hz".
+- DT is in the station's details, opened by touch and hold, with its unit: "DT −0.8 s". In 0.8 the DT column ran into the frequency at values such as −0.8.
+- Rows from slots older than the newest slot with decodes fade to grey text and a lighter tint.
+- The next transmission shows at the top of the list as soon as it is planned, as Next with a countdown to its slot. On air it reads Sending, with a red line growing to the end of the transmission, and then Sent in its slot.
+- The waterfall has a ruler with a tick every 100 Hz, a taller tick every 500 Hz and labels from 500 to 3000 Hz.
+- The Tx and Rx markers span a signal's width, from its lowest to its highest tone (50 Hz in FT8, 83 Hz in FT4), with a line at each edge and a light fill. The drag label shows the lowest tone.
+- The waterfall levels each frequency against its own noise floor, so the edges of the radio's passband read like the middle, and a signal 3 dB over the noise shows cyan.
+- Settings › Radio and audio › Waterfall contrast sets Low, Normal or High.
+- The waterfall leaves the slots RR73 transmitted in blank, where the radio's own audio showed as a band. The Tx marker stays.
+- A drag on the waterfall no longer moves the screen. In 0.9.1 a drag with a vertical movement slid Operate up by about 470 pt and left a blank area under it. Not tested on a device.
+- The waterfall shows no text before audio starts. After a break it shows when audio stopped.
+- The bar at the bottom of Operate keeps one height while receiving, calling CQ, calling a station and in a QSO, so the list stays put. Calling CQ has its own steps: CQ, Report, R-report, RR73 and Logged.
+- The Tx button shows the state: Tx off in grey, Tx on in a light blue tint, and On air in solid red with a blinking white dot, still with Reduce Motion on. The On air tag in the status line is removed.
+- Halt is a red outline in every state.
+- The buttons at the bottom of Operate are 36 pt high, inside 44 pt targets.
+
 ## 0.10.0 · 2026-10-13
 
 - Hunt, a new button in Operate, answers CQs one after another until you stop it. It calls a CQ from the slot just decoded, completes and logs the QSO, then picks the next.
@@ -54,7 +72,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.8.0 · 2026-10-13
 
-- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.
+- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and Sent. The first category from the top that matches colours the decode.
 - Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
 - Decodes from stations in the log on this band and mode show grey text over any colour.
 - Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore WSJT-X colours puts the defaults back, with Undo.

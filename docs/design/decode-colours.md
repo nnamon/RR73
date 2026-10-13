@@ -27,7 +27,7 @@ Sources: WSJT-X User Guide for version 2.7.0 (`wsjtx-main-2.7.0.html`). Section 
 | 5 | New call on this band | #99CCFF | Unverified: colour and position |
 | 6 | Ending a QSO | #FFE2C8 | Unverified: an RR73 category with no WSJT-X counterpart |
 | 7 | CQ in the message | #66FF66 | 6.3 screenshot and text; position Unverified |
-| 8 | Sent | #C98A1A | Unverified: the app's amber "you sent" colour |
+| 8 | Sent | #C98A1A | Unverified: the app's amber Sent colour |
 | Text | Worked before | #8C93A0 | Unverified: an RR73 layer with no WSJT-X counterpart |
 
 - Order. The 4.7 screenshot shows the top of the list: My Call in message, New Continent, New Continent on Band, New CQ Zone, New CQ Zone on Band, New ITU Zone, New ITU Zone on Band, New DXCC, New DXCC on Band, New Grid, New Grid on Band. The rest of the list is scrolled out of view. Unverified: the order of New Call, New Call on Band, LoTW User, CQ in message and Transmitted message. Section 6.4 recommends "My Call in message, New DXCC, New Call on Band, CQ in message and Transmitted message, reading from top to bottom" for contests, which agrees with the order above.

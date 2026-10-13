@@ -45,8 +45,10 @@ test('a drag moves Tx with a live label, sets it on release, and the hint goes f
   await expect(slider(page, 'Transmit')).toHaveValue(String(end.hz));
   await expect(slider(page, 'Receive')).toHaveValue('1500');
   await expect(hint).toBeHidden();
+  // The marker's first line sits on the lowest tone; the second 50 Hz above it.
   const tx = (await page.getByTestId('tx-marker').boundingBox())!;
-  expect(Math.abs(tx.x + tx.width / 2 - (b.x + (b.width * end.hz) / 3000))).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(tx.x + 1 - (b.x + (b.width * end.hz) / 3000))).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(tx.x + tx.width - 1 - (b.x + (b.width * (end.hz + 50)) / 3000))).toBeLessThanOrEqual(1.5);
 
   // Settings are written to IndexedDB after the change; give the write a moment.
   await page.waitForTimeout(500);
@@ -77,7 +79,7 @@ test('a tap sets Tx where it lands, and a drag from the green line moves Rx', as
   await expect(slider(page, 'Receive')).toHaveValue(String(to.hz));
   await expect(slider(page, 'Transmit')).toHaveValue(String(tap.hz));
   const rx = (await page.getByTestId('rx-marker').boundingBox())!;
-  expect(Math.abs(rx.x + rx.width / 2 - (b.x + (b.width * to.hz) / 3000))).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(rx.x + 1 - (b.x + (b.width * to.hz) / 3000))).toBeLessThanOrEqual(1.5);
 });
 
 test('a vertical movement and a cancelled drag change nothing', async ({ page }) => {

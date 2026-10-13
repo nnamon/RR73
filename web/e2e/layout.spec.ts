@@ -87,18 +87,20 @@ for (const theme of ['light', 'dark'] as const) {
       if (running) await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 7 of 10\./ })).toBeVisible();
       const { vw, vh } = await page.evaluate(() => ({ vw: window.innerWidth, vh: window.innerHeight }));
       const top = (await page.locator('.operate header.top').boundingBox())!;
-      const wf = (await page.getByTestId('waterfall').boundingBox())!;
+      const wf = (await page.getByTestId('waterfall-area').boundingBox())!;
       const filters = (await page.getByRole('radiogroup', { name: 'Show decodes' }).boundingBox())!;
       const list = (await page.getByTestId('decode-list').boundingBox())!;
       const bar = (await page.getByRole('region', { name: 'Transmit' }).boundingBox())!;
-      // The top bar is one 44 pt row; the waterfall is 130 pt at 393 x 852 and 110 pt at 375 x 667.
+      // The top bar is one 44 pt row; the waterfall with its ruler is 130 pt at 393 x 852 and 110 pt
+      // at 375 x 667.
       expect([Math.round(top.y), Math.round(top.height)]).toEqual([0, 44]);
       expect(wf.height).toBeCloseTo(38 + 0.108 * vh, 0);
       expect(filters.height).toBeLessThanOrEqual(44);
       expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
       // The bottom bar sits at the bottom, with Halt in it; no tab bar.
       expect(bar.y + bar.height).toBeCloseTo(vh, 0);
-      expect(bar.height).toBeLessThanOrEqual(54);
+      // Status line, step row and buttons: one height in every state (states.spec.ts).
+      expect(bar.height).toBeCloseTo(86, 0);
       await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
       const halt = (await page.getByRole('button', { name: 'Halt' }).boundingBox())!;
       expect(halt.height).toBeGreaterThanOrEqual(43.5);
@@ -164,6 +166,27 @@ for (const theme of ['light', 'dark'] as const) {
     expect(last.y + last.height).toBeLessThanOrEqual(m.y + m.height + 0.5);
     await page.waitForTimeout(200);
     await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu-end.png` });
+  });
+
+  test(`a drag on the waterfall never scrolls the screen in ${theme}`, async ({ page }) => {
+    await open(page, '#/operate', theme);
+    // 0.9.1 left vertical pans to the browser (touch-action: pan-y) and only body hid its
+    // overflow: on an iPhone a drag on the waterfall slid Operate up by 470 pt.
+    const area = page.getByTestId('waterfall-area');
+    expect(await area.evaluate((el) => getComputedStyle(el).touchAction)).toBe('none');
+    const root = await page.evaluate(() => {
+      const [h, b] = [getComputedStyle(document.documentElement), getComputedStyle(document.body)];
+      return { html: [h.overflowY, h.overscrollBehaviorY], body: [b.overflowY, b.position] };
+    });
+    expect(root).toEqual({ html: ['hidden', 'none'], body: ['hidden', 'fixed'] });
+    // A drag with a vertical part, then a scroll asked for outright: the document stays put.
+    const b = (await area.boundingBox())!;
+    await page.mouse.move(b.x + b.width * 0.3, b.y + 20);
+    await page.mouse.down();
+    await page.mouse.move(b.x + b.width * 0.6, b.y + b.height + 300, { steps: 8 });
+    await page.mouse.up();
+    await page.evaluate(() => window.scrollTo(0, 470));
+    expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
   });
 
   test(`band sheet in ${theme}`, async ({ page }, info) => {
@@ -242,6 +265,22 @@ for (const theme of ['light', 'dark'] as const) {
     const halt = boxes.at(-1)!;
     for (const b of boxes.slice(0, -1)) expect(halt.width).toBeGreaterThanOrEqual(b.width);
     await expect(buttons.at(-1)!).toHaveText('Halt');
+    // 36 pt faces in the 44 pt targets.
+    const faces = await bar.locator('.face').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+    expect(new Set(faces)).toEqual(new Set([36]));
+    await expect(buttons[2]).toHaveText('Hunt');
+    // Room for one more button beside Hunt: every target stays 44 pt wide.
+    await bar.locator('[data-id=hunt]').evaluate((el) => {
+      const extra = el.cloneNode(true) as HTMLElement;
+      extra.dataset.id = 'extra';
+      extra.querySelector('.face')!.textContent = 'Spot';
+      el.after(extra);
+    });
+    const six = await Promise.all((await bar.getByRole('button').all()).map(async (b) => (await b.boundingBox())!));
+    expect(six).toHaveLength(6);
+    for (const b of six) expect(b.width).toBeGreaterThanOrEqual(43.5);
+    for (let i = 1; i < six.length; i++) expect(six[i].x).toBeGreaterThanOrEqual(six[i - 1].x + six[i - 1].width - 0.5);
+    await bar.locator('[data-id=extra]').evaluate((el) => el.remove());
 
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });

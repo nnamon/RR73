@@ -87,7 +87,7 @@ test('a double-tap on a decode calls the station with Tx on at once', async ({ p
   await page.waitForTimeout(500);
   await row(page, 'CQ VJ6X OF78').click();
   await expect(row(page, 'CQ VJ6X OF78')).toHaveAttribute('aria-pressed', 'false');
-  await expect(bar.getByRole('status')).toBeHidden();
+  await expect(bar.getByRole('status')).toHaveText('');
 
   await row(page, 'CQ VJ6X OF78').dblclick();
   await expect(bar.getByRole('button', { name: 'Tx on' })).toHaveAttribute('aria-pressed', 'true');
@@ -95,7 +95,8 @@ test('a double-tap on a decode calls the station with Tx on at once', async ({ p
   // Rx moves to the station; Hold Tx keeps Tx. Audio is off here, so the bar says why nothing goes out.
   await expect(page.getByRole('slider', { name: 'Receive frequency, Hz' })).toHaveValue('505');
   await expect(bar.getByRole('status')).toContainText('Resume audio to transmit.');
-  await expect(bar.getByRole('button', { name: 'Halt' })).toHaveClass(/solid/);
+  // Halt stays a red outline: the Tx button carries the state.
+  await expect(bar.getByRole('button', { name: 'Halt' })).toHaveClass(/halt/);
 });
 
 test('the ••• menu holds the rest, acts on the first tap and closes with Escape', async ({ page }) => {
@@ -164,9 +165,9 @@ test('Tune in the ••• menu starts at once, shows in the bar, and Halt stop
   await page.getByRole('menuitem', { name: 'Tune for 10 s' }).click();
   await expect(bar.getByRole('status')).toContainText('Tune');
   await expect(bar.getByRole('status')).toContainText('1500 Hz');
-  await expect(bar.getByRole('button', { name: 'Halt' })).toHaveClass(/solid/);
+  await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible();
   await expect(page.getByRole('timer', { name: /Tuning$/ })).toBeVisible();
   await bar.getByRole('button', { name: 'Halt' }).click();
-  await expect(bar.getByRole('status')).toBeHidden();
-  await expect(bar.getByRole('button', { name: 'Halt' })).not.toHaveClass(/solid/);
+  await expect(bar.getByRole('status')).toHaveText('');
+  await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
 });

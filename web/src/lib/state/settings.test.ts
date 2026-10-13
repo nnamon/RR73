@@ -84,7 +84,7 @@ describe('the optional features migration', () => {
     await setKv('settings', { callsign: '9V1NE', theme: 'dark', band: '40m' });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF });
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
   });
 
   it('keeps the features of a current record', async () => {
@@ -98,7 +98,7 @@ describe('the optional features migration', () => {
     await loadSettings();
     expect(settings).toEqual(DEFAULTS);
     expect(await getKv('settings')).toBeUndefined();
-    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ });
+    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal' });
   });
 
   it('keeps a feature turned on before the stored settings arrived', async () => {
@@ -117,7 +117,7 @@ describe('the decode colours migration', () => {
     expect(settings.highlights).toEqual(defaultHighlights());
     expect(settings.highlights.every((h) => h.on)).toBe(true);
     expect(settings.features.activations).toBe(true);
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
   });
 
   it('keeps a stored order, colours and switches', async () => {
@@ -132,17 +132,13 @@ describe('the decode colours migration', () => {
 });
 
 describe('the sequencer settings migration', () => {
-  it('stores Run off, tail-ending on, not worked first and a 6 min watchdog, from schema 3 or 4', async () => {
-    for (const from of [3, 4]) {
-      resetSettings();
-      // Schema 4 adds a waterfall contrast setting on another branch; it is kept as stored.
-      const stored = { callsign: '9V1NE', highlights: defaultHighlights(), schema: from, ...(from === 4 ? { contrast: 0.7 } : {}) };
-      await setKv('settings', stored);
-      expect(migration(stored)).toEqual({ schema: 5, ...SEQ });
-      await loadSettings();
-      expect(settings).toMatchObject({ callsign: '9V1NE', ...SEQ });
-      await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, schema: 5 });
-    }
+  it('stores Run off, tail-ending on, not worked first and a 6 min watchdog on a phone that ran 0.9', async () => {
+    const stored = { callsign: '9V1NE', highlights: defaultHighlights(), schema: 3 };
+    await setKv('settings', stored);
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...SEQ, waterfallContrast: 'normal' });
+    await loadSettings();
+    expect(settings).toMatchObject({ callsign: '9V1NE', ...SEQ });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
   });
 
   it('keeps sequencer settings the operator changed', async () => {
@@ -157,6 +153,25 @@ describe('the sequencer settings migration', () => {
     expect(validate({ watchdogMin: 90 }).watchdogMin).toBe(90);
     for (const bad of [0, -3, Number.NaN, 10_000]) expect(validate({ watchdogMin: bad }).watchdogMin).toBe(6);
     expect(validate({ huntOrder: 'loudest', run: 'yes' })).toMatchObject({ huntOrder: 'unworked', run: false });
+  });
+});
+
+describe('the waterfall contrast migration', () => {
+  it('starts at Normal on a phone that ran 0.10.0, keeping its sequencer settings, and stores that once', async () => {
+    const mine = { run: true, tailEnd: false, huntOrder: 'farthest', watchdog: false, watchdogMin: 2.5 };
+    const stored = { callsign: '9V1NE', highlights: defaultHighlights(), ...mine, schema: 5 };
+    await setKv('settings', stored);
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, waterfallContrast: 'normal' });
+    await loadSettings();
+    expect(settings).toMatchObject({ ...mine, waterfallContrast: 'normal' });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
+  });
+
+  it('keeps a stored contrast and drops an unknown one', async () => {
+    await setKv('settings', { waterfallContrast: 'high', schema: SETTINGS_SCHEMA });
+    await loadSettings();
+    expect(settings.waterfallContrast).toBe('high');
+    expect(validate({ waterfallContrast: 'max' }).waterfallContrast).toBe('normal');
   });
 });
 

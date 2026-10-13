@@ -6,8 +6,15 @@
   box-sizing: border-box;
 }
 
+/*
+ * The document never scrolls: only the panes inside the app do. iOS scrolls the document from
+ * a touch even with overflow hidden on body alone, so html holds it too, and body is pinned to
+ * the viewport (the standalone app had slid up by 470 pt under a drag).
+ */
 html {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
@@ -15,6 +22,8 @@ html {
 }
 
 body {
+  position: fixed;
+  inset: 0;
   height: 100%;
   margin: 0;
   overflow: hidden;

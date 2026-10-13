@@ -1,6 +1,6 @@
 // Operate in the states an operator meets, on iPhone viewports in WebKit, light and dark: each
-// state is captured for the visual review, and the decode rows on screen are counted against
-// the targets (15 receiving and 12 in a QSO at 393 x 852, 12 receiving at 375 x 667). The
+// state is captured for the visual review, the decode rows on screen are counted against the
+// targets (13 receiving at 393 x 852, 10 at 375 x 667), and the bottom bar keeps one height. The
 // status bar and home indicator insets of the device are applied, as the app runs from the Home
 // Screen. WebKit's mock microphone runs the audio; decodes come through the screen-review hooks
 // (src/lib/testing/e2e-hooks.ts). Transmissions are real: the scheduler plays them.
@@ -15,7 +15,7 @@ const SLOT = 15_000;
 /** Status bar and home indicator insets, pt: iPhone 15 and 16 (393 x 852), iPhone SE (375 x 667). */
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
 /** Decode rows that must show, by viewport width. */
-const TARGET: Record<number, { receiving: number; qso: number }> = { 393: { receiving: 15, qso: 12 }, 375: { receiving: 12, qso: 9 } };
+const TARGET: Record<number, { receiving: number; qso: number }> = { 393: { receiving: 13, qso: 9 }, 375: { receiving: 10, qso: 8 } };
 
 interface D {
   text: string;
@@ -86,19 +86,23 @@ function rowsOnScreen(page: Page): Promise<number> {
 
 for (const theme of ['light', 'dark'] as const) {
   test(`Operate states in ${theme}`, async ({ page }, info) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const width = page.viewportSize()!.width;
     const inset = INSETS[width];
     const counts: Record<string, number> = {};
+    const bars: Record<string, number> = {};
     mkdirSync(SHOTS, { recursive: true });
     const shot = async (name: string) => {
       // As after a tap on the new decodes pill: the newest slot at the top.
       await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));
       await page.waitForTimeout(400);
       counts[name] = await rowsOnScreen(page);
+      bars[name] = Math.round((await page.getByRole('region', { name: 'Transmit' }).boundingBox())!.height * 2) / 2;
       expect(await smallTargets(page, 'main .pane:not([hidden])')).toEqual([]);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(wide).toBeLessThanOrEqual(0);
+      // The document never scrolls in any state: only the list does.
+      expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${name}.png` });
     };
     await page.addInitScript((i) => {
@@ -135,15 +139,53 @@ for (const theme of ['light', 'dark'] as const) {
     await shot('2-decodes');
     expect(counts['2-decodes']).toBeGreaterThanOrEqual(TARGET[width].receiving);
 
-    // Calling: a double-tap on a CQ calls with Tx on; the next slot of the other parity goes out.
-    await rowOf(page, 'CQ VJ6X OF78').dblclick();
+    // CQ: planned at once, with a countdown at the top of the list, then on air with a progress line.
+    // Clicked early in an odd slot, so the even slot it goes out in is 9 to 14 s away.
+    await phase(page, 1, 6, 'odd');
+    await bar.getByRole('button', { name: 'CQ', exact: true }).click();
+    // Tx on is a light tint, set apart from the solid CQ button.
+    await expect(bar.locator('[data-id=tx]')).toHaveClass(/soft/);
+    await expect(bar.locator('[data-id=cq]')).toHaveClass(/selected/);
+    const next = page.getByTestId('next-row');
+    await expect(next).toBeVisible();
+    await expect(next.locator('.c-tag')).toHaveText(/^Next · :[0-5]\d$/);
+    await expect(next.locator('.c-when')).toHaveText(/^in \d+ s$/);
+    await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/CQ.*Report.*R-report.*RR73.*Logged/);
+    await shot('3-cq-next');
+    await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 35_000 });
+    await expect(bar.locator('[data-id=tx]')).toHaveClass(/air/);
+    const cqSlot = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
+    const sending = page.getByTestId('decode-list').locator('button.dr.sending');
+    await expect(sending.locator('.c-tag')).toHaveText('Sending');
+    await expect(next).toHaveCount(0);
+    await page.waitForTimeout(2000);
+    await shot('4-cq-sending');
+    expect(await sending.locator('.prog').evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0);
+    await bar.getByRole('button', { name: 'Halt' }).click();
+    await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+    await expect(page.getByTestId('decode-list').locator('button.dr.sent .c-tag').first()).toHaveText('Sent');
+
+    // Calling: fresh decodes in the slot after the CQ; a double-tap on a CQ calls with Tx on, and
+    // the next slot of the other parity goes out.
+    // The slot heard in has ended and was decoded, so the decoder's own result does not replace it.
+    let after = await phase(page, 2, 5);
+    while (after - SLOT <= cqSlot) {
+      await page.waitForTimeout(SLOT - 4000);
+      after = await phase(page, 2, 5);
+    }
+    await inject(page, after - SLOT, SLOT_B);
+    // Both taps in one task, so a loaded machine cannot stretch them past the double-tap time.
+    await rowOf(page, 'CQ VJ6X OF78').evaluate((el: HTMLElement) => {
+      el.click();
+      el.click();
+    });
     await expect(bar.getByRole('button', { name: 'Tx on' })).toBeVisible();
-    await expect(bar.getByText('On air')).toBeVisible({ timeout: 20_000 });
+    await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 40_000 });
     // The slot RR73 transmits in, read as soon as it is on air: the screenshot below can run past
     // the slot boundary on a loaded machine.
     const ours = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
-    await shot('3-calling');
-    expect(counts['3-calling']).toBeGreaterThanOrEqual(TARGET[width].qso);
+    await shot('5-calling');
+    expect(counts['5-calling']).toBeGreaterThanOrEqual(TARGET[width].qso);
 
     // The radio hands RR73's own signal back in the slot it transmits in, at +45 dB: that slot is
     // not decoded or shown, and the amber row says what was sent.
@@ -158,8 +200,8 @@ for (const theme of ['light', 'dark'] as const) {
     await inject(page, ours + SLOT, [d('9V1NE VJ6X -12', -9, 506), ...SLOT_A.slice(0, 7)]);
     await expect(bar.getByRole('list', { name: 'QSO progress' })).toBeVisible();
     await expect(bar.getByText(/^Tx3 · VJ6X 9V1NE R-09/)).toBeVisible();
-    await shot('4-in-qso');
-    expect(counts['4-in-qso']).toBeGreaterThanOrEqual(TARGET[width].qso);
+    await shot('6-in-qso');
+    expect(counts['6-in-qso']).toBeGreaterThanOrEqual(TARGET[width].qso);
 
     // Run: End QSO from the menu, Run, then three callers; the ••• menu open.
     await bar.getByRole('button', { name: 'More' }).click();
@@ -179,12 +221,14 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('decode-list').getByText('Working')).toBeVisible();
     await bar.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('menu', { name: 'More' })).toBeVisible();
-    await shot('5-run');
+    await shot('7-run');
     await page.keyboard.press('Escape');
     await bar.getByRole('button', { name: 'Halt' }).click();
     await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
 
-    writeFileSync(`${SHOTS}/${info.project.name}-${theme}-rows.json`, JSON.stringify(counts));
-    console.log(`${info.project.name} ${theme} rows ${JSON.stringify(counts)}`);
+    // One bottom bar height in every state: idle, CQ, calling, in a QSO and Run.
+    expect(new Set(Object.values(bars)).size, JSON.stringify(bars)).toBe(1);
+    writeFileSync(`${SHOTS}/${info.project.name}-${theme}-rows.json`, JSON.stringify({ counts, bars }));
+    console.log(`${info.project.name} ${theme} rows ${JSON.stringify(counts)} bar ${JSON.stringify(bars)}`);
   });
 }

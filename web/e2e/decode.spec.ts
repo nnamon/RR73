@@ -93,7 +93,7 @@ async function listedSlots(page: Page): Promise<ListedSlot[]> {
         slots.push({ head: `${cell('.visually-hidden')}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, rows: [] });
       }
       else if (li.querySelector('button.dr') && slots.length) {
-        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: Number(cell('.c-hz')), db: Number(cell('.c-db').replace('\u2212', '-')) });
+        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: parseInt(cell('.c-hz')), db: parseInt(cell('.c-db').replace('\u2212', '-')) });
       }
     }
     return slots.reverse();
@@ -166,8 +166,8 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   await expect(row('JH1RRT YB0AZK RR73')).not.toHaveClass(/k-(cq|me)/);
   await expect(page.getByRole('button', { name: /9V1NE JA1KXM PM95, to you/ }).first()).toBeVisible();
 
-  // Rows are 30 px, and the list with decodes passes axe (WCAG 2.2 AA).
-  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(30, 0);
+  // Rows are 32 px, and the list with decodes passes axe (WCAG 2.2 AA).
+  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(32, 0);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   await page.screenshot({ path: fileURLToPath(new URL('../test-results/screens/decode-chromium-light-operate.png', import.meta.url)) });

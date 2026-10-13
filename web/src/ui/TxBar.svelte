@@ -1,18 +1,22 @@
 <script lang="ts">
   /**
-   * The bottom bar. While calling or in a QSO, one status line says what is on air or goes next
-   * and when, with the watchdog on the right, and a step bar shows the QSO's progress. Under it,
-   * one row of controls: Tx on or off, CQ, Hunt, the ••• menu and Halt. Every control acts on the
-   * first tap. Halt is always there and always enabled, and turns solid red while Tx is on or
-   * output plays.
+   * The bottom bar, one height in every state. A status line says what is on air or goes next and
+   * when, with the watchdog on the right; while calling CQ, answering or in a QSO a step row shows
+   * the progress (CQ has its own steps), and its space stays reserved otherwise. Under them, one
+   * row of buttons from data (BarButtons): Tx, CQ, Hunt, the ••• menu and Halt. The Tx button
+   * carries the state: Tx off in grey, Tx on in a light accent tint, and On air in solid red with a
+   * blinking dot; solid fills mean an active CQ (blue), Hunt (green) or a transmission (red). Every
+   * button acts on the first tap. Halt is always there, always enabled, a red outline.
    */
   import { tick } from 'svelte';
+  import BarButtons, { type BarButton } from './BarButtons.svelte';
   import Icon from './Icon.svelte';
   import { signed } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
   import { pathBetween } from '../lib/qso/grid';
   import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
-  import { barText, houndText, huntText, runTally, steps, watchdogText } from '../lib/qso/view';
+  import { barText, houndText, huntText, runTally, watchdogText } from '../lib/qso/view';
+  import { active, barSteps, txButton } from '../lib/operate/bar';
   import { clock } from '../lib/state/now.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { callCq, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
@@ -25,7 +29,6 @@
 
   const st = $derived(qso.st);
   const onAir = $derived(qso.onAir);
-  const hot = $derived(st.txEnabled || !!onAir || tx.tuning);
   const notice = $derived(qso.notice && clock.ms - qso.notice.atMs < 20_000 ? qso.notice : null);
   const blocked = $derived(st.phase !== 'idle' || st.hunt ? notReady(st) : null);
   const text = $derived(barText(st));
@@ -34,7 +37,7 @@
   /** CQ is on until a station is called by hand or Hunt starts. */
   const cqOn = $derived(st.phase === 'cq' && !st.hunt);
   const running = $derived(cqOn && st.config.run);
-  const stepList = $derived(steps(st));
+  const stepList = $derived(active(st) && !tx.tuning ? barSteps(st) : []);
   const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
   const aside = $derived.by(() => {
     if (tx.tuning) return `${tuneLeft} s`;
@@ -62,22 +65,22 @@
     return `${bare(selCall)} · ${where}`;
   });
 
-  /** The status line: a pill, the text, the right-hand note, and its tone. Null hides the line. */
-  const line = $derived.by((): { pill: { text: string; tone: 'tx' | 'run' } | null; text: string; aside: string; warn: boolean } | null => {
-    if (tx.tuning) return { pill: { text: 'Tune', tone: 'tx' }, text: `${settings.txHz} Hz`, aside, warn: false };
-    if (onAir) return { pill: { text: 'On air', tone: 'tx' }, text: `Tx${onAir.tx} · ${onAir.text}`, aside, warn: false };
-    if (notice) return { pill: null, text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside, warn: notice.kind !== 'info' };
-    if (blocked) return { pill: null, text: blocked, aside, warn: true };
-    if (hunting) return { pill: null, text: hunting, aside, warn: false };
-    if (hounding && st.partner) return { pill: null, text: hounding, aside, warn: false };
-    if (text) return { pill: running ? { text: 'Run', tone: 'run' } : null, text, aside, warn: false };
-    if (selLine) return { pill: null, text: selLine, aside: 'Double-tap to call', warn: false };
-    if (hounding) return { pill: null, text: hounding, aside, warn: false };
+  /** The status line: the Run tag, the text, the right-hand note, and its tone. Null leaves the line empty. */
+  const line = $derived.by((): { run: boolean; text: string; aside: string; warn: boolean } | null => {
+    if (tx.tuning) return { run: false, text: `Tune · ${settings.txHz} Hz`, aside, warn: false };
+    if (onAir) return { run: running, text: `Tx${onAir.tx} · ${onAir.text}`, aside, warn: false };
+    if (notice) return { run: false, text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside, warn: notice.kind !== 'info' };
+    if (blocked) return { run: false, text: blocked, aside, warn: true };
+    if (hunting) return { run: false, text: hunting, aside, warn: false };
+    if (hounding && st.partner) return { run: false, text: hounding, aside, warn: false };
+    if (text) return { run: running, text, aside, warn: false };
+    if (selLine) return { run: false, text: selLine, aside: 'Double-tap to call', warn: false };
+    if (hounding) return { run: false, text: hounding, aside, warn: false };
     return null;
   });
 
   let menuOpen = $state(false);
-  let moreBtn: HTMLButtonElement;
+  let barEl: HTMLElement;
   let menuEl: HTMLDivElement | undefined = $state();
 
   const ORDERS: { id: QueueOrder; label: string }[] = [
@@ -106,7 +109,7 @@
   function closeMenu(focus = true) {
     if (!menuOpen) return;
     menuOpen = false;
-    if (focus) moreBtn?.focus();
+    if (focus) barEl?.querySelector<HTMLButtonElement>('[data-id=more]')?.focus();
   }
 
   /** A menu action: closes the menu, then acts. */
@@ -114,6 +117,15 @@
     closeMenu(false);
     fn();
   };
+
+  const txb = $derived(txButton(st.txEnabled, !!onAir || tx.tuning));
+  const buttons: BarButton[] = $derived([
+    { id: 'tx', label: txb.label, tone: txb.look === 'off' ? 'plain' : txb.look === 'on' ? 'soft' : 'air', pressed: st.txEnabled, dot: txb.look === 'air' ? 'blink' : 'still', onclick: () => setTxEnabled(!st.txEnabled) },
+    { id: 'cq', label: 'CQ', tone: cqOn ? 'selected' : 'plain', pressed: cqOn, onclick: callCq },
+    { id: 'hunt', label: 'Hunt', tone: st.hunt ? 'run' : 'plain', pressed: st.hunt, onclick: () => setHunt(!st.hunt) },
+    { id: 'more', label: 'More', icon: 'more', menu: { open: menuOpen }, onclick: () => (menuOpen ? closeMenu() : void openMenu()) },
+    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, onclick: () => halt() },
+  ]);
 
   function menuKey(e: KeyboardEvent) {
     if (e.key === 'Escape') {
@@ -129,32 +141,24 @@
   }
 </script>
 
-<section class="bar" class:hot aria-label="Transmit">
-  {#if line}
-    <div class="status" role="status">
-      {#if line.pill}<span class="pill {line.pill.tone}">{line.pill.text}</span>{/if}
+<section class="bar" aria-label="Transmit" bind:this={barEl}>
+  <div class="status" role="status">
+    {#if line}
+      {#if line.run}<span class="pill">Run</span>{/if}
       <span class="msg" class:warn={line.warn} class:mono={!line.warn}>{line.text}</span>
       {#if line.aside}<span class="aside">{line.aside}</span>{/if}
-    </div>
-  {/if}
-  {#if st.partner && !tx.tuning}
+    {/if}
+  </div>
+  {#if stepList.length}
     <ol class="steps" aria-label="QSO progress">
       {#each stepList as s, i (i)}
         <li class="step {s.state}"><i></i><span>{s.label}</span></li>
       {/each}
     </ol>
+  {:else}
+    <div class="steps" aria-hidden="true"></div>
   {/if}
-  <div class="ctl">
-    <button class="b txb" class:on={st.txEnabled} aria-pressed={st.txEnabled} onclick={() => setTxEnabled(!st.txEnabled)}>
-      <span class="dot" aria-hidden="true"></span>{st.txEnabled ? 'Tx on' : 'Tx off'}
-    </button>
-    <button class="b" class:on={cqOn} aria-pressed={cqOn} onclick={callCq}>CQ</button>
-    <button class="b hunt" class:on={st.hunt} aria-pressed={st.hunt} onclick={() => setHunt(!st.hunt)}>Hunt</button>
-    <button class="b icon" class:open={menuOpen} bind:this={moreBtn} aria-label="More" aria-haspopup="menu" aria-expanded={menuOpen} onclick={() => (menuOpen ? closeMenu() : void openMenu())}>
-      <Icon name="more" size={22} />
-    </button>
-    <button class="halt" class:solid={hot} onclick={() => halt()}>Halt</button>
-  </div>
+  <BarButtons {buttons} />
   {#if menuOpen}
     <div class="scrim" aria-hidden="true" onclick={() => closeMenu(false)}></div>
     <!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -208,7 +212,7 @@
     position: relative;
     z-index: 3;
     flex: none;
-    padding: var(--rr-space-1-5) calc(var(--rr-space-3) + var(--rr-safe-right)) 0 calc(var(--rr-space-3) + var(--rr-safe-left));
+    padding: var(--rr-space-1) calc(var(--rr-space-3) + var(--rr-safe-right)) 0 calc(var(--rr-space-3) + var(--rr-safe-left));
     background: var(--rr-dock);
     box-shadow: 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
@@ -217,27 +221,19 @@
     display: flex;
     gap: var(--rr-space-2);
     align-items: center;
-    height: 22px;
+    height: 20px;
     white-space: nowrap;
   }
 
   .pill {
     flex: none;
-    padding: var(--rr-space-px) var(--rr-space-1-5);
+    padding: 0 var(--rr-space-1-5);
     border-radius: var(--rr-radius-s);
+    background: var(--rr-run);
+    color: var(--rr-on-strong);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-bold);
     line-height: var(--rr-leading-caption);
-  }
-
-  .pill.tx {
-    background: var(--rr-tx-fill);
-    color: var(--rr-on-fill);
-  }
-
-  .pill.run {
-    background: var(--rr-run);
-    color: var(--rr-on-strong);
   }
 
   .msg {
@@ -261,10 +257,11 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /* Always 18 pt, empty while idle, so the bar keeps its height. */
   .steps {
     display: flex;
     gap: var(--rr-space-1-5);
-    height: 20px;
+    height: 18px;
     margin: 0;
     padding: var(--rr-space-half) 0 0;
     list-style: none;
@@ -277,7 +274,7 @@
     gap: var(--rr-space-half);
     min-width: 0;
     font-size: var(--rr-text-axis);
-    line-height: 12px;
+    line-height: 11px;
     color: var(--rr-label3);
   }
 
@@ -304,86 +301,6 @@
 
   .step.now i {
     background: var(--rr-tx);
-  }
-
-  .ctl {
-    display: flex;
-    gap: var(--rr-space-2);
-    align-items: center;
-    height: 46px;
-    padding-bottom: var(--rr-space-half);
-  }
-
-  .b {
-    display: flex;
-    flex: none;
-    gap: var(--rr-space-1-5);
-    align-items: center;
-    justify-content: center;
-    min-width: var(--rr-tap);
-    height: var(--rr-tap);
-    padding: 0 var(--rr-space-3);
-    border-radius: var(--rr-radius-l);
-    background: var(--rr-fill-bg);
-    color: var(--rr-label);
-    font-size: var(--rr-text-callout);
-    font-weight: var(--rr-weight-semibold);
-    white-space: nowrap;
-  }
-
-  .b.icon {
-    padding: 0;
-  }
-
-  .b.icon.open {
-    background: var(--rr-label);
-    color: var(--rr-on-strong);
-  }
-
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 4px;
-    background: var(--rr-label3);
-  }
-
-  .txb.on {
-    background: var(--rr-tx-fill);
-    color: var(--rr-on-fill);
-    font-weight: var(--rr-weight-bold);
-  }
-
-  .txb.on .dot {
-    background: var(--rr-on-fill);
-  }
-
-  .b.on:not(.txb, .hunt) {
-    background: var(--rr-accent-fill);
-    color: var(--rr-on-fill);
-  }
-
-  .hunt.on {
-    background: var(--rr-run);
-    color: var(--rr-on-strong);
-    font-weight: var(--rr-weight-bold);
-  }
-
-  .halt {
-    flex: 1;
-    min-width: var(--rr-tap);
-    height: var(--rr-tap);
-    border-radius: var(--rr-radius-l);
-    background: transparent;
-    box-shadow: inset 0 0 0 2px var(--rr-tx);
-    color: var(--rr-tx-text);
-    font-size: var(--rr-text-body);
-    font-weight: var(--rr-weight-bold);
-  }
-
-  .halt.solid {
-    background: var(--rr-tx-fill);
-    box-shadow: none;
-    color: var(--rr-on-fill);
   }
 
   .scrim {

@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CATEGORIES, PALETTE } from './highlight';
-import { BASE as TS_BASE, GROUND, TINT as TS_TINT, inkFor, rgb } from './highlight-colour';
+import { BASE as TS_BASE, GROUND, OLD_TEXT, TINT as TS_TINT, TINT_OLD, inkFor, oldInkFor, rgb, tintOf } from './highlight-colour';
 
 const css = readFileSync(join(__dirname, '../../styles/tokens.css'), 'utf8');
 
@@ -101,5 +101,32 @@ describe('decode colour contrast', () => {
       // On the CQ tint the grey and the row text differ by 1.5:1 or more.
       expect(contrast(hex(inkFor(GREY, cq)[theme]), LABEL[theme])).toBeGreaterThanOrEqual(1.5);
     }
+  });
+});
+
+describe('rows of older slots', () => {
+  const colours = [...new Set([...CATEGORIES.map((c) => c.colour), ...PALETTE.map((p) => p.colour), '#000000', '#FFFFFF', '#808080', '#0000FF'])];
+
+  it('take their faded tint and grey text from tokens.css', () => {
+    expect(TINT_OLD).toEqual({ light: pct('rr-hl-tint-old-light'), dark: pct('rr-hl-tint-old-dark') });
+    const text = pair('rr-old-text');
+    expect([rgb(OLD_TEXT.light), rgb(OLD_TEXT.dark)]).toEqual([text.light, text.dark]);
+    expect(TINT_OLD.light).toBeLessThan(TS_TINT.light);
+    expect(TINT_OLD.dark).toBeLessThan(TS_TINT.dark);
+  });
+
+  it('keep 4.5:1 for grey text on a plain row', () => {
+    for (const theme of ['light', 'dark'] as const) expect(contrast(rgb(OLD_TEXT[theme]), rgb(GROUND[theme]))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keep 4.5:1 on every faded tint', () => {
+    for (const c of colours) {
+      const ink = oldInkFor(c);
+      for (const theme of ['light', 'dark'] as const) expect(contrast(rgb(ink[theme]), tintOf(c, theme, TINT_OLD[theme])), `${c} ${theme}`).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('stay the old grey on a plain row', () => {
+    expect([rgb(OLD_TEXT.light), rgb(OLD_TEXT.dark)].map((c) => Math.max(...c) - Math.min(...c) < 24)).toEqual([true, true]);
   });
 });

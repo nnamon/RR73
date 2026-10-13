@@ -8,6 +8,7 @@ import type { WaterfallPalette } from './colormap';
 import type { FromWaterfall, ToWaterfall } from './protocol';
 import { WaterfallRenderer, type Context2D, type FrameInfo } from './renderer';
 import type { Mode } from '../clock/slots';
+import type { Contrast } from './levels';
 
 export class WaterfallClient {
   /** True when the worker draws; false on the main-thread fallback. */
@@ -65,6 +66,20 @@ export class WaterfallClient {
     if (this.worker) this.send({ type: 'mode', mode });
     else if (this.local) {
       this.local.setMode(mode);
+      this.onFrame(this.local.info());
+    }
+  }
+
+  setContrast(contrast: Contrast) {
+    if (this.worker) this.send({ type: 'contrast', contrast });
+    else this.local?.setContrast(contrast);
+  }
+
+  /** Slots RR73 transmitted in, UTC ms: drawn blank. */
+  setTxSlots(starts: readonly number[]) {
+    if (this.worker) this.send({ type: 'txSlots', starts: [...starts] });
+    else if (this.local) {
+      this.local.setTxSlots(starts);
       this.onFrame(this.local.info());
     }
   }
