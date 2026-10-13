@@ -438,6 +438,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr73-rtty"
+version = "0.9.0"
+dependencies = [
+ "rand",
+ "rand_chacha",
+ "rand_distr",
+ "rr73-chansim",
+ "rr73-dsp",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rr73-wasm"
 version = "0.9.0"
 dependencies = [

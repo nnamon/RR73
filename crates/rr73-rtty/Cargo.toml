@@ -1,0 +1,24 @@
+[package]
+name = "rr73-rtty"
+description = "RTTY modem: ITA2 code, AFSK encoder and streaming decoder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+rr73-dsp.workspace = true
+rustfft.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+rr73-chansim.workspace = true
+rand.workspace = true
+rand_chacha.workspace = true
+rand_distr.workspace = true
+serde_json.workspace = true
+
+[lints]
+workspace = true
