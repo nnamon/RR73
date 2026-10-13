@@ -198,13 +198,13 @@
       {#if open && valid}
         <i class="guide" data-testid="freq-guide" style:left="{xOfHz(typed) * 100}%" aria-hidden="true"></i>
       {/if}
+      {#if hint && !open}
+        <span class="hint">Tap the waterfall to set the receive or transmit frequency.</span>
+      {/if}
     </div>
     <FreqAxis {rxHz} {txHz} {mode} />
   </div>
   <button class="visually-hidden set-freq" bind:this={setBtn} onclick={() => openAt(rxHz, true)}>Set frequencies. Receive {rxHz} Hz, transmit {txHz} Hz.</button>
-  {#if hint}
-    <p class="hint">Tap the waterfall to set the receive or transmit frequency.</p>
-  {/if}
   <p class="visually-hidden" aria-live="polite">{announce}</p>
   {#if open}
     <div class="bar" bind:this={bar} role="group" aria-label="Set the frequency" data-testid="freq-bar">
@@ -321,13 +321,21 @@
     clip-path: none;
   }
 
+  /* Over the bottom of the waterfall, so it takes no height on small screens. */
   .hint {
-    padding: var(--rr-space-1-5) var(--rr-space-4);
+    position: absolute;
+    right: var(--rr-space-2);
+    bottom: var(--rr-space-1-5);
+    left: var(--rr-space-2);
+    padding: var(--rr-space-half) var(--rr-space-2);
+    border-radius: var(--rr-radius-s);
+    background: var(--rr-wf-tag-bg);
+    color: var(--rr-wf-text);
     font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-medium);
     line-height: var(--rr-leading-caption);
-    color: var(--rr-label2);
-    background: var(--rr-plain);
-    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+    letter-spacing: 0;
+    text-align: center;
   }
 
   .bar {

@@ -79,8 +79,8 @@
     </ol>
   {:else if st.phase === 'cq' && !st.run}
     <div class="q1"><span class="call">Calling CQ</span><span class="sub">{ord(st.config.cqParity)} slots</span></div>
-  {:else}
-    <p class="hint">Tap a decode to choose a station; double-tap calls at once. Touch and hold for details.</p>
+  {:else if !blocked}
+    <p class="hint">Double-tap a decode to call. Touch and hold for details.</p>
   {/if}
 
   {#if next && !showSelection && !needsSetup}
