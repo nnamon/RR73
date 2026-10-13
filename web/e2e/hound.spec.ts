@@ -73,13 +73,18 @@ for (const theme of ['light', 'dark'] as const) {
 
     await page.getByRole('button', { name: 'Start audio' }).click();
     await expect(page.getByRole('button', { name: 'Start audio' })).toBeHidden({ timeout: 20_000 });
+    // Transmitting waits for audio to run, which can come a moment after the banner goes.
+    await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 20_000 });
 
     // Calling the Fox from its CQ: Tx1 waits for the next odd slot.
     const fox = await afterFoxSlot(page);
     await inject(page, fox, FOX_CQ);
     const cq = page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: /^CQ VP8PJ GD18$/ }) }).first();
-    await cq.dblclick();
-    await expect(bar.getByRole('status')).toContainText('Calling the Fox · VP8PJ');
+    // A double-tap while the new rows settle can land as two taps: tap again until the call starts.
+    await expect(async () => {
+      await cq.dblclick();
+      await expect(bar.getByRole('status')).toContainText('Calling the Fox · VP8PJ', { timeout: 2000 });
+    }).toPass({ timeout: 15_000 });
     await shot('2-calling');
 
     // The Fox's report to us inside a multi-call message, among its other streams.
