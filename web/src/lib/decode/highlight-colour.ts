@@ -13,6 +13,10 @@ export type Rgb = [number, number, number];
 
 /** Share of the category colour in a row's tint (--rr-hl-tint-light, --rr-hl-tint-dark). */
 export const TINT: Record<Theme, number> = { light: 0.45, dark: 0.3 };
+/** The same in rows of older slots, which fade (--rr-hl-tint-old-light, --rr-hl-tint-old-dark). */
+export const TINT_OLD: Record<Theme, number> = { light: 0.25, dark: 0.18 };
+/** Text of rows from older slots (--rr-old-text). */
+export const OLD_TEXT: Record<Theme, string> = { light: '#6E7684', dark: '#8C93A0' };
 /** What the tint is mixed with (--rr-hl-base-light, --rr-hl-base-dark). */
 export const BASE: Record<Theme, string> = { light: '#FFFFFF', dark: '#0B0D10' };
 /**
@@ -48,11 +52,11 @@ export function contrast(a: Rgb, b: Rgb): number {
   return (x + 0.05) / (y + 0.05);
 }
 
-/** A row's tint for `colour` in `theme`, as color-mix() in sRGB gives it. */
-export function tintOf(colour: string, theme: Theme): Rgb {
+/** A row's tint for `colour` in `theme`, as color-mix() in sRGB gives it; `share` of the colour. */
+export function tintOf(colour: string, theme: Theme, share = TINT[theme]): Rgb {
   const c = rgb(colour);
   const base = rgb(BASE[theme]);
-  return c.map((v, i) => v * TINT[theme] + base[i] * (1 - TINT[theme])) as Rgb;
+  return c.map((v, i) => v * share + base[i] * (1 - share)) as Rgb;
 }
 
 function adjust(c: Rgb, theme: Theme, k: number): Rgb {
@@ -78,5 +82,13 @@ export function inkFor(ink: string, bg: string | null): Record<Theme, string> {
   return {
     light: readableOn(ink, bg ? tintOf(bg, 'light') : rgb(GROUND.light), 'light'),
     dark: readableOn(ink, bg ? tintOf(bg, 'dark') : rgb(GROUND.dark), 'dark'),
+  };
+}
+
+/** The text colour of an older slot's row tinted with `bg`, in each theme: the old grey, kept at 4.5:1 on the faded tint. */
+export function oldInkFor(bg: string): Record<Theme, string> {
+  return {
+    light: readableOn(OLD_TEXT.light, tintOf(bg, 'light', TINT_OLD.light), 'light'),
+    dark: readableOn(OLD_TEXT.dark, tintOf(bg, 'dark', TINT_OLD.dark), 'dark'),
   };
 }

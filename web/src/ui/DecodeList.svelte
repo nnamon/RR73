@@ -9,23 +9,27 @@
 
 <script lang="ts">
   /**
-   * Band activity: 30 pt monospace rows (SNR, DT, Hz, message) under a 22 pt bar per slot,
-   * coloured as in WSJT-X by the first matching decode colour (Settings › Decode colours): a
-   * 4 px bar and a tint. Worked before greys the text over any tint. The colours ride on the row as
-   * classes, data-hl and data-ink, so the markup can change without touching the matcher. The
-   * callsign of a CQ, a message to you or what you sent is bold. Slot bars alternate slate (even)
-   * and blue (odd).
+   * Band activity: 32 pt rows under a 22 pt bar per slot. Each row leads with the message in
+   * 16 pt semibold, the calling station of a CQ a weight heavier, and ends with SNR and audio
+   * frequency in 12 pt grey ("−12 dB · 766 Hz"); DT is in the station's details. Rows are
+   * coloured as in WSJT-X by the first matching decode colour (Settings › Decode colours): a 4 px
+   * bar and a tint. Worked before greys the text over any tint. The colours ride on the row as
+   * classes, data-hl and data-ink, so the markup can change without touching the matcher. Rows of
+   * slots older than the newest decoded slot fade: grey text, a lighter tint. Slot bars alternate
+   * slate (even) and blue (odd).
+   *
+   * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
+   * with a red progress line while on air, then Sent in its slot.
    *
    * A tap selects a row (or clears the selection, on the selected row), a double-tap calls, and
-   * touch and hold opens the station's details. `preview` draws the rows without actions, for the
-   * example in Settings.
+   * touch and hold opens the station's details. The Next row takes no gestures. `preview` draws
+   * the rows without actions, for the example in Settings.
    */
   import { dt, snr } from '../lib/clock/format';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
-  import { inkFor } from '../lib/decode/highlight-colour';
+  import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
+  import { outText, type RowItem } from '../lib/decode/list';
   import { splitKey, type DecodeRowData, type TextParts } from '../lib/decode/marking';
-
-  type RowItem = Extract<DecodeListItem, { kind: 'row' }>;
 
   let {
     items,
@@ -33,6 +37,7 @@
     selectedId = null,
     highlights = defaultHighlights(),
     preview = false,
+    nowMs = 0,
     onselect,
     oncall,
     ondetail,
@@ -43,24 +48,31 @@
     /** Decode colours, for each row's category colour. */
     highlights?: readonly HighlightEntry[];
     preview?: boolean;
+    /** Now, UTC ms: the Next row's countdown and the Sending row's progress. */
+    nowMs?: number;
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
   } = $props();
 
-  const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'you sent' } as const;
+  const MARK_TEXT = { cq: 'calling CQ', me: 'to you', sent: 'sent' } as const;
   /** Categories the mark already reads out. */
   const SAID: readonly HighlightId[] = ['cq', 'myCall', 'sent'];
   const HOLD_MS = 500;
 
   const colours = $derived(new Map(highlights.map((e) => [e.id, e.colour])));
 
-  function spoken(r: DecodeRowData): string {
+  type Out = ReturnType<typeof outText>;
+
+  function spoken(item: RowItem, o: Out | null): string {
+    const r = item.row;
     const parts = [
+      o ? o.tag.replace(' · :', ', :') : '',
       r.time ? `${r.time} UTC` : `${snr(r.decode.snr_db)} dB, DT ${dt(r.decode.dt_s)} s`,
-      `${Math.round(r.decode.freq_hz)} Hz`,
+      o ? o.meta : `${Math.round(r.decode.freq_hz)} Hz`,
       r.decode.text,
-      r.mark ? MARK_TEXT[r.mark] : '',
+      // Our own rows say Next, Sending or Sent in their tag.
+      r.mark && !item.out ? MARK_TEXT[r.mark] : '',
       r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
       r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
@@ -69,18 +81,28 @@
     return parts.filter(Boolean).join(', ');
   }
 
-  function rowClass(r: DecodeRowData, selected: boolean): string {
+  function rowClass(item: RowItem, selected: boolean): string {
+    const r = item.row;
     const bg = !!r.hl && colours.has(r.hl);
     const ink = !!r.ink && colours.has(r.ink);
-    return ['dr', r.mark ? `k-${r.mark}` : '', r.worked ? 'worked' : '', bg ? 'rr-hl hl-background' : '', ink ? 'rr-ink hl-ink' : '', selected ? 'sel' : ''].filter(Boolean).join(' ');
+    return ['dr', r.mark ? `k-${r.mark}` : '', r.worked ? 'worked' : '', bg ? 'rr-hl hl-background' : '', ink ? 'rr-ink hl-ink' : '', item.old ? 'old' : '', item.out ? `out ${item.out.stage}` : '', selected ? 'sel' : '']
+      .filter(Boolean)
+      .join(' ');
   }
 
   // Text colours per pair of text colour and tint, worked out once each (highlight-colour.ts).
   const inks = new Map<string, { light: string; dark: string }>();
-  function inkOf(r: DecodeRowData): { light: string; dark: string } | null {
+  function inkOf(item: RowItem): { light: string; dark: string } | null {
+    const r = item.row;
+    const bg = r.hl ? (colours.get(r.hl) ?? null) : null;
+    if (item.old && bg) {
+      const key = `old${bg}`;
+      let v = inks.get(key);
+      if (!v) inks.set(key, (v = oldInkFor(bg)));
+      return v;
+    }
     const ink = r.ink ? colours.get(r.ink) : undefined;
     if (!ink) return null;
-    const bg = r.hl ? (colours.get(r.hl) ?? null) : null;
     const key = `${ink}${bg ?? ''}`;
     let v = inks.get(key);
     if (!v) inks.set(key, (v = inkFor(ink, bg)));
@@ -126,20 +148,19 @@
   }
 </script>
 
-{#snippet cells(r: DecodeRowData, t: TextParts)}
-  {#if r.mark === 'sent'}
-    <span class="c-db" aria-hidden="true">Tx</span>
-    <span class="c-dt" aria-hidden="true"></span>
-  {:else}
-    <span class="c-db" aria-hidden="true">{snr(r.decode.snr_db)}</span>
-    <span class="c-dt" aria-hidden="true">{dt(r.decode.dt_s)}</span>
-  {/if}
-  <span class="c-hz" aria-hidden="true">{Math.round(r.decode.freq_hz)}</span>
+{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean)}
+  {#if o}<span class="c-tag" aria-hidden="true">{o.tag}</span>{/if}
   <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
   {#if r.badge}
     <span class="badge {r.badge.tone}" aria-hidden="true">{r.badge.text}</span>
   {:else if r.meta}
     <span class="c-meta" aria-hidden="true">{r.meta}</span>
+  {/if}
+  {#if o}
+    <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
+    {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
+  {:else}
+    <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
 
@@ -156,23 +177,33 @@
       {@const r = item.row}
       {@const t = splitKey(r.decode.text, r.key)}
       {@const colour = r.hl ? (colours.get(r.hl) ?? null) : null}
-      {@const ink = inkOf(r)}
+      {@const ink = inkOf(item)}
+      {@const o = item.out ? outText(item.out, item.slotStartMs, r.decode.freq_hz, nowMs) : null}
+      {@const next = item.out?.stage === 'next'}
       <li class="dr-item">
-        {#if preview}
-          <div class={rowClass(r, false)} style:--rr-hl={colour} style:--rr-ink-light={ink?.light} style:--rr-ink-dark={ink?.dark} data-hl={r.hl ?? undefined} data-ink={r.ink ?? undefined}>
-            <span class="visually-hidden">{spoken(r)}</span>
-            {@render cells(r, t)}
-          </div>
-        {:else}
-          <button
-            type="button"
-            class={rowClass(r, selectedId === item.id)}
+        {#if preview || next}
+          <div
+            class={rowClass(item, false)}
             style:--rr-hl={colour}
             style:--rr-ink-light={ink?.light}
             style:--rr-ink-dark={ink?.dark}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
-            aria-label={spoken(r)}
+            data-testid={next ? 'next-row' : undefined}
+          >
+            <span class="visually-hidden">{spoken(item, o)}</span>
+            {@render cells(r, t, o, next)}
+          </div>
+        {:else}
+          <button
+            type="button"
+            class={rowClass(item, selectedId === item.id)}
+            style:--rr-hl={colour}
+            style:--rr-ink-light={ink?.light}
+            style:--rr-ink-dark={ink?.dark}
+            data-hl={r.hl ?? undefined}
+            data-ink={r.ink ?? undefined}
+            aria-label={spoken(item, o)}
             aria-pressed={selectedId === item.id}
             onpointerdown={(e) => down(e, item)}
             onpointermove={move}
@@ -181,7 +212,7 @@
             oncontextmenu={(e) => e.preventDefault()}
             onclick={(e) => click(e, item)}
           >
-            {@render cells(r, t)}
+            {@render cells(r, t, o, false)}
           </button>
         {/if}
       </li>
@@ -253,16 +284,14 @@
 
   .dr {
     position: relative;
-    display: grid;
-    grid-template-columns: 30px 28px 38px minmax(0, 1fr) auto;
-    column-gap: var(--rr-space-2);
+    display: flex;
+    gap: var(--rr-space-2);
     align-items: center;
     width: 100%;
     height: var(--rr-row-decode);
-    padding: 0 var(--rr-space-3);
-    font-family: var(--rr-mono);
-    font-size: var(--rr-text-decode);
-    line-height: var(--rr-leading-row);
+    padding: 0 var(--rr-space-3) 0 calc(var(--rr-space-3) + var(--rr-space-half));
+    overflow: hidden;
+    font-family: var(--rr-sans);
     letter-spacing: 0;
     text-align: left;
     white-space: nowrap;
@@ -291,6 +320,42 @@
     transform-origin: 0 0;
   }
 
+  /* The message first, in proportional type; the calling station of a CQ a weight heavier. */
+  .c-msg {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--rr-text-callout);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-row);
+    color: var(--rr-label);
+    white-space: pre;
+    text-overflow: ellipsis;
+  }
+
+  .c-msg b {
+    font-weight: inherit;
+  }
+
+  .k-cq .c-msg b {
+    font-weight: var(--rr-weight-bold);
+  }
+
+  /* SNR and frequency on the right, in one column. */
+  .c-num {
+    flex: none;
+    min-width: 100px;
+    font-size: var(--rr-text-caption);
+    line-height: var(--rr-leading-caption);
+    font-variant-numeric: tabular-nums;
+    color: var(--rr-label3);
+    text-align: right;
+  }
+
+  .worked .c-msg {
+    color: var(--rr-label2);
+  }
+
   /* Decode colours: --rr-hl-bg and --rr-hl-ink come from .rr-hl in tokens.css. */
   .dr.hl-background {
     background: var(--rr-hl-bg);
@@ -300,62 +365,100 @@
     background: var(--rr-hl);
   }
 
-  /* After the decode colours, so a selected row shows as selected. */
-  .dr.sel {
-    background: var(--rr-sel-tint);
-    box-shadow: inset 0 0 0 2px var(--rr-accent-fill);
-  }
-
-  .c-db,
-  .c-dt,
-  .c-hz {
-    color: var(--rr-label2);
-    text-align: right;
-  }
-
-  .c-msg {
-    min-width: 0;
-    overflow: hidden;
-    white-space: pre;
-    text-overflow: ellipsis;
-  }
-
-  .c-msg b {
-    font-weight: var(--rr-weight-bold);
-  }
-
-  .worked .c-msg {
-    color: var(--rr-label2);
-  }
-
-  /* On a tint, every column takes the label colour, which keeps 4.5:1 on any decode colour. */
-  .hl-background .c-db,
-  .hl-background .c-dt,
-  .hl-background .c-hz,
+  /* On a tint, all text takes the label colour, which keeps 4.5:1 on any decode colour. */
+  .hl-background .c-num,
   .hl-background .c-msg,
   .hl-background .c-meta {
     color: var(--rr-label);
   }
 
   /* Worked before: after the tint's label colour, so it wins over it. */
-  .hl-ink .c-db,
-  .hl-ink .c-dt,
-  .hl-ink .c-hz,
+  .hl-ink .c-num,
   .hl-ink .c-msg,
   .hl-ink .c-meta {
     color: var(--rr-hl-ink);
   }
 
-  .hl-ink.sel .c-db,
-  .hl-ink.sel .c-dt,
-  .hl-ink.sel .c-hz,
-  .hl-ink.sel .c-msg,
-  .hl-ink.sel .c-meta {
+  /* Our transmission: a tag before the message; Next is grey with a countdown in the accent. */
+  .c-tag {
+    flex: none;
+    font-size: var(--rr-text-tag);
+    font-weight: var(--rr-weight-bold);
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--rr-label2);
+  }
+
+  .hl-background .c-tag {
+    color: color-mix(in srgb, var(--rr-hl) 35%, var(--rr-label));
+  }
+
+  .dr.next {
+    background: var(--rr-fill);
+  }
+
+  .c-when {
+    font-weight: var(--rr-weight-semibold);
+    color: var(--rr-accent);
+  }
+
+  /* On air: a red line along the bottom, growing to the end of the transmission. */
+  .prog {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    height: 3px;
+    background: var(--rr-tx);
+    transition: width 200ms linear;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .prog {
+      transition: none;
+    }
+  }
+
+  /* Older slots fade: grey text, a lighter tint, its text grey as far as 4.5:1 allows. */
+  .dr.old .c-msg,
+  .dr.old .c-num,
+  .dr.old .c-meta,
+  .dr.old .c-tag {
+    color: var(--rr-old-text);
+  }
+
+  .dr.old.hl-background {
+    background: var(--rr-hl-bg-old);
+  }
+
+  .dr.old.hl-background::after {
+    opacity: 0.6;
+  }
+
+  .dr.old.hl-background .c-msg,
+  .dr.old.hl-background .c-num,
+  .dr.old.hl-background .c-meta,
+  .dr.old.hl-background .c-tag {
+    color: var(--rr-hl-old-ink);
+  }
+
+  /* After the decode colours and the fading, so a selected row shows as selected. */
+  .dr.sel,
+  .dr.old.sel {
+    background: var(--rr-sel-tint);
+    box-shadow: inset 0 0 0 2px var(--rr-accent-fill);
+  }
+
+  .dr.sel .c-msg,
+  .dr.sel .c-num,
+  .dr.sel .c-meta,
+  .dr.old.sel .c-msg,
+  .dr.old.sel .c-num,
+  .dr.old.sel .c-meta {
     color: var(--rr-label);
   }
 
   .c-meta {
-    font-family: var(--rr-sans);
+    flex: none;
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-semibold);
     line-height: var(--rr-leading-caption);
@@ -364,6 +467,7 @@
   }
 
   .badge {
+    flex: none;
     height: 20px;
     font-family: var(--rr-sans);
     padding: 0 var(--rr-space-1-5);

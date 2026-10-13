@@ -45,7 +45,7 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Rust: stable toolchain from `rust-toolchain.toml`, `cargo fmt`, `clippy -D warnings`, no `unsafe`, no panics on input data. Public items carry doc comments that state units (Hz, s, dB, samples at 12 kHz).
 - TypeScript: strict mode, no `any` in exported signatures. Svelte 5 runes.
 - Colours, type sizes and spacing come only from `web/src/styles/tokens.css`.
-- Tap targets at least 44 px. Decode rows are 30 px and act by tap, double-tap and touch and hold; slot bars are 22 px.
+- Tap targets at least 44 px. Decode rows are 32 px and act by tap, double-tap and touch and hold; slot bars are 22 px.
 - Halt is red, always visible in Operate's bottom bar and in every sheet that plays output, and takes one tap.
 - Actions take effect on the first tap. No confirmation steps; deleting stored data offers Undo or, failing that, one confirmation.
 - Layouts work from 375 x 667 points (iPhone SE) upward, in both light and dark themes.

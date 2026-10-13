@@ -71,13 +71,17 @@
 
   /* Sizes */
   --rr-tap: 44px;
-  --rr-row-decode: 30px;
+  --rr-row-decode: 32px;
   --rr-slot-bar: 22px;
+  /* The ruler strip under the waterfall picture. */
+  --rr-ruler: 22px;
   --rr-slot-rule: 2px;
   --rr-filters: 36px;
   --rr-button: 46px;
   --rr-button-large: 54px;
   --rr-button-halt: 64px;
+  /* The face of a bottom bar button, inside its 44 pt target. */
+  --rr-bar-button: 36px;
   --rr-chip: 28px;
   --rr-mark-bar: 4px;
   --rr-icon: 24px;
@@ -153,6 +157,10 @@
    */
   --rr-hl-tint-light: 45%;
   --rr-hl-tint-dark: 30%;
+  /* Rows of older slots fade: a lighter tint, and grey text kept at 4.5:1 (highlight-colour.ts). */
+  --rr-hl-tint-old-light: 25%;
+  --rr-hl-tint-old-dark: 18%;
+  --rr-old-text: light-dark(#6E7684, #8C93A0);
   --rr-hl-base-light: #FFF;
   --rr-hl-base-dark: #0B0D10;
   --rr-sel-tint: light-dark(rgb(40 81 216 / 21%), rgb(110 149 255 / 25%));
@@ -198,13 +206,17 @@
   --rr-wf-tx: #FF5A4E;
   --rr-wf-rx-band: rgb(52 199 123 / 20%);
   --rr-wf-tx-band: rgb(255 90 78 / 18%);
-  --rr-wf-tx-slot: rgb(210 58 47 / 16%);
+  --rr-wf-ruler: #0B1020;
+  --rr-wf-ruler-rule: rgb(255 255 255 / 25%);
+  --rr-wf-ruler-text: rgb(255 255 255 / 90%);
+  --rr-wf-tick: rgb(255 255 255 / 55%);
+  --rr-wf-tick-major: rgb(255 255 255 / 90%);
   --rr-wf-c0: #04060A;
-  --rr-wf-c1: #0A1530;
-  --rr-wf-c2: #123E6E;
-  --rr-wf-c3: #1A7F9A;
-  --rr-wf-c4: #4CC3A3;
-  --rr-wf-c5: #F0D25A;
+  --rr-wf-c1: #0B1D45;
+  --rr-wf-c2: #1898D8;
+  --rr-wf-c3: #4FD2FF;
+  --rr-wf-c4: #8AF0C8;
+  --rr-wf-c5: #FFF060;
   --rr-wf-c6: #FFF8E6;
 }
 
@@ -219,6 +231,12 @@
     color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-light), var(--rr-hl-base-light)),
     color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-dark), var(--rr-hl-base-dark))
   );
+  --rr-hl-bg-old: light-dark(
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-old-light), var(--rr-hl-base-light)),
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-old-dark), var(--rr-hl-base-dark))
+  );
+  /* Text on that faded tint, worked out for each theme (highlight-colour.ts oldInkFor). */
+  --rr-hl-old-ink: light-dark(var(--rr-ink-light), var(--rr-ink-dark));
 }
 
 .rr-ink {

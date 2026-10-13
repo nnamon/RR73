@@ -1,6 +1,8 @@
 /**
  * Builds the decode list: newest slot first, a bar per slot, rows marked as in WSJT-X, the
- * callers in Run, and the chip filters.
+ * callers in Run, and the chip filters. Our own transmission sits at the top as soon as it is
+ * planned (Next), then while on air (Sending), then stays in its slot (Sent). Rows of slots older
+ * than the newest decoded slot are marked old, so they fade.
  */
 
 import { utcTime } from '../clock/format';
@@ -47,14 +49,57 @@ export interface HeaderItem {
   ms?: number;
 }
 
-export type ListItem = HeaderItem | { kind: 'row'; id: string; row: DecodeRowData; slotStartMs: number };
+/** Where our own transmission stands: planned, on air, or sent. */
+export type OutStage = 'next' | 'sending' | 'sent';
+
+export interface OutInfo {
+  stage: OutStage;
+  /** Start of the transmission, UTC ms. */
+  startMs: number;
+  /** End of the transmission, UTC ms: on air only. */
+  endMs?: number;
+}
+
+export interface RowItem {
+  kind: 'row';
+  id: string;
+  row: DecodeRowData;
+  slotStartMs: number;
+  /** From a slot older than the newest decoded slot: drawn faded. */
+  old?: boolean;
+  /** Our own transmission. */
+  out?: OutInfo;
+}
+
+export type ListItem = HeaderItem | RowItem;
+
+/**
+ * What an outgoing row says at `nowMs`: its tag ("Next · :00", "Sending", "Sent"), the text on
+ * the right ("in 6 s", "1500 Hz") and, on air, how much of the transmission is done (0 to 1).
+ */
+export function outText(out: OutInfo, slotStartMs: number, freqHz: number, nowMs: number): { tag: string; meta: string; progress: number | null } {
+  if (out.stage === 'next') return { tag: `Next · :${utcTime(slotStartMs).slice(6)}`, meta: `in ${Math.max(0, Math.ceil((out.startMs - nowMs) / 1000))} s`, progress: null };
+  const meta = `${Math.round(freqHz)} Hz`;
+  if (out.stage === 'sent') return { tag: 'Sent', meta, progress: null };
+  const span = (out.endMs ?? out.startMs) - out.startMs;
+  const progress = span > 0 ? Math.min(1, Math.max(0, (nowMs - out.startMs) / span)) : 0;
+  return { tag: 'Sending', meta, progress };
+}
+
+/** Our transmission, planned or on air, for the top of the list. */
+export interface Outgoing {
+  /** The next transmission, while Tx is on and it waits for its slot. */
+  next?: { slotStartMs: number; startMs: number; text: string; freqHz: number } | null;
+  /** The transmission on air: its slot, start and end, UTC ms. */
+  onAir?: { slotStartMs: number; startMs: number; endMs: number } | null;
+}
 
 function header(id: string, startMs: number, mode: Mode, detail: string): HeaderItem {
   const time = utcTime(startMs);
   return { kind: 'header', id, time, detail, parity: parity(startMs, mode), text: `${time} UTC · ${detail}` };
 }
 
-/** A message we transmitted, shown as an amber row. */
+/** A message we transmitted, shown as an amber row: Sending while on air, then Sent. */
 export interface SentItem {
   slotStartMs: number;
   text: string;
@@ -82,13 +127,16 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
 
 /**
  * List items for `slots` and our own transmissions, newest first. A transmission sorts by its
- * start (slot + 0.5 s) under a "you sent" bar, a decoded slot by its end. With a filter, slots
+ * start (slot + 0.5 s) under a bar that says next, sending or sent, a decoded slot by its end. With a filter, slots
  * with no matching decode are left out; with none, every slot shows its bar. Transmissions show
  * with All and To me; `mode` gives their slot parity.
  */
-export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify): ListItem[] {
+export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify, outgoing: Outgoing = {}): ListItem[] {
   type Group = { at: number; items: ListItem[] };
   const groups: Group[] = [];
+  // The newest decoded slot keeps full contrast; anything older fades.
+  const newest = slots.reduce((m, s) => (s.skipped ? m : Math.max(m, s.startUtcMs)), -Infinity);
+  const old = (slotStartMs: number) => slotStartMs < newest;
   for (const s of slots) {
     const rows = s.decodes
       .map((d) => ({ decode: d, ...markDecode(d, myCall) }))
@@ -96,14 +144,24 @@ export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, 
       .map((r) => ({ ...r, ...colours(classify, r.decode, false) }));
     if (!rows.length && filter !== 'all') continue;
     const items: ListItem[] = [slotHeader(s)];
-    rows.forEach((row, i) => items.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row, slotStartMs: s.startUtcMs }));
+    rows.forEach((row, i) => items.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) }));
     groups.push({ at: s.startUtcMs + SLOT_MS[s.mode], items });
   }
   if (filter === 'all' || filter === 'me') {
+    const air = outgoing.onAir ?? null;
     for (const t of sent) {
       const d = { text: t.text, freq_hz: t.freqHz, dt_s: 0, snr_db: 0 };
       const row: DecodeRowData = { decode: d, ...markDecode(d, myCall, true), time: utcTime(t.slotStartMs), ...colours(classify, d, true) };
-      groups.push({ at: t.slotStartMs + 500, items: [header(`hs${t.slotStartMs}`, t.slotStartMs, mode, 'you sent'), { kind: 'row', id: `s${t.slotStartMs}`, row, slotStartMs: t.slotStartMs }] });
+      const out: OutInfo = air?.slotStartMs === t.slotStartMs ? { stage: 'sending', startMs: air.startMs, endMs: air.endMs } : { stage: 'sent', startMs: t.slotStartMs + 500 };
+      const item: RowItem = { kind: 'row', id: `s${t.slotStartMs}`, row, slotStartMs: t.slotStartMs, out, old: out.stage === 'sent' && old(t.slotStartMs) };
+      groups.push({ at: t.slotStartMs + 500, items: [header(`hs${t.slotStartMs}`, t.slotStartMs, mode, out.stage), item] });
+    }
+    const n = outgoing.next;
+    if (n && !sent.some((t) => t.slotStartMs === n.slotStartMs)) {
+      const d = { text: n.text, freq_hz: n.freqHz, dt_s: 0, snr_db: 0 };
+      const row: DecodeRowData = { decode: d, ...markDecode(d, myCall, true), time: utcTime(n.slotStartMs), hl: null, ink: null };
+      const item: RowItem = { kind: 'row', id: `n${n.slotStartMs}`, row, slotStartMs: n.slotStartMs, out: { stage: 'next', startMs: n.startMs } };
+      groups.push({ at: n.slotStartMs + 500, items: [header(`hn${n.slotStartMs}`, n.slotStartMs, mode, 'next'), item] });
     }
   }
   return groups.sort((a, b) => b.at - a.at).flatMap((g) => g.items);

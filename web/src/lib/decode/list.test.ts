@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, callerItems, filterCounts, slotHeader, type SlotDecodes } from './list';
+import { buildList, callerItems, filterCounts, outText, slotHeader, type RowItem, type SlotDecodes } from './list';
 import type { Caller } from '../qso/sequencer';
 
 const T = Date.UTC(2026, 9, 13, 13, 14, 15);
@@ -27,13 +27,63 @@ describe('buildList with our transmissions', () => {
     const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent);
     const sentAt = items.findIndex((i) => i.kind === 'row' && i.row.mark === 'sent');
     expect(sentAt).toBe(1);
-    expect(items[0]).toMatchObject({ kind: 'header', time: '13:14:30', detail: 'you sent', parity: 'even' });
+    expect(items[0]).toMatchObject({ kind: 'header', time: '13:14:30', detail: 'sent', parity: 'even' });
     const r = items[1];
     expect(r.kind === 'row' && r.row).toMatchObject({ mark: 'sent', key: 'JA1KXM', time: '13:14:30' });
     // A transmission in the slot before the newest decoded slot sorts below that slot's decodes.
     const earlier = buildList([NEWER], '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]);
     expect(earlier.at(-1)).toMatchObject({ kind: 'row', id: `s${T}` });
     expect(buildList([], '9V1NE', 'cq', 1500, sent)).toEqual([]);
+  });
+
+  const rows = (items: ReturnType<typeof buildList>) => items.filter((i): i is RowItem => i.kind === 'row');
+
+  it('puts the next transmission at the top as soon as it is planned, counting down to its slot', () => {
+    const next = { slotStartMs: T + 15000, startMs: T + 15500, text: 'CQ 9V1NE OJ11', freqHz: 1500 };
+    const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500, [], 'FT8', undefined, { next });
+    expect(items[0]).toMatchObject({ kind: 'header', time: '13:14:30', detail: 'next', parity: 'even' });
+    const top = rows(items)[0];
+    expect(top).toMatchObject({ id: `n${T + 15000}`, out: { stage: 'next', startMs: T + 15500 }, row: { mark: 'sent', hl: null } });
+    expect(top.old).toBeFalsy();
+    expect(outText(top.out!, top.slotStartMs, 1500, T + 9400)).toEqual({ tag: 'Next · :30', meta: 'in 7 s', progress: null });
+    expect(outText(top.out!, top.slotStartMs, 1500, T + 16000).meta).toBe('in 0 s');
+    // With the To me filter too, and never with CQ or Rx freq.
+    expect(rows(buildList([NEWER], '9V1NE', 'me', 1500, [], 'FT8', undefined, { next }))[0].id).toBe(`n${T + 15000}`);
+    expect(rows(buildList([NEWER], '9V1NE', 'cq', 1500, [], 'FT8', undefined, { next })).some((r) => r.out)).toBe(false);
+  });
+
+  it('turns the row to Sending with its progress on air, then Sent in its slot', () => {
+    const sent = [{ slotStartMs: T + 15000, text: 'CQ 9V1NE OJ11', freqHz: 1500 }];
+    const onAir = { slotStartMs: T + 15000, startMs: T + 15500, endMs: T + 15500 + 12640 };
+    // The plan is gone once on air; a stale one for the same slot is not shown twice.
+    const next = { slotStartMs: T + 15000, startMs: T + 15500, text: 'CQ 9V1NE OJ11', freqHz: 1500 };
+    const sending = rows(buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent, 'FT8', undefined, { onAir, next }));
+    expect(sending.filter((r) => r.out)).toHaveLength(1);
+    expect(sending[0].out).toEqual({ stage: 'sending', startMs: onAir.startMs, endMs: onAir.endMs });
+    expect(outText(sending[0].out!, T + 15000, 1500, T + 15500 + 6320)).toEqual({ tag: 'Sending', meta: '1500 Hz', progress: 0.5 });
+    expect(outText(sending[0].out!, T + 15000, 1500, T + 40000).progress).toBe(1);
+    const done = buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent);
+    expect(done[0]).toMatchObject({ kind: 'header', detail: 'sent' });
+    expect(rows(done)[0].out).toMatchObject({ stage: 'sent' });
+    expect(outText(rows(done)[0].out!, T + 15000, 1499.6, T + 40000)).toEqual({ tag: 'Sent', meta: '1500 Hz', progress: null });
+  });
+
+  it('fades every slot older than the newest decoded slot, our older transmissions included', () => {
+    const sent = [
+      { slotStartMs: T + 15000, text: 'CQ 9V1NE OJ11', freqHz: 1500 },
+      { slotStartMs: T - 15000, text: 'CQ 9V1NE OJ11', freqHz: 1500 },
+    ];
+    const r = rows(buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent));
+    expect(r.map((x) => `${x.old ? 'old' : 'new'} ${x.out?.stage ?? x.row.decode.text}`)).toEqual([
+      'new sent',
+      'new CQ 9M2TRX OJ02',
+      'new 9V1NE JA1KXM PM95',
+      'new JH1RRT YB0AZK RR73',
+      'old CQ K1ABC FN42',
+      'old sent',
+    ]);
+    // A slot the decoder skipped is not the newest decoded slot.
+    expect(rows(buildList([OLDER, { ...NEWER, decodes: [], skipped: true }], '9V1NE', 'all', 1500))[0].old).toBe(false);
   });
 });
 

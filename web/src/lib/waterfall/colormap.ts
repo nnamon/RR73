@@ -1,14 +1,15 @@
 /**
- * The waterfall colormap from the mockups: dark blue noise rising through teal and green to
- * yellow and a warm white for the strongest signals. Colours come from tokens.css
- * (--rr-wf-c0 to --rr-wf-c6); positions are fixed here.
+ * The waterfall colormap: navy for average noise, cyan from 3 dB over it, then mint, yellow and a
+ * warm white for the strongest signals. Colours come from tokens.css (--rr-wf-c0 to --rr-wf-c6);
+ * positions are fixed here. With the default contrast (levels.ts) the stops sit at the average
+ * noise and 3, 6, 10, 14.5 and 20 dB over it.
  */
 
 export type Rgb = [number, number, number];
 export type Rgba = [number, number, number, number];
 
 /** Where each colour token sits on the 0 to 1 display scale. */
-export const STOP_POSITIONS = [0, 0.18, 0.38, 0.55, 0.72, 0.86, 1] as const;
+export const STOP_POSITIONS = [0, 0.2, 0.32, 0.44, 0.6, 0.78, 1] as const;
 /** Token names for the stops, in order. */
 export const STOP_TOKENS = STOP_POSITIONS.map((_, i) => `--rr-wf-c${i}`);
 

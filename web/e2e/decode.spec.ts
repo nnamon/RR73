@@ -93,7 +93,7 @@ async function listedSlots(page: Page): Promise<ListedSlot[]> {
         slots.push({ head: `${cell('.visually-hidden')}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, rows: [] });
       }
       else if (li.querySelector('button.dr') && slots.length) {
-        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: Number(cell('.c-hz')), db: Number(cell('.c-db').replace('\u2212', '-')) });
+        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: parseInt(cell('.c-hz')), db: parseInt(cell('.c-db').replace('\u2212', '-')) });
       }
     }
     return slots.reverse();

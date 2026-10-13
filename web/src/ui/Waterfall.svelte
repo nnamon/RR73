@@ -1,13 +1,16 @@
 <script lang="ts">
   /**
    * The live waterfall: newest time at the top, 0 to 3000 Hz across, slot lines labelled with
-   * their UTC start, the frequency labels over its bottom edge. Drawing happens in the waterfall
-   * worker; this component sizes the canvas, feeds it audio and places the overlays.
+   * their UTC start, and a ruler strip under it with a tick every 100 Hz, a taller one every
+   * 500 Hz and labels from 500 to 3000. Drawing happens in the waterfall worker; this component
+   * sizes the canvas, feeds it audio and places the overlays. Slots RR73 transmitted in are drawn
+   * blank and labelled Tx.
    *
-   * The red line is Tx, the green line Rx. Dragging sideways anywhere moves Tx, with the
-   * frequency on a label, and lifting the finger sets it; a drag that starts on the green line
-   * moves Rx. A tap sets Tx where it lands. A vertical movement is left to the page. Without a
-   * pointer, two sliders (hidden until focused) set Tx and Rx.
+   * Tx (red) and Rx (green) show as two lines at the signal's lowest and highest tone with a
+   * light fill, through the picture and the ruler. Dragging sideways anywhere moves Tx, with the
+   * lowest tone's frequency on a label, and lifting the finger sets it; a drag that starts on the
+   * green marker moves Rx. A tap sets Tx where it lands. A vertical movement is left to the page.
+   * Without a pointer, two sliders (hidden until focused) set Tx and Rx.
    */
   import { onMount } from 'svelte';
   import { WaterfallClient } from '../lib/waterfall/client';
@@ -15,7 +18,8 @@
   import type { FrameInfo } from '../lib/waterfall/renderer';
   import { FREQ_LIMITS, SIGNAL_HZ, xOfHz } from '../lib/waterfall/pick';
   import { STEP_HZ, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
-  import { ticks } from '../lib/waterfall/axis';
+  import { bracket, rulerLabels, ticks } from '../lib/waterfall/axis';
+  import type { Contrast } from '../lib/waterfall/levels';
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, type Mode } from '../lib/clock/slots';
   import { onAudioChunk } from '../lib/state/station.svelte';
@@ -26,6 +30,7 @@
     rxHz,
     txHz,
     txSlots = [],
+    contrast = 'normal',
     stoppedAtUtcMs = null,
     hint = false,
     onset,
@@ -33,8 +38,9 @@
     mode: Mode;
     rxHz: number;
     txHz: number;
-    /** Starts of the slots RR73 transmitted in, UTC ms: tinted red. */
+    /** Starts of the slots RR73 transmitted in, UTC ms: drawn blank. */
     txSlots?: number[];
+    contrast?: Contrast;
     stoppedAtUtcMs?: number | null;
     /** Shows the pill that says how to move Tx and Rx: until the first drag or tap. */
     hint?: boolean;
@@ -42,6 +48,7 @@
   } = $props();
 
   let box: HTMLDivElement;
+  let pic: HTMLDivElement;
   let canvas: HTMLCanvasElement;
   let client: WaterfallClient | null = null;
   let frame = $state<FrameInfo | null>(null);
@@ -56,19 +63,8 @@
   const sent = $derived(new Set(txSlots));
   // Each label sits 14 px above its line; a label that would cross the top edge is dropped.
   const labels = $derived(marks.map((b) => ({ key: b.utcMs, text: `${utcTime(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0));
-  // A slot RR73 transmitted in spans from its start line up to the next slot's line.
-  const txBands = $derived.by(() => {
-    const at = new Map(marks.map((b) => [b.utcMs, b.y]));
-    return txSlots.flatMap((s) => {
-      const bottom = at.get(s);
-      const top = at.get(s + slotMs);
-      if (bottom === undefined && top === undefined) return [];
-      const y0 = top ?? 0;
-      const y1 = bottom ?? height;
-      return y1 > y0 ? [{ key: s, top: y0, height: y1 - y0 }] : [];
-    });
-  });
-  const axis = ticks().filter((t) => t.label);
+  const TICKS = ticks();
+  const LABELS = rulerLabels();
 
   /** The press in progress, and the marker it moves once it is a drag. */
   let press: { id: number; x0: number; y0: number; t0: number; which: Marker; g: Gesture } | null = null;
@@ -78,9 +74,24 @@
   const shownTx = $derived(live?.which === 'tx' ? live.hz : txHz);
   const tagLeft = $derived(live ? labelLeft(xOfHz(live.hz) * width, tagWidth, width) : 0);
   const limits = $derived(FREQ_LIMITS[mode]);
+  const rxBand = $derived(bracket(shownRx, mode));
+  const txBand = $derived(bracket(shownTx, mode));
+
+  // Each effect reads its value first: `client?.` skips its arguments while there is no client,
+  // and an effect that read nothing would never run again.
+  $effect(() => {
+    const m = mode;
+    client?.setMode(m);
+  });
 
   $effect(() => {
-    client?.setMode(mode);
+    const c = contrast;
+    client?.setContrast(c);
+  });
+
+  $effect(() => {
+    const s = txSlots;
+    client?.setTxSlots(s);
   });
 
   function set(which: Marker, hz: number) {
@@ -138,18 +149,21 @@
     let size = { w: 0, h: 0 };
     const measure = () => {
       dpr = Math.min(3, window.devicePixelRatio || 1);
-      const r = box.getBoundingClientRect();
-      width = r.width;
+      width = box.getBoundingClientRect().width;
+      const r = pic.getBoundingClientRect();
       height = r.height;
       const w = Math.round(r.width * dpr);
       const h = Math.round(r.height * dpr);
       if (!w || !h || (w === size.w && h === size.h)) return;
       size = { w, h };
-      if (!client) client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
-      else client.resize(w, h);
+      if (!client) {
+        client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
+        client.setContrast(contrast);
+        client.setTxSlots(txSlots);
+      } else client.resize(w, h);
     };
     const ro = new ResizeObserver(measure);
-    ro.observe(box);
+    ro.observe(pic);
     measure();
     const off = onAudioChunk((c) => {
       started = true;
@@ -167,33 +181,33 @@
 <figure class="wf-wrap" aria-label="Waterfall, 0 to 3000 Hz, newest at the top">
   <!-- svelte-ignore a11y_no_static_element_interactions (the sliders below are the way in without a pointer) -->
   <div class="wf" class:dragging={!!live} bind:this={box} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} data-testid="waterfall-area">
-    <canvas bind:this={canvas} data-testid="waterfall"></canvas>
-    {#each txBands as b (b.key)}
-      <i class="txslot" style:top="{b.top}px" style:height="{b.height}px" aria-hidden="true"></i>
-    {/each}
-    {#each labels as l (l.key)}
-      <span class="tl" style:top="{l.top}px" aria-hidden="true">{l.text}</span>
-    {/each}
-    {#if stoppedAtUtcMs !== null}
-      <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
-    {:else if !started}
-      <span class="gap">{practice.on ? 'The waterfall starts with the audio. The practice band plays here. It needs no radio or microphone.' : 'The waterfall starts with the audio. RR73 listens to the radio through the headset microphone contact.'}</span>
-    {/if}
-    {#if hint && !live}
-      <span class="hint" data-testid="drag-hint">Drag to move Tx. Drag the green line to move Rx.</span>
-    {/if}
-    <i class="mark rx" data-testid="rx-marker" style:left="{xOfHz(shownRx) * 100}%" aria-hidden="true"></i>
-    {#if live}
-      <i class="band {live.which}" style:left="{xOfHz(live.hz) * 100}%" style:width="{(SIGNAL_HZ[mode] / 3000) * 100}%" aria-hidden="true"></i>
-    {/if}
-    <i class="mark tx" data-testid="tx-marker" style:left="{xOfHz(shownTx) * 100}%" aria-hidden="true"></i>
+    <div class="pic" bind:this={pic}>
+      <canvas bind:this={canvas} data-testid="waterfall"></canvas>
+      {#each labels as l (l.key)}
+        <span class="tl" style:top="{l.top}px" aria-hidden="true">{l.text}</span>
+      {/each}
+      {#if stoppedAtUtcMs !== null}
+        <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
+      {:else if !started}
+        <span class="gap">{practice.on ? 'The waterfall starts with the audio. The practice band plays here. It needs no radio or microphone.' : 'The waterfall starts with the audio. RR73 listens to the radio through the headset microphone contact.'}</span>
+      {/if}
+      {#if hint && !live}
+        <span class="hint" data-testid="drag-hint">Drag to move Tx. Drag the green marker to move Rx.</span>
+      {/if}
+    </div>
+    <div class="ruler" aria-hidden="true">
+      {#each TICKS as t (t.hz)}
+        <i class="tick" class:major={t.major} style:left="{t.x * 100}%"></i>
+      {/each}
+      {#each LABELS as l (l.hz)}
+        <span class="rl" class:end={l.align === 'end'} style:left="{l.x * 100}%">{l.text}</span>
+      {/each}
+    </div>
+    <i class="mark rx" data-testid="rx-marker" style:left="calc({rxBand.x0 * 100}% - 1px)" style:width="calc({(rxBand.x1 - rxBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    <i class="mark tx" data-testid="tx-marker" style:left="calc({txBand.x0 * 100}% - 1px)" style:width="calc({(txBand.x1 - txBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
     {#if live}
       <span class="tag {live.which}" bind:clientWidth={tagWidth} style:left="{tagLeft}px" data-testid="drag-label">{live.which === 'tx' ? 'Tx' : 'Rx'} {live.hz} Hz</span>
     {/if}
-    <span class="scrim" aria-hidden="true"></span>
-    {#each axis as t (t.hz)}
-      <span class="ax" style:left="{t.x * 100}%" aria-hidden="true">{t.label}</span>
-    {/each}
   </div>
   <input
     class="visually-hidden slider"
@@ -245,6 +259,11 @@
     cursor: ew-resize;
   }
 
+  .pic {
+    position: absolute;
+    inset: 0 0 var(--rr-ruler) 0;
+  }
+
   canvas {
     position: absolute;
     inset: 0;
@@ -253,41 +272,54 @@
     height: 100%;
   }
 
-  .txslot {
-    position: absolute;
-    right: 0;
-    left: 0;
-    background: var(--rr-wf-tx-slot);
-  }
-
   .tl,
-  .ax {
+  .rl {
     position: absolute;
     height: 13px;
     font-family: var(--rr-mono);
     font-size: var(--rr-text-axis);
     line-height: 13px;
     letter-spacing: 0;
-    color: var(--rr-wf-text);
     white-space: nowrap;
   }
 
   .tl {
     left: 6px;
+    color: var(--rr-wf-text);
   }
 
-  .ax {
-    bottom: 2px;
-    transform: translateX(-50%);
-  }
-
-  .scrim {
+  /* The ruler: a tick every 100 Hz, a taller one every 500 Hz, labels under the tall ones. */
+  .ruler {
     position: absolute;
     right: 0;
     bottom: 0;
     left: 0;
-    height: 16px;
-    background: linear-gradient(180deg, transparent, var(--rr-wf-scrim));
+    height: var(--rr-ruler);
+    background: var(--rr-wf-ruler);
+    box-shadow: inset 0 var(--rr-hairline) 0 var(--rr-wf-ruler-rule);
+  }
+
+  .tick {
+    position: absolute;
+    top: 0;
+    width: var(--rr-hairline);
+    height: 4px;
+    background: var(--rr-wf-tick);
+  }
+
+  .tick.major {
+    height: 7px;
+    background: var(--rr-wf-tick-major);
+  }
+
+  .rl {
+    top: 8px;
+    color: var(--rr-wf-ruler-text);
+    transform: translateX(-50%);
+  }
+
+  .rl.end {
+    transform: translateX(calc(-100% - var(--rr-space-half)));
   }
 
   .gap {
@@ -303,10 +335,10 @@
     text-align: center;
   }
 
-  /* A small pill at the bottom left, above the frequency labels. */
+  /* A small pill at the bottom left of the picture, above the ruler. */
   .hint {
     position: absolute;
-    bottom: 18px;
+    bottom: var(--rr-space-1-5);
     left: var(--rr-space-1-5);
     max-width: calc(100% - 2 * var(--rr-space-1-5));
     padding: var(--rr-space-half) var(--rr-space-2);
@@ -319,31 +351,37 @@
     letter-spacing: 0;
   }
 
+  /* A line at the lowest and the highest tone, through the picture and the ruler; a light fill
+     between them over the picture. */
   .mark {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 2px;
-    margin-left: calc(-1 * var(--rr-space-px));
+    border-right: 2px solid;
+    border-left: 2px solid;
+    pointer-events: none;
+  }
+
+  .mark::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 var(--rr-ruler) 0;
   }
 
   .mark.rx {
-    background: var(--rr-wf-rx);
+    border-color: var(--rr-wf-rx);
+  }
+
+  .mark.rx::before {
+    background: var(--rr-wf-rx-band);
   }
 
   .mark.tx {
-    background: var(--rr-wf-tx);
+    border-color: var(--rr-wf-tx);
   }
 
-  .band {
-    position: absolute;
-    top: 0;
-    bottom: 0;
+  .mark.tx::before {
     background: var(--rr-wf-tx-band);
-  }
-
-  .band.rx {
-    background: var(--rr-wf-rx-band);
   }
 
   .tag {

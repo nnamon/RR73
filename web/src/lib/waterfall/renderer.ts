@@ -6,10 +6,12 @@
  * The visible height covers about 45 s (three FT8 slots), so the row period follows the canvas
  * height. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
+ * The slots RR73 transmitted in are blank too: the receive audio of those slots is the radio's
+ * own transmission.
  */
 
 import { buildLut, type WaterfallPalette } from './colormap';
-import { LevelMapper } from './levels';
+import { LevelMapper, type Contrast } from './levels';
 import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
 import { SLOT_MS, type Mode } from '../clock/slots';
 import { QuietTracker, quietestHz } from './pick';
@@ -101,6 +103,8 @@ export class WaterfallRenderer {
   private marks: { utcMs: number; row: number }[] = [];
   private lastRowUtc: number | null = null;
   private readonly quiet: QuietTracker;
+  /** Starts of the slots RR73 transmitted in, UTC ms. */
+  private txSlots = new Set<number>();
 
   constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
     this.ctx = ctx;
@@ -135,8 +139,36 @@ export class WaterfallRenderer {
     this.ctx.canvas.height = this.height;
     this.cols = columns(this.width);
     this.hop = Math.max(64, Math.round((VISIBLE_S * DISPLAY_RATE) / this.height));
+    this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
     this.redraw();
+  }
+
+  /** Sets the contrast of the colormap for the rows drawn from now on. */
+  setContrast(c: Contrast) {
+    this.mapper.setContrast(c);
+  }
+
+  /**
+   * Sets the slots RR73 transmitted in, UTC ms. Their rows are drawn blank, including rows drawn
+   * before the slot was known.
+   */
+  setTxSlots(starts: readonly number[]) {
+    this.txSlots = new Set(starts);
+    let changed = false;
+    for (const r of this.history) {
+      if (!r.blank && this.inTxSlot(r.utcMs)) {
+        r.blank = true;
+        changed = true;
+      }
+    }
+    if (changed) this.redraw();
+  }
+
+  private inTxSlot(utcMs: number): boolean {
+    if (!this.txSlots.size) return false;
+    const slot = SLOT_MS[this.mode];
+    return this.txSlots.has(Math.floor(utcMs / slot) * slot);
   }
 
   /** Clears the picture and the history. */
@@ -207,6 +239,10 @@ export class WaterfallRenderer {
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
+        if (this.inTxSlot(t)) {
+          rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+          continue;
+        }
         this.quiet.add(this.db, t);
         rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
       }

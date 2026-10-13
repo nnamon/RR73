@@ -45,7 +45,7 @@ export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'newCallBand', rank: 13, label: 'New call on this band', sub: 'Not worked on this band', style: 'background', colour: '#99CCFF', spoken: 'new call on this band' },
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: '#FFE2C8', spoken: 'ending a QSO' },
   { id: 'cq', rank: 15, label: 'CQ in the message', sub: 'Any station calling CQ', style: 'background', colour: '#66FF66', spoken: 'CQ' },
-  { id: 'sent', rank: 16, label: 'What I sent', sub: 'Your own transmissions', style: 'background', colour: '#C98A1A', spoken: 'you sent' },
+  { id: 'sent', rank: 16, label: 'What I sent', sub: 'Your own transmissions', style: 'background', colour: '#C98A1A', spoken: 'sent' },
   { id: 'worked', rank: 17, label: 'Worked before', sub: 'In the log on this band and mode', style: 'text', colour: '#8C93A0', spoken: 'worked before' },
 ];
 

@@ -9,6 +9,7 @@
   import { timingReport, type TimingSnapshot } from '../lib/clock/timing';
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
+  import type { Contrast } from '../lib/waterfall/levels';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { audio, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
 
@@ -47,6 +48,12 @@
   const screenText = $derived(
     audio.wake === 'held' ? 'Stays on while audio runs' : audio.wake === 'refused' ? 'Follows Auto-Lock: the browser refused to keep it on' : audio.wake === 'unsupported' ? 'Follows Auto-Lock: this browser cannot keep it on' : 'Stays on while audio runs',
   );
+
+  const CONTRASTS: { id: Contrast; label: string }[] = [
+    { id: 'low', label: 'Low' },
+    { id: 'normal', label: 'Normal' },
+    { id: 'high', label: 'High' },
+  ];
 
   const checks: { key: keyof Checklist; title: string; sub: string }[] = [
     { key: 'focus', title: 'Focus mode on', sub: 'iOS sounds go out through the cable and key the radio’s VOX.' },
@@ -144,6 +151,17 @@
           <span class="row-title">Level</span>
           <LevelMeter rmsDb={audio.rmsDb} {live} variant="full" />
         </div>
+      </div>
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="contrast">Waterfall contrast</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="contrast">
+          {#each CONTRASTS as c (c.id)}
+            <label class="seg-i" class:on={settings.waterfallContrast === c.id}>
+              <input class="visually-hidden" type="radio" name="contrast" value={c.id} checked={settings.waterfallContrast === c.id} onchange={() => void updateSettings({ waterfallContrast: c.id })} />
+              {c.label}
+            </label>
+          {/each}
+        </span>
       </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Sample rate</span><span class="row-sub">{rateText}</span></span>
@@ -355,6 +373,13 @@
 
   .pct {
     width: 52px;
+  }
+
+  /* The title, then the segments across the row. */
+  .stack {
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    align-items: stretch;
   }
 
   .tune {
