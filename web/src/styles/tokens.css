@@ -5,8 +5,8 @@
  * Each colour is light-dark(light, dark). The theme follows the system unless Settings sets
  * data-theme on the root element, which pins color-scheme.
  *
- * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a marked decode
- * row's tint 1.35:1 or more against the list, badge text 4.5:1 or more on its fill.
+ * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a decode row's
+ * text 4.5:1 or more on its decode colour, badge text 4.5:1 or more on its fill.
  */
 
 :root {
@@ -25,6 +25,8 @@
   --rr-text-foot: 13px;
   --rr-text-caption: 12px;
   --rr-text-axis: 10px;
+  --rr-text-tag: 11px;
+  --rr-text-decode: 14.5px;
   --rr-text-dial: 40px;
   --rr-text-countdown: 64px;
   --rr-text-sideband: 19px;
@@ -69,20 +71,26 @@
 
   /* Sizes */
   --rr-tap: 44px;
-  --rr-row-decode: 40px;
+  --rr-row-decode: 32px;
+  --rr-slot-bar: 22px;
+  /* The ruler strip under the waterfall picture. */
+  --rr-ruler: 22px;
+  --rr-slot-rule: 2px;
+  --rr-filters: 36px;
   --rr-button: 46px;
   --rr-button-large: 54px;
   --rr-button-halt: 64px;
-  --rr-chip: 30px;
+  /* The face of a bottom bar button, inside its 44 pt target. */
+  --rr-bar-button: 36px;
+  --rr-chip: 28px;
   --rr-mark-bar: 4px;
   --rr-icon: 24px;
   --rr-icon-tab: 25px;
-  --rr-ring: 30px;
+  --rr-ring: 22px;
   --rr-row-icon: 30px;
-  --rr-tabbar: 49px;
-  --rr-axis: 24px;
-  --rr-waterfall: clamp(128px, 21dvh, 220px);
-  --rr-meter-mini: 60px;
+  /* 130 pt at 393 x 852, 110 pt at 375 x 667. */
+  --rr-waterfall: clamp(96px, calc(38px + 10.8dvh), 180px);
+  --rr-level-line: 2px;
   --rr-reading: 640px;
 
   /* Notch and home indicator. */
@@ -137,11 +145,39 @@
   --rr-warn: light-dark(#A84D08, #F0A23B);
   --rr-warn-soft: light-dark(rgb(217 119 6 / 13%), rgb(240 162 59 / 16%));
 
-  /* Colour: decode row marking (WSJT-X style: bar, tint, bold callsign) */
-  --rr-cq-tint: light-dark(rgb(23 138 80 / 25%), rgb(52 199 123 / 22%));
-  --rr-me-tint: light-dark(rgb(210 58 47 / 23%), rgb(255 90 78 / 26%));
-  --rr-sent-tint: light-dark(rgb(201 138 26 / 32%), rgb(224 169 59 / 22%));
+  /*
+   * Colour: decode colours (Settings › Decode colours). A row's category colour, chosen by the
+   * operator, shows as a tint: the colour mixed with a base in sRGB. The limits hold for any
+   * colour, so the row's text stays at 4.5:1 or more in both themes (highlight-contrast.test.ts):
+   * - light: at most 45% colour over #FFF, so every channel is 140 or more, and #0E1116 text is
+   *   5.6:1 or more;
+   * - dark: at most 30% colour over #0B0D10, so every channel is 88 or less, and #ECEEF2 text is
+   *   6.1:1 or more. 30% leaves room for worked-before grey text over a tint.
+   * lib/decode/highlight-colour.ts mirrors these four values for the worked-before text colour.
+   */
+  --rr-hl-tint-light: 45%;
+  --rr-hl-tint-dark: 30%;
+  /* Rows of older slots fade: a lighter tint, and grey text kept at 4.5:1 (highlight-colour.ts). */
+  --rr-hl-tint-old-light: 25%;
+  --rr-hl-tint-old-dark: 18%;
+  --rr-old-text: light-dark(#6E7684, #8C93A0);
+  --rr-hl-base-light: #FFF;
+  --rr-hl-base-dark: #0B0D10;
   --rr-sel-tint: light-dark(rgb(40 81 216 / 21%), rgb(110 149 255 / 25%));
+
+  /*
+   * Colour: slot bars in the decode list. Even slots (:00, :30) slate, odd slots (:15, :45) blue:
+   * a tint, a 2 pt rule on top a step stronger, the time and tag in the strong text, the rest in
+   * the soft text. Text is 4.5:1 or more on the tint in both themes.
+   */
+  --rr-slot-even: light-dark(#E4E8EF, #1A1F27);
+  --rr-slot-even-rule: light-dark(#7E899C, #5A6577);
+  --rr-slot-even-strong: light-dark(#1F2633, #E3E8F0);
+  --rr-slot-even-text: light-dark(#4A5363, #A9B2C0);
+  --rr-slot-odd: light-dark(#DCE5F8, #15203A);
+  --rr-slot-odd-rule: light-dark(#4A6FC4, #5679CC);
+  --rr-slot-odd-strong: light-dark(#1C3F8F, #B9CCFF);
+  --rr-slot-odd-text: light-dark(#3B4F7D, #93A7D6);
 
   /* Colour: controls */
   --rr-seg-sel: light-dark(#FFF, #4A515E);
@@ -165,13 +201,46 @@
   --rr-wf-line: rgb(255 255 255 / 18%);
   --rr-wf-text: rgb(255 255 255 / 78%);
   --rr-wf-tag-bg: rgb(4 6 10 / 62%);
+  --rr-wf-scrim: rgb(4 6 10 / 75%);
+  --rr-wf-rx: #34C77B;
+  --rr-wf-tx: #FF5A4E;
+  --rr-wf-rx-band: rgb(52 199 123 / 20%);
+  --rr-wf-tx-band: rgb(255 90 78 / 18%);
+  --rr-wf-ruler: #0B1020;
+  --rr-wf-ruler-rule: rgb(255 255 255 / 25%);
+  --rr-wf-ruler-text: rgb(255 255 255 / 90%);
+  --rr-wf-tick: rgb(255 255 255 / 55%);
+  --rr-wf-tick-major: rgb(255 255 255 / 90%);
   --rr-wf-c0: #04060A;
-  --rr-wf-c1: #0A1530;
-  --rr-wf-c2: #123E6E;
-  --rr-wf-c3: #1A7F9A;
-  --rr-wf-c4: #4CC3A3;
-  --rr-wf-c5: #F0D25A;
+  --rr-wf-c1: #0B1D45;
+  --rr-wf-c2: #1898D8;
+  --rr-wf-c3: #4FD2FF;
+  --rr-wf-c4: #8AF0C8;
+  --rr-wf-c5: #FFF060;
   --rr-wf-c6: #FFF8E6;
+}
+
+/*
+ * A decode-coloured element sets --rr-hl to its category's colour (#RRGGBB) and takes the class
+ * rr-hl, which gives it the tint in --rr-hl-bg for both themes. A worked-before text colour comes
+ * worked out for each theme (highlight-colour.ts) in --rr-ink-light and --rr-ink-dark, and the
+ * class rr-ink gives it in --rr-hl-ink.
+ */
+.rr-hl {
+  --rr-hl-bg: light-dark(
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-light), var(--rr-hl-base-light)),
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-dark), var(--rr-hl-base-dark))
+  );
+  --rr-hl-bg-old: light-dark(
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-old-light), var(--rr-hl-base-light)),
+    color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-old-dark), var(--rr-hl-base-dark))
+  );
+  /* Text on that faded tint, worked out for each theme (highlight-colour.ts oldInkFor). */
+  --rr-hl-old-ink: light-dark(var(--rr-ink-light), var(--rr-ink-dark));
+}
+
+.rr-ink {
+  --rr-hl-ink: light-dark(var(--rr-ink-light), var(--rr-ink-dark));
 }
 
 :root[data-theme='light'] {

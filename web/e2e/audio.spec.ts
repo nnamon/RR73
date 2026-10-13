@@ -33,7 +33,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   await expect(page.getByText('Audio is off')).toBeVisible();
 
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
 
   // The level meter moves off "No audio" and shows a level in dBFS.
   await expect(meter).toHaveAttribute('aria-valuetext', /^−\d+ dBFS$/, { timeout: 10_000 });
@@ -48,24 +48,47 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   await page.waitForTimeout(8000);
   const wf = page.getByTestId('waterfall');
   const px = await elementPixels(page, wf);
-  const rows = Math.min(px.height, 60);
+  // The newest 6 s of rows: audio has run for all of them. With the colour map steepened in 0.9.2,
+  // noise peaks show navy to cyan, brighter still here at 1 px per 7.6 Hz, where each pixel takes
+  // the strongest of its 2 or 3 bins; the tones are checked for near white as well.
+  const rows = Math.max(4, Math.floor((px.height * 6) / 45));
   const col = (hz: number) => Math.round((hz / 3000) * px.width);
   const at = (hz: number) => brightness(px, col(hz) - 1, col(hz) + 1, 2, rows);
   const quiet = [450, 1000, 1600, 2250].map((hz) => brightness(px, col(hz) - 1, col(hz) + 1, 2, rows));
   const background = Math.max(...quiet);
   const report = { background, tones: TONES_HZ.map((hz) => [hz, Math.round(at(hz))]), alias: Math.round(at(ALIAS_AT_HZ)), level };
   test.info().annotations.push({ type: 'waterfall', description: JSON.stringify(report) });
-  for (const hz of TONES_HZ) expect(at(hz), `${hz} Hz`).toBeGreaterThan(background * 2.5);
-  expect(at(ALIAS_AT_HZ)).toBeLessThan(at(TONES_HZ[1]) / 2.5);
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-operate-running.png` });
+  for (const hz of TONES_HZ) {
+    expect(at(hz), `${hz} Hz`).toBeGreaterThan(background * 1.5);
+    expect(at(hz), `${hz} Hz`).toBeGreaterThan(600);
+  }
+  expect(at(ALIAS_AT_HZ)).toBeLessThan(at(TONES_HZ[1]) / 1.5);
 
-  // Save slot: the first slot is kept at the next slot boundary.
+  // Save slot: the first slot is kept at the next slot boundary. Audio that started just before
+  // a boundary leaves that slot too short to measure ("started late, 3 % recorded"), so wait,
+  // while the sheet lists slots as they are kept, for one with at least 10 % recorded, and save
+  // the slot with the most audio.
   const save = page.getByRole('button', { name: 'Save slot' });
   await expect(save).toBeEnabled({ timeout: 25_000 });
   await save.click();
   const sheet = page.getByRole('dialog', { name: 'Save a slot' });
   await expect(sheet).toBeVisible();
-  await sheet.getByRole('button', { name: /^Save the slot at/ }).first().click();
+  const slotButtons = sheet.getByRole('button', { name: /^Save the slot at/ });
+  const recorded = (label: string) => (/complete$/.test(label) ? 100 : Number(/(\d+) % recorded$/.exec(label)?.[1] ?? 0));
+  let labels: string[] = [];
+  await expect
+    .poll(
+      async () => {
+        labels = await slotButtons.evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') ?? ''));
+        return Math.max(0, ...labels.map(recorded));
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThanOrEqual(10);
+  const fullest = labels.reduce((a, b) => (recorded(b) > recorded(a) ? b : a));
+  test.info().annotations.push({ type: 'slots', description: JSON.stringify({ listed: labels, saved: fullest }) });
+  await sheet.getByRole('button', { name: fullest, exact: true }).click();
   await expect(sheet.getByText('This browser cannot share files. Download both files below.')).toBeVisible();
 
   const wavLink = sheet.getByRole('link', { name: /^Download \d{6}_\d{6}\.wav$/ });
@@ -99,7 +122,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
 test('a hidden page stops audio, says when, and a tap resumes it', async ({ page }) => {
   await page.goto('./');
   await page.getByRole('button', { name: 'Start audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(3000);
 
   // iOS stops the microphone in the background; RR73 stops capture when the page is hidden.
@@ -130,6 +153,37 @@ test('a hidden page stops audio, says when, and a tap resumes it', async ({ page
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-audio-stopped.png` });
 
   await banner.getByRole('button', { name: 'Resume audio' }).click();
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/, { timeout: 10_000 });
+});
+
+test('a decoder gone from the server says a new version is ready, waits for audio to stop, then reloads at the next change of screen', async ({ page }) => {
+  // A newer build replaced this one on the server: its decoder worker is gone, and index.html names another main script.
+  await page.route('**/assets/decoder.worker-*.js', (route) => route.fulfill({ status: 404, body: 'File not found' }));
+  await page.route('**/index.html', async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, body: (await res.text()).replace(/\/assets\/index-[\w-]+\.js/, '/assets/index-N3wBu1ld.js') });
+  });
+  await page.goto('./');
+  await page.evaluate(() => ((window as unknown as { marker: boolean }).marker = true));
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
+  const notice = page.getByTestId('status-notice');
+  await expect(notice).toContainText('A new version of RR73 is ready. It loads when audio stops.');
+
+  // Audio runs: a change of screen does not reload.
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Radio and audio/ }).click();
+  await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker)).toBe(true);
+
+  // Audio stops when the page is hidden; the next change of screen reloads.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  await expect(notice).toHaveText(/^A new version of RR73 is ready\.\s*Reload$/);
+  await Promise.all([page.waitForEvent('load'), page.getByRole('link', { name: 'Operate' }).click()]);
+  expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
 });

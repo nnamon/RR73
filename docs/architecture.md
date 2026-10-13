@@ -103,16 +103,18 @@ SlotAudio (12 kHz f32, start time, mode)
 
 | Module | Responsibility |
 | --- | --- |
-| `lib/audio` | AudioContext lifecycle, iOS audio session, microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
+| `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
 | `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
-| `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
+| `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ, Run and Hunt. See `docs/design/sequencer.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
+| `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
-| `lib/state` | Settings and persistent stores in IndexedDB. |
+| `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
+| `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
@@ -120,8 +122,12 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 ## Timing
 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
-- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`. Input latency is unknown on iOS, so the residual offset is measured from the median DT of decodes and corrected.
+- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it.
 - Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s, as in WSJT-X.
+
+## Updates
+
+The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A new version installs and waits; the running build keeps its own files, including the decoder worker and the WebAssembly it may still load. At the next change of screen with audio off, or on Reload app, the app sends SKIP_WAITING and reloads. Workers up to 0.5.0 do not answer the handover check in `public/sw-handover.js`, so a new worker takes over from them at once, as those builds expect. When a file of the running build fails to load and the server's index.html names another build, the app says a new version is ready and reloads at the next safe moment.
 
 ## Platform constraints
 

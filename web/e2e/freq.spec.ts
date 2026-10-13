@@ -1,100 +1,132 @@
-// Setting the receive and transmit frequencies from the waterfall: a tap picks the frequency
-// under the finger, the bar sets Rx, Tx or both, and the choice survives a reload.
+// Moving Tx and Rx on the waterfall by direct manipulation: a sideways drag moves Tx with a live
+// label and sets it on release, a tap sets Tx where it lands, a drag that starts on the green
+// line moves Rx, and a vertical movement or a cancelled pointer changes nothing. The sliders set
+// both without a pointer. The choice, and the hint that goes after the first drag, survive a reload.
 import { expect, test, type Page } from '@playwright/test';
 
-const HINT = 'Tap the waterfall to set the receive or transmit frequency.';
+const slider = (page: Page, which: 'Transmit' | 'Receive') => page.getByRole('slider', { name: `${which} frequency, Hz` });
+const area = async (page: Page) => (await page.getByTestId('waterfall-area').boundingBox())!;
+type Box = { x: number; y: number; width: number; height: number };
+/** A whole pixel near `hz`, and the frequency the app sets there: 5 Hz steps inside 200 to 2800 Hz. */
+const at = (b: Box, hz: number) => {
+  const x = Math.round(b.x + (b.width * hz) / 3000);
+  return { x, hz: Math.min(2800, Math.max(200, Math.round(Math.round(((x - b.x) / b.width) * 3000) / 5) * 5)) };
+};
 
-/** Taps the waterfall at `hz` and returns the frequency the app should pick there. */
-async function tapAt(page: Page, hz: number): Promise<number> {
-  const box = (await page.getByTestId('waterfall').boundingBox())!;
-  const x = Math.round(box.x + (box.width * hz) / 3000);
-  await page.mouse.click(x, Math.round(box.y + box.height / 2));
-  return Math.round(((x - box.x) / box.width) * 3000);
+async function drag(page: Page, b: Box, fromHz: number, toHz: number, release = true) {
+  const y = Math.round(b.y + b.height / 2);
+  await page.mouse.move(at(b, fromHz).x, y);
+  await page.mouse.down();
+  await page.mouse.move(at(b, toHz).x, y, { steps: 6 });
+  if (release) await page.mouse.up();
+  return at(b, toHz).hz;
 }
 
-const axisLabel = (page: Page) => page.getByRole('button', { name: /^Set frequencies/ });
-
-test('a tap on the waterfall sets Rx and Tx, and they survive a reload', async ({ page }) => {
+test('a drag moves Tx with a live label, sets it on release, and the hint goes for good', async ({ page }) => {
   await page.goto('./#/operate');
-  await expect(page.getByText(HINT)).toBeVisible();
-  await expect(axisLabel(page)).toHaveAccessibleName('Set frequencies. Receive 1500 Hz, transmit 1500 Hz.');
+  const hint = page.getByTestId('drag-hint');
+  await expect(hint).toBeVisible();
+  const b = await area(page);
+  // The hint is a small pill at the bottom left, above the frequency labels.
+  const h = (await hint.boundingBox())!;
+  expect(h.x - b.x).toBeLessThanOrEqual(8);
+  expect(b.y + b.height - (h.y + h.height)).toBeGreaterThanOrEqual(14);
+  expect(h.y).toBeGreaterThan(b.y + b.height / 2);
 
-  const hz = await tapAt(page, 1846);
-  expect(Math.abs(hz - 1846)).toBeLessThanOrEqual(8);
-  const bar = page.getByRole('group', { name: 'Set the frequency' });
-  await expect(bar).toBeVisible();
-  await expect(bar.getByRole('textbox', { name: 'Frequency, Hz' })).toHaveValue(String(hz));
-  await expect(page.getByTestId('freq-guide')).toBeVisible();
-  await bar.getByRole('button', { name: `Both, receive and transmit at ${hz} Hz` }).click();
-  await expect(bar).toBeHidden();
-  await expect(page.getByTestId('freq-guide')).toBeHidden();
-  await expect(axisLabel(page)).toHaveAccessibleName(`Set frequencies. Receive ${hz} Hz, transmit ${hz} Hz.`);
-  await expect(page.getByText(HINT)).toBeHidden();
-
-  // The brackets moved to the tapped frequency.
-  const wf = (await page.getByTestId('waterfall').boundingBox())!;
-  const rx = (await page.getByTestId('rx-bracket').boundingBox())!;
-  const tx = (await page.getByTestId('tx-bracket').boundingBox())!;
-  expect(Math.abs(rx.x - (wf.x + (wf.width * hz) / 3000))).toBeLessThanOrEqual(1);
-  expect(Math.abs(tx.x - rx.x)).toBeLessThanOrEqual(1);
-
-  // Receive here moves only Rx; Transmit here only Tx.
-  const rxHz = await tapAt(page, 700);
-  await bar.getByRole('button', { name: `Receive here, ${rxHz} Hz` }).click();
-  await expect(axisLabel(page)).toHaveAccessibleName(`Set frequencies. Receive ${rxHz} Hz, transmit ${hz} Hz.`);
-  const txHz = await tapAt(page, 2210);
-  await bar.getByRole('button', { name: `Transmit here, ${txHz} Hz` }).click();
-  await expect(axisLabel(page)).toHaveAccessibleName(`Set frequencies. Receive ${rxHz} Hz, transmit ${txHz} Hz.`);
+  const mid = await drag(page, b, 600, 1200, false);
+  await expect(page.getByTestId('drag-label')).toHaveText(`Tx ${mid} Hz`);
+  // Nothing is set until the finger lifts.
+  await expect(slider(page, 'Transmit')).toHaveValue('1500');
+  const end = at(b, 1850);
+  await page.mouse.move(end.x, Math.round(b.y + b.height / 2), { steps: 6 });
+  await expect(page.getByTestId('drag-label')).toHaveText(`Tx ${end.hz} Hz`);
+  await page.mouse.up();
+  await expect(page.getByTestId('drag-label')).toBeHidden();
+  await expect(slider(page, 'Transmit')).toHaveValue(String(end.hz));
+  await expect(slider(page, 'Receive')).toHaveValue('1500');
+  await expect(hint).toBeHidden();
+  // The marker's first line sits on the lowest tone; the second 50 Hz above it.
+  const tx = (await page.getByTestId('tx-marker').boundingBox())!;
+  expect(Math.abs(tx.x + 1 - (b.x + (b.width * end.hz) / 3000))).toBeLessThanOrEqual(1.5);
+  expect(Math.abs(tx.x + tx.width - 1 - (b.x + (b.width * (end.hz + 50)) / 3000))).toBeLessThanOrEqual(1.5);
 
   // Settings are written to IndexedDB after the change; give the write a moment.
   await page.waitForTimeout(500);
   await page.reload();
-  await expect(axisLabel(page)).toHaveAccessibleName(`Set frequencies. Receive ${rxHz} Hz, transmit ${txHz} Hz.`);
-  await expect(page.getByText(HINT)).toBeHidden();
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByText(`Tx stays on ${txHz} Hz when you call a station`)).toBeVisible();
+  await expect(slider(page, 'Transmit')).toHaveValue(String(end.hz));
+  await expect(page.getByTestId('waterfall-area')).toBeVisible();
+  await expect(hint).toBeHidden();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('switch', { name: 'Hold Tx frequency' })).toBeChecked();
 });
 
-test('the bar keeps to the FT8 limits, and closes with Escape or a tap elsewhere', async ({ page }) => {
+test('a tap sets Tx where it lands, and a drag from the green line moves Rx', async ({ page }) => {
   await page.goto('./#/operate');
-  const bar = page.getByRole('group', { name: 'Set the frequency' });
-  // The edges clamp to 200 and 2800 Hz.
-  await tapAt(page, 30);
-  await expect(bar.getByRole('textbox', { name: 'Frequency, Hz' })).toHaveValue('200');
-  await tapAt(page, 2990);
-  await expect(bar.getByRole('textbox', { name: 'Frequency, Hz' })).toHaveValue('2800');
-  // A typed frequency outside them is refused.
-  await bar.getByRole('textbox', { name: 'Frequency, Hz' }).fill('2950');
-  await expect(bar.getByText('FT8 uses 200 to 2800 Hz.')).toBeVisible();
-  await expect(bar.getByRole('button', { name: /^Both/ })).toBeDisabled();
-  await page.keyboard.press('Escape');
-  await expect(bar).toBeHidden();
-  await tapAt(page, 1200);
-  await expect(bar).toBeVisible();
-  await page.getByRole('timer', { name: 'UTC time and slot progress' }).click();
-  await expect(bar).toBeHidden();
-  // Clear frequency needs audio; with none it says so.
-  await tapAt(page, 1200);
-  await bar.getByRole('button', { name: 'Find clear Tx frequency' }).click();
-  await expect(bar.getByText('Finding a clear frequency needs 2 slots of audio.')).toBeVisible();
+  const b = await area(page);
+  const tap = at(b, 2210);
+  await page.mouse.click(tap.x, Math.round(b.y + b.height / 2));
+  await expect(slider(page, 'Transmit')).toHaveValue(String(tap.hz));
+  await expect(slider(page, 'Receive')).toHaveValue('1500');
+
+  // The press lands on the Rx line at 1500 Hz.
+  const y = Math.round(b.y + b.height / 2);
+  await page.mouse.move(Math.round(b.x + (b.width * 1500) / 3000) + 3, y);
+  await page.mouse.down();
+  const to = at(b, 900);
+  await page.mouse.move(to.x, y, { steps: 6 });
+  await expect(page.getByTestId('drag-label')).toHaveText(`Rx ${to.hz} Hz`);
+  await page.mouse.up();
+  await expect(slider(page, 'Receive')).toHaveValue(String(to.hz));
+  await expect(slider(page, 'Transmit')).toHaveValue(String(tap.hz));
+  const rx = (await page.getByTestId('rx-marker').boundingBox())!;
+  expect(Math.abs(rx.x + 1 - (b.x + (b.width * to.hz) / 3000))).toBeLessThanOrEqual(1.5);
 });
 
-test('without a pointer, Set frequencies opens the bar and takes a typed frequency', async ({ page }) => {
+test('a vertical movement and a cancelled drag change nothing', async ({ page }) => {
   await page.goto('./#/operate');
-  const set = axisLabel(page);
-  await set.focus();
-  await expect(set).toBeVisible();
-  await page.keyboard.press('Enter');
-  const field = page.getByRole('group', { name: 'Set the frequency' }).getByRole('textbox', { name: 'Frequency, Hz' });
-  await expect(field).toBeFocused();
-  await expect(field).toHaveValue('1500');
-  await page.keyboard.type('1846');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await page.keyboard.press('Tab');
-  await expect(page.getByRole('button', { name: 'Transmit here, 1846 Hz' })).toBeFocused();
-  await page.keyboard.press('Enter');
-  await expect(set).toBeFocused();
-  await expect(set).toHaveAccessibleName('Set frequencies. Receive 1500 Hz, transmit 1846 Hz.');
+  const b = await area(page);
+  // Up and down: the page's scroll gets it.
+  const x = at(b, 1000).x;
+  await page.mouse.move(x, Math.round(b.y + 20));
+  await page.mouse.down();
+  await page.mouse.move(x + 3, Math.round(b.y + 70), { steps: 5 });
+  await page.mouse.up();
+  await expect(slider(page, 'Transmit')).toHaveValue('1500');
+
+  // The system takes the pointer mid-drag (pointercancel): the drag ends where it began.
+  await drag(page, b, 600, 1200, false);
+  await expect(page.getByTestId('drag-label')).toBeVisible();
+  await page.getByTestId('waterfall-area').dispatchEvent('pointercancel', { pointerId: 1, bubbles: true });
+  await expect(page.getByTestId('drag-label')).toBeHidden();
+  await page.mouse.up();
+  await expect(slider(page, 'Transmit')).toHaveValue('1500');
+  await expect(page.getByTestId('drag-hint')).toBeVisible();
+});
+
+test('without a pointer, the sliders set Tx and Rx in 5 Hz steps', async ({ page }) => {
+  await page.goto('./#/operate');
+  const tx = slider(page, 'Transmit');
+  await tx.focus();
+  await page.keyboard.press('ArrowRight');
+  await page.keyboard.press('ArrowRight');
+  await expect(tx).toHaveValue('1510');
+  await expect(tx).toHaveAttribute('aria-valuetext', '1510 Hz');
+  await expect(page.getByText('Transmit 1510 Hz.')).toBeAttached();
+  const rx = slider(page, 'Receive');
+  await rx.focus();
+  await page.keyboard.press('ArrowLeft');
+  await expect(rx).toHaveValue('1495');
+  // FT8 keeps to 200 to 2800 Hz.
+  await expect(tx).toHaveAttribute('min', '200');
+  await expect(tx).toHaveAttribute('max', '2800');
+});
+
+test('Find clear Tx in the ••• menu says when there is not enough audio', async ({ page }) => {
+  await page.goto('./#/operate');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await bar.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Find clear Tx' }).click();
+  await expect(page.getByRole('menu')).toBeHidden();
+  await expect(bar.getByRole('status')).toHaveText('Not enough audio yet');
+  await expect(slider(page, 'Transmit')).toHaveValue('1500');
 });

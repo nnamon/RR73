@@ -1,12 +1,13 @@
 /**
- * What the dock shows, worked out from the sequencer state: the QSO's progress steps, the next
- * message and when it starts, and the status line. Times are UTC.
+ * What the bottom bar shows, worked out from the sequencer state: the QSO's progress steps and
+ * the status line. Times are UTC.
  */
 
-import { MINUS, utcTime } from '../clock/format';
-import { SLOT_MS } from '../clock/slots';
+import { MINUS, signed as signedNum, utcTime } from '../clock/format';
+import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
 import { messages, type SeqState } from './sequencer';
+import { PAUSED } from './status';
 
 export type StepState = 'done' | 'now' | 'next' | 'todo';
 
@@ -54,57 +55,60 @@ export function steps(st: SeqState): Step[] {
   });
 }
 
-export interface NextLine {
-  /** "Tx 5 · JA1KXM 9V1NE 73". */
-  title: string;
-  /** "Starts 13:15:00", "Starts 13:15:00 once RR73 is decoded", "Too late for :00, starts :30". */
-  detail: string;
-}
-
-/** The next message and when it starts; null when nothing is planned or awaited. */
-export function nextLine(st: SeqState, nowMs: number): NextLine | null {
-  const len = SLOT_MS[st.config.mode];
+/**
+ * The bottom bar's status line while calling or in a QSO: what is on air, what goes next with
+ * its slot and second ("Tx6 · CQ 9V1NE OJ11 · 1st · :30"), or what RR73 waits for. Null when
+ * idle.
+ */
+export function barText(st: SeqState): string | null {
   const m = messages(st);
-  const parity = st.parity ? ` (${ordinal(st.parity)})` : '';
-  if (st.paused && st.current) {
-    return { title: `Tx ${st.current} · ${m[st.current]}`, detail: `No reply after ${st.config.maxRetries} repeats. Tap Call to try again.` };
-  }
+  const p = st.partner;
+  if (st.onAir) return `Tx${st.onAir.tx} · ${st.onAir.text}`;
+  if (st.paused && st.current) return `Tx${st.current} · ${m[st.current]} · ${st.pausedWhy ?? PAUSED.noReply}`;
+  if (p && st.lost?.state === 'watching') return `${bare(p.call)} · working ${st.lost.other}`;
   if (st.next) {
     const n = st.next;
     const start = n.slotStartMs + n.offsetS * 1000;
-    const late = n.offsetS > 0.5 ? `, ${(n.offsetS - 0.5).toFixed(1)} s late` : '';
-    let detail = `Starts ${utcTime(start)}${parity}${late}`;
-    if (n.tooLateFor !== null) {
-      const ss = (ms: number) => `:${utcTime(ms).slice(6)}`;
-      detail = `Too late for ${ss(n.tooLateFor + 500)}, starts ${ss(start)}`;
-    }
-    if (!st.txEnabled) detail = `Enable Tx to send it at ${utcTime(start)}`;
-    return { title: `Tx ${n.tx} · ${n.text}`, detail };
+    return `Tx${n.tx} · ${n.text} · ${ordinal(parityOf(n.slotStartMs, st.config.mode))} · :${utcTime(start).slice(6)}`;
   }
-  const p = st.partner;
-  const last = st.onAir ?? st.lastSent;
-  if (!last) return null;
-  const startNext = last.slotStartMs + 2 * len + 500;
-  const at = utcTime(Math.max(startNext, nowMs));
-  if (st.phase === 'cq' && !p) return { title: 'Calling CQ', detail: 'Callers are answered in the next slot' };
-  if (!p) return null;
-  const who = bare(p.call);
-  const expect = (tx: 1 | 2 | 3 | 4 | 5, what: string) => ({ title: `Tx ${tx} · ${m[tx]}`, detail: `Starts ${at} once ${what} is decoded` });
-  if (st.phase === 'cq') {
-    if (p.logged) return { title: `${who} is logged`, detail: 'The next caller or CQ follows' };
-    if (p.sentRpt && !p.rcvdRRpt) return expect(4, `${who}'s R-report`);
-  } else {
-    if (p.sentRRpt) return expect(5, st.config.ack);
-    if (p.startMs !== null && !p.rcvdRpt) return expect(3, `${who}'s report`);
-  }
+  if (p?.logged) return `${bare(p.call)} logged`;
+  if (p) return `${bare(p.call)} · waiting for a reply`;
+  if (st.phase === 'cq') return 'CQ · waiting for callers';
   return null;
 }
 
-/** "Auto Seq on · Hold Tx 1500 Hz · Watchdog 5:40"; without Hold Tx, "Tx 1500 Hz". */
-export function statusLine(st: SeqState, nowMs: number, holdTx = true): string {
+/**
+ * Hunt's status line: "Hunt · calling VJ6X (−12 dB) · 2 QSOs". Null when Hunt is off.
+ */
+export function huntText(st: SeqState): string | null {
+  if (!st.hunt) return null;
+  const p = st.partner;
+  const n = st.huntQsos;
+  const tally = n ? ` · ${n} ${n === 1 ? 'QSO' : 'QSOs'}` : '';
+  let what = 'listening for CQs';
+  if (p) {
+    const call = bare(p.call);
+    const db = Math.round(p.snrDb);
+    if (st.lost?.state === 'watching') what = `${call} is working ${st.lost.other}`;
+    else if (p.logged) what = `${call} logged`;
+    else if (p.rcvdRpt || p.rcvdAck) what = `working ${call}`;
+    else what = `calling ${call} (${db > 0 ? '+' : ''}${signedNum(db)} dB)`;
+  }
+  return `Hunt · ${what}${tally}`;
+}
+
+/** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */
+export function watchdogText(st: SeqState, nowMs: number): string {
+  if (!st.txEnabled) return 'Tx off';
+  if (st.config.watchdogMs <= 0) return 'Watchdog off';
   const left = Math.max(0, st.config.watchdogMs - (nowMs - st.watchdogFromMs));
   const m = Math.floor(left / 60000);
   const s = Math.floor((left % 60000) / 1000);
-  const wd = st.txEnabled ? `Watchdog ${m}:${String(s).padStart(2, '0')}` : 'Tx off';
-  return `Auto Seq on · ${holdTx ? 'Hold Tx' : 'Tx'} ${st.config.txHz} Hz · ${wd}`;
+  return `Watchdog ${m}:${String(s).padStart(2, '0')}`;
+}
+
+/** Run's tally: "3 QSOs · 18/h". Null until Run has logged a QSO. */
+export function runTally(rate: { total: number; hour: number }): string | null {
+  if (rate.total < 1) return null;
+  return `${rate.total} ${rate.total === 1 ? 'QSO' : 'QSOs'} · ${rate.hour}/h`;
 }

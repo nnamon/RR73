@@ -7,7 +7,7 @@
  * after slot + 0.5 s is reported as missed. Halt stops the sound within one render quantum
  * (128 frames).
  *
- * Transmitting needs running audio and a confirmed band; otherwise the request is refused.
+ * Transmitting needs running audio, a callsign and a grid; otherwise the request is refused.
  * The scheduler plays through the output only while it transmits.
  */
 
@@ -75,7 +75,7 @@ export class TxScheduler {
   constructor(opts: {
     audio: () => TxAudio | null;
     encoder: Encoder;
-    /** Why transmitting is not allowed now (audio stopped, band unconfirmed), or null. */
+    /** Why transmitting is not allowed now (audio stopped, no callsign), or null. */
     gate: () => string | null;
     report: (r: TxReport) => void;
     timer?: (fn: () => void, ms: number) => unknown;

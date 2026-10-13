@@ -45,7 +45,7 @@
 
 <Sheet bind:open title="Save a slot" onclose={closed}>
   {#if recent.slots.length === 0}
-    <p class="note">No slots yet. The first slot is kept at the next slot boundary after audio starts.</p>
+    <p class="note">No slots yet. Slots appear here as each one ends while audio runs.</p>
   {:else}
     <ul class="group slots" aria-label="Recent slots">
       {#each recent.slots as s (s.startUtcMs)}

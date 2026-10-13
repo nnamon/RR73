@@ -1,22 +1,27 @@
 <script lang="ts">
   /**
-   * Spots. The activation sits at the top: a Start activation row when none runs, else the
-   * running activation. Spots follow below; they arrive in a later version.
+   * Spots, with the parts turned on in Settings › Optional features. The activation sits at the
+   * top: a Start activation row when none runs, else the running activation. Spots follow below;
+   * they arrive in a later version.
    */
   import ActivationPanel from '../ui/ActivationPanel.svelte';
   import ActivationSheet from '../ui/ActivationSheet.svelte';
   import Icon from '../ui/Icon.svelte';
+  import BackLink from '../ui/BackLink.svelte';
+  import { href } from '../lib/app/router.svelte';
   import { log } from '../lib/log/log.svelte';
+  import { features } from '../lib/state/features.svelte';
 
   let starting = $state(false);
+  const sources = $derived([features.potaSpots && 'POTA', features.clusterSpots && 'DX cluster'].filter(Boolean).join(' and '));
 </script>
 
 <section class="screen" aria-labelledby="spots-title">
-  <h1 id="spots-title" class="large-title">Spots</h1>
+  <BackLink to={href('operate')} label="Operate" title="Spots" id="spots-title" />
 
-  {#if log.ready && log.current}
+  {#if features.activations && log.ready && log.current}
     <ActivationPanel activation={log.current} />
-  {:else if log.ready}
+  {:else if features.activations && log.ready}
     <div class="section">
       <h2 class="section-head">Activation</h2>
       <div class="group">
@@ -24,7 +29,7 @@
           <span class="ic" aria-hidden="true"><Icon name="mountain" size={20} /></span>
           <span class="row-main">
             <span class="row-title">Start activation</span>
-            <span class="row-sub">POTA, SOTA, WWFF or IOTA. QSOs logged while it runs count towards it.</span>
+            <span class="row-sub">POTA, SOTA, WWFF and IOTA</span>
           </span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </button>
@@ -32,12 +37,14 @@
     </div>
   {/if}
 
-  <div class="section">
-    <h2 class="section-head">Spots</h2>
-    <div class="group">
-      <p class="none">No spots yet. POTA, SOTA and WWFF spots on your bands will appear here, refreshed every minute while online. Spots arrive in a later version.</p>
+  {#if sources}
+    <div class="section">
+      <h2 class="section-head">Spots</h2>
+      <div class="group">
+        <p class="none">No spots yet. {sources} spots on your bands will appear here in a later version, refreshed every minute while online.</p>
+      </div>
     </div>
-  </div>
+  {/if}
 </section>
 
 <ActivationSheet bind:open={starting} />

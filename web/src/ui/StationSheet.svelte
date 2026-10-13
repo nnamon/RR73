@@ -3,6 +3,7 @@
    * Fix for a QSO Wavelog refused for its station location: choose the station location for the
    * QSO's activation, or the default for QSOs outside one. Refused QSOs go again at once.
    */
+  import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
   import { href } from '../lib/app/router.svelte';
   import { refsLabel } from '../lib/log/activation';
@@ -36,9 +37,9 @@
             <button class="row pick" aria-pressed={s.id === current} onclick={() => void pick(s.id)}>
               <span class="row-main">
                 <span class="row-title">{s.name}</span>
-                <span class="row-sub">{s.callsign}{s.grid ? ` · ${s.grid}` : ''}{s.id === current ? ' · in use' : ''}</span>
+                <span class="row-sub">{s.callsign}{s.grid ? ` · ${s.grid}` : ''}{s.callsign === call ? ` · for ${call}` : ''}</span>
               </span>
-              {#if s.callsign === call}<span class="match">For {call}</span>{/if}
+              {#if s.id === current}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
             </button>
           </li>
         {/each}
@@ -54,7 +55,7 @@
 
 <style>
   .lead {
-    margin: var(--rr-space-3) var(--rr-space-1) 0;
+    margin: var(--rr-space-3) var(--rr-space-4) 0;
     font-size: var(--rr-text-sub);
     line-height: var(--rr-leading-sub);
     color: var(--rr-label2);
@@ -75,15 +76,9 @@
     color: var(--rr-label);
   }
 
-  .pick[aria-pressed='true'] .row-title {
-    font-weight: var(--rr-weight-semibold);
-  }
-
-  .match {
+  .tick {
     flex: none;
-    font-size: var(--rr-text-foot);
-    font-weight: var(--rr-weight-semibold);
-    color: var(--rr-ok);
+    color: var(--rr-accent);
   }
 
   .open-settings {
@@ -91,8 +86,20 @@
     justify-content: center;
   }
 
-  li + li {
-    box-shadow: inset 0 var(--rr-hairline) 0 var(--rr-sep);
+  li {
+    position: relative;
+  }
+
+  li + li::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: var(--rr-space-4);
+    height: var(--rr-hairline);
+    background: var(--rr-sep-strong);
+    transform: scaleY(0.5);
+    transform-origin: 0 0;
   }
 
   .cancel {

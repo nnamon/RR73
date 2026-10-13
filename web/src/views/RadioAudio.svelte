@@ -5,11 +5,13 @@
   import LevelMeter from '../ui/LevelMeter.svelte';
   import TuneSheet from '../ui/TuneSheet.svelte';
   import { href } from '../lib/app/router.svelte';
-  import { signed, utcHm } from '../lib/clock/format';
+  import { signed, utcHm, utcTime } from '../lib/clock/format';
+  import { timingReport, type TimingSnapshot } from '../lib/clock/timing';
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
+  import type { Contrast } from '../lib/waterfall/levels';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, halt, inputDevices, startAudio, tx, useInput } from '../lib/state/station.svelte';
+  import { audio, band, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
@@ -44,14 +46,96 @@
     r ? `Echo cancellation ${onOff(r.echoCancellation)}, noise suppression ${onOff(r.noiseSuppression)}, auto gain ${onOff(r.autoGainControl)}` : 'Unknown until audio starts',
   );
   const screenText = $derived(
-    audio.wake === 'held' ? 'Stays on while audio runs' : audio.wake === 'refused' ? 'Can lock: the browser refused to keep it on' : audio.wake === 'unsupported' ? 'Can lock: this browser cannot keep it on' : 'Stays on while audio runs',
+    audio.wake === 'refused' || audio.wake === 'unsupported' ? 'Follows Auto-Lock. Set it to Never.' : 'Stays on while audio runs',
   );
 
-  const checks: { key: keyof Checklist; title: string; sub: string }[] = [
-    { key: 'focus', title: 'Focus mode on', sub: 'iOS sounds go out through the cable and key the radio’s VOX.' },
-    { key: 'clicks', title: 'Keyboard clicks off', sub: 'RR73 can’t see this setting.' },
-    { key: 'volume', title: 'Phone volume at maximum', sub: 'It sets the transmit level.' },
+  const CONTRASTS: { id: Contrast; label: string }[] = [
+    { id: 'low', label: 'Low' },
+    { id: 'normal', label: 'Normal' },
+    { id: 'high', label: 'High' },
   ];
+
+  const checks: { key: keyof Checklist; title: string; sub?: string }[] = [
+    { key: 'focus', title: 'Focus mode on', sub: 'Stops iOS sounds keying the radio' },
+    { key: 'clicks', title: 'Keyboard clicks off' },
+    { key: 'volume', title: 'Phone volume at maximum' },
+  ];
+
+  const keyingText = $derived.by(() => {
+    const k = tx.keying;
+    if (k === null) return 'Not checked yet. Start audio, then run Tune.';
+    const at = utcHm(k.atUtcMs);
+    if (k.passed === null)
+      return k.source === 'tune' ? `Not checked at ${at}: receive audio was off. Start audio, then run Tune.` : `Not checked at ${at}: receive audio started after the chime. Start audio again.`;
+    return k.passed ? `Passed at ${at}: receive audio dropped ${Math.round(k.dropDb ?? 0)} dB.` : `Failed at ${at}: receive audio did not drop. Check the radio’s VOX and the cable.`;
+  });
+
+  const decoderText = $derived.by(() => {
+    const d = band.decoder;
+    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
+    if (d.state === 'loading') return 'Loading';
+    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
+    return 'Not loaded';
+  });
+
+  // Timing: measurements for checking receive and transmit timing on the air.
+  let timing = $state<TimingSnapshot>(timingSnapshot());
+  $effect(() => {
+    const id = setInterval(() => (timing = timingSnapshot()), 1000);
+    return () => clearInterval(id);
+  });
+  let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
+  let reportText = $state('');
+
+  async function copyReport() {
+    const text = timingReport(timingSnapshot());
+    try {
+      await navigator.clipboard.writeText(text);
+      copyState = 'copied';
+      reportText = '';
+    } catch {
+      copyState = 'failed';
+      reportText = text;
+    }
+  }
+
+  const secs = (v: number) => `${v > 0 && v.toFixed(2) !== '0.00' ? '+' : ''}${signed(v, 2)} s`;
+  const medianText = $derived(
+    timing.medianDtS === null ? 'Waiting for strong decodes' : `${secs(timing.medianDtS)} from ${timing.strongDecodes} decodes`,
+  );
+  const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
+  const sourceText = $derived(
+    timing.source === 'output' ? 'Output timestamps' : timing.source === 'current-time' ? 'Audio clock time' : 'Unknown until audio starts',
+  );
+  const driftText = $derived.by(() => {
+    if (timing.driftPpm === null) return timing.source ? 'Measured after 1 minute of audio' : 'Unknown until audio starts';
+    const ppm = Math.round(timing.driftPpm);
+    return ppm === 0 ? '0 ppm' : `${Math.abs(ppm)} ppm, audio clock ${ppm > 0 ? 'slow' : 'fast'}`;
+  });
+  const gapText = $derived(
+    !timing.source && timing.gaps === 0
+      ? 'Unknown until audio starts'
+      : timing.gaps === 0
+        ? 'None since audio started'
+        : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total`,
+  );
+  const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
+  const heardText = $derived.by(() => {
+    const h = timing.heardBack;
+    if (!h.length) return 'Shows after you transmit';
+    const last = h.find((x) => x.dtS !== null);
+    if (!last) return `Not heard back in the last ${h.length === 1 ? 'transmission' : `${h.length} transmissions`}`;
+    return `DT ${secs(last.dtS!)} at ${utcTime(last.slotStartUtcMs)} UTC, ${signed(last.snrDb ?? 0)} dB`;
+  });
+  const resumeLines = $derived(
+    timing.resumes
+      .slice(-3)
+      .reverse()
+      .map((r) => {
+        const ms = (v: number | null) => (v === null ? 'none' : `${signed(v)} ms`);
+        return r.resumedAtUtcMs === null ? `Stopped at ${utcTime(r.stoppedAtUtcMs)} UTC, offset ${ms(r.beforeMs)}` : `${utcTime(r.stoppedAtUtcMs)} to ${utcTime(r.resumedAtUtcMs)} UTC: offset ${ms(r.beforeMs)} before, ${ms(r.afterMs)} after`;
+      }),
+  );
 
   function toggle(key: keyof Checklist) {
     void updateSettings({ checklist: { ...settings.checklist, [key]: !settings.checklist[key] } });
@@ -85,6 +169,17 @@
           <LevelMeter rmsDb={audio.rmsDb} {live} variant="full" />
         </div>
       </div>
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="contrast">Waterfall contrast</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="contrast">
+          {#each CONTRASTS as c (c.id)}
+            <label class="seg-i" class:on={settings.waterfallContrast === c.id}>
+              <input class="visually-hidden" type="radio" name="contrast" value={c.id} checked={settings.waterfallContrast === c.id} onchange={() => void updateSettings({ waterfallContrast: c.id })} />
+              {c.label}
+            </label>
+          {/each}
+        </span>
+      </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Sample rate</span><span class="row-sub">{rateText}</span></span>
       </div>
@@ -102,9 +197,8 @@
       <div class="start">
         <button class="btn primary" onclick={() => void startAudio()}>Start audio</button>
       </div>
-      <p class="section-foot">Once audio runs, these rows show what the browser applied to the microphone.</p>
     {:else}
-      <p class="section-foot">Peak {signed(Math.round(audio.peakDb))} dBFS. Aim for band noise inside the green zone with the radio’s AGC on.</p>
+      <p class="section-foot">Set the level with the radio’s AGC on.</p>
     {/if}
   </div>
 
@@ -129,18 +223,23 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">Start audio plays a short rising chime (659 and 880 Hz, 0.45 s) at the output level. It keys the radio, runs the keying check, and stops iOS muting output on the silent switch.</span>
+            <span class="row-sub">Keys the radio when audio starts</span>
           </span>
         </label>
       </div>
-      <button class="row tune" onclick={() => (tuneOpen = true)}>
+      <button
+        class="row tune"
+        onclick={() => {
+          startTune();
+          tuneOpen = true;
+        }}
+      >
         <span class="row-main">
-          <span class="row-title acc">Tune…</span>
-          <span class="row-sub">Asks first, then transmits at {settings.txHz} Hz for 10 s with a countdown.</span>
+          <span class="row-title acc">Tune for 10 s</span>
         </span>
       </button>
     </div>
-    <p class="section-foot">Raise the level until the radio shows 4 to 5 ALC bars during Tune. Above 5 bars the signal distorts.</p>
+    <p class="section-foot">Set the level for 4 to 5 ALC bars during Tune, no more.</p>
   </div>
 
   <div class="section">
@@ -152,7 +251,7 @@
             <input type="checkbox" class="box" checked={settings.checklist[c.key]} onchange={() => toggle(c.key)} />
             <span class="row-main">
               <span class="row-title">{c.title}</span>
-              <span class="row-sub">{c.sub}</span>
+              {#if c.sub}<span class="row-sub">{c.sub}</span>{/if}
             </span>
           </label>
         </li>
@@ -163,22 +262,60 @@
         </span>
         <span class="row-main">
           <span class="row-title">Keying check</span>
-          <span class="row-sub">
-            {#if tx.keying === null}
-              Not checked yet. Start audio with the start chime on, or run Tune: receive audio drops when the radio keys.
-            {:else if tx.keying.passed === null && tx.keying.source === 'tune'}
-              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio was off during Tune. Start audio, then run Tune again.
-            {:else if tx.keying.passed === null}
-              Not checked at {utcHm(tx.keying.atUtcMs)}: receive audio had not started when the start chime played. Start audio again.
-            {:else if tx.keying.passed}
-              Passed at {utcHm(tx.keying.atUtcMs)}. Receive audio dropped {Math.round(tx.keying.dropDb ?? 0)} dB during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}, so the radio keyed.
-            {:else}
-              Failed at {utcHm(tx.keying.atUtcMs)}. Receive audio did not drop during {tx.keying.source === 'start' ? 'the start chime' : 'Tune'}. Check the radio’s VOX setting and the cable.
-            {/if}
-          </span>
+          <span class="row-sub">{keyingText}</span>
         </span>
       </li>
     </ul>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head">Timing</h2>
+    <div class="group" data-testid="timing">
+      <div class="row">
+        <span class="row-main"><span class="row-title">Decoder</span></span>
+        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Input offset</span><span class="row-sub" data-testid="timing-offset">{offsetText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Your Tx, heard back</span><span class="row-sub" data-testid="timing-heard">{heardText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Clock source</span><span class="row-sub" data-testid="timing-source">{sourceText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Clock drift</span><span class="row-sub" data-testid="timing-drift">{driftText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Capture lag</span><span class="row-sub" data-testid="timing-lag">{lagText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Audio gaps</span><span class="row-sub" data-testid="timing-gaps">{gapText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main">
+          <span class="row-title">Resumes</span>
+          {#if resumeLines.length}
+            {#each resumeLines as line, i (i)}<span class="row-sub">{line}</span>{/each}
+          {:else}
+            <span class="row-sub">None since the app opened</span>
+          {/if}
+        </span>
+      </div>
+    </div>
+    <div class="start">
+      <button class="btn" onclick={() => void copyReport()}>Copy timing report</button>
+      {#if copyState === 'copied'}<span class="copied" role="status">Copied</span>{/if}
+    </div>
+    {#if copyState === 'failed'}
+      <p class="section-foot">The phone refused to copy. Select the report below and copy it.</p>
+      <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
+    {/if}
+    <p class="section-foot">Transmit timing shows only in Your Tx, heard back.</p>
   </div>
 </section>
 
@@ -206,6 +343,26 @@
     display: block;
   }
 
+  .copied {
+    align-self: center;
+    margin-left: var(--rr-space-3);
+    color: var(--rr-label2);
+    font-size: var(--rr-text-sub);
+  }
+
+  .report {
+    width: 100%;
+    min-height: 160px;
+    margin-top: var(--rr-space-2);
+    padding: var(--rr-space-2);
+    border: 0;
+    border-radius: var(--rr-radius-m);
+    background: var(--rr-fill);
+    color: var(--rr-label);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-caption);
+  }
+
   .start {
     display: flex;
     margin-top: var(--rr-space-3);
@@ -220,6 +377,13 @@
 
   .pct {
     width: 52px;
+  }
+
+  /* The title, then the segments across the row. */
+  .stack {
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    align-items: stretch;
   }
 
   .tune {

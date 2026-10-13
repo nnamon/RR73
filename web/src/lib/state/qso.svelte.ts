@@ -8,6 +8,7 @@
 import { untrack } from 'svelte';
 import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
+import { STATUS } from '../qso/status';
 import { parity as parityOf, type Parity } from '../clock/slots';
 import { dialHz } from '../radio/bands';
 import type { Decode } from '../decode/types';
@@ -17,9 +18,11 @@ import { webAudioOut } from '../tx/web-audio';
 import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
 import { log, logQso } from '../log/log.svelte';
+import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
-import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
+import { txLevel } from './practice.svelte';
+import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
 
 export interface SentRow {
   slotStartMs: number;
@@ -35,7 +38,7 @@ export interface Selected {
 }
 
 export interface Notice {
-  kind: NoticeKind | 'refused' | 'encode';
+  kind: NoticeKind | 'refused' | 'encode' | 'info';
   text: string;
   atMs: number;
 }
@@ -54,9 +57,9 @@ export const qso = new QsoRuntime();
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
 const sessionStart = Date.now();
 
-/** The call and grid on air: the running activation's, else Settings. */
-function configNow() {
-  const a = log.current;
+/** The call and grid on air: the running activation's (with Activations on), else Settings. Exported for tests. */
+export function configNow() {
+  const a = features.activations ? log.current : null;
   return {
     myCall: a?.callsign || settings.callsign,
     myGrid: a?.grid || settings.grid,
@@ -68,7 +71,10 @@ function configNow() {
     maxRetries: 3,
     order: settings.queueOrder,
     workDupes: settings.workDupes,
-    watchdogMs: 6 * 60_000,
+    run: settings.run,
+    tailEnd: settings.tailEnd,
+    huntOrder: settings.huntOrder,
+    watchdogMs: settings.watchdog ? Math.round(settings.watchdogMin * 60_000) : 0,
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
@@ -81,7 +87,7 @@ const scheduler = new TxScheduler({
     return out ? webAudioOut(out.ctx, out.mapper) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
-  gate: () => (audio.status !== 'running' ? 'Resume audio to transmit.' : notReady(qso.st)),
+  gate: () => (audio.status !== 'running' ? STATUS.audioOff : notReady(qso.st)),
   report: onTxReport,
 });
 
@@ -106,7 +112,7 @@ export function dispatch(e: SeqEvent) {
           slotStartMs: f.slotStartMs,
           startOffsetS: f.startOffsetS,
           f0Hz: settings.txHz,
-          level: settings.outputLevel,
+          level: txLevel(settings.outputLevel),
         });
         break;
       case 'cancelTx':
@@ -132,12 +138,16 @@ function onTxReport(r: TxReport) {
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
     const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
+    // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
+    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: settings.txHz });
     qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
+    void showTx(r.startUtcMs, r.text, qso.st.config.mode, settings.txHz);
   } else if (r.type === 'ended') {
     qso.onAir = null;
+    if (!r.complete) cutTx(now);
     dispatch({ type: 'txEnded', slotStartMs: r.slotStartMs, text: r.text, complete: r.complete, nowMs: now });
   } else if (r.type === 'missed') {
-    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: 'The message could not be encoded. Check it in Messages.', atMs: now };
+    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: STATUS.encode, atMs: now };
     dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
   } else {
     qso.notice = { kind: 'refused', text: r.reason, atMs: now };
@@ -178,12 +188,17 @@ function retune() {
     slotStartMs: p.slotStartMs,
     startOffsetS: p.offsetS,
     f0Hz: settings.txHz,
-    level: settings.outputLevel,
+    level: txLevel(settings.outputLevel),
   });
 }
 
 export function select(s: Selected | null) {
   qso.selected = s;
+}
+
+/** A tap on a decode row: selects it, or clears the selection when the row is already selected. */
+export function tapRow(s: Selected) {
+  qso.selected = qso.selected?.id === s.id ? null : s;
 }
 
 /**
@@ -213,10 +228,15 @@ export function setTxEnabled(on: boolean) {
   dispatch({ type: 'enableTx', on, nowMs: Date.now() });
 }
 
-/** Turns Run on or off. Call from the tap. */
+/** Run on or off: what the CQ loop does after a QSO. It starts nothing by itself. */
 export function setRun(on: boolean) {
+  void updateSettings({ run: on });
+}
+
+/** Turns Hunt on or off. Call from the tap. */
+export function setHunt(on: boolean) {
   if (on) unmute();
-  dispatch({ type: 'runMode', on, nowMs: Date.now() });
+  dispatch({ type: 'hunt', on, nowMs: Date.now() });
 }
 
 export function setStopAfter(on: boolean) {
@@ -231,12 +251,14 @@ export function editMessage(tx: TxNum, text: string) {
   dispatch({ type: 'editMessage', tx, text, nowMs: Date.now() });
 }
 
-/** The band sheet confirmed the radio's dial. A different band or mode first stops Tx. */
-export function confirmBand(band: string, mode: 'FT8' | 'FT4') {
-  const c = qso.st.config;
-  const now = Date.now();
-  if (c.band !== band || c.mode !== mode) dispatch({ type: 'bandChanged', nowMs: now });
-  dispatch({ type: 'bandConfirmed', band, dialHz: dialHz(band as never, mode) ?? 0, mode, nowMs: now });
+/** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
+export function endQso() {
+  dispatch({ type: 'endQso', nowMs: Date.now() });
+}
+
+/** A notice in the status line, such as the result of Find clear Tx. */
+export function showNotice(text: string) {
+  qso.notice = { kind: 'info', text, atMs: Date.now() };
 }
 
 /** When a call to a decode heard in `slotStartMs` would start, and in which parity. */
@@ -297,11 +319,6 @@ export function startQso() {
     },
     { capture: true, passive: true },
   );
-  // The band and mode in Settings until the band sheet confirms them; Tx stays off until then.
-  {
-    const c = configNow();
-    dispatch({ type: 'configure', patch: { band: c.band, mode: c.mode, dialHz: c.dialHz }, nowMs: Date.now() });
-  }
   // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
   // its worked-before list, so dupes survive a reload.
   $effect.root(() => {
@@ -311,7 +328,22 @@ export function startQso() {
     });
     $effect(() => {
       const c = configNow();
-      const patch = { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
+      const patch = {
+        myCall: c.myCall,
+        myGrid: c.myGrid,
+        band: c.band,
+        mode: c.mode,
+        dialHz: c.dialHz,
+        txHz: c.txHz,
+        ack: c.ack,
+        order: c.order,
+        workDupes: c.workDupes,
+        cqParity: c.cqParity,
+        run: c.run,
+        tailEnd: c.tailEnd,
+        huntOrder: c.huntOrder,
+        watchdogMs: c.watchdogMs,
+      };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });

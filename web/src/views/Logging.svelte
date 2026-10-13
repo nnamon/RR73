@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** Settings › Logging: the destinations, how sending runs, and the relay (planned). */
+  /** Settings › Logging: the destinations and how sending runs. */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
@@ -7,6 +7,7 @@
   import { log, setFileDestination, setLoggingSettings, wavelogReady } from '../lib/log/log.svelte';
   import type { FileDestinationId } from '../lib/log/types';
   import { hostOf } from '../lib/log/wavelog';
+  import { features } from '../lib/state/features.svelte';
 
   const w = $derived(log.wavelog);
   const ready = $derived(wavelogReady(w));
@@ -27,10 +28,10 @@
   });
 
   const files: { id: FileDestinationId; title: string; sub: string; icon: 'doc' | 'tree' | 'mountain'; bg: string }[] = [
-    { id: 'pota-file', title: 'POTA', sub: 'A file per park and UTC day, to upload at pota.app', icon: 'tree', bg: 'green' },
-    { id: 'sota-file', title: 'SOTA', sub: 'A file per summit and UTC day, for the SOTA database', icon: 'mountain', bg: 'orange' },
-    { id: 'wwff-file', title: 'WWFF', sub: 'A file per reference, for your national coordinator', icon: 'tree', bg: 'teal' },
-    { id: 'adif-file', title: 'ADIF file', sub: 'A file per activation with every field', icon: 'doc', bg: 'grey' },
+    { id: 'pota-file', title: 'POTA', sub: 'File to upload at pota.app', icon: 'tree', bg: 'green' },
+    { id: 'sota-file', title: 'SOTA', sub: 'File for the SOTA database', icon: 'mountain', bg: 'orange' },
+    { id: 'wwff-file', title: 'WWFF', sub: 'File for your WWFF coordinator', icon: 'tree', bg: 'teal' },
+    { id: 'adif-file', title: 'ADIF file', sub: 'One per activation, all fields', icon: 'doc', bg: 'grey' },
   ];
 </script>
 
@@ -44,7 +45,7 @@
         <span class="ic blue" data-letter="W" aria-hidden="true"></span>
         <span class="row-main">
           <span class="row-title">Wavelog</span>
-          <span class="row-sub">{w.url ? `${hostOf(w.url)} · sends each QSO` : 'Sends each QSO to your Wavelog'}</span>
+          {#if w.url}<span class="row-sub">{hostOf(w.url)}{log.settings.sendAutomatically ? ' · sends automatically' : ''}</span>{/if}
           {#if refusal && (!w.lastTest || (refusal.lastAttemptAt ?? 0) >= w.lastTest.at)}
             <span class="row-sub badt">Refused at {utcHm(refusal.lastAttemptAt ?? 0)} UTC: {refusal.lastError}</span>
           {:else if w.lastTest}
@@ -60,12 +61,13 @@
         <a class="row link indent" href={href('settings', 'logging', 'wavelog')}>
           <span class="row-main">
             <span class="row-title">Station location</span>
-            <span class="row-sub">{station ? `${station.name} · ${station.callsign}` : 'Not chosen'}. Each activation can choose its own.</span>
+            <span class="row-sub">{station ? `${station.name} · ${station.callsign}` : 'Not chosen'}</span>
           </span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       {/if}
-      {#each files as f (f.id)}
+      <!-- Activation files belong to Activations (Settings › Optional features). -->
+      {#each features.activations ? files : [] as f (f.id)}
         <label class="row">
           <span class="ic {f.bg}" aria-hidden="true"><Icon name={f.icon} size={20} /></span>
           <span class="row-main">
@@ -76,7 +78,7 @@
         </label>
       {/each}
     </div>
-    <p class="section-foot">Every QSO stays on this phone. Each destination gets a copy, and RR73 records which copies arrived. Files are for QSOs made in an activation.</p>
+    {#if features.activations}<p class="section-foot">Files take only QSOs made in an activation.</p>{/if}
   </div>
 
   <div class="section">
@@ -85,7 +87,6 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Send automatically</span>
-          <span class="row-sub">When RR73 is open and online</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendAutomatically} onchange={(e) => void setLoggingSettings({ sendAutomatically: e.currentTarget.checked })} />
       </label>
@@ -97,19 +98,9 @@
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendEdits} onchange={(e) => void setLoggingSettings({ sendEdits: e.currentTarget.checked })} />
       </label>
     </div>
-    <p class="section-foot">Wavelog takes no changes through its API: an edit to a QSO it holds shows as changed in the log, for you to make in Wavelog too.</p>
+    <p class="section-foot">Wavelog takes no edits, so repeat each edit in Wavelog.</p>
   </div>
 
-  <div class="section">
-    <h2 class="section-head">Relay</h2>
-    <div class="group">
-      <div class="row">
-        <span class="row-main"><span class="row-title">Relay address</span></span>
-        <span class="row-value">Planned</span>
-      </div>
-    </div>
-    <p class="section-foot">QRZ Logbook, Club Log, Cloudlog and eQSL need a relay server between RR73 and the service. It is planned and not built yet.</p>
-  </div>
 </section>
 
 <style>
@@ -131,6 +122,10 @@
 
   .indent {
     padding-left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
+  }
+
+  .indent + :global(.row)::before {
+    left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
   }
 
   .ic {

@@ -1,5 +1,5 @@
-// Transmit safety: nothing reaches the output except Tune, Tune asks first and counts down, and
-// Halt stops the tone at once. Web Audio is instrumented in the page to record what reaches the
+// Transmit safety: nothing reaches the output except Tune, Tune starts on the first tap and
+// counts down, and Halt stops the tone at once. Web Audio is instrumented in the page to record what reaches the
 // destination.
 import { expect, test, type Page } from '@playwright/test';
 
@@ -43,18 +43,14 @@ function stopsAtOnce(entry: string | undefined): boolean {
   return !!m && Number(m[1]) <= 5;
 }
 
-test('Tune asks first, counts down, and Halt stops the tone at once', async ({ page }) => {
+test('Tune starts on the first tap, counts down, and Halt stops the tone at once', async ({ page }) => {
   await instrument(page);
   await page.goto('./#/settings/radio');
-  await page.getByRole('button', { name: /^Tune/ }).click();
-  const confirm = page.getByRole('dialog', { name: 'Transmit a tune tone?' });
-  await expect(confirm).toContainText('1500 Hz for 10 s');
-  await expect(confirm).toContainText('14.074 MHz');
-  // Nothing plays before the confirming tap.
+  // Nothing plays before the tap.
   expect(await log(page)).toEqual([]);
-
-  await confirm.getByRole('button', { name: 'Start tune' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Transmitting' });
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Tuning' });
+  await expect(sheet).toContainText('1500 Hz on 14.074 MHz');
   await expect(sheet.getByRole('timer')).toHaveText(/^(10|9) s$/);
   expect(await log(page)).toEqual([
     'connect OscillatorNode -> GainNode',
@@ -85,55 +81,47 @@ test('Tune asks first, counts down, and Halt stops the tone at once', async ({ p
 test('a tap outside the Tune sheet closes it and halts', async ({ page }) => {
   await instrument(page);
   await page.goto('./#/settings/radio');
-  await page.getByRole('button', { name: /^Tune/ }).click();
-  await page.getByRole('button', { name: 'Start tune' }).click();
-  await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeVisible();
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Tuning' })).toBeVisible();
   await page.mouse.click(200, 20);
   expect(stopsAtOnce((await log(page)).at(-1)), (await log(page)).at(-1)).toBe(true);
-  await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Tuning' })).toBeHidden();
 });
 
 test('Tune stops by itself after 10 s', async ({ page }) => {
   test.setTimeout(30_000);
   await instrument(page);
   await page.goto('./#/settings/radio');
-  await page.getByRole('button', { name: /^Tune/ }).click();
-  await page.getByRole('dialog', { name: 'Transmit a tune tone?' }).getByRole('button', { name: 'Start tune' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Transmitting' });
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toBeVisible();
   await expect(sheet).toBeHidden({ timeout: 13_000 });
-  await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off during Tune/)).toBeVisible();
+  await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off\./)).toBeVisible();
 });
 
 test('Escape closes the Tune sheet and halts', async ({ page }) => {
   await instrument(page);
   await page.goto('./#/settings/radio');
-  await page.getByRole('button', { name: /^Tune/ }).click();
-  await page.getByRole('button', { name: 'Start tune' }).click();
-  await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeVisible();
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  await expect(page.getByRole('dialog', { name: 'Tuning' })).toBeVisible();
   await page.keyboard.press('Escape');
   // The halt happens in the same task as the key press.
   expect(stopsAtOnce((await log(page)).at(-1)), (await log(page)).at(-1)).toBe(true);
-  await expect(page.getByRole('dialog', { name: 'Transmitting' })).toBeHidden();
+  await expect(page.getByRole('dialog', { name: 'Tuning' })).toBeHidden();
 });
 
 test('Tune transmits at the Tx frequency set on the waterfall', async ({ page }) => {
   await instrument(page);
   await page.goto('./#/operate');
   const wf = (await page.getByTestId('waterfall').boundingBox())!;
-  const x = Math.round(wf.x + (wf.width * 1846) / 3000);
-  const hz = Math.round(((x - wf.x) / wf.width) * 3000);
-  await page.mouse.click(x, Math.round(wf.y + wf.height / 2));
-  await page.getByRole('button', { name: `Transmit here, ${hz} Hz` }).click();
+  await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
+  const hz = Number(await page.getByRole('slider', { name: 'Transmit frequency, Hz' }).inputValue());
+  expect(Math.abs(hz - 1846)).toBeLessThanOrEqual(10);
   await page.waitForTimeout(300);
 
   await page.goto('./#/settings/radio');
-  await expect(page.getByRole('button', { name: /^Tune/ })).toContainText(`Asks first, then transmits at ${hz} Hz for 10 s`);
-  await page.getByRole('button', { name: /^Tune/ }).click();
-  const confirm = page.getByRole('dialog', { name: 'Transmit a tune tone?' });
-  await expect(confirm).toContainText(`${hz} Hz for 10 s`);
-  await confirm.getByRole('button', { name: 'Start tune' }).click();
-  const sheet = page.getByRole('dialog', { name: 'Transmitting' });
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toContainText(`${hz} Hz on 14.074 MHz`);
   expect(await log(page)).toContain(`start ${hz} Hz`);
   await sheet.getByRole('button', { name: 'Halt' }).click();

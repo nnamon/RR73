@@ -52,11 +52,15 @@ export const ICONS = {
   settings: { stroke: [gearPath()], rings: [[12, 12, 3.1, 3.1]], width: 1.75 },
   chevdown: { stroke: ['M6.5 9.5L12 15L17.5 9.5'], width: 2.4 },
   chevright: { stroke: ['M9 5L16 12L9 19'], width: 2.3 },
+  chevup: { stroke: ['M6.5 14.5L12 9L17.5 14.5'], width: 2.4 },
+  // Reorder handle: three lines, as in iOS table views.
+  grip: { stroke: ['M4.5 8H19.5M4.5 12H19.5M4.5 16H19.5'], width: 1.8 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
-  share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.6 10.3H7.2A2.2 2.2 0 0 0 5 12.5V18.8A2.2 2.2 0 0 0 7.2 21H16.8A2.2 2.2 0 0 0 19 18.8V12.5A2.2 2.2 0 0 0 16.8 10.3H15.4'], width: 1.8 },
+  // Bar glyphs share one stroke weight and an 18-unit-wide ink box centred on 12, as SF Symbols do.
+  share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
   // Log, activations and destinations.
   search: { stroke: ['M15.4 15.4L20.2 20.2'], rings: [[10.6, 10.6, 6.4, 6.4]], width: 2.1 },
-  plus: { stroke: ['M12 5V19M5 12H19'], width: 2.2 },
+  plus: { stroke: ['M12 3.9V20.1M3.9 12H20.1'], width: 1.8 },
   checkcircle: { dots: [[12, 12, 10]], inner: ['M7.4 12.4L10.6 15.5L16.7 9'], innerWidth: 2.3 },
   warncircle: { fill: ['M10.3 3.6a2 2 0 0 1 3.4 0l8 14a2 2 0 0 1-1.7 3H4a2 2 0 0 1-1.7-3Z'], inner: ['M12 9.2V13.4'], innerDots: [[12, 16.8, 1.25]], innerWidth: 2.2 },
   cloudoff: { stroke: ['M21.2 16.4A4.4 4.4 0 0 0 17.6 9.6H16.5A7 7 0 0 0 9.9 4.4M5.6 6.9A7 7 0 0 0 8.7 19.6H17.4A4.6 4.6 0 0 0 18.8 19.4', 'M3 3L21 21'], width: 1.9 },
@@ -68,6 +72,10 @@ export const ICONS = {
   alert: { stroke: ['M10.3 3.9a2 2 0 0 1 3.4 0l7.8 13.6a2 2 0 0 1-1.7 3H4.2a2 2 0 0 1-1.7-3Z', 'M12 9.3V13.4'], dots: [[12, 16.7, 1.15]], width: 1.9 },
   mic: { stroke: ['M12 3A3 3 0 0 1 15 6V11A3 3 0 0 1 9 11V6A3 3 0 0 1 12 3Z', 'M5.8 11a6.2 6.2 0 0 0 12.4 0M12 17.2V20.6'], width: 1.7 },
   doc: { stroke: ['M7 3.2H13.4L17.6 7.4V20.8H7Z', 'M13.4 3.2V7.4H17.6'], width: 1.9 },
+  // Save slot: the share glyph's tray with the arrow pointing in.
+  save: { stroke: ['M12 3.4V14.3M9 11.3L12 14.3L15 11.3M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
+  // The ••• menu: three dots on the bar glyphs' 18-unit ink box.
+  more: { dots: [[4.6, 12, 1.9], [12, 12, 1.9], [19.4, 12, 1.9]] },
   globe: { stroke: ['M3.6 12H20.4M5 7.6H19M5 16.4H19'], rings: [[12, 12, 8.6, 8.6], [12, 12, 3.6, 8.6]], width: 1.6 },
 } satisfies Record<string, IconShape>;
 

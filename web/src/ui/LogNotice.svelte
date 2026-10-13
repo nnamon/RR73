@@ -26,6 +26,16 @@
       {:else if n.qsoId && n.kind === 'deleted'}
         {@const id = n.qsoId}
         <button class="act" aria-label="Undo deleting the QSO with {call}" onclick={() => void restoreQso(id)}>Undo</button>
+      {:else if n.kind === 'cleared' && n.undo}
+        {@const undo = n.undo}
+        <button
+          class="act"
+          onclick={() => {
+            // Undo first: the notice and its values go with dismissNotice.
+            undo();
+            dismissNotice();
+          }}>Undo</button
+        >
       {:else if n.qsoId && n.kind === 'removed'}
         {@const id = n.qsoId}
         <button class="act" aria-label="Restore the QSO with {call}" onclick={() => void restoreQso(id)}>Restore</button>
@@ -37,7 +47,8 @@
 
 <style>
   .wrap {
-    flex: none;
+    width: 100%;
+    max-width: var(--rr-reading);
   }
 
   .toast {
@@ -45,7 +56,9 @@
     align-items: center;
     gap: var(--rr-space-1);
     min-height: var(--rr-tap);
-    margin: 0 var(--rr-space-4) var(--rr-space-1);
+    margin-top: var(--rr-space-2);
+    box-shadow: 0 var(--rr-space-1) var(--rr-space-4) var(--rr-shadow-thumb);
+    pointer-events: auto;
     padding-left: var(--rr-space-4);
     border-radius: var(--rr-radius-l);
     background: var(--rr-toast);

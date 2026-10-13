@@ -129,7 +129,11 @@ export type DestinationKind = DestinationId;
 export type FileDestinationId = Exclude<DestinationId, 'wavelog'>;
 export type Transport = 'direct' | 'relay' | 'file';
 
-export const LEDGER_STATES = ['waiting', 'delivered', 'refused', 'changed', 'file-ready', 'submitted', 'not-needed'] as const;
+/**
+ * not-sent: a direct destination's copy the operator has not sent yet, with Send automatically
+ * off. waiting: queued, and the outbox sends it while RR73 is open and online.
+ */
+export const LEDGER_STATES = ['not-sent', 'waiting', 'delivered', 'refused', 'changed', 'file-ready', 'submitted', 'not-needed'] as const;
 export type LedgerState = (typeof LEDGER_STATES)[number];
 
 /**

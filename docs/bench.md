@@ -1,6 +1,6 @@
 # Decoder bench
 
-`rr73-bench` measures decoder configurations against the corpus (`docs/corpus.md`): it writes synthetic slots with exact truth, decodes every slot with a named preset, scores the decodes, compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
+`rr73-bench` measures decoder presets against the corpus (`docs/corpus.md`). It writes synthetic slots with exact truth, decodes every slot with a named preset and scores the decodes. It also compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
 
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh             # public test files
@@ -110,6 +110,31 @@ Set summary:
 ## Other decoders
 
 `rr73-bench import --decodes out.txt --label NAME [--dt-offset S] --out results/NAME.json <paths>` scores another decoder's text output on the same slots and writes a results file for `compare`. The output file holds a line `== <name>` per slot followed by decode lines in the WSJT-X layout (`HHMMSS SNR DT FREQ ~ MESSAGE`), as `jt9` and ft8_lib's `decode_ft8` print them. The name is the slot's path below `corpus/` without extension, a trailing part of it, or the bare stem when no other slot shares it. `--dt-offset` is subtracted from every DT: `decode_ft8` prints the start of symbol 0 plus 0.16 s, which is DT + 0.66 s. Timing fields are zero.
+
+## End-to-end fixture
+
+`rr73-bench loop-fixture [--out web/e2e/fixtures/ft8-loop] [--check-only] [--preset NAME ...] [--step-s 0.05]` writes the audio that the Playwright `decode` project plays as Chromium's fake microphone, then checks it. Chromium loops the file from the moment capture starts, so the offset between the loop and the UTC slots is arbitrary, and on a loaded host it moves by seconds between runs and drifts during a run.
+
+The file is one 15 s FT8 slot at 12 kHz (`<out>.wav`, 360 KB) that loops without a break: `rr73_chansim::render_loop` carries a transmission that runs past the end of the file over to its start. It holds 4 messages, each sent 4 times, consecutive copies 3.75 s and 90 Hz apart, in white noise at the reference level (seed 2026):
+
+| Message | SNR | Copies: base tone and DT from the start of the file |
+| --- | --- | --- |
+| `CQ 9M2TRX OJ02` | -10 dB | 1022 Hz at 0.1 s, 1112 Hz at 3.85 s, 1202 Hz at 7.6 s, 1292 Hz at 11.35 s |
+| `9V1NE JA1KXM PM95` | -12 dB | 1418 Hz at 0.2 s, 1508 Hz at 3.95 s, 1598 Hz at 7.7 s, 1688 Hz at 11.45 s |
+| `CQ VK3QRP QF22` | -14 dB | 1846 Hz at 0 s, 1936 Hz at 3.75 s, 2026 Hz at 7.5 s, 2116 Hz at 11.25 s |
+| `JH1RRT YB0AZK RR73` | -16 dB | 2210 Hz at 0.1 s, 2300 Hz at 3.85 s, 2390 Hz at 7.6 s, 2480 Hz at 11.35 s |
+
+Copies of a message start every 3.75 s, so whatever the offset, one of them has a DT between -1.62 and 2.5 s in every slot: its 58 data symbols lie inside the slot (only the first or last Costas array, 1.12 s, may be cut) and every preset searches that DT. No two copies share spectrum. The sidecar (`<out>.json`) is an `rr73-slot/1` file whose truth lists all 16 copies with DT measured from the start of the file.
+
+The check decodes the file as a slot starting at every offset `--step-s` apart, with each `--preset` (default `subtract-3-osd2`, the preset the app ships), and exits with status 1 unless every offset gives each message from at least one copy, with frequency within 3 Hz and SNR within 4 dB of that copy (the limits the end-to-end test applies), and no false decodes. The decoder drops repeats of a message within a slot, so each offset gives each message once. `--check-only` checks the committed files without writing them, for use after a decoder change.
+
+On 2026-10-13 (aarch64 container, release 0.6.0), all 1500 offsets 10 ms apart pass for all four presets: worst frequency error 1.88 Hz, worst SNR error 2.16 dB, no false decodes. Regenerating the file on the same machine gives identical bytes. `rr73-bench run` scores the file as one slot that starts at sample 0: it decodes the 4 copies at DT 0 to 0.2 s (matched 4 of 16 expected, recall 0.25) and nothing false; the other 12 copies lie outside the DT search at that offset.
+
+To rebuild the fixture after changing the messages or the layout:
+
+```sh
+docker compose run --rm rust rr73-bench loop-fixture
+```
 
 ## Gate
 

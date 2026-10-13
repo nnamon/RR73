@@ -41,7 +41,7 @@ export interface SidecarInput {
   input: string;
   captureRateHz: number;
   appVersion: string;
-  /** Correction applied to the phone's clock, s (AudioClockMapper.offsetS). */
+  /** Receive calibration applied to captured audio, s (AudioClockMapper.inputOffsetS). */
   offsetS: number;
   filled: number;
   lateStart: boolean;

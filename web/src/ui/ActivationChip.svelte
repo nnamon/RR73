@@ -6,11 +6,13 @@
   import { href } from '../lib/app/router.svelte';
   import { hoursMinutes, progress, utcDayLeftMs, utcDayStart } from '../lib/log/activation';
   import { log } from '../lib/log/log.svelte';
+  import { features } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
 
   // Progress counts by UTC day, so it recounts when the day or the log changes, not with Operate's 5 Hz clock.
   const day = $derived(utcDayStart(clock.ms));
-  const a = $derived(log.current);
+  // Only with Activations on (Settings › Optional features).
+  const a = $derived(features.activations ? log.current : null);
   const p = $derived.by(() => {
     if (!a) return null;
     const all = progress(a, log.qsos, log.activations, day);

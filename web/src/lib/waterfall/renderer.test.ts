@@ -222,3 +222,56 @@ describe('WaterfallRenderer', () => {
     expect(r.info().boundaries).toEqual([]);
   });
 });
+
+describe('WaterfallRenderer in transmitted slots', () => {
+  const T0 = Date.UTC(2026, 9, 13, 13, 14, 50);
+  const SLOT = Date.UTC(2026, 9, 13, 13, 15, 0);
+  const background = [...PALETTE.background, 255];
+
+  it('draws the slots RR73 transmitted in blank, rows drawn before it was known included', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const x = Math.floor((1000 / 3000) * 300);
+    // 13:14:50 to 13:15:04 with a tone throughout; the transmission in 13:15:00 becomes known after.
+    feed(r, signal(14, [1000]), T0);
+    expect(bright(ctx.pixel(x, 2))).toBeGreaterThan(bright(background));
+    r.setTxSlots([SLOT]);
+    const rows = (s: number) => Math.round((s * 1000) / r.rowMs);
+    // 13:15:03 (1 s before the newest row) is blank; 13:14:57 (7 s before) keeps its tone.
+    expect(ctx.pixel(x, rows(1))).toEqual(background);
+    expect(bright(ctx.pixel(x, rows(7)))).toBeGreaterThan(3 * bright(background));
+    // Rows arriving later in the slot are blank as they are drawn.
+    feed(r, signal(4, [1000], 3), T0 + 14_000, 14 * 12000);
+    expect(ctx.pixel(x, 2)).toEqual(background);
+    expect(ctx.pixel(x, rows(5))).toEqual(background);
+  });
+
+  it('draws the transmitted audio in its slot, before and after it arrives, and cuts it at Halt', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const rx = Math.floor((1000 / 3000) * 300);
+    const txX = Math.floor((1500 / 3000) * 300);
+    const rows = (s: number) => Math.round((s * 1000) / r.rowMs);
+    r.setTxSlots([SLOT]);
+    // The receive audio carries a tone at 1000 Hz; the transmission is a tone at 1500 Hz from 13:15:00.5.
+    feed(r, signal(14, [1000]), T0);
+    expect(ctx.pixel(txX, rows(1))).toEqual(background);
+    const start = SLOT + 500;
+    const tone = signal(12.64, [1500], 7, 0);
+    r.setTxWave({ startUtcMs: start, endUtcMs: start + 12_640, samples: tone });
+    // 13:15:03: the transmitted tone, over a floor brighter than the background; the received 1000 Hz tone is gone.
+    const on = bright(ctx.pixel(txX, rows(1)));
+    const floor = bright(ctx.pixel(rx, rows(1)));
+    expect(floor).toBeGreaterThan(bright(background));
+    expect(on).toBeGreaterThan(2 * floor);
+    // Before the slot, the received tone shows as usual.
+    expect(bright(ctx.pixel(rx, rows(7)))).toBeGreaterThan(3 * bright(background));
+    // Rows drawn later in the transmission show it as they arrive.
+    feed(r, signal(4, [1000], 3), T0 + 14_000, 14 * 12000);
+    expect(bright(ctx.pixel(txX, 2))).toBeGreaterThan(2 * floor);
+    // Halt at 13:15:06: rows after it are blank, rows before keep the tone.
+    r.setTxWave({ startUtcMs: start, endUtcMs: SLOT + 6000, samples: tone });
+    expect(ctx.pixel(txX, 2)).toEqual(background);
+    expect(bright(ctx.pixel(txX, rows(4)))).toBeGreaterThan(2 * floor);
+  });
+});

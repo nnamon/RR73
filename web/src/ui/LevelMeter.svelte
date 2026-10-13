@@ -1,12 +1,13 @@
 <script lang="ts">
   /**
-   * Input level. "mini" sits in the Operate header; "full" in Radio and audio, with the target
-   * zone and a dBFS scale.
+   * Input level. "line" is the 2 pt line along the bottom of Operate's top bar, green inside the
+   * target range and amber outside it; "full" in Radio and audio, with the target zone and a
+   * dBFS scale.
    */
   import { signed } from '../lib/clock/format';
   import { FLOOR_DB, TARGET_DB } from '../lib/audio/level';
 
-  let { rmsDb, live, variant = 'mini' }: { rmsDb: number; live: boolean; variant?: 'mini' | 'full' } = $props();
+  let { rmsDb, live, variant = 'line' }: { rmsDb: number; live: boolean; variant?: 'line' | 'full' } = $props();
 
   const MIN = -60;
   const pct = (db: number) => Math.max(0, Math.min(100, ((db - MIN) / -MIN) * 100));
@@ -27,10 +28,9 @@
   );
 </script>
 
-{#if variant === 'mini'}
-  <div class="mini {tone}" role="meter" aria-label="Input level" aria-valuemin={MIN} aria-valuemax={0} aria-valuenow={hasSignal ? Math.round(rmsDb) : MIN} aria-valuetext={text}>
-    <i><b style:width="{hasSignal ? pct(rmsDb) : 0}%"></b></i>
-    <span>{text}</span>
+{#if variant === 'line'}
+  <div class="line {tone}" role="meter" aria-label="Input level" aria-valuemin={MIN} aria-valuemax={0} aria-valuenow={hasSignal ? Math.round(rmsDb) : MIN} aria-valuetext={text}>
+    <b style:width="{hasSignal ? pct(rmsDb) : 0}%"></b>
   </div>
 {:else}
   <div class="full">
@@ -49,50 +49,24 @@
 {/if}
 
 <style>
-  .mini {
-    display: flex;
-    align-items: center;
-    height: 15px;
-    margin-top: var(--rr-space-half);
-  }
-
-  .mini i {
-    position: relative;
-    display: block;
-    width: var(--rr-meter-mini);
-    height: 5px;
-    overflow: hidden;
-    border-radius: 2.5px;
+  .line {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    height: var(--rr-level-line);
     background: var(--rr-fill2);
   }
 
-  .mini b {
-    position: absolute;
-    inset: 0 auto 0 0;
-    border-radius: 2.5px;
+  .line b {
+    display: block;
+    height: 100%;
     background: var(--rr-ok-bar);
     transition: width 80ms linear;
   }
 
-  .mini.warn b {
+  .line.warn b {
     background: var(--rr-warn);
-  }
-
-  .mini span {
-    margin-left: var(--rr-space-2);
-    font-size: var(--rr-text-caption);
-    font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-caption);
-    letter-spacing: 0;
-    color: var(--rr-ok);
-  }
-
-  .mini.warn span {
-    color: var(--rr-warn);
-  }
-
-  .mini.off span {
-    color: var(--rr-tx-text);
   }
 
   .full {
