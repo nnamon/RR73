@@ -60,14 +60,28 @@ describe('AudioClockMapper', () => {
     expect(() => m.toUtcMs(1)).toThrow();
   });
 
-  it('applies the offset correction to both directions', () => {
+  it('applies the input offset to captured audio and never to transmit times', () => {
     const c = clocks(origin, 0);
     const m = new AudioClockMapper();
     m.observe({ contextTime: 1, performanceTime: c.perfAt(1) }, c.perfAt(1), c.utcAt(c.perfAt(1)));
-    const before = m.toUtcMs(5);
-    m.offsetS = -0.3;
-    expect(m.toUtcMs(5)).toBeCloseTo(before - 300, 9);
-    expect(m.toContextTime(before - 300)).toBeCloseTo(5, 9);
+    const heard = m.toUtcMs(5);
+    m.inputOffsetS = -0.3;
+    expect(m.captureUtcMs(5)).toBeCloseTo(heard - 300, 9);
+    expect(m.toUtcMs(5)).toBe(heard);
+    expect(m.toContextTime(heard)).toBeCloseTo(5, 9);
+  });
+
+  it('estimates the drift of an audio clock that runs 1000 ppm slow', () => {
+    const c = clocks(origin, 250, 1 - 1000e-6);
+    const m = new AudioClockMapper();
+    for (let t = 1; t < 200; t += 0.0427) {
+      const perf = c.perfAt(t);
+      m.observe({ contextTime: t, performanceTime: perf }, perf + 10, c.utcAt(perf + 10));
+      if (t < 50) expect(m.driftPpm).toBeNull();
+    }
+    expect(m.driftPpm).toBeCloseTo(1000, -1);
+    m.reset();
+    expect(m.driftPpm).toBeNull();
   });
 
   it('starts over after reset', () => {

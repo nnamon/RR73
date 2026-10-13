@@ -13,8 +13,10 @@ import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import type { CaptureReport } from '../audio/report';
 import type { AudioClockMapper } from '../clock/mapping';
+import { RxCalibration } from '../clock/calibration';
+import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
-import { SLOT_SAMPLES, type Mode } from '../clock/slots';
+import { SLOT_MS, SLOT_SAMPLES, type Mode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
 import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
@@ -91,13 +93,25 @@ const KEEP_SLOTS = 8;
 /** Tune, the keying check, and the slots RR73 transmitted in (UTC ms, oldest first). */
 export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null, slots: [] as number[] });
 const transmitted = new TransmittedSlots();
+/** What RR73 sent in its recent slots, by slot start (UTC ms). */
+const sentTx = new Map<number, SentTx>();
+/** RR73's recent transmissions as decoded from the receive audio, newest first. */
+let heardBack: HeardBack[] = [];
+/** Transmissions kept for Your Tx, heard back. */
+const HEARD_KEEP = 6;
+/** Receive calibration from the DT of strong decodes; moves capture stamps only. */
+const calibration = new RxCalibration();
 
 /**
  * Notes output from `fromUtcMs` to `toUtcMs`: the slots it overlaps hold RR73's own signal, so
- * they are not decoded and their decodes are not shown.
+ * their decodes are not shown. A transmission's slot is decoded for Your Tx, heard back.
  */
-export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode = settings.mode) {
+export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode = settings.mode, sent?: SentTx) {
   transmitted.mark(fromUtcMs, toUtcMs, mode);
+  if (sent) {
+    sentTx.set(Math.floor(fromUtcMs / SLOT_MS[mode]) * SLOT_MS[mode], sent);
+    if (sentTx.size > HEARD_KEEP) sentTx.delete(sentTx.keys().next().value!);
+  }
   tx.slots = transmitted.list();
   if (band.slots.some((s) => transmitted.has(s.startUtcMs))) band.slots = band.slots.filter((s) => !transmitted.has(s.startUtcMs));
 }
@@ -133,6 +147,7 @@ let peakHold: { db: number; at: number } = { db: FLOOR_DB, at: 0 };
 function getEngine(): CaptureEngine {
   if (engine) return engine;
   engine = new CaptureEngine(undefined, inputSource);
+  engine.mapper.inputOffsetS = inputSource ? 0 : calibration.offsetS;
   wake = new WakeLockKeeper();
   wake.onChange = (s) => (audio.wake = s);
   engine.onState((s) => {
@@ -182,7 +197,11 @@ function onSlot(slot: AssembledSlot) {
   recorder.add(slot);
   recent.slots = recorder.list().map(({ startUtcMs, mode, filled, lateStart, gap }) => ({ startUtcMs, mode, filled, lateStart, gap }));
   // A slot with less than half its audio cannot hold a whole FT8 or FT4 message.
-  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available || transmitted.has(slot.startUtcMs)) return;
+  if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available) return;
+  if (transmitted.has(slot.startUtcMs)) {
+    decodeOwn(slot);
+    return;
+  }
   const t0 = performance.now();
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
   decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
@@ -191,6 +210,55 @@ function onSlot(slot: AssembledSlot) {
       if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
     },
   );
+}
+
+/** Decodes a slot RR73 transmitted in, for Your Tx, heard back. Its decodes are never shown. */
+function decodeOwn(slot: AssembledSlot) {
+  const sent = sentTx.get(slot.startUtcMs);
+  if (!sent) return;
+  decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
+    (decodes) => noteHeardBack(slot.startUtcMs, sent, decodes),
+    () => undefined,
+  );
+}
+
+/** Records whether a transmission came back in its slot's decodes, and at what DT. */
+export function noteHeardBack(slotStartUtcMs: number, sent: SentTx, decodes: Decode[]) {
+  const own = findOwnDecode(sent, decodes);
+  const entry: HeardBack = { slotStartUtcMs, text: sent.text, dtS: own?.dt_s ?? null, snrDb: own?.snr_db ?? null };
+  heardBack = [entry, ...heardBack.filter((h) => h.slotStartUtcMs !== slotStartUtcMs)].slice(0, HEARD_KEEP);
+}
+
+/** Feeds a slot's decodes to the receive calibration and applies the offset to capture. */
+function calibrate(entry: DecodedSlot) {
+  // The practice band has no radio path to calibrate, and must not move the radio's correction.
+  if (entry.skipped || inputSource) return;
+  calibration.add(entry.startUtcMs, entry.decodes, Date.now());
+  if (engine) engine.mapper.inputOffsetS = calibration.offsetS;
+}
+
+/** Timing measurements for Settings › Radio and audio and the timing report. */
+export function timingSnapshot(): TimingSnapshot {
+  const e = engine;
+  const running = audio.status === 'running';
+  return {
+    atUtcMs: Date.now(),
+    appVersion: __APP_VERSION__,
+    audio: audio.status,
+    source: running ? (e?.clockSource ?? null) : null,
+    offsetMs: running ? (e?.mappingOffsetMs() ?? null) : null,
+    driftPpm: running ? (e?.mapper.driftPpm ?? null) : null,
+    captureLagMs: running ? (e?.timing.captureLagMs ?? null) : null,
+    gaps: e?.timing.gaps ?? 0,
+    gapMs: (e?.timing.gapS ?? 0) * 1000,
+    inputOffsetS: calibration.offsetS,
+    medianDtS: calibration.medianDtS,
+    strongDecodes: calibration.count,
+    heardBack: heardBack.map((h) => ({ ...h })),
+    resumes: e?.timing.resumes ?? [],
+    readings: e?.timing.readings ?? [],
+    observations: e?.mapper.observations ?? [],
+  };
 }
 
 function keepSlot(entry: DecodedSlot) {
@@ -205,6 +273,7 @@ export function deliverDecodes(entry: DecodedSlot) {
   if (transmitted.has(entry.startUtcMs)) return;
   keepSlot(entry);
   for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes);
+  calibrate(entry);
 }
 
 /** Listens to each slot's decodes as they arrive (the sequencer). */
@@ -289,6 +358,7 @@ export function startAudio() {
 export function setInputSource(src: InputSource | null) {
   inputSource = src;
   engine?.useSource(src);
+  if (engine) engine.mapper.inputOffsetS = src ? 0 : calibration.offsetS;
 }
 
 /** Resumes audio after an interruption. Call from a tap. */
@@ -297,8 +367,10 @@ export function resumeAudio() {
   return getEngine().resume();
 }
 
-/** Switches the input device. Call from a change event. */
+/** Switches the input device. Call from a change event. Another input has its own latency, so the receive calibration starts over. */
 export function useInput(deviceId: string | null) {
+  calibration.reset();
+  getEngine().mapper.inputOffsetS = 0;
   return getEngine().useInput(deviceId);
 }
 
@@ -316,7 +388,7 @@ export function saveRecentSlot(startUtcMs: number): Promise<SaveResult> | null {
     input: audio.report?.inputLabel ?? 'Microphone',
     captureRateHz: audio.report?.contextRate ?? 0,
     appVersion: __APP_VERSION__,
-    offsetS: engine?.mapper.offsetS ?? 0,
+    offsetS: engine?.mapper.inputOffsetS ?? 0,
   });
   return saveSlot(files);
 }

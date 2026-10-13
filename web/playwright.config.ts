@@ -56,7 +56,7 @@ export default defineConfig({
         reuseExistingServer: true,
       },
   projects: [
-    { name: 'mic', testMatch: /(audio|start-tone)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
+    { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
     // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
     // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },

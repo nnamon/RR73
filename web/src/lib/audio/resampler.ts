@@ -127,6 +127,15 @@ export class Resampler {
     return this.inCount;
   }
 
+  /** Starts a new stream: forgets the input history and the counts, keeps the filter. */
+  reset() {
+    this.buf.fill(0);
+    this.bufStart = -(this.design.half - 1);
+    this.bufLen = this.design.half - 1;
+    this.inCount = 0;
+    this.outCount = 0;
+  }
+
   /** Input position, in input samples from the first input sample, that output sample n represents. */
   inputPosition(n: number): number {
     return (n * this.design.inputRate) / this.design.outputRate;

@@ -11,6 +11,14 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - In practice, Send to Wavelog goes to a stand-in on the phone that delivers most QSOs and refuses some as Wavelog does. RR73 sends nothing over the network while practice is on.
 - Play Tx audio in Settings › Practice band turns transmissions and Tune silent while practising.
 
+## 0.8.1 · 2026-10-13
+
+- Receive timing follows the audio clock frame by frame. Moments when the browser delivered no audio used to shift the DT of every later decode earlier, adding up to seconds over a session. Not tested on a device.
+- When the browser stops giving output timestamps, RR73 times audio from the audio clock. The timing used to drift with the audio clock, 0.6 s in 10 minutes at 1000 ppm.
+- After a start or Resume audio, receive audio waits about 0.2 s until 5 clock readings agree, so one bad reading no longer moves a slot.
+- RR73 corrects receive timing from the median DT of decodes at −10 dB or stronger, once 8 are in, by at most 0.08 s per slot. Transmit timing does not use this correction.
+- Settings › Radio and audio › Timing shows the median DT, the receive correction, your own transmission heard back through the radio, the clock source, clock drift, capture lag, the audio gaps bridged and the clock offset around each resume. Copy timing report puts them on the clipboard as text.
+
 ## 0.8.0 · 2026-10-13
 
 - Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.

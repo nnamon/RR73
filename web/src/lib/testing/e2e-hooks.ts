@@ -9,7 +9,7 @@ import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
 import { qso } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
-import { audioOut, deliverDecodes, onAudioChunk } from '../state/station.svelte';
+import { audioOut, deliverDecodes, noteHeardBack, onAudioChunk } from '../state/station.svelte';
 
 export interface E2eHooks {
   /** Decodes for the slot starting at `slotStartMs`, UTC ms. */
@@ -22,6 +22,8 @@ export interface E2eHooks {
   clockErrorMs(): number | null;
   /** UTC stamped on the end of the last captured chunk, minus Date.now() when it arrived, ms. */
   rxLagMs(): number | null;
+  /** Decodes of a slot RR73 transmitted `text` in at `f0Hz`, as if from the decoder. */
+  heardBack(slotStartMs: number, text: string, f0Hz: number, decodes: Decode[]): void;
 }
 
 declare global {
@@ -48,5 +50,6 @@ export function installE2eHooks() {
       return out ? out.mapper.toUtcMs(out.ctx.currentTime) - Date.now() : null;
     },
     rxLagMs: () => rxLag,
+    heardBack: (slotStartMs, text, f0Hz, decodes) => noteHeardBack(slotStartMs, { text, f0Hz }, decodes),
   };
 }

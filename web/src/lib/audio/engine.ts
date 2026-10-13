@@ -10,8 +10,9 @@
 
 import workletUrl from './capture.worklet.ts?worker&url';
 import { AudioClockMapper, plausibleTimestamp } from '../clock/mapping';
+import { TimingLog, type ClockSource } from '../clock/timing';
 import { FLOOR_DB } from './level';
-import { CAPTURE_PROCESSOR, type CaptureMessage } from './messages';
+import { CAPTURE_PROCESSOR, type CaptureChunkMessage, type CaptureMessage } from './messages';
 import { RateMeter, type CaptureReport } from './report';
 import { setAudioSession } from './session';
 import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
@@ -60,6 +61,14 @@ const loaded = new WeakSet<BaseAudioContext>();
 
 /** Implausible output timestamps in a row, about 0.2 s of chunks, before the engine stops using them. */
 const IMPLAUSIBLE_RUN = 5;
+
+/**
+ * Observations the mapping needs after a start or resume before chunks are stamped, about 0.2 s.
+ * Chunks wait and are stamped once it settles, so one skewed first reading never reaches a slot.
+ */
+const SETTLE = 5;
+/** Chunks held while the mapping settles: 1.4 s. */
+const HOLD_MAX = 32;
 
 export function browserDeps(): EngineDeps {
   return {
@@ -110,6 +119,12 @@ export class CaptureEngine {
   private implausible = 0;
   /** The browser's output timestamps are wrong: the mapper uses currentTime until the next start or resume. */
   private distrustTimestamps = false;
+  /** Chunks waiting for the mapping to settle. */
+  private held: CaptureChunkMessage[] = [];
+  /** The mapping settled since the last start or resume. */
+  private settled = false;
+  /** Clock readings, capture lags and the mapping around stops and resumes. */
+  readonly timing = new TimingLog();
 
   constructor(deps: EngineDeps = browserDeps(), input: InputSource | null = null) {
     this.deps = deps;
@@ -129,6 +144,17 @@ export class CaptureEngine {
 
   get captureReport(): CaptureReport | null {
     return this.report;
+  }
+
+  /** What the mapping is built from now; null without a mapping. */
+  get clockSource(): ClockSource | null {
+    return this.mapper.ready ? (this.fallbackClock ? 'current-time' : 'output') : null;
+  }
+
+  /** UTC the mapping gives the audio clock now minus Date.now(), ms; null without a mapping. */
+  mappingOffsetMs(): number | null {
+    if (!this.ctx || !this.mapper.ready) return null;
+    return this.mapper.toUtcMs(this.ctx.currentTime) - this.deps.dateNow();
   }
 
   onChunk(fn: (c: Chunk) => void): () => void {
@@ -226,7 +252,7 @@ export class CaptureEngine {
     const was = this.stateValue.status;
     this.closeInput();
     if (was === 'running' || was === 'starting' || was === 'stopped') {
-      this.mapper.reset();
+      this.resetClock();
       this.rate.reset();
       this.set({ status: 'off', reason: null, stoppedAtUtcMs: null, error: null });
     }
@@ -243,6 +269,7 @@ export class CaptureEngine {
   interrupt(reason: StopReason) {
     if (this.stateValue.status !== 'running' && this.stateValue.status !== 'starting') return;
     const at = this.lastUtcMs ?? this.deps.dateNow();
+    this.timing.stopped(at, this.mappingOffsetMs());
     this.mapper.reset();
     this.rate.reset();
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => undefined);
@@ -288,12 +315,31 @@ export class CaptureEngine {
       return;
     }
     if (this.stateValue.status !== 'running' || !this.ctx) return;
-    this.observeClock(this.ctx);
-    if (!this.mapper.ready) return;
-    const utcMs = this.mapper.toUtcMs(m.contextTime);
+    const ctx = this.ctx;
+    this.observeClock(ctx);
+    this.timing.lag(ctx.currentTime - (m.contextTime + m.samples.length / 12000));
+    this.timing.gaps = m.gaps ?? 0;
+    this.timing.gapS = (m.gapFrames ?? 0) / ctx.sampleRate;
+    // A mapping that started over (start, resume, a change of clock source) holds chunks until it settles.
+    if (this.mapper.count < SETTLE) {
+      this.held.push(m);
+      if (this.held.length > HOLD_MAX) this.held.shift();
+      return;
+    }
+    if (!this.settled) {
+      this.settled = true;
+      this.timing.settled(this.deps.dateNow(), this.mappingOffsetMs()!);
+    }
+    const ready = this.held.length ? [...this.held, m] : [m];
+    this.held = [];
+    for (const c of ready) this.emitChunk(ctx, c);
+  }
+
+  private emitChunk(ctx: AudioContext, m: CaptureChunkMessage) {
+    const utcMs = this.mapper.captureUtcMs(m.contextTime);
     this.lastUtcMs = utcMs + (m.samples.length / 12000) * 1000;
     this.rate.add(this.deps.perfNow(), m.contextTime);
-    const measured = this.rate.rate(this.ctx.sampleRate);
+    const measured = this.rate.rate(ctx.sampleRate);
     if (this.report && measured !== null && (this.report.measuredRate === null || Math.abs(measured - this.report.measuredRate) >= 1)) {
       this.report = { ...this.report, measuredRate: measured };
       this.emitReport();
@@ -307,15 +353,20 @@ export class CaptureEngine {
     this.fallbackClock = false;
     this.implausible = 0;
     this.distrustTimestamps = false;
+    this.held = [];
+    this.settled = false;
+    this.timing.restart();
   }
 
   private observeClock(ctx: AudioContext) {
     const perfNow = this.deps.perfNow();
     const dateNow = this.deps.dateNow();
     const raw = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+    const currentTime = ctx.currentTime;
+    this.timing.reading({ contextTime: raw?.contextTime ?? 0, performanceTime: raw?.performanceTime ?? 0, perfNow, dateNow, currentTime });
     const ts = raw && (raw.performanceTime ?? 0) > 0 && (raw.contextTime ?? 0) > 0 ? { contextTime: raw.contextTime!, performanceTime: raw.performanceTime! } : null;
-    if (ts && !this.distrustTimestamps) {
-      if (plausibleTimestamp(ts, ctx.currentTime, perfNow)) {
+    if (!this.distrustTimestamps) {
+      if (ts && plausibleTimestamp(ts, currentTime, perfNow)) {
         // Output timestamps differ from the fallback by the output latency: start over on them.
         if (this.fallbackClock) this.mapper.reset();
         this.fallbackClock = false;
@@ -324,16 +375,19 @@ export class CaptureEngine {
         return;
       }
       // A few bad timestamps are skipped. A run of them means the browser's are wrong (Playwright's
-      // WebKit on Linux): drop the observations made from them and use currentTime.
-      if (++this.implausible < IMPLAUSIBLE_RUN) return;
-      this.distrustTimestamps = true;
-      if (!this.fallbackClock) this.mapper.reset();
+      // WebKit on Linux): drop the observations made from them and use currentTime. Timestamps that
+      // stop coming count too: a mapping left on old ones drifts with the audio clock.
+      if (ts || (this.mapper.ready && !this.fallbackClock)) {
+        if (++this.implausible < IMPLAUSIBLE_RUN) return;
+        if (ts) this.distrustTimestamps = true;
+        else this.implausible = 0;
+        if (!this.fallbackClock) this.mapper.reset();
+      }
     }
     // Until output timestamps arrive, or where the browser has none or wrong ones, pair currentTime
     // with now: off by the output latency.
-    if (this.mapper.ready && !this.fallbackClock) return;
     this.fallbackClock = true;
-    this.mapper.observe({ contextTime: ctx.currentTime, performanceTime: perfNow }, perfNow, dateNow);
+    this.mapper.observe({ contextTime: currentTime, performanceTime: perfNow }, perfNow, dateNow);
   }
 
   private fail(error: StartError): EngineState {

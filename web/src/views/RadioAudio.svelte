@@ -5,11 +5,12 @@
   import LevelMeter from '../ui/LevelMeter.svelte';
   import TuneSheet from '../ui/TuneSheet.svelte';
   import { href } from '../lib/app/router.svelte';
-  import { signed, utcHm } from '../lib/clock/format';
+  import { signed, utcHm, utcTime } from '../lib/clock/format';
+  import { timingReport, type TimingSnapshot } from '../lib/clock/timing';
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, halt, inputDevices, startAudio, startTune, tx, useInput } from '../lib/state/station.svelte';
+  import { audio, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
@@ -52,6 +53,65 @@
     { key: 'clicks', title: 'Keyboard clicks off', sub: 'RR73 can’t see this setting.' },
     { key: 'volume', title: 'Phone volume at maximum', sub: 'It sets the transmit level.' },
   ];
+
+  // Timing: measurements for checking receive and transmit timing on the air.
+  let timing = $state<TimingSnapshot>(timingSnapshot());
+  $effect(() => {
+    const id = setInterval(() => (timing = timingSnapshot()), 1000);
+    return () => clearInterval(id);
+  });
+  let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
+  let reportText = $state('');
+
+  async function copyReport() {
+    const text = timingReport(timingSnapshot());
+    try {
+      await navigator.clipboard.writeText(text);
+      copyState = 'copied';
+      reportText = '';
+    } catch {
+      copyState = 'failed';
+      reportText = text;
+    }
+  }
+
+  const secs = (v: number) => `${v > 0 && v.toFixed(2) !== '0.00' ? '+' : ''}${signed(v, 2)} s`;
+  const medianText = $derived(
+    timing.medianDtS === null ? 'Shows once decodes at −10 dB or stronger arrive' : `${secs(timing.medianDtS)} from ${timing.strongDecodes} decodes at −10 dB or stronger`,
+  );
+  const offsetText = $derived(timing.inputOffsetS === 0 ? 'None. It is set from the median DT once 8 decodes are in.' : `${secs(timing.inputOffsetS)} on receive audio`);
+  const sourceText = $derived(
+    timing.source === 'output' ? 'Output timestamps' : timing.source === 'current-time' ? 'Audio clock time: the output timestamps are unusable' : 'Unknown until audio starts',
+  );
+  const driftText = $derived.by(() => {
+    if (timing.driftPpm === null) return timing.source ? 'Measured after 1 minute of audio' : 'Unknown until audio starts';
+    const ppm = Math.round(timing.driftPpm);
+    return ppm === 0 ? '0 ppm' : `${Math.abs(ppm)} ppm, audio clock ${ppm > 0 ? 'slow' : 'fast'}`;
+  });
+  const gapText = $derived(
+    !timing.source && timing.gaps === 0
+      ? 'Unknown until audio starts'
+      : timing.gaps === 0
+        ? 'None since audio started'
+        : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total. Receive timing stays on the audio clock across them.`,
+  );
+  const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
+  const heardText = $derived.by(() => {
+    const h = timing.heardBack;
+    if (!h.length) return 'Shows after RR73 transmits';
+    const last = h.find((x) => x.dtS !== null);
+    if (!last) return `Not heard back. The radio returned no decodable signal in the last ${h.length === 1 ? 'transmission' : `${h.length} transmissions`}.`;
+    return `DT ${secs(last.dtS!)} at ${utcTime(last.slotStartUtcMs)} UTC, ${signed(last.snrDb ?? 0)} dB`;
+  });
+  const resumeLines = $derived(
+    timing.resumes
+      .slice(-3)
+      .reverse()
+      .map((r) => {
+        const ms = (v: number | null) => (v === null ? 'none' : `${signed(v)} ms`);
+        return r.resumedAtUtcMs === null ? `Stopped at ${utcTime(r.stoppedAtUtcMs)} UTC, offset ${ms(r.beforeMs)}` : `${utcTime(r.stoppedAtUtcMs)} to ${utcTime(r.resumedAtUtcMs)} UTC: offset ${ms(r.beforeMs)} before, ${ms(r.afterMs)} after`;
+      }),
+  );
 
   function toggle(key: keyof Checklist) {
     void updateSettings({ checklist: { ...settings.checklist, [key]: !settings.checklist[key] } });
@@ -186,6 +246,55 @@
       </li>
     </ul>
   </div>
+
+  <div class="section">
+    <h2 class="section-head">Timing</h2>
+    <div class="group" data-testid="timing">
+      <div class="row">
+        <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Input offset</span><span class="row-sub" data-testid="timing-offset">{offsetText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Your Tx, heard back</span><span class="row-sub" data-testid="timing-heard">{heardText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Clock source</span><span class="row-sub" data-testid="timing-source">{sourceText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Clock drift</span><span class="row-sub" data-testid="timing-drift">{driftText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Capture lag</span><span class="row-sub" data-testid="timing-lag">{lagText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Audio gaps</span><span class="row-sub" data-testid="timing-gaps">{gapText}</span></span>
+      </div>
+      <div class="row">
+        <span class="row-main">
+          <span class="row-title">Resumes</span>
+          {#if resumeLines.length}
+            {#each resumeLines as line, i (i)}<span class="row-sub">{line}</span>{/each}
+          {:else}
+            <span class="row-sub">None since the app opened</span>
+          {/if}
+        </span>
+      </div>
+    </div>
+    <div class="start">
+      <button class="btn" onclick={() => void copyReport()}>Copy timing report</button>
+      {#if copyState === 'copied'}<span class="copied" role="status">Copied</span>{/if}
+    </div>
+    {#if copyState === 'failed'}
+      <p class="section-foot">The phone refused to copy. Select the report below and copy it.</p>
+      <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
+    {/if}
+    <p class="section-foot">
+      DT reads about 0 s for stations with correct clocks. The input offset moves receive audio toward a median DT of 0, by at most 0.08 s per slot. Transmit timing does not use it. Your Tx, heard back
+      decodes your own transmission when the radio returns it to the phone, and measures transmit timing directly.
+    </p>
+  </div>
 </section>
 
 <TuneSheet bind:open={tuneOpen} dialHz={dialHz(settings.band, settings.mode)} />
@@ -210,6 +319,26 @@
 
   .meter-row {
     display: block;
+  }
+
+  .copied {
+    align-self: center;
+    margin-left: var(--rr-space-3);
+    color: var(--rr-label2);
+    font-size: var(--rr-text-sub);
+  }
+
+  .report {
+    width: 100%;
+    min-height: 160px;
+    margin-top: var(--rr-space-2);
+    padding: var(--rr-space-2);
+    border: 0;
+    border-radius: var(--rr-radius-m);
+    background: var(--rr-fill);
+    color: var(--rr-label);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-caption);
   }
 
   .start {
