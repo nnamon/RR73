@@ -175,7 +175,10 @@ export class ReferenceList<T extends Reference> {
       if (!entry) throw new ReferenceUnavailableError(this.indexSlot(), 'missing', `this build has no ${this.programme} list`);
       const kept = await this.store.kept(this.indexSlot(), entry);
       const index = readRefIndex(kept.data, this.programme);
-      if (!kept.stale) {
+      if (kept.stale) {
+        // An older build's index names files the server no longer has: ask again next time.
+        this.index = null;
+      } else {
         // Shards whose key left the list take space until dropped.
         const slots = new Set([this.indexSlot(), ...index.shards.map((s) => this.shardSlot(s.key))]);
         void this.store.drop(`${this.dir}/`, (slot) => slots.has(slot)).catch(() => undefined);
@@ -198,7 +201,7 @@ export class ReferenceList<T extends Reference> {
     return p;
   }
 
-  /** True when this build has the programme's list. */
+  /** True when the list can be read: this build has it, and it is reachable or kept on the phone. */
   async available(): Promise<boolean> {
     try {
       await this.loadIndex();

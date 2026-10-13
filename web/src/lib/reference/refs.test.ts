@@ -146,6 +146,21 @@ describe('parks', () => {
     expect(await online.offline()).toMatchObject({ shardsKept: 5, shardsCurrent: 1 });
   });
 
+  it('asks for the current index again once an older kept one has stood in', async () => {
+    const files: Record<string, unknown> = potaFiles('v1', PARKS);
+    const { parks, origin, store, state } = setup(files);
+    await parks.get('SG-0001');
+    // A deploy replaces the v1 files with v2 ones while the phone is offline and the app updates.
+    for (const k of Object.keys(files)) delete files[k];
+    Object.assign(files, potaFiles('v2', PARKS));
+    state.entry = 'pota/index.v2.json';
+    origin.state.offline = true;
+    const list = parkList(store, () => Promise.resolve(state.entry));
+    expect((await list.get('SG-0001'))?.name).toBe('Admiralty National Park');
+    origin.state.offline = false;
+    expect((await list.get('US-0001'))?.name).toBe('Acadia National Park');
+  });
+
   it('marks a nearest search incomplete when a shard it needs is unreachable', async () => {
     const { parks, origin } = setup(potaFiles('v1', PARKS));
     await parks.get('SG-0001');
