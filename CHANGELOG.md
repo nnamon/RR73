@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.7.1 · 2026-10-13
 
 - With Spots on, the dial frequency in the top bar ran into the slot ring. The dial now drops out when the bar is short of room; the band sheet shows it.
 
