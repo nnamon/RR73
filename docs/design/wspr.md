@@ -20,23 +20,22 @@ Source for slot, timing, modulation and message types: the Wikipedia article on 
 
 ## Dial frequencies
 
-`web/src/lib/radio/bands.ts` gains a WSPR column. Signals sit 1400 to 1600 Hz above the dial. Checked against the WSPR table at qsl.net/oz5em (160m to 6m) and the Signal Identification Wiki (160m to 17m).
+`web/src/lib/radio/bands.ts` gains a WSPR column, from WSPRnet's frequency sheet (wsprnet.org, wspr-qrg.pdf). The same dials apply everywhere; the operator works within their licence. Signals sit 1400 to 1600 Hz above the dial.
 
-| Band | Dial, MHz | Signals, MHz | Checked |
-| --- | --- | --- | --- |
-| 160m | 1.8366 | 1.8380 to 1.8382 | Two sources |
-| 80m | 3.5686 | 3.5700 to 3.5702 | Two sources |
-| 60m | 5.3647 | 5.3661 to 5.3663 | Unverified. Neither source lists 60m. This dial puts the signals inside the WRC-15 allocation, 5351.5 to 5366.5 kHz. |
-| 40m | 7.0386 | 7.0400 to 7.0402 | Two sources |
-| 30m | 10.1387 | 10.1401 to 10.1403 | Two sources |
-| 20m | 14.0956 | 14.0970 to 14.0972 | Two sources |
-| 17m | 18.1046 | 18.1060 to 18.1062 | Two sources |
-| 15m | 21.0946 | 21.0960 to 21.0962 | One source |
-| 12m | 24.9246 | 24.9260 to 24.9262 | One source |
-| 10m | 28.1246 | 28.1260 to 28.1262 | One source |
-| 6m | 50.2930 | 50.2944 to 50.2946 | One source |
-
-A 2010 guide gives 80m as 3.5926 MHz; both current lists use 3.5686 MHz. 60m ships as `null` until confirmed, so the band sheet greys WSPR out there, as it does FT4 on 160m.
+| Band | Dial, kHz | Signals, kHz |
+| --- | --- | --- |
+| 160m | 1836.6 | 1838.0 to 1838.2 |
+| 80m | 3568.6 | 3570.0 to 3570.2 |
+| 60m | 5287.2 | 5288.6 to 5288.8 |
+| 40m | 7038.6 | 7040.0 to 7040.2 |
+| 30m | 10138.7 | 10140.1 to 10140.3 |
+| 20m | 14095.6 | 14097.0 to 14097.2 |
+| 17m | 18104.6 | 18106.0 to 18106.2 |
+| 15m | 21094.6 | 21096.0 to 21096.2 |
+| 12m | 24924.6 | 24926.0 to 24926.2 |
+| 10m | 28124.6 | 28126.0 to 28126.2 |
+| 6m | 50293.0 | 50294.4 to 50294.6 |
+| 2m | 144488.5 | 144489.9 to 144490.1 |
 
 ## Mode switching
 
@@ -55,7 +54,7 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006).
 - List: one header per slot, newest first. The slot in progress reads "14:04 · receiving, spots at 14:06". A decoded slot reads "14:08 · 9 spots". A Tx slot shows the approved Next, Sending and Sent rows with the message as transmitted, "9V1NE OJ11 37".
 - Rows are 32 pt, in option B's style: callsign (16 pt semibold) and grid first, then dBm, SNR, drift and distance in fixed right-aligned 12 pt columns, such as "37 dBm −14 dB 0 Hz 3840 km". Slots below the newest slot with spots fade.
 - Distance and bearing: great-circle from the station grid (6 characters when set) to the centre of the spot's grid, in km.
-- Sort: distance, farthest first, by default. The ••• menu offers SNR and callsign.
+- Sort: distance, farthest first, by default. The ••• menu offers distance, SNR, callsign and newest.
 - Gestures: a tap selects a row and marks its trace on the waterfall. Touch and hold opens the details: frequency in MHz to 1 Hz, DT, drift, bearing, power in W and the times heard today. Double-tap does nothing in WSPR.
 - Colours: a spot carrying the station's own callsign shows as My call. No other decode-colour category applies, because each compares against QSOs.
 - Bottom bar: a status line with the message and Tx frequency ("9V1NE OJ11 37 · 1500 Hz") and, on the right, "Beacon off", "Stops at 16:05" or the time left on air. Below it: Beacon, the Tx percentage, ••• and Halt.
@@ -70,8 +69,7 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006).
 - Each later gap is 1 + x slots, where n = 100 ÷ Tx percentage and x is drawn uniformly from 0 to 2(n − 1), then rounded up or down at random in proportion to its fraction. The mean gap is n slots and the longest 2n − 1. At 20%: gaps of 1 to 9 slots, mean 5.
 - The next Tx slot is drawn when a transmission ends, when Beacon turns on and when the percentage changes, so the button can show it.
 - Reason: a known next slot lets the button say "Tx at :06", and a bounded gap keeps spots arriving at a steady rate. Random gaps stop two beacons on one frequency from colliding every time.
-- Stop beacon after: 2 h by default; 30 min, 1, 2, 4, 8 or 12 h, or Off. It counts from Beacon on. When it fires, a notice says "Beacon stopped after 2 h."
-- Reason: AGENTS.md says RR73 never runs unattended, and `sequencer.md` exempts WSPR from the QSO watchdog. A default limit stops a forgotten phone. Off serves an operator who runs a beacon on purpose.
+- Stop beacon after: 1 h by default, set to any duration or Off. It counts from Beacon on. When it fires, a notice says "Beacon stopped after 1 h."
 
 ## Settings
 
@@ -82,9 +80,8 @@ Per ADR 0006. Station, Radio and audio, Logging, Optional features and Appearanc
 | Tx percentage | 20% | 5 to 100% in steps of 5. Also set from the bottom bar. |
 | Reported power | 37 dBm (5 W) | WSPR's power values, each shown with its power in W. The radio's output is set on the radio. |
 | Tx frequency | 1500 Hz | 1410 to 1590 Hz. Also set on the waterfall. |
-| Stop beacon after | 2 h | 30 min to 12 h, or Off. |
+| Stop beacon after | 1 h | Any duration, or Off. |
 | Message | Read only | Station callsign, the first 4 characters of the grid and the reported power. |
-| Band hopping | Off, disabled | Later round. |
 | Report to WSPRnet | Off, disabled | Later round. Needs the spot relay. |
 | Keep spots | 30 days | 1 day to 1 year, or Forever. |
 
@@ -206,7 +203,7 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - A coin flip per slot: gaps have no upper bound and the next Tx slot is unknown until it starts.
 - Fixed spacing between transmissions: it repeats collisions with a station on the same spacing.
 - Modes as its own screen under Settings: one more tap.
-- Band hopping in this round: RR73 cannot tune the KX2, because Safari on iOS has no Web Serial or Web Bluetooth, so hopping means the operator retunes by hand at each hop.
+- Band hopping: RR73 has no CAT control of the radio, so a hop would need the operator to retune by hand.
 
 ## Open risks
 
@@ -215,12 +212,12 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - The 8192-point FFT per waterfall line: its cost on a phone is Not tested on a device.
 - KX2 at 110.6 s key-down every few minutes: heat at 5 W and 10 W is Not tested on a device. VOX should hold through the continuous tone; Not tested on a device.
 - Storage: at 30 spots a slot, 12 h a day for 30 days, about 320 000 spots or 65 MB. Safari's quota for a home-screen app at that size is Unverified.
-- Unverified: the 60m dial, the set of power values, the drift unit and frequency point WSPRnet uses, the ALL_WSPR column layout, and whether WSPRnet accepts a file upload of exported spots, which could report spots before the relay exists.
+- Unverified: the set of power values, the drift unit and frequency point WSPRnet uses, the ALL_WSPR column layout, and whether WSPRnet accepts a file upload of exported spots, which could report spots before the relay exists.
 
-## Questions for the owner
+## Decisions from the owner, 14 October 2026
 
-1. Stop beacon after: 2 h by default, or Off by default?
-2. Band hopping means retuning the KX2 by hand at each hop. Keep it for a later round as a prompt to change band, or drop it?
-3. Transmitting with a compound callsign such as 9V1NE/P needs Type 2 and 3 messages. Include it in the first WSPR release, or ship standard callsigns first?
-4. Sort spots by distance by default, or by SNR?
-5. Which 60m channel applies to 9V1, if any?
+- Stop beacon after: 1 h by default, settable to any value or Off.
+- No band hopping: RR73 has no CAT control.
+- Compound callsigns such as 9V1NE/P (Type 2 and 3 messages) ship in the first WSPR release.
+- Spots sort by distance, farthest first, by default; the sort can be changed.
+- Dials follow WSPRnet's frequency sheet on every band, 60m included. Licensing is the operator's to observe.
