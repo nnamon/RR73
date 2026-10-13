@@ -4,7 +4,7 @@
  */
 
 import { utcTime } from '../clock/format';
-import type { Mode } from '../clock/slots';
+import { SLOT_MS, type Mode } from '../clock/slots';
 import { markDecode, type DecodeRowData } from './marking';
 import type { Decode } from './types';
 
@@ -22,7 +22,14 @@ export interface SlotDecodes {
   skipped?: boolean;
 }
 
-export type ListItem = { kind: 'header'; id: string; text: string } | { kind: 'row'; id: string; row: DecodeRowData };
+export type ListItem = { kind: 'header'; id: string; text: string } | { kind: 'row'; id: string; row: DecodeRowData; slotStartMs: number };
+
+/** A message we transmitted, shown as an amber row. */
+export interface SentItem {
+  slotStartMs: number;
+  text: string;
+  freqHz: number;
+}
 
 /** "13:14:15 UTC · 23 decodes · decoded in 0.38 s". */
 export function slotHeader(s: SlotDecodes): string {
@@ -39,18 +46,28 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
 }
 
 /**
- * List items for `slots` (any order; shown newest first). With a filter, slots with no
- * matching decode are left out; with none, every slot shows its header.
+ * List items for `slots` and our own transmissions, newest first. A transmission sorts by its
+ * start (slot + 0.5 s), a decoded slot by its end. With a filter, slots with no matching decode
+ * are left out; with none, every slot shows its header. Transmissions show with All and To me.
  */
-export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number): ListItem[] {
-  const out: ListItem[] = [];
-  for (const s of [...slots].sort((a, b) => b.startUtcMs - a.startUtcMs)) {
+export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = []): ListItem[] {
+  type Group = { at: number; items: ListItem[] };
+  const groups: Group[] = [];
+  for (const s of slots) {
     const rows = s.decodes.map((d) => ({ decode: d, ...markDecode(d, myCall) })).filter((r) => passes(r, filter, rxHz));
     if (!rows.length && filter !== 'all') continue;
-    out.push({ kind: 'header', id: `h${s.startUtcMs}`, text: slotHeader(s) });
-    rows.forEach((row, i) => out.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row }));
+    const items: ListItem[] = [{ kind: 'header', id: `h${s.startUtcMs}`, text: slotHeader(s) }];
+    rows.forEach((row, i) => items.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row, slotStartMs: s.startUtcMs }));
+    groups.push({ at: s.startUtcMs + SLOT_MS[s.mode], items });
   }
-  return out;
+  if (filter === 'all' || filter === 'me') {
+    for (const t of sent) {
+      const d = { text: t.text, freq_hz: t.freqHz, dt_s: 0, snr_db: 0 };
+      const row: DecodeRowData = { decode: d, ...markDecode(d, myCall, true), time: utcTime(t.slotStartMs), meta: 'You sent' };
+      groups.push({ at: t.slotStartMs + 500, items: [{ kind: 'row', id: `s${t.slotStartMs}`, row, slotStartMs: t.slotStartMs }] });
+    }
+  }
+  return groups.sort((a, b) => b.at - a.at).flatMap((g) => g.items);
 }
 
 /** Decodes per filter, for the chips. */
