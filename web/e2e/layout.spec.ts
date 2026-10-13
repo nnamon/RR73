@@ -150,7 +150,7 @@ for (const theme of ['light', 'dark'] as const) {
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
     const items = menu.getByRole('menuitemradio');
-    await expect(items).toHaveCount(9);
+    await expect(items).toHaveCount(10);
     await expect(items.first()).toHaveText('Practice: Random band');
     await expect(items.first()).toHaveAttribute('aria-checked', 'true');
     expect(await smallTargets(page, '[role=menu]')).toEqual([]);
@@ -268,18 +268,19 @@ for (const theme of ['light', 'dark'] as const) {
     // 36 pt faces in the 44 pt targets.
     const faces = await bar.locator('.face').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
     expect(new Set(faces)).toEqual(new Set([36]));
-    // Room for one more button, such as Hunt beside CQ: every target stays 44 pt wide.
-    await bar.locator('[data-id=cq]').evaluate((el) => {
-      const hunt = el.cloneNode(true) as HTMLElement;
-      hunt.dataset.id = 'hunt';
-      hunt.querySelector('.face')!.textContent = 'Hunt';
-      el.after(hunt);
+    await expect(buttons[2]).toHaveText('Hunt');
+    // Room for one more button beside Hunt: every target stays 44 pt wide.
+    await bar.locator('[data-id=hunt]').evaluate((el) => {
+      const extra = el.cloneNode(true) as HTMLElement;
+      extra.dataset.id = 'extra';
+      extra.querySelector('.face')!.textContent = 'Spot';
+      el.after(extra);
     });
     const six = await Promise.all((await bar.getByRole('button').all()).map(async (b) => (await b.boundingBox())!));
     expect(six).toHaveLength(6);
     for (const b of six) expect(b.width).toBeGreaterThanOrEqual(43.5);
     for (let i = 1; i < six.length; i++) expect(six[i].x).toBeGreaterThanOrEqual(six[i - 1].x + six[i - 1].width - 0.5);
-    await bar.locator('[data-id=hunt]').evaluate((el) => el.remove());
+    await bar.locator('[data-id=extra]').evaluate((el) => el.remove());
 
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });

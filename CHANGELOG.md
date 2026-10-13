@@ -20,6 +20,20 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Halt is a red outline in every state.
 - The buttons at the bottom of Operate are 36 pt high, inside 44 pt targets.
 
+## 0.10.0 · 2026-10-13
+
+- Hunt, a new button in Operate, answers CQs one after another until you stop it. It calls a CQ from the slot just decoded, completes and logs the QSO, then picks the next.
+- Hunt skips stations in a QSO, stations worked today on this band and mode, and for 10 min stations that did not answer it. It answers plain CQs only: CQ DX, CQ NA and other directed CQs wait for reference data.
+- Hunt order in ••• picks by Not worked (on this band and mode, strongest first), Strongest, Newest, Farthest or New call. The status line reads "Hunt · calling VJ6X (−12 dB) · 2 QSOs".
+- Hunt and CQ stop each other. Halt, End QSO and the watchdog stop Hunt.
+- Run is a switch in Operate's •••, stored and off by default. On, CQ answers the next caller or calls CQ again after each QSO. Off, Tx turns off once the QSO ends, as WSJT-X does with Disable Tx after sending 73.
+- Double-tapping a station while calling CQ ends CQ until that QSO is done, and the CQ button turns off. An unanswered call from CQ used to go back to CQ after the repeats.
+- When the station you call sends a report, R-report, RR73 or 73 to another station, calling stops and the bar says who it answered: "VK2LAW answered DV5CEL".
+- Tail-end, in Settings › FT8 and FT4 and on by default, calls that station once more in the slot after its RR73 or 73 to the other station. One unanswered call ends it. It never calls during their QSO.
+- Settings › FT8 and FT4 sets the watchdog to any number of minutes, or turns it off. The default stays 6 min.
+- Practice scenario Hunt: busy band carries at least 6 CQs a slot. Stations weaker than −10 dB do not hear you.
+- In the practice scenario Station works another, the station ends its QSO with RR73 or 73 and answers your next call.
+
 ## 0.9.2 · 2026-10-13
 
 - The "Updated to" notice floats over the screen without moving it, and goes by itself after 4 s.
@@ -49,7 +63,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.8.0 · 2026-10-13
 
-- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and what you sent. The first category from the top that matches colours the decode.
+- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and Sent. The first category from the top that matches colours the decode.
 - Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
 - Decodes from stations in the log on this band and mode show grey text over any colour.
 - Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore WSJT-X colours puts the defaults back, with Undo.

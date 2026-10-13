@@ -101,8 +101,8 @@ test('a phone that ran 0.5.0 with an activation running ends up with every featu
   // 0.5.0 stored settings without a schema; it always showed activations.
   await seed(page, mockupLog({ running: true }));
   await expect.poll(() => screenNames(page)).toEqual(['Log', 'Settings']);
-  // Schema 4: the features migration (2), decode colours (3) and waterfall contrast (4) in one step.
-  await expect.poll(async () => (await stored(page))?.schema).toBe(4);
+  // Schema 6: the features migration (2), decode colours (3), the sequencer settings (5) and waterfall contrast (6) in one step.
+  await expect.poll(async () => (await stored(page))?.schema).toBe(6);
   expect((await stored(page))?.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
   // Operate shows no activation line; the log keeps every QSO.
   await expect(page.getByRole('link', { name: /^Activation / })).toHaveCount(0);

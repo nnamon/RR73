@@ -206,7 +206,10 @@ for (const theme of ['light', 'dark'] as const) {
     // Run: End QSO from the menu, Run, then three callers; the ••• menu open.
     await bar.getByRole('button', { name: 'More' }).click();
     await page.getByRole('menuitem', { name: 'End QSO' }).click();
-    await bar.getByRole('button', { name: 'Run' }).click();
+    await bar.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitemcheckbox', { name: /^Run/ }).click();
+    await page.keyboard.press('Escape');
+    await bar.getByRole('button', { name: 'CQ', exact: true }).click();
     // The callers answer in an odd slot that starts after the QSO ended, so RR73 sent nothing in it.
     const ended = Date.now();
     now = await phase(page, 2, 11, 'even');

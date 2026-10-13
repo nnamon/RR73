@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { barText, runTally, steps, watchdogText } from './view';
-import { Sim } from '../testing/qso-sim';
+import { barText, huntText, runTally, steps, watchdogText } from './view';
+import { Sim, decode } from '../testing/qso-sim';
 
 const M = '−';
 
@@ -57,6 +57,34 @@ describe('bottom bar view', () => {
     expect(watchdogText(s.st, s.at(1, 20.1))).toBe('Watchdog 5:25');
     s.send({ type: 'halt', nowMs: s.at(2) });
     expect(watchdogText(s.st, s.at(2))).toBe('Tx off');
+  });
+
+  it('says the watchdog is off', () => {
+    const s = new Sim({ watchdogMs: 0 });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    expect(watchdogText(s.st, s.at(100))).toBe('Watchdog off');
+  });
+
+  it('says what Hunt is doing, with its tally', () => {
+    const s = new Sim();
+    expect(huntText(s.st)).toBeNull();
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    expect(huntText(s.st)).toBe('Hunt · listening for CQs');
+    s.hear(1, [decode('CQ VJ6X OF78', -12, 506)]);
+    expect(huntText({ ...s.st, huntQsos: 2 })).toBe(`Hunt · calling VJ6X (${M}12 dB) · 2 QSOs`);
+    s.run(2, 3, { 3: ['9V1NE VJ6X -09'] });
+    expect(huntText({ ...s.st, huntQsos: 1 })).toBe('Hunt · working VJ6X · 1 QSO');
+  });
+
+  it('says who a lost station is working', () => {
+    const s = new Sim();
+    s.call(1, 'CQ VK2LAW QF56');
+    s.run(2, 3, { 3: ['DV5CEL VK2LAW -05'] });
+    expect(barText(s.st)).toBe('VK2LAW · working DV5CEL');
+    const t = new Sim({ tailEnd: false });
+    t.call(1, 'CQ VK2LAW QF56');
+    t.run(2, 3, { 3: ['DV5CEL VK2LAW -05'] });
+    expect(barText(t.st)).toBe('Tx1 · VK2LAW 9V1NE OJ11 · VK2LAW answered DV5CEL');
   });
 
   it('tallies Run once it has logged a QSO', () => {

@@ -4,7 +4,7 @@
   import LocateButton from '../ui/LocateButton.svelte';
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
-  import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { normaliseCallsign, normaliseGrid, normaliseMinutes, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
   import { audio, band, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
@@ -60,6 +60,18 @@
     grid = r.grid;
     saveGrid();
     gridNote = r.note;
+  }
+
+  let watchdogMin = $state(String(settings.watchdogMin));
+  $effect(() => {
+    watchdogMin = String(settings.watchdogMin);
+  });
+
+  /** Any positive number of minutes; anything else puts back the stored value. */
+  function saveWatchdog() {
+    const m = normaliseMinutes(Number(watchdogMin.replace(',', '.')));
+    if (m === null) watchdogMin = String(settings.watchdogMin);
+    else void updateSettings({ watchdogMin: m });
   }
 
   function saveCallsign() {
@@ -190,6 +202,30 @@
         <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Same day, band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Tail-end</span><span class="row-sub">Call once more after their QSO</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.tailEnd} onchange={(e) => void updateSettings({ tailEnd: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Watchdog</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.watchdog} onchange={(e) => void updateSettings({ watchdog: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
+      {#if settings.watchdog}
+        <label class="row">
+          <span class="row-title">Stop Tx after</span>
+          <input
+            class="field num"
+            type="text"
+            inputmode="decimal"
+            bind:value={watchdogMin}
+            onblur={saveWatchdog}
+            onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+            autocomplete="off"
+            aria-label="Stop Tx after, min"
+          />
+          <span class="unit">min</span>
+        </label>
+      {/if}
       <label class="row">
         <span class="row-main"><span class="row-title">Hold Tx frequency</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.holdTx} onchange={(e) => void updateSettings({ holdTx: (e.currentTarget as HTMLInputElement).checked })} />
@@ -341,6 +377,15 @@
     font-size: var(--rr-text-body);
     text-align: right;
     text-transform: uppercase;
+  }
+
+  .field.num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .unit {
+    flex: none;
+    color: var(--rr-label2);
   }
 
   .field::placeholder {

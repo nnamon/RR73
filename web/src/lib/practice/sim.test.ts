@@ -82,8 +82,8 @@ describe('calling CQ', () => {
 
   it('a pile-up brings 3 to 5 callers, and Run works more than one of them', () => {
     for (const seed of [2, 3, 4]) {
-      const s = new Session('cq-pileup', seed);
-      s.sim.send({ type: 'runMode', on: true, nowMs: s.sim.at(0, 0.1) });
+      const s = new Session('cq-pileup', seed, { run: true });
+      callCq(s);
       s.run(0, 1);
       const n = s.toMe(1).length;
       expect(n, `seed ${seed}`).toBeGreaterThanOrEqual(3);
@@ -136,29 +136,26 @@ describe('calling a station', () => {
     expect(s.sentTexts().at(-1)).toBe(`${cq.call} ${ME} 73`);
   });
 
-  it('he answers someone else, works him to RR73 or 73, and only then may answer us', () => {
-    let tailEnded = 0;
+  it('he works someone else to RR73 or 73, then answers our one tail-end call, and the QSO is logged', () => {
     for (const seed of [8, 9, 10, 11, 12, 13]) {
       const s = new Session('answer-busy', seed);
       s.run(0, 0);
       const cq = plainCq(s, 0);
       s.sim.call(0, decode(cq.text, Math.round(cq.snrDb), cq.freqHz, cq.dtS));
-      s.run(1, 12);
-      const theirs = s.from(cq.call, 1).map((m) => parseExchange(m.text));
-      const other = theirs[0].to!;
+      s.run(1, 16);
+      const theirs = s.from(cq.call, 1).map((m) => ({ slot: m.slot, ex: parseExchange(m.text) }));
+      const other = theirs[0].ex.to!;
       expect(other, `seed ${seed}`).not.toBe(ME);
-      expect(theirs[0].kind, `seed ${seed}`).toBe('report');
-      const end = theirs.findIndex((x) => x.to === other && (x.kind === 'rr73' || x.kind === '73' || x.kind === 'rrr'));
-      expect(end, `seed ${seed}: ends the QSO with ${other}`).toBeGreaterThan(0);
-      const first = theirs.findIndex((x) => x.to === ME);
-      if (first >= 0) {
-        expect(first, `seed ${seed}`).toBeGreaterThan(end);
-        tailEnded++;
-      }
+      expect(theirs[0].ex.kind, `seed ${seed}`).toBe('report');
+      const end = theirs.find((x) => x.ex.to === other && (x.ex.kind === 'rr73' || x.ex.kind === '73'));
+      expect(end, `seed ${seed}: ends the QSO with ${other} by RR73 or 73`).toBeDefined();
+      // Our calls: the first one, nothing while they work, one more in the slot after the end.
+      const ours = s.sim.sent.filter((t) => t.text === `${cq.call} ${ME} OJ11`).map((t) => t.slot);
+      expect(ours, `seed ${seed}`).toEqual([1, end!.slot + 1]);
+      expect(theirs.find((x) => x.ex.to === ME)?.slot, `seed ${seed}`).toBe(end!.slot + 2);
+      expect(s.sim.logged().map((q) => q.call), `seed ${seed}`).toEqual([cq.call]);
+      expect(s.sim.notices()[0], `seed ${seed}`).toMatchObject({ kind: 'lost', text: `${cq.call} answered ${other}. Calling once more when they finish.` });
     }
-    // A tail-end chance: some of the six answer us afterwards, not all.
-    expect(tailEnded).toBeGreaterThan(0);
-    expect(tailEnded).toBeLessThan(6);
   });
 
   it('he never hears us and keeps calling CQ', () => {
@@ -172,6 +169,51 @@ describe('calling a station', () => {
     for (const t of theirs) expect(parseExchange(t).to).not.toBe(ME);
     expect(theirs[0]).toBe(cq.text);
     expect(s.sentTexts().filter((t) => t.startsWith(`${cq.call} ${ME}`)).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('Hunt: busy band', () => {
+  function hunt(seed: number, over: Partial<SeqConfig> = {}) {
+    const s = new Session('hunt-busy', seed, over);
+    s.sim.send({ type: 'hunt', on: true, nowMs: s.sim.at(0, 5) });
+    return s;
+  }
+
+  it('carries at least 6 plain CQs a slot, and the weaker stations ignore us', () => {
+    const s = hunt(71);
+    s.run(0, 12);
+    for (let i = 0; i <= 12; i++) {
+      const plain = (s.slots[i] ?? []).filter((x) => /^CQ [A-Z0-9/]+ [A-R]{2}\d{2}$/.test(x.text));
+      expect(plain.length, `slot ${i}`).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('Hunt works one station after another and logs each QSO', () => {
+    for (const seed of [71, 72, 73]) {
+      const s = hunt(seed);
+      s.run(0, 24);
+      const calls = s.sim.logged().map((q) => q.call);
+      expect(calls.length, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      expect(new Set(calls).size, `seed ${seed}`).toBe(calls.length);
+      expect(s.sim.st.huntQsos, `seed ${seed}`).toBe(calls.length);
+    }
+  });
+
+  it('Hunt gives up on a station that does not hear us and does not call it again', () => {
+    // Farthest first reaches the weak stations, which ignore us.
+    const s = hunt(74, { huntOrder: 'farthest' });
+    s.run(0, 60);
+    const ignored = s.sim.st.ignored;
+    expect(ignored.length).toBeGreaterThan(0);
+    for (const { call, atMs } of ignored) {
+      const calls = s.sim.sent.filter((t) => t.text.startsWith(`${call} ${ME} `)).map((t) => s.sim.at(t.slot));
+      // 4 calls, or 5 with a tail-end call when he answered someone else; none after giving up.
+      expect(calls.length, call).toBeGreaterThanOrEqual(4);
+      expect(calls.length, call).toBeLessThanOrEqual(5);
+      expect(calls.every((t) => t < atMs), call).toBe(true);
+      expect(s.from(call).some((m) => m.text.startsWith(`${ME} `)), call).toBe(false);
+    }
+    expect(s.sim.logged().length).toBeGreaterThan(0);
   });
 });
 
@@ -301,7 +343,7 @@ describe('the band', () => {
     expect(wasm, 'the wasm package in src/wasm/pkg').not.toBeNull();
     if (!wasm) return;
     const texts = new Set<string>();
-    for (const sc of ['random', 'cq-pileup', 'directed', 'answer-busy'] as const) {
+    for (const sc of ['random', 'cq-pileup', 'directed', 'answer-busy', 'hunt-busy'] as const) {
       const s = new Session(sc, 51, {}, sc === 'random');
       callCq(s);
       s.run(0, 30);

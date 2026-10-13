@@ -60,11 +60,17 @@ test('CQ, Tx on and Run each play the silent clip inside the tap', async ({ page
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
   expect(await clips()).toBe(2);
 
-  await bar.getByRole('button', { name: 'Run', exact: true }).click();
-  await expect(bar.getByRole('button', { name: 'Run', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  expect(await clips()).toBe(3);
-  await bar.getByRole('button', { name: 'Run', exact: true }).click();
-  expect(await clips()).toBe(3);
+  // Hunt turns Tx on and stops CQ.
+  await bar.getByRole('button', { name: 'CQ', exact: true }).click();
+  await bar.getByRole('button', { name: 'Hunt', exact: true }).click();
+  await expect(bar.getByRole('button', { name: 'Hunt', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(bar.getByRole('button', { name: 'Tx on' })).toHaveAttribute('aria-pressed', 'true');
+  expect(await clips()).toBe(4);
+  await bar.getByRole('button', { name: 'Hunt', exact: true }).click();
+  await expect(bar.getByRole('button', { name: 'Hunt', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+  expect(await clips()).toBe(4);
 });
 
 test('a double-tap on a decode calls the station with Tx on at once', async ({ page }) => {
@@ -100,7 +106,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Answer order First', 'Transmit in 1st', 'Work dupes Off']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Run Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -112,6 +118,12 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(menu.getByRole('menuitem', { name: /^Answer order/ })).toHaveText('Answer order Strongest');
   await menu.getByRole('menuitemcheckbox', { name: /^Work dupes/ }).click();
   await expect(menu.getByRole('menuitemcheckbox', { name: /^Work dupes/ })).toHaveAttribute('aria-checked', 'true');
+  await menu.getByRole('menuitem', { name: /^Hunt order/ }).click();
+  await expect(menu.getByRole('menuitem', { name: /^Hunt order/ })).toHaveText('Hunt order Strongest');
+  // Run is a setting: it starts nothing.
+  await menu.getByRole('menuitemcheckbox', { name: /^Run/ }).click();
+  await expect(menu.getByRole('menuitemcheckbox', { name: /^Run/ })).toHaveText('Run On');
+  await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(more).toBeFocused();
@@ -122,8 +134,8 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(page.getByRole('dialog', { name: 'Messages' })).toBeVisible();
   await page.keyboard.press('Escape');
 
-  // In Run: Stop after this QSO; with a QSO under way, End QSO goes back to idle.
-  await bar.getByRole('button', { name: 'Run', exact: true }).click();
+  // CQ with Run on: Stop after this QSO; with a QSO under way, End QSO goes back to idle.
+  await bar.getByRole('button', { name: 'CQ', exact: true }).click();
   await more.click();
   const stop = menu.getByRole('menuitemcheckbox', { name: 'Stop after this QSO' });
   await stop.click();
@@ -131,13 +143,14 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await menu.getByRole('menuitem', { name: 'End QSO' }).click();
   await expect(menu).toBeHidden();
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
-  await expect(bar.getByRole('button', { name: 'Run', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'false');
   // The choices are stored.
   await page.waitForTimeout(500);
   await page.reload();
   await bar.getByRole('button', { name: 'More' }).click();
   await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd');
+  await expect(menu.getByRole('menuitemcheckbox', { name: /^Run/ })).toHaveAttribute('aria-checked', 'true');
+  await expect(menu.getByRole('menuitem', { name: /^Hunt order/ })).toHaveText('Hunt order Strongest');
 });
 
 test('Tune in the ••• menu starts at once, shows in the bar, and Halt stops it', async ({ page }) => {

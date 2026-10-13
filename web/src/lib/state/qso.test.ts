@@ -16,7 +16,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 import { silentClipUri } from '../audio/unlock';
 import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
-import { callCq, callStation, dispatch, haltTx, qso, setFrequencies, setRun, setTxEnabled } from './qso.svelte';
+import { callCq, callStation, dispatch, haltTx, qso, setFrequencies, setHunt, setTxEnabled } from './qso.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import type { Activation } from '../log/types';
 
@@ -34,7 +34,7 @@ function heard(hz: number) {
 }
 
 describe('taps that can transmit', () => {
-  it('play the silent clip at once: Call CQ, Enable Tx, Run on, Call and double-tap', () => {
+  it('play the silent clip at once: Call CQ, Enable Tx, Hunt on, Call and double-tap', () => {
     callCq();
     expect(played).toEqual([silentClipUri()]);
     setTxEnabled(false);
@@ -42,9 +42,9 @@ describe('taps that can transmit', () => {
     setTxEnabled(true);
     expect(played).toHaveLength(2);
     haltTx();
-    setRun(true);
+    setHunt(true);
     expect(played).toHaveLength(3);
-    setRun(false);
+    setHunt(false);
     expect(played).toHaveLength(3);
     haltTx();
     const { d, slot } = heard(1846);
