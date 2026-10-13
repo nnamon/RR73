@@ -117,9 +117,12 @@ export async function captured(page: Page): Promise<Captured[]> {
 
 export const SLOT_MS = 15000;
 
-/** Start of the FT8 slot a transmission belongs to, UTC ms. */
+/**
+ * Start of the FT8 slot a transmission belongs to, UTC ms: the slot whose start + 0.5 s is
+ * nearest. A start a fraction of a millisecond early still belongs to its own slot.
+ */
 export function slotOf(t: Captured): number {
-  return Math.floor((t.startUtc - 500) / SLOT_MS) * SLOT_MS;
+  return Math.round((t.startUtc - 500) / SLOT_MS) * SLOT_MS;
 }
 
 /** Decodes a captured transmission with the app's decoder, placed in its slot at its real offset. */
@@ -127,7 +130,7 @@ export function decodeCaptured(wasm: Wasm, t: Captured): { text: string; dt_s: n
   const r = new Resampler(t.sampleRate, 12000);
   const at12 = r.process(t.samples);
   const slot = new Float32Array(180000);
-  const offset = Math.round(((t.startUtc - slotOf(t)) / 1000) * 12000);
-  slot.set(at12.subarray(0, Math.max(0, 180000 - offset)), offset);
+  const offset = Math.min(179_999, Math.max(0, Math.round(((t.startUtc - slotOf(t)) / 1000) * 12000)));
+  slot.set(at12.subarray(0, 180000 - offset), offset);
   return JSON.parse(wasm.decode_slot(slot, 'FT8', PRESET)) as { text: string; dt_s: number; freq_hz: number }[];
 }
