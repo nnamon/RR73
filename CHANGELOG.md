@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The "Updated to" notice floats over the screen without moving it, and goes by itself after 4 s.
+
 ## 0.9.1 · 2026-10-13
 
 - Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.
