@@ -29,7 +29,7 @@ export interface HighlightCategory {
    */
   rank: number;
   label: string;
-  sub: string;
+  sub?: string;
   style: HighlightStyle;
   /** Default colour, #RRGGBB. */
   colour: string;
@@ -39,14 +39,14 @@ export interface HighlightCategory {
 
 export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'myCall', rank: 1, label: 'My call in the message', sub: 'Including portable forms', style: 'background', colour: '#FF6666', spoken: 'my call' },
-  { id: 'newGrid', rank: 10, label: 'New grid', sub: 'Grid not in the log', style: 'background', colour: '#FF8000', spoken: 'new grid' },
-  { id: 'newGridBand', rank: 11, label: 'New grid on this band', sub: 'Not in the log on this band', style: 'background', colour: '#FFCC99', spoken: 'new grid on this band' },
-  { id: 'newCall', rank: 12, label: 'New call', sub: 'Never worked', style: 'background', colour: '#3399FF', spoken: 'new call' },
-  { id: 'newCallBand', rank: 13, label: 'New call on this band', sub: 'Not worked on this band', style: 'background', colour: '#99CCFF', spoken: 'new call on this band' },
+  { id: 'newGrid', rank: 10, label: 'New grid', style: 'background', colour: '#FF8000', spoken: 'new grid' },
+  { id: 'newGridBand', rank: 11, label: 'New grid on this band', style: 'background', colour: '#FFCC99', spoken: 'new grid on this band' },
+  { id: 'newCall', rank: 12, label: 'New call', style: 'background', colour: '#3399FF', spoken: 'new call' },
+  { id: 'newCallBand', rank: 13, label: 'New call on this band', style: 'background', colour: '#99CCFF', spoken: 'new call on this band' },
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: '#FFE2C8', spoken: 'ending a QSO' },
-  { id: 'cq', rank: 15, label: 'CQ in the message', sub: 'Any station calling CQ', style: 'background', colour: '#66FF66', spoken: 'CQ' },
-  { id: 'sent', rank: 16, label: 'What I sent', sub: 'Your own transmissions', style: 'background', colour: '#C98A1A', spoken: 'you sent' },
-  { id: 'worked', rank: 17, label: 'Worked before', sub: 'In the log on this band and mode', style: 'text', colour: '#8C93A0', spoken: 'worked before' },
+  { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: '#66FF66', spoken: 'CQ' },
+  { id: 'sent', rank: 16, label: 'What I sent', style: 'background', colour: '#C98A1A', spoken: 'you sent' },
+  { id: 'worked', rank: 17, label: 'Worked before', sub: 'On this band and mode', style: 'text', colour: '#8C93A0', spoken: 'worked before' },
 ];
 
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));

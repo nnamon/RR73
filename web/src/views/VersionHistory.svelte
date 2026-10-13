@@ -23,7 +23,6 @@
 
 <section class="screen sub" aria-labelledby="versions-title">
   <BackLink to={href('settings')} label="Settings" title="Version history" id="versions-title" />
-  <p class="intro">You are using version {__APP_VERSION__} ({__APP_BUILD__}).</p>
 
   {#if releases.length === 0}
     <div class="empty">
@@ -51,13 +50,6 @@
     padding-top: var(--rr-safe-top);
   }
 
-  .intro {
-    margin-top: var(--rr-space-2);
-    padding: 0 var(--rr-space-8);
-    font-size: var(--rr-text-sub);
-    line-height: var(--rr-leading-sub);
-    color: var(--rr-label2);
-  }
 
   .release {
     display: flex;

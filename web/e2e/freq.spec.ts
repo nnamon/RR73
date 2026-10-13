@@ -55,7 +55,7 @@ test('a drag moves Tx with a live label, sets it on release, and the hint goes f
   await expect(page.getByTestId('waterfall-area')).toBeVisible();
   await expect(hint).toBeHidden();
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByText(`Tx stays on ${end.hz} Hz when you call a station`)).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'Hold Tx frequency' })).toBeChecked();
 });
 
 test('a tap sets Tx where it lands, and a drag from the green line moves Rx', async ({ page }) => {

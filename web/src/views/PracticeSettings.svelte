@@ -49,29 +49,24 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Practice band</span>
-          <span class="row-sub">Simulated stations through the decoder. No radio or microphone needed.</span>
+          <span class="row-sub">Simulated stations. No radio needed.</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.on} onchange={(e) => void setPracticeOn(e.currentTarget.checked)} />
       </label>
       <label class="row">
         <span class="row-main">
           <span class="row-title">Crowded band</span>
-          <span class="row-sub">{practice.crowded ? '25 to 40 stations a slot' : '8 to 15 stations a slot'}</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.crowded} onchange={(e) => void setCrowded(e.currentTarget.checked)} />
       </label>
       <label class="row">
         <span class="row-main">
           <span class="row-title">Play Tx audio</span>
-          <span class="row-sub">{practice.playTx ? 'Transmissions and Tune play through the headphone contact' : 'Transmissions and Tune run silently'}</span>
+          <span class="row-sub">Can key a connected radio</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.playTx} onchange={(e) => void setPlayTx(e.currentTarget.checked)} />
       </label>
     </div>
-    <p class="section-foot">
-      While practice is on, Operate shows Practice, QSOs go to the practice log, and Send to Wavelog goes to a stand-in on this phone. RR73 sends nothing over the network. Your log
-      returns when practice is off. Choose a scenario from ••• in Operate.
-    </p>
   </div>
 
   <div class="section">
@@ -84,7 +79,6 @@
         </span>
       </button>
     </div>
-    <p class="section-foot">Clears practice QSOs only. Undo shows for 10 s.</p>
   </div>
 </section>
 

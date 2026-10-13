@@ -212,7 +212,7 @@
             <span class="chip" aria-hidden="true"></span>
           </button>
           <label class="hl-main">
-            <span class="row-main"><span class="row-title">{c.label}</span><span class="row-sub">{c.sub}</span></span>
+            <span class="row-main"><span class="row-title">{c.label}</span>{#if c.sub}<span class="row-sub">{c.sub}</span>{/if}</span>
             <input class="switch" type="checkbox" role="switch" aria-label={c.label} checked={e.on} onchange={(ev) => setOn(e.id, ev.currentTarget.checked)} />
           </label>
           <span class="grip" aria-hidden="true" {@attach grip}><Icon name="grip" size={22} /></span>
@@ -223,10 +223,7 @@
         </li>
       {/each}
     </ul>
-    <p class="section-foot">
-      The first category from the top that matches colours a decode's background. New call, new grid and ending a QSO apply to the station sending a CQ, 73 or RR73. Tap a swatch to change its colour.
-      Touch and hold a handle, then drag, to change the order.
-    </p>
+    <p class="section-foot">The first matching category from the top sets the background.</p>
   </div>
 
   <div class="section">
@@ -240,13 +237,12 @@
             <span class="chip" aria-hidden="true">Aa</span>
           </button>
           <label class="hl-main end">
-            <span class="row-main"><span class="row-title">{c.label}</span><span class="row-sub">{c.sub}</span></span>
+            <span class="row-main"><span class="row-title">{c.label}</span>{#if c.sub}<span class="row-sub">{c.sub}</span>{/if}</span>
             <input class="switch" type="checkbox" role="switch" aria-label={c.label} checked={e.on} onchange={(ev) => setOn(e.id, ev.currentTarget.checked)} />
           </label>
         </li>
       {/each}
     </ul>
-    <p class="section-foot">Worked before greys the text of decodes from stations in the log on this band and mode, over any background. Your own transmissions keep their colours.</p>
   </div>
 
   <div class="section">

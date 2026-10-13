@@ -21,11 +21,11 @@
     if (section === 'features') featuresHead?.scrollIntoView({ block: 'start' });
   });
 
-  const optional: { id: FeatureId; title: string; sub: string }[] = [
-    { id: 'activations', title: 'Activations', sub: 'Start POTA, SOTA, WWFF and IOTA activations, and follow their progress and files.' },
-    { id: 'potaSpots', title: 'POTA spots', sub: 'Parks on the air now, from the POTA spot list.' },
-    { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster spots through HamQTH.' },
-    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW. Downloads the LoTW user list.' },
+  const optional: { id: FeatureId; title: string; sub?: string }[] = [
+    { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
+    { id: 'potaSpots', title: 'POTA spots' },
+    { id: 'clusterSpots', title: 'Cluster spots' },
+    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW' },
   ];
 
   let callsign = $state(settings.callsign);
@@ -111,14 +111,14 @@
     void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
   }
 
-  const reloadSub = $derived(reloading === 'reload' ? 'Checking for a newer version.' : 'Checks for a newer version, installs it and reloads. Audio stops.');
+  const reloadSub = $derived(reloading === 'reload' ? 'Checking for updates' : 'Installs any update. Audio stops.');
 
   const clearSub = $derived(
     !online
-      ? 'Needs a connection: the app loads fresh from the network.'
+      ? 'Needs a connection'
       : reloading === 'clear'
-        ? 'Removing the stored copy.'
-        : 'Removes the stored copy and loads the app fresh. Audio stops. Settings and saved data stay on this phone.',
+        ? 'Removing the cached copy'
+        : 'Keeps settings and QSOs. Audio stops.',
   );
 
   const themes: { id: Theme; label: string }[] = [
@@ -142,7 +142,7 @@
           bind:value={callsign}
           onblur={saveCallsign}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          placeholder="Not set"
+          placeholder="Required"
           autocapitalize="characters"
           autocomplete="off"
           spellcheck="false"
@@ -159,7 +159,7 @@
           oninput={() => (gridNote = '')}
           onblur={saveGrid}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          placeholder="Not set"
+          placeholder="Required"
           autocapitalize="characters"
           autocomplete="off"
           spellcheck="false"
@@ -169,7 +169,7 @@
       </div>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Decodes addressed to this callsign show in red. Transmitting needs the callsign and the grid. Both stay on this phone.</p>
+    <p class="section-foot">Needed to transmit.</p>
   </div>
 
   <div class="section">
@@ -187,15 +187,14 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Stations already worked today on this band and mode</span></span>
+        <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Same day, band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
-        <span class="row-main"><span class="row-title">Hold Tx frequency</span><span class="row-sub">{settings.holdTx ? `Tx stays on ${settings.txHz} Hz when you call a station` : 'Tx moves to the station you call'}</span></span>
+        <span class="row-main"><span class="row-title">Hold Tx frequency</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.holdTx} onchange={(e) => void updateSettings({ holdTx: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
     </div>
-    <p class="section-foot">Tx4 sends RR73 or RRR. Calling a station moves Rx to its frequency. The watchdog stops Tx after 6 min without a touch or a new message.</p>
   </div>
 
   <div class="section">
@@ -218,7 +217,6 @@
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
-    {#if features.activations}<p class="section-foot">Wavelog and the POTA, SOTA and WWFF files.</p>{/if}
   </div>
 
   <div class="section">
@@ -239,13 +237,12 @@
         <label class="row">
           <span class="row-main">
             <span class="row-title">{f.title}</span>
-            <span class="row-sub">{f.sub}</span>
+            {#if f.sub}<span class="row-sub">{f.sub}</span>{/if}
           </span>
           <input type="checkbox" role="switch" class="switch" checked={features[f.id]} onchange={(e) => void setFeature(f.id, e.currentTarget.checked)} />
         </label>
       {/each}
     </div>
-    <p class="section-foot">Operate shows a Spots button while Activations, POTA spots or Cluster spots is on. Each feature is off until you turn it on. A feature that is off downloads nothing. Turning one off keeps what it stored.</p>
   </div>
 
   <div class="section">
@@ -279,6 +276,10 @@
         <span class="row-main"><span class="row-title">Decoder</span></span>
         <span class="row-value" data-testid="decoder-status">{decoderText}</span>
       </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Licence</span></span>
+        <span class="row-value">MIT or Apache 2.0</span>
+      </div>
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>
@@ -286,7 +287,6 @@
         <span class="row-main"><span class="row-title acc">Clear cached copy and reload</span><span class="row-sub" aria-live="polite">{clearSub}</span></span>
       </button>
     </div>
-    <p class="section-foot">RR73 is free software under the MIT or Apache 2.0 licence.</p>
   </div>
 </section>
 
