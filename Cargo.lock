@@ -366,7 +366,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-bench"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "clap",
  "rand",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-chansim"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "rand",
  "rand_chacha",
@@ -396,7 +396,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-corpus"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "hound",
  "serde",
@@ -406,7 +406,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-decode"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "rand",
  "rand_chacha",
@@ -421,7 +421,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-dsp"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "rustfft",
  "serde",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-ft8"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -439,7 +439,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-wasm"
-version = "0.10.0"
+version = "0.11.0"
 dependencies = [
  "rr73-chansim",
  "rr73-decode",
