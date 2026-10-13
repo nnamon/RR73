@@ -82,8 +82,9 @@ for (const theme of ['light', 'dark'] as const) {
 
   test(`tab roots put the large title in one place and bar buttons follow iOS in ${theme}`, async ({ page }) => {
     const titles: { path: string; top: number; left: number; fontSize: string }[] = [];
+    // Spots shows only with an optional feature on (all are off by default).
     for (const path of ['#/log', '#/spots', '#/settings']) {
-      await open(page, path, theme);
+      await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
       const pane = page.locator('main .pane:not([hidden])');
       const h1 = (await pane.locator('h1').boundingBox())!;
       const fontSize = await pane.locator('h1').evaluate((el) => getComputedStyle(el).fontSize);

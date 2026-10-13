@@ -32,7 +32,7 @@ test('a new install shows three tabs, every feature off, and Spots opens Optiona
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
-  await expect(page.getByText('Spots is off. Turn on Activations, POTA spots or Cluster spots to show it.')).toBeVisible();
+  await expect(page.getByText('The Spots tab shows while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
   for (const name of ['Activations', 'POTA spots', 'Cluster spots', 'LoTW users']) await expect(feature(page, name)).not.toBeChecked();
 });
 

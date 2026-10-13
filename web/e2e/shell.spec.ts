@@ -38,7 +38,7 @@ test('three tabs on a new install, and an old Activate link opens Optional featu
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
   await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
-  await expect(page.getByText('Spots is off. Turn on Activations, POTA spots or Cluster spots to show it.')).toBeVisible();
+  await expect(page.getByText('The Spots tab shows while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
 });
 
 test('with Activations on, an old Activate link opens Spots', async ({ page }) => {
