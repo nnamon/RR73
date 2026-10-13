@@ -206,6 +206,11 @@ a {
   transform-origin: 0 0;
 }
 
+/* A row holding a 44 pt text field or picker is 44 pt, as an iOS form row. */
+.row:has(> input:not([type='checkbox'], [type='radio'], [type='range']), > select) {
+  padding-block: 0;
+}
+
 /* After a row with a leading 30 pt icon, the separator starts at the text, as iOS insets it. */
 .row:has(> .ic) + .row::before {
   left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
@@ -291,10 +296,16 @@ a {
   font-weight: var(--rr-weight-bold);
 }
 
+/*
+ * A small button in a row: a 28 pt capsule inside its 44 pt target. The transparent borders keep
+ * the target and leave the fill to the padding box.
+ */
 .btn.compact {
   flex: none;
   min-height: var(--rr-tap);
-  padding: 0 var(--rr-space-4);
+  padding: 0 var(--rr-space-3);
+  border-block: calc((var(--rr-tap) - var(--rr-chip)) / 2) solid transparent;
+  background-clip: padding-box;
   font-size: var(--rr-text-sub);
 }
 

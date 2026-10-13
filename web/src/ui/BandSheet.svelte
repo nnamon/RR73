@@ -102,8 +102,10 @@
     outline-offset: 2px;
   }
 
+  /* The fieldset rule above clears padding; the track keeps its 2 pt inset around the thumb. */
   .seg {
     margin-top: var(--rr-space-3);
+    padding: var(--rr-space-half);
   }
 
   .seg-i.off {
