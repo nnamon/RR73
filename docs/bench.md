@@ -131,10 +131,12 @@ The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesi
 
 | Preset | Recorded file | Why CI gates it |
 | --- | --- | --- |
-| `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, LDPC, validator) and the bench itself, apart from the subtraction code. |
-| `subtract-3` | `bench/subtract-3.json` | The preset the app ships from 0.3.0. Its numbers are what operators get. |
+| `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, belief propagation, validator) and the bench itself. |
+| `subtract-3-osd2` | `bench/subtract-3-osd2.json` | The preset the app ships from 0.4.0. Its numbers are what operators get. |
 
-The `subtract-3` steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 1.8 s (`subtract-3`) on 4 threads of the dev machine (Apple M4); on a 4-core x86_64 runner, estimated from typical per-core speed, 2 s and 5 s. The release build dominates the job.
+`subtract-3`, shipped in 0.3.0, is no longer gated: `subtract-3-osd2` runs all of its code (subtraction, refinement, passes) and only adds OSD, so a regression in `subtract-3` shows in the shipped preset's gate, and a third run would add CI time without a check of its own.
+
+The shipped preset's steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 3.2 s (`subtract-3-osd2`) on 4 threads of the dev machine (Apple M4); the x86_64 runner took 1.3 s and 3.0 s for `baseline` and `subtract-3` in the last CI run, and `subtract-3-osd2` is expected near 5 s there. The release build dominates the job.
 
 Each recorded file is a slim results file (summaries and per-slot counts) of its preset on the CI sets. To record a new one after an intended change, run the CI sets only (the shared corpus may hold other synthetic sets), slim the results and commit the file with the numbers:
 
@@ -142,8 +144,8 @@ Each recorded file is a slim results file (summaries and per-slot counts) of its
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh
 docker compose run --rm rust rr73-bench synth --set smoke --set noise-ci
 docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
-  --preset subtract-3 --out results/ci-subtract-3.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
-docker compose run --rm rust rr73-bench slim results/ci-subtract-3.json --out bench/subtract-3.json
+  --preset subtract-3-osd2 --out results/ci-subtract-3-osd2.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
+docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --out bench/subtract-3-osd2.json
 ```
 
 ## Decoder presets
