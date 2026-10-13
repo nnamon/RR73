@@ -2,6 +2,24 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Transmits FT8 and FT4. Tap a decode and Call, or double-tap it, to answer a station; Call CQ to call CQ. Each message starts 0.5 s into its slot. Not tested with a radio.
+- In loopback tests in desktop Chromium, transmissions started within START ms of slot + 0.5 s, and Halt silenced the output HALT ms after the tap.
+- The sequencer sends Tx1 to Tx6 as WSJT-X does and logs the QSO when it completes. The dock shows the steps, the next message and when it starts.
+- A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and the dock says which.
+- Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Dupes are marked and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
+- Touch and hold a decode for the station's details: distance, bearing, SNR and Call.
+- Messages edits Tx1 to Tx6. Text that cannot be encoded is refused before it is sent.
+- What you send appears in the decode list as amber rows. While transmitting, Operate shows a red edge and "On air" with the message.
+- Each logged QSO shows "Logged JA1KXM 20m FT8 −14 / −09" with Edit and Undo. QSOs are kept until the app closes.
+- The watchdog stops Tx after 6 min without a touch or a new message.
+- Transmitting needs your callsign and grid in Settings, the band confirmed in the band sheet, and audio running.
+- Tap the waterfall to set the receive or transmit frequency: a bar offers Receive here, Transmit here and Both. Find clear Tx moves Tx to the quietest 50 Hz in the last 2 to 4 slots.
+- Calling a station moves Rx to its frequency. Turn off Hold Tx frequency in Settings to move Tx as well.
+- Tune transmits at the Tx frequency, and the Tune sheet says which.
+- On iOS, every tap that can start a transmission plays a 0.1 s silent clip, so output works with the ring switch on silent. Not tested on a device.
+
 ## 0.4.1 · 2026-10-13
 
 - Start audio plays 1500 Hz for 0.4 s at the output level, after 1.5 s of silence. The tone stops iOS muting output while the ring switch is on silent, keys the radio's VOX, and runs the keying check. Turn it off under Start tone in Radio and audio.
