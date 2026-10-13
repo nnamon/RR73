@@ -175,6 +175,7 @@ test('a decoder gone from the server says a new version is ready, waits for audi
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('link', { name: /^Radio and audio/ }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
+  await page.getByRole('link', { name: 'Settings' }).click();
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker)).toBe(true);
 
   // Audio stops when the page is hidden; the next change of screen reloads.
