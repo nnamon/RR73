@@ -3,6 +3,7 @@
 mod compare;
 mod gate;
 mod import;
+mod loop_fixture;
 mod results;
 mod run;
 mod synth;
@@ -116,6 +117,22 @@ enum Command {
         /// File to write.
         #[arg(long)]
         out: PathBuf,
+    },
+    /// Write the end-to-end decode fixture (a 15 s FT8 loop holding 4 messages 4 times each),
+    /// then decode it from start offsets across the loop and check every message comes out.
+    LoopFixture {
+        /// Fixture path without extension: writes `<out>.wav` and `<out>.json`.
+        #[arg(long, default_value = "web/e2e/fixtures/ft8-loop")]
+        out: PathBuf,
+        /// Check the existing files without writing them.
+        #[arg(long)]
+        check_only: bool,
+        /// Preset to decode with; repeat for several.
+        #[arg(long = "preset", default_value = "subtract-3-osd2", value_name = "NAME")]
+        presets: Vec<String>,
+        /// Time between the start offsets checked, in seconds.
+        #[arg(long, default_value_t = 0.05)]
+        step_s: f64,
     },
     /// Print a preset's configuration as JSON, or list the presets.
     Presets {
@@ -243,6 +260,24 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 out.display()
             );
             Ok(ExitCode::SUCCESS)
+        }
+        Command::LoopFixture {
+            out,
+            check_only,
+            presets,
+            step_s,
+        } => {
+            if !check_only {
+                let files = loop_fixture::write(&out)?;
+                println!("Wrote {} and {}", files.wav.display(), files.json.display());
+            }
+            let (report, pass) = loop_fixture::check(&out, &presets, step_s)?;
+            print!("{report}");
+            Ok(if pass {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
         }
         Command::Presets { name } => {
             match name {

@@ -59,13 +59,30 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   expect(at(ALIAS_AT_HZ)).toBeLessThan(at(TONES_HZ[1]) / 2.5);
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-operate-running.png` });
 
-  // Save slot: the first slot is kept at the next slot boundary.
+  // Save slot: the first slot is kept at the next slot boundary. Audio that started just before
+  // a boundary leaves that slot too short to measure ("started late, 3 % recorded"), so wait,
+  // while the sheet lists slots as they are kept, for one with at least 10 % recorded, and save
+  // the slot with the most audio.
   const save = page.getByRole('button', { name: 'Save slot' });
   await expect(save).toBeEnabled({ timeout: 25_000 });
   await save.click();
   const sheet = page.getByRole('dialog', { name: 'Save a slot' });
   await expect(sheet).toBeVisible();
-  await sheet.getByRole('button', { name: /^Save the slot at/ }).first().click();
+  const slotButtons = sheet.getByRole('button', { name: /^Save the slot at/ });
+  const recorded = (label: string) => (/complete$/.test(label) ? 100 : Number(/(\d+) % recorded$/.exec(label)?.[1] ?? 0));
+  let labels: string[] = [];
+  await expect
+    .poll(
+      async () => {
+        labels = await slotButtons.evaluateAll((bs) => bs.map((b) => b.getAttribute('aria-label') ?? ''));
+        return Math.max(0, ...labels.map(recorded));
+      },
+      { timeout: 20_000 },
+    )
+    .toBeGreaterThanOrEqual(10);
+  const fullest = labels.reduce((a, b) => (recorded(b) > recorded(a) ? b : a));
+  test.info().annotations.push({ type: 'slots', description: JSON.stringify({ listed: labels, saved: fullest }) });
+  await sheet.getByRole('button', { name: fullest, exact: true }).click();
   await expect(sheet.getByText('This browser cannot share files. Download both files below.')).toBeVisible();
 
   const wavLink = sheet.getByRole('link', { name: /^Download \d{6}_\d{6}\.wav$/ });

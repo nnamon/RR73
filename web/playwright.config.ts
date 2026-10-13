@@ -10,8 +10,10 @@ const micPlaying = (file: string) => ({
 });
 // Test tones written by e2e/global-setup.ts.
 const fakeMic = micPlaying('./e2e/.fixtures/tones.wav');
-// One FT8 slot with 4 known messages (e2e/fixtures/ft8-four-signals.json).
-const ft8Mic = micPlaying('./e2e/fixtures/ft8-four-signals.wav');
+// A 15 s FT8 loop with 4 known messages, 4 copies each (e2e/fixtures/ft8-loop.json).
+const ft8Mic = micPlaying('./e2e/fixtures/ft8-loop.wav');
+// The same loop with 1 s of silence, written by e2e/global-setup.ts.
+const holeMic = micPlaying('./e2e/.fixtures/ft8-loop-hole.wav');
 // The other station of a QSO, written by e2e/global-setup.ts (e2e/qso-script.ts).
 const qsoMic = micPlaying('./e2e/.fixtures/qso-script.wav');
 
@@ -31,7 +33,7 @@ const iphone = (width: number, height: number, scale: number) => ({
 });
 
 /** Projects that finish before the transmit timing tests start. */
-const QUIET = ['mic', 'decode', 'chromium', 'webkit-375x667', 'webkit-393x852'];
+const QUIET = ['mic', 'decode', 'slot-record', 'chromium', 'webkit-375x667', 'webkit-393x852'];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -53,10 +55,10 @@ export default defineConfig({
       },
   projects: [
     { name: 'mic', testMatch: /(audio|start-tone)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
-    // The decode test aligns Chromium's looped fake microphone with UTC slots from the tap; on a heavily
-    // loaded host the capture can start late enough to put the signals outside the decoder's DT
-    // window. Retries bound that; a decoding regression still fails all three attempts.
-    { name: 'decode', retries: 2, testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
+    // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
+    // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
+    { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
+    { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...holeMic } },
     { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
@@ -64,7 +66,7 @@ export default defineConfig({
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
     // after the other projects, so the rest of the suite does not load the machine meanwhile
-    // (locally: --no-deps to run them alone), with 2 retries, as for decode.
+    // (locally: --no-deps to run them alone), with 2 retries.
     { name: 'tx-cq', testMatch: /tx-(cq|again)\.spec/, retries: 2, dependencies: QUIET, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: { ...iphone(393, 852, 3), permissions: ['microphone'] } },

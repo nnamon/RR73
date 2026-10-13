@@ -11,5 +11,5 @@ pub mod scene;
 
 pub use channel::Watterson;
 pub use scene::{
-    NOISE_RMS, Noise, RenderError, Scene, SimSignal, Truth, crowded, noise_only, render, single,
+    NOISE_RMS, Noise, RenderError, Scene, SimSignal, Truth, crowded, noise_only, render, render_loop, single,
 };

@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Use GPS in Settings sets the grid from the phone's position: 6 characters when the fix is within 1 km, otherwise the 4-character square with the reason. RR73 keeps the grid, never the position. The activation form's Use GPS works the same way.
 - Slots and transmissions stay on UTC when the browser's output timestamps disagree with its audio clock. In Playwright's WebKit they gained 1 s every second, so slots drifted and no call went on air. Not tested on an iPhone.
 
 ## 0.6.1 · 2026-10-13
