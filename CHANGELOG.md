@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- CQ tapped before audio runs shows Audio off and tries once a slot. Before, the refusals planned slot after slot until the browser ran out of stack, which left the CQ about 26 hours ahead, so it never went out.
+
 ## 0.10.2 · 2026-10-13
 
 - The Logged notice and the notices about updates float above Operate's buttons. In 0.10.1 they pushed the buttons up.

@@ -882,6 +882,23 @@ describe('the audio layer', () => {
   });
 });
 
+describe('a refused transmission', () => {
+  it('waits for its slot to pass before planning again, once a slot', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    expect(s.st.next).toMatchObject({ tx: 6, slotStartMs: s.at(0), scheduled: true });
+    // The output refuses at once (audio not running). The scheduler answers inside the same call,
+    // so planning again here recursed slot after slot until the stack overflowed.
+    const fx = s.send({ type: 'txRefused', slotStartMs: s.at(0), nowMs: s.at(0, 0.1) });
+    expect(fx.filter((f) => f.type === 'scheduleTx')).toEqual([]);
+    expect(s.st.next).toMatchObject({ slotStartMs: s.at(0), scheduled: false });
+    expect(s.send({ type: 'tick', nowMs: s.at(0, 1) }).filter((f) => f.type === 'scheduleTx')).toEqual([]);
+    // Once the slot's last start has passed, tick plans the next CQ slot.
+    s.send({ type: 'tick', nowMs: s.at(1, 0.5) });
+    expect(s.st.next).toMatchObject({ tx: 6, slotStartMs: s.at(2), scheduled: true });
+  });
+});
+
 describe('messages and planning', () => {
   it('lets the operator choose and edit the next message', () => {
     const s = new Sim();

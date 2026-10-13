@@ -112,3 +112,15 @@ describe('the call on air', () => {
     log.activations = [];
   });
 });
+
+describe('Call CQ while audio is not running', () => {
+  it('is refused for its slot and stays planned no more than 2 slots ahead', () => {
+    const now = Date.now();
+    callCq();
+    expect(qso.notice?.text).toBe('Audio off');
+    // Each refusal used to plan the next slot inside the same call, slot after slot, until the
+    // stack overflowed hundreds of slots ahead.
+    expect(qso.st.next!.slotStartMs).toBeLessThanOrEqual(slotStart(now, 'FT8') + 30_000);
+    expect(qso.st.next!.scheduled).toBe(false);
+  });
+});
