@@ -78,3 +78,20 @@ describe('frequencies', () => {
     expect(settings).toMatchObject({ rxHz: 912, txHz: 912 });
   });
 });
+
+describe('worked before', () => {
+  it('comes from the log: FT8 and FT4 QSOs that are not deleted, by UTC day', async () => {
+    const { workedFrom } = await import('./qso.svelte');
+    const base = { gridsquare: '', submode: '', deletedAt: null, band: '20m', start: Date.UTC(2026, 9, 13, 23, 59) } as const;
+    const qsos = [
+      { ...base, call: 'JA1KXM', mode: 'FT8', gridsquare: 'PM95' },
+      { ...base, call: 'K1ABC', mode: 'MFSK', submode: 'FT4', band: '40m' },
+      { ...base, call: 'VK2ESN', mode: 'SSB' },
+      { ...base, call: 'ZL1TQK', mode: 'FT8', deletedAt: 1 },
+    ] as never[];
+    expect(workedFrom(qsos)).toEqual([
+      { call: 'JA1KXM', band: '20m', mode: 'FT8', day: '20261013', grid: 'PM95' },
+      { call: 'K1ABC', band: '40m', mode: 'FT4', day: '20261013', grid: null },
+    ]);
+  });
+});

@@ -10,7 +10,11 @@ declare global {
   }
 }
 
-export async function prepare(page: Page) {
+/**
+ * Sets the callsign and grid and confirms 20m FT8. `setup` runs first on a loaded page, for
+ * seeding the log; it may reload, as the tap is installed for every page load.
+ */
+export async function prepare(page: Page, setup?: (page: Page) => Promise<void>) {
   test.skip(!(await loadWasm()), 'The wasm package is not built (src/wasm/pkg).');
   await installTap(page);
   await page.addInitScript(() => {
@@ -18,6 +22,10 @@ export async function prepare(page: Page) {
       if ((e.target as Element).closest('button')?.textContent?.trim() === 'Halt') window.__haltAt = Date.now();
     }, true);
   });
+  if (setup) {
+    await page.goto('./');
+    await setup(page);
+  }
   await page.goto('./#/settings');
   for (const [name, value] of [
     ['Callsign', '9V1NE'],

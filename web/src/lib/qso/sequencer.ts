@@ -13,7 +13,7 @@ import { SLOT_MS, parity as parityOf, slotStart, type Mode, type Parity } from '
 import type { Decode } from '../decode/types';
 import { pathBetween } from './grid';
 import { buildMessages, formatReport, isGrid, parseExchange, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
-import { buildRecord, type QsoRecord } from './record';
+import type { LogQsoRecord } from '../log/types';
 
 export type QueueOrder = 'first' | 'strongest' | 'farthest' | 'new';
 export type Phase = 'idle' | 'answering' | 'cq';
@@ -45,9 +45,6 @@ export interface SeqConfig {
   cqModifier: string | null;
   /** Decoder preset, recorded with each QSO. */
   preset: string;
-  activationId: string | null;
-  /** Makes QSO record ids (crypto.randomUUID in the app). */
-  newId: () => string;
 }
 
 export interface Worked {
@@ -170,7 +167,7 @@ export type SeqEvent =
 export type SeqEffect =
   | { type: 'scheduleTx'; tx: TxNum; text: string; slotStartMs: number; startOffsetS: number }
   | { type: 'cancelTx'; stopPlaying: boolean }
-  | { type: 'logQso'; record: QsoRecord }
+  | { type: 'logQso'; record: LogQsoRecord }
   | { type: 'notice'; kind: NoticeKind; text: string }
   | { type: 'queueChanged'; callers: Caller[] };
 
@@ -371,30 +368,24 @@ class Machine {
     if (!p || p.logged) return;
     p.logged = true;
     const c = this.cfg;
-    const record = buildRecord(
-      {
-        call: p.call,
-        grid: p.grid,
-        mode: c.mode,
-        band: c.band,
-        dialHz: c.dialHz,
-        txHz: c.txHz,
-        startMs: p.startMs ?? nowMs,
-        endMs: nowMs,
-        sent: formatReport(p.reportSent ?? p.snrDb),
-        rcvd: p.reportRcvd === null ? '' : formatReport(p.reportRcvd),
-        stationCall: c.myCall,
-        myGrid: c.myGrid,
-        activationId: c.activationId,
-        preset: c.preset,
-        snrDb: p.snrDb,
-        dtS: p.dtS,
-        audioHz: p.freqHz,
-      },
-      c.newId(),
-      nowMs,
-    );
-    st.worked.push({ call: record.CALL, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid });
+    // The log attaches the running activation and builds the ADIF fields (MFSK for FT4).
+    const record: LogQsoRecord = {
+      call: bare(p.call),
+      grid: p.grid,
+      mode: c.mode,
+      band: c.band,
+      dialHz: c.dialHz,
+      audioHz: c.txHz,
+      startUtcMs: p.startMs ?? nowMs,
+      endUtcMs: nowMs,
+      reportSent: formatReport(p.reportSent ?? p.snrDb),
+      reportRcvd: p.reportRcvd === null ? '' : formatReport(p.reportRcvd),
+      source: 'sequencer',
+      decode: { preset: c.preset, snrDb: p.snrDb, dtS: p.dtS, audioHz: p.freqHz },
+      stationCallsign: c.myCall,
+      myGridsquare: c.myGrid,
+    };
+    st.worked.push({ call: record.call, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid });
     st.completed++;
     this.fx.push({ type: 'logQso', record });
     this.markQueue(nowMs);
@@ -743,9 +734,7 @@ class Machine {
 
 /** Applies one event. The input state is not changed. */
 export function reduce(state: SeqState, e: SeqEvent): SeqResult {
-  const { newId } = state.config;
-  const st: SeqState = structuredClone({ ...state, config: { ...state.config, newId: undefined as unknown as () => string } });
-  st.config.newId = newId;
+  const st: SeqState = structuredClone(state);
   const m = new Machine(st);
   switch (e.type) {
     case 'slotDecoded':

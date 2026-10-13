@@ -10,7 +10,7 @@
   import { nextLine, statusLine, steps } from '../lib/qso/view';
   import { clock } from '../lib/state/now.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
-  import { callCq, callStart, callStation, haltTx, liveRecords, qso, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
+  import { callCq, callStart, callStation, haltTx, qso, runRate, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { href } from '../lib/app/router.svelte';
 
   let { onconfirmband, onmessages, ondetail }: { onconfirmband: () => void; onmessages: () => void; ondetail: () => void } = $props();
@@ -43,11 +43,7 @@
   const elapsed = $derived(onAir ? Math.max(0, Math.min(onAir.endMs, clock.ms) - onAir.startMs) / 1000 : 0);
   const total = $derived(onAir ? (onAir.endMs - onAir.startMs) / 1000 : 0);
   const notice = $derived(qso.notice && clock.ms - qso.notice.atMs < 20_000 ? qso.notice : null);
-  const rate = $derived.by(() => {
-    const live = liveRecords();
-    const hour = live.filter((r) => clock.ms - Date.parse(r.createdAt) < 3_600_000).length;
-    return { total: live.length, hour };
-  });
+  const rate = $derived(runRate(clock.ms));
   const ord = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
 </script>
 

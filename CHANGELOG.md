@@ -8,11 +8,12 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - In loopback tests in desktop Chromium, CQ started 20 to 40 ms after slot + 0.5 s and Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
 - The sequencer sends Tx1 to Tx6 as WSJT-X does and logs the QSO when it completes. The dock shows the steps, the next message and when it starts.
 - A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and the dock says which.
-- Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Dupes are marked and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
+- Run calls CQ and answers callers in order: first heard, strongest, farthest or new. Stations already in the Log for this UTC day, band and mode are marked as dupes and skipped unless Work dupes is on. Stop after this QSO ends Run after the current QSO.
 - Touch and hold a decode for the station's details: distance, bearing, SNR and Call.
 - Messages edits Tx1 to Tx6. Text that cannot be encoded is refused before it is sent.
 - What you send appears in the decode list as amber rows. While transmitting, Operate shows a red edge and "On air" with the message.
-- Each logged QSO shows "Logged JA1KXM 20m FT8 −14 / −09" with Edit and Undo. QSOs are kept until the app closes.
+- Each completed QSO goes to the Log with the Logged notice, Edit and Undo, and on to Wavelog and the activation files.
+- While an activation runs, RR73 transmits its callsign and grid.
 - The watchdog stops Tx after 6 min without a touch or a new message.
 - Transmitting needs your callsign and grid in Settings, the band confirmed in the band sheet, and audio running.
 - Tap the waterfall to set the receive or transmit frequency: a bar offers Receive here, Transmit here and Both. Find clear Tx moves Tx to the quietest 50 Hz in the last 2 to 4 slots.

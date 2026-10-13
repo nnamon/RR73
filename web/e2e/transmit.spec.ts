@@ -1,15 +1,19 @@
 // A QSO end to end in Chromium. The fake microphone plays the other station (qso-script.ts):
 // CQ, then a report, then RR73, one slot each with our slots silent. The app's output is recorded
-// in the page (tap.ts) and decoded in Node with the app's own wasm decoder.
+// in the page (tap.ts) and decoded in Node with the app's own wasm decoder. The QSO lands in the
+// Log, waits for a mock Wavelog (route interception; no real server) and goes on Send now.
 import { expect, test } from '@playwright/test';
 import { decodeCaptured, slotOf, SLOT_MS } from './tap';
 import { loadWasm } from './wasm';
 import { DX } from './qso-script';
 import { prepare, startAudioAtBoundary, startError, waitForTransmissions } from './txhelp';
+import { mockWavelog, seed, wavelogOnly } from './log-data';
 
-test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, and the QSO is logged', async ({ page }) => {
+test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent to Wavelog', async ({ page }) => {
   test.setTimeout(300_000);
-  const dock = await prepare(page);
+  const wavelog = await mockWavelog(page);
+  // Wavelog set up, sending by hand, so the QSO stays waiting until Send now.
+  const dock = await prepare(page, (p) => seed(p, wavelogOnly({ sendAutomatically: false })));
   await startAudioAtBoundary(page);
   const list = page.getByTestId('decode-list');
   const row = (text: string) => list.locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) }).first();
@@ -52,4 +56,21 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, and the QSO is 
   for (const t of [`${DX.call} 9V1NE OJ11`, `${DX.call} 9V1NE R${rpt}`, `${DX.call} 9V1NE 73`]) await expect(row(t)).toHaveClass(/k-sent/);
   // After 73 the QSO is over and Tx is off.
   await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+
+  // In the Log with the band, grid and reports, waiting for Wavelog.
+  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
+  const entry = page.locator('li.lr', { has: page.getByText(DX.call, { exact: true }) });
+  await expect(entry).toHaveCount(1);
+  await expect(entry).toContainText(`20m FT8 · 14.076 · ${DX.grid} · −${rpt.slice(1)} / −12`);
+  await expect(entry).toContainText('Wavelog · waiting');
+  expect(wavelog.requests.filter((r) => r.path === '/api/qso')).toHaveLength(0);
+  await page.locator('label.seg-i', { hasText: 'To do' }).click();
+  await page.getByRole('button', { name: 'Send now' }).click();
+  await expect(page.getByText('Nothing to do')).toBeVisible();
+  const posted = wavelog.requests.filter((r) => r.path === '/api/qso');
+  expect(posted).toHaveLength(1);
+  const adif = String(posted[0].body?.string);
+  for (const field of [`<CALL:6>${DX.call}`, '<MODE:3>FT8', '<BAND:3>20m', `<RST_SENT:3>${rpt}`, '<RST_RCVD:3>-12', `<GRIDSQUARE:4>${DX.grid}`, '<FREQ:9>14.075500', '<STATION_CALLSIGN:5>9V1NE']) {
+    expect(adif).toContain(field);
+  }
 });

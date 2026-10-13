@@ -1,12 +1,14 @@
 <script lang="ts">
   /** Station detail, from touch and hold: Call first, then the facts. */
   import Sheet from './Sheet.svelte';
-  import { dt, signed, utcTime } from '../lib/clock/format';
+  import { dt, signed, utcHm, utcTime } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
   import { pathBetween } from '../lib/qso/grid';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
-  import { callStart, callStation, liveRecords, qso, type Selected } from '../lib/state/qso.svelte';
+  import { callStart, callStation, qso, type Selected } from '../lib/state/qso.svelte';
+  import { log } from '../lib/log/log.svelte';
+  import { displayMode } from '../lib/log/qso';
 
   let { open = $bindable(false), item }: { open: boolean; item: Selected | null } = $props();
 
@@ -22,7 +24,9 @@
   const grid = $derived(ex?.grid ?? null);
   const path = $derived(grid && settings.grid ? pathBetween(settings.grid, grid) : null);
   const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
-  const worked = $derived(call ? liveRecords().filter((r) => r.CALL === bare(call)) : []);
+  const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
+  const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
+  const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
   const ord = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
 
   function doCall() {
@@ -49,8 +53,8 @@
       </li>
       <li class="row">
         <span class="row-main">
-          <span class="row-title">Worked in this session</span>
-          <span class="row-sub">{worked.length ? worked.map((r) => `${r.BAND} ${r.SUBMODE ?? r.MODE} at ${r.TIME_ON.slice(0, 2)}:${r.TIME_ON.slice(2, 4)}`).join(', ') : 'Not yet'}</span>
+          <span class="row-title">Worked before</span>
+          <span class="row-sub">{worked.length ? worked.map((q) => `${q.band} ${displayMode(q)} ${when(q.start)}`).join(', ') : 'Not yet'}</span>
         </span>
       </li>
     </ul>

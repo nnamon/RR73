@@ -1,13 +1,13 @@
 /**
  * The QSO runtime: feeds the sequencer (lib/qso) with decodes, audio and band state, touches
  * and a 1 s tick, and carries out its effects through the transmit scheduler (lib/tx).
- * Completed QSOs are kept in memory for this session; lib/log subscribes with subscribeQsos.
+ * Completed QSOs go to the log (lib/log logQso), which stores them, shows the Logged notice
+ * and sends them on; the log's QSOs are also the worked-before list for dupes.
  */
 
 import { untrack } from 'svelte';
-import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState } from '../qso/sequencer';
+import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
-import type { QsoRecord } from '../qso/record';
 import { parity as parityOf, type Parity } from '../clock/slots';
 import { dialHz } from '../radio/bands';
 import type { Decode } from '../decode/types';
@@ -16,6 +16,8 @@ import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
 import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
+import { log, logQso } from '../log/log.svelte';
+import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
 
@@ -38,42 +40,26 @@ export interface Notice {
   atMs: number;
 }
 
-export type QsoEvent = { type: 'logged' | 'updated' | 'deleted'; record: QsoRecord };
-
 class QsoRuntime {
   st = $state.raw<SeqState>(initialState(configNow()));
   sent = $state<SentRow[]>([]);
   selected = $state<Selected | null>(null);
   notice = $state<Notice | null>(null);
-  /** The QSO just logged, for the notice with Edit and Undo. */
-  logged = $state.raw<QsoRecord | null>(null);
-  /** QSOs logged in this session, newest first; Undo leaves a tombstone (deletedAt). */
-  records = $state.raw<QsoRecord[]>([]);
   /** On air now: start and end, UTC ms. */
   onAir = $state<{ text: string; tx: TxNum; startMs: number; endMs: number } | null>(null);
 }
 
 export const qso = new QsoRuntime();
 
-const subscribers = new Set<(e: QsoEvent) => void>();
+/** When this session started, UTC ms: the Run rate counts QSOs from here. */
+const sessionStart = Date.now();
 
-/**
- * For lib/log: every QSO the sequencer logs ('logged'), and later Edit ('updated') and Undo
- * ('deleted', with deletedAt set). Returns a function that unsubscribes.
- */
-export function subscribeQsos(fn: (e: QsoEvent) => void): () => void {
-  subscribers.add(fn);
-  return () => subscribers.delete(fn);
-}
-
-function emit(e: QsoEvent) {
-  for (const s of subscribers) s(e);
-}
-
+/** The call and grid on air: the running activation's, else Settings. */
 function configNow() {
+  const a = log.current;
   return {
-    myCall: settings.callsign,
-    myGrid: settings.grid,
+    myCall: a?.callsign || settings.callsign,
+    myGrid: a?.grid || settings.grid,
     mode: settings.mode,
     band: settings.band,
     dialHz: dialHz(settings.band, settings.mode) ?? 0,
@@ -86,8 +72,6 @@ function configNow() {
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
-    activationId: null,
-    newId: () => (typeof crypto !== 'undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`),
   };
 }
 
@@ -130,9 +114,7 @@ export function dispatch(e: SeqEvent) {
         else scheduler.cancel();
         break;
       case 'logQso':
-        qso.records = [f.record, ...qso.records];
-        qso.logged = f.record;
-        emit({ type: 'logged', record: f.record });
+        void logQso(f.record);
         break;
       case 'notice':
         qso.notice = { kind: f.kind, text: f.text, atMs: e.nowMs };
@@ -265,43 +247,22 @@ export function callStart(slotStartMs: number, nowMs = Date.now()): { startMs: n
   return { startMs: s.slotStartMs + s.offsetS * 1000, parity, tooLateFor: s.tooLateFor };
 }
 
-export function undoQso(id: string) {
-  const r = qso.records.find((q) => q.id === id);
-  if (!r || r.deletedAt) return;
-  const now = new Date().toISOString();
-  const dead: QsoRecord = { ...r, deletedAt: now, updatedAt: now };
-  qso.records = qso.records.map((q) => (q.id === id ? dead : q));
-  if (qso.logged?.id === id) qso.logged = null;
-  syncWorked();
-  emit({ type: 'deleted', record: dead });
+/** FT8 and FT4 QSOs in the log, as the sequencer's worked-before list. */
+export function workedFrom(qsos: readonly Qso[]): Worked[] {
+  const out: Worked[] = [];
+  for (const q of qsos) {
+    if (q.deletedAt !== null) continue;
+    const mode = q.mode === 'FT8' ? 'FT8' : q.mode === 'MFSK' && q.submode === 'FT4' ? 'FT4' : null;
+    if (!mode) continue;
+    out.push({ call: q.call, band: q.band, mode, day: new Date(q.start).toISOString().slice(0, 10).replace(/-/g, ''), grid: q.gridsquare || null });
+  }
+  return out;
 }
 
-export function editQso(id: string, patch: Partial<Pick<QsoRecord, 'CALL' | 'GRIDSQUARE' | 'RST_SENT' | 'RST_RCVD' | 'COMMENT'>>) {
-  const r = qso.records.find((q) => q.id === id);
-  if (!r) return;
-  const next: QsoRecord = { ...r, ...patch, updatedAt: new Date().toISOString() };
-  if (!next.GRIDSQUARE) delete next.GRIDSQUARE;
-  if (!next.COMMENT) delete next.COMMENT;
-  qso.records = qso.records.map((q) => (q.id === id ? next : q));
-  if (qso.logged?.id === id) qso.logged = next;
-  syncWorked();
-  emit({ type: 'updated', record: next });
-}
-
-/** Live QSOs only. */
-export function liveRecords(): QsoRecord[] {
-  return qso.records.filter((r) => !r.deletedAt);
-}
-
-function syncWorked() {
-  const worked = liveRecords().map((r) => ({
-    call: r.CALL,
-    band: r.BAND,
-    mode: (r.SUBMODE === 'FT4' ? 'FT4' : 'FT8') as 'FT8' | 'FT4',
-    day: r.QSO_DATE,
-    grid: r.GRIDSQUARE ?? null,
-  }));
-  dispatch({ type: 'setWorked', worked, nowMs: Date.now() });
+/** QSOs logged by the sequencer in this session, and in the last hour, for the Run line. */
+export function runRate(nowMs: number): { total: number; hour: number } {
+  const mine = log.live.filter((q) => q.source === 'sequencer' && q.createdAt >= sessionStart);
+  return { total: mine.length, hour: mine.filter((q) => nowMs - q.createdAt < 3_600_000).length };
 }
 
 /** The caller queue in answering order. */
@@ -341,8 +302,13 @@ export function startQso() {
     const c = configNow();
     dispatch({ type: 'configure', patch: { band: c.band, mode: c.mode, dialHz: c.dialHz }, nowMs: Date.now() });
   }
-  // Settings feed the sequencer's configuration.
+  // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
+  // its worked-before list, so dupes survive a reload.
   $effect.root(() => {
+    $effect(() => {
+      const worked = workedFrom(log.qsos);
+      untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));
+    });
     $effect(() => {
       const c = configNow();
       const patch = { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };

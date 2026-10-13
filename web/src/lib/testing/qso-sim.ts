@@ -11,7 +11,6 @@ import type { TxNum } from '../qso/messages';
 export const T0 = Date.UTC(2026, 9, 13, 13, 14, 0);
 
 export function config(over: Partial<SeqConfig> = {}): SeqConfig {
-  let n = 0;
   return {
     myCall: '9V1NE',
     myGrid: 'OJ11',
@@ -27,8 +26,6 @@ export function config(over: Partial<SeqConfig> = {}): SeqConfig {
     cqParity: 'even',
     cqModifier: null,
     preset: 'subtract-3',
-    activationId: null,
-    newId: () => `qso-${++n}`,
     ...over,
   };
 }

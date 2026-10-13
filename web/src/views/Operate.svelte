@@ -10,14 +10,11 @@
   import SlotRing from '../ui/SlotRing.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
   import CallerQueue from '../ui/CallerQueue.svelte';
-  import LoggedNotice from '../ui/LoggedNotice.svelte';
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import QsoDock from '../ui/QsoDock.svelte';
-  import QsoEditSheet from '../ui/QsoEditSheet.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
   import { callStation, confirmBand, qso, select, setFrequencies, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
-  import type { QsoRecord } from '../lib/qso/record';
   import { mhz, utcTime } from '../lib/clock/format';
   import { SLOT_MS, parity, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
@@ -32,8 +29,6 @@
   let messagesOpen = $state(false);
   let detailOpen = $state(false);
   let detail = $state<Selected | null>(null);
-  let editOpen = $state(false);
-  let editing = $state<QsoRecord | null>(null);
   /** In Run mode the caller queue replaces the band activity unless asked for. */
   let showBand = $state(false);
   const queueView = $derived(qso.st.run && !showBand);
@@ -51,15 +46,6 @@
     detail = asSelected(i);
     detailOpen = true;
   }
-  // The logged notice stays 15 s.
-  $effect(() => {
-    const r = qso.logged;
-    if (!r) return;
-    const t = setTimeout(() => {
-      if (qso.logged?.id === r.id) qso.logged = null;
-    }, 15_000);
-    return () => clearTimeout(t);
-  });
   let filter = $state<Filter>('all');
 
   const dial = $derived(dialHz(settings.band, settings.mode));
@@ -269,15 +255,6 @@
       {/if}
     </div>
   </div>
-  {#if qso.logged}
-    <LoggedNotice
-      record={qso.logged}
-      onedit={() => {
-        editing = qso.logged;
-        editOpen = true;
-      }}
-    />
-  {/if}
   <QsoDock
     onconfirmband={() => (bandOpen = true)}
     onmessages={() => (messagesOpen = true)}
@@ -294,7 +271,6 @@
 <SaveSlotSheet bind:open={saveOpen} />
 <MessagesSheet bind:open={messagesOpen} />
 <StationDetailSheet bind:open={detailOpen} item={detail} />
-<QsoEditSheet bind:open={editOpen} record={editing} />
 
 <style>
   /* On short screens with a banner and a tall dock, Operate scrolls; the dock stays at the

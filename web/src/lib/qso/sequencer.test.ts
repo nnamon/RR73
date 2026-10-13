@@ -14,27 +14,24 @@ describe('answering a CQ', () => {
     // The report is the SNR of their latest decode when it first goes out: -11.
     expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-11', '6:JA1KXM 9V1NE 73']);
     const [rec] = s.logged();
-    expect(rec).toMatchObject({
-      CALL: 'JA1KXM',
-      GRIDSQUARE: 'PM95',
-      MODE: 'FT8',
-      BAND: '20m',
-      FREQ: '14.075500',
-      QSO_DATE: '20261013',
-      TIME_ON: '131430',
-      TIME_OFF: '131530',
-      RST_SENT: '-11',
-      RST_RCVD: '-09',
-      STATION_CALLSIGN: '9V1NE',
-      OPERATOR: '9V1NE',
-      MY_GRIDSQUARE: 'OJ11',
-      id: 'qso-1',
-      activationId: null,
-      deletedAt: null,
+    expect(rec).toEqual({
+      call: 'JA1KXM',
+      grid: 'PM95',
+      mode: 'FT8',
+      band: '20m',
+      dialHz: 14_074_000,
+      audioHz: 1500,
+      startUtcMs: Date.UTC(2026, 9, 13, 13, 14, 30, 500),
+      endUtcMs: Date.UTC(2026, 9, 13, 13, 15, 30, 100),
+      reportSent: '-11',
+      reportRcvd: '-09',
       source: 'sequencer',
-      provenance: { preset: 'subtract-3', snrDb: -10, dtS: 0.2, audioHz: 1418 },
+      decode: { preset: 'subtract-3', snrDb: -10, dtS: 0.2, audioHz: 1418 },
+      stationCallsign: '9V1NE',
+      myGridsquare: 'OJ11',
     });
-    expect(rec.SUBMODE).toBeUndefined();
+    // No activationId: the log attaches the running activation.
+    expect('activationId' in rec).toBe(false);
     // After 73 the QSO is over and Tx is off, as WSJT-X does by default.
     expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false, partner: null });
   });
@@ -53,7 +50,7 @@ describe('answering a CQ', () => {
     s.run(2, 4, { 3: ['9V1NE JA1KXM R-05'] });
     expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE RR73']);
     expect(s.logged()).toHaveLength(1);
-    expect(s.logged()[0]).toMatchObject({ RST_RCVD: '-05', RST_SENT: '-10' });
+    expect(s.logged()[0]).toMatchObject({ reportRcvd: '-05', reportSent: '-10' });
     expect(s.st.phase).toBe('idle');
   });
 
@@ -166,7 +163,7 @@ describe('calling CQ', () => {
     s.run(0, 6, { 1: [decode('9V1NE K1ABC FN42', -8)], 3: [decode('9V1NE K1ABC R-14', -9)] });
     expect(texts(s)).toEqual(['0:CQ 9V1NE OJ11', '2:K1ABC 9V1NE -08', '4:K1ABC 9V1NE RR73', '6:CQ 9V1NE OJ11']);
     expect(s.logged()).toHaveLength(1);
-    expect(s.logged()[0]).toMatchObject({ CALL: 'K1ABC', GRIDSQUARE: 'FN42', RST_SENT: '-08', RST_RCVD: '-14', TIME_ON: '131430' });
+    expect(s.logged()[0]).toMatchObject({ call: 'K1ABC', grid: 'FN42', reportSent: '-08', reportRcvd: '-14', startUtcMs: Date.UTC(2026, 9, 13, 13, 14, 30, 500) });
   });
 
   it('answers a caller who sends a report with Tx3, and an R-report with Tx4', () => {
@@ -243,7 +240,7 @@ describe('Run mode', () => {
       '8:JA1KXM 9V1NE RR73',
       '10:CQ 9V1NE OJ11',
     ]);
-    expect(s.logged().map((r) => r.CALL)).toEqual(['K1ABC', 'JA1KXM']);
+    expect(s.logged().map((r) => r.call)).toEqual(['K1ABC', 'JA1KXM']);
     expect(s.st.queue).toEqual([]);
   });
 
@@ -421,18 +418,11 @@ describe('parity', () => {
 });
 
 describe('records', () => {
-  it('writes FT4 as MFSK with SUBMODE FT4, the dial plus our audio frequency, and the base call as operator', () => {
+  it('records FT4, the dial and our audio frequency, and the call and grid used on air', () => {
     const s = new Sim({ mode: 'FT4', myCall: 'VK3/9V1NE', myGrid: 'QF22lb', txHz: 1180, dialHz: 14080000 });
     s.call(1, 'CQ JA1KXM PM95');
     s.run(2, 6, { 3: ['VK3/9V1NE JA1KXM -09'], 5: ['VK3/9V1NE JA1KXM RR73'] });
-    expect(s.logged()[0]).toMatchObject({
-      MODE: 'MFSK',
-      SUBMODE: 'FT4',
-      FREQ: '14.081180',
-      STATION_CALLSIGN: 'VK3/9V1NE',
-      OPERATOR: '9V1NE',
-      MY_GRIDSQUARE: 'QF22LB',
-    });
+    expect(s.logged()[0]).toMatchObject({ mode: 'FT4', dialHz: 14_080_000, audioHz: 1180, stationCallsign: 'VK3/9V1NE', myGridsquare: 'QF22lb' });
   });
 });
 
