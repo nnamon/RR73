@@ -19,6 +19,7 @@
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, type Mode } from '../lib/clock/slots';
   import { onAudioChunk } from '../lib/state/station.svelte';
+  import { practice } from '../lib/state/practice.svelte';
 
   let {
     mode,
@@ -176,7 +177,7 @@
     {#if stoppedAtUtcMs !== null}
       <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
     {:else if !started}
-      <span class="gap">The waterfall starts with the audio. RR73 listens to the radio through the headset microphone contact.</span>
+      <span class="gap">{practice.on ? 'The waterfall starts with the audio. The practice band plays here. It needs no radio or microphone.' : 'The waterfall starts with the audio. RR73 listens to the radio through the headset microphone contact.'}</span>
     {/if}
     {#if hint && !live}
       <span class="hint" data-testid="drag-hint">Drag to move Tx. Drag the green line to move Rx.</span>
