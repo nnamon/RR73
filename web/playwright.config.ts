@@ -33,7 +33,7 @@ const iphone = (width: number, height: number, scale: number) => ({
 });
 
 /** Projects that finish before the transmit timing tests start. */
-const QUIET = ['mic', 'decode', 'slot-record', 'chromium', 'webkit-375x667', 'webkit-393x852'];
+const QUIET = ['mic', 'decode', 'slot-record', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852'];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -59,7 +59,9 @@ export default defineConfig({
     // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
     { name: 'decode', testMatch: /decode\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...ft8Mic } },
     { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 }, ...holeMic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker)\.spec/, use: { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } } },
+    // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
+    { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
     { name: 'webkit-375x667', testMatch: /layout\.spec/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /layout\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,

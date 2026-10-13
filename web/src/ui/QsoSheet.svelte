@@ -12,6 +12,7 @@
   import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
+  import { features } from '../lib/state/features.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
   let open = $state(false);
@@ -29,6 +30,10 @@
   let comment = $state('');
   let join = $state(true);
   let errors = $state<string[]>([]);
+  /** True while a save waits for storage, so a second tap cannot log the QSO twice. */
+  let saving = $state(false);
+  /** The running activation a new QSO can join: only with Activations on. */
+  const running = $derived(features.activations ? log.current : null);
 
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
@@ -65,7 +70,7 @@
 
   const bands = $derived([...new Set([...BAND_IDS, ...(original && !isBand(original.band) && original.band ? [original.band] : [])])]);
   const modes = $derived([...new Set(['FT8', 'FT4', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
-  const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : log.current);
+  const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : running);
   const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : 'Add QSO');
   const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
   const wavelog = $derived(original ? (log.index.get(original.id)?.find((e) => e.destinationId === 'wavelog') ?? null) : null);
@@ -117,6 +122,7 @@
 
   /** Saves the form, a new or an edited QSO; false when it says what is wrong instead. */
   async function persist(): Promise<boolean> {
+    if (saving) return false;
     const problems: string[] = [];
     const c = normaliseCall(call);
     date = tidyDate(date);
@@ -134,38 +140,43 @@
     errors = problems;
     if (problems.length) return false;
 
-    if (original) {
-      const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
-      await updateQso(original.id, {
-        call: c,
-        gridsquare: normaliseGrid(grid),
-        band: band.toLowerCase(),
-        ...keepMode,
-        freqHz: hz,
-        start,
-        end: start + Math.max(0, original.end - original.start),
-        rstSent: formatReport(sent),
-        rstRcvd: formatReport(rcvd),
-        comment: comment.trim(),
-        ...theirFields(parsed.refs),
-      });
-    } else {
-      await logQso({
-        call: c,
-        grid: normaliseGrid(grid),
-        mode: mode === 'FT4' ? 'FT4' : 'FT8',
-        band: band.toLowerCase(),
-        dialHz: hz ?? 0,
-        audioHz: 0,
-        startUtcMs: start,
-        endUtcMs: start,
-        reportSent: formatReport(sent),
-        reportRcvd: formatReport(rcvd),
-        comment: comment.trim(),
-        theirRefs: parsed.refs,
-        source: 'manual',
-        activationId: log.current && join ? log.current.id : null,
-      });
+    saving = true;
+    try {
+      if (original) {
+        const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
+        await updateQso(original.id, {
+          call: c,
+          gridsquare: normaliseGrid(grid),
+          band: band.toLowerCase(),
+          ...keepMode,
+          freqHz: hz,
+          start,
+          end: start + Math.max(0, original.end - original.start),
+          rstSent: formatReport(sent),
+          rstRcvd: formatReport(rcvd),
+          comment: comment.trim(),
+          ...theirFields(parsed.refs),
+        });
+      } else {
+        await logQso({
+          call: c,
+          grid: normaliseGrid(grid),
+          mode: mode === 'FT4' ? 'FT4' : 'FT8',
+          band: band.toLowerCase(),
+          dialHz: hz ?? 0,
+          audioHz: 0,
+          startUtcMs: start,
+          endUtcMs: start,
+          reportSent: formatReport(sent),
+          reportRcvd: formatReport(rcvd),
+          comment: comment.trim(),
+          theirRefs: parsed.refs,
+          source: 'manual',
+          activationId: running && join ? running.id : null,
+        });
+      }
+    } finally {
+      saving = false;
     }
     return true;
   }
@@ -263,11 +274,11 @@
 
     {#if original}
       {#if activation}<p class="note">Part of the activation {refsLabel(activation.refs)}, made as {original.stationCallsign}.</p>{/if}
-    {:else if log.current}
+    {:else if running}
       <label class="card row check">
         <span class="row-main">
           <span class="row-title">Add to the activation</span>
-          <span class="row-sub">{refsLabel(log.current.refs)}, as {log.current.callsign}</span>
+          <span class="row-sub">{refsLabel(running.refs)}, as {running.callsign}</span>
         </span>
         <input type="checkbox" role="switch" class="switch" bind:checked={join} />
       </label>
@@ -293,7 +304,7 @@
     {#if original?.deletedAt != null}
       <button type="button" class="btn primary wide" onclick={() => void restore()}>Restore QSO</button>
     {:else}
-      <button type="submit" class="btn primary wide">{original ? 'Save QSO' : 'Add QSO'}</button>
+      <button type="submit" class="btn primary wide" disabled={saving}>{original ? 'Save QSO' : 'Add QSO'}</button>
     {/if}
     <button type="button" class="btn wide cancel" onclick={closed}>Cancel</button>
     {#if original && original.deletedAt === null}

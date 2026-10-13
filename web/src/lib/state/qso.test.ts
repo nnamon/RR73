@@ -18,6 +18,7 @@ import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
 import { callCq, callStation, dispatch, haltTx, qso, setFrequencies, setRun, setTxEnabled } from './qso.svelte';
 import { settings, updateSettings } from './settings.svelte';
+import type { Activation } from '../log/types';
 
 beforeEach(async () => {
   haltTx();
@@ -93,5 +94,21 @@ describe('worked before', () => {
       { call: 'JA1KXM', band: '20m', mode: 'FT8', day: '20261013', grid: 'PM95' },
       { call: 'K1ABC', band: '40m', mode: 'FT4', day: '20261013', grid: null },
     ]);
+  });
+});
+
+describe('the call on air', () => {
+  it('comes from a running activation only while Activations is on', async () => {
+    const { configNow } = await import('./qso.svelte');
+    const { log } = await import('../log/log.svelte');
+    await updateSettings({ callsign: '9V1NE', grid: 'OJ11' });
+    const running: Activation = { id: 'a1', refs: [], callsign: 'VK3/9V1NE', operator: '9V1NE', grid: 'QF22', gridSource: 'typed', wavelogStationId: null, startedAt: 1, endedAt: null, updatedAt: 1 };
+    log.activations = [running];
+    settings.features.activations = false;
+    expect(configNow()).toMatchObject({ myCall: '9V1NE', myGrid: 'OJ11' });
+    settings.features.activations = true;
+    expect(configNow()).toMatchObject({ myCall: 'VK3/9V1NE', myGrid: 'QF22' });
+    settings.features.activations = false;
+    log.activations = [];
   });
 });

@@ -4,6 +4,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Updating no longer leaves RR73 blank or without its decoder. While an older copy of RR73 holds the log, the app opens, says "Close other copies of RR73 to finish updating" and finishes the update once that copy closes. A new version takes over at the next change of screen with audio off.
+- Optional features in Settings, each off until turned on: Activations, POTA spots, Cluster spots and LoTW users. With Activations and both spot sources off, the Spots tab is hidden and the app has three tabs. Activations and QSOs already logged stay on the phone.
 - Use GPS in Settings sets the grid from the phone's position: 6 characters when the fix is within 1 km, otherwise the 4-character square with the reason. RR73 keeps the grid, never the position. The activation form's Use GPS works the same way.
 - Slots and transmissions stay on UTC when the browser's output timestamps disagree with its audio clock. In Playwright's WebKit they gained 1 s every second, so slots drifted and no call went on air. Not tested on an iPhone.
 

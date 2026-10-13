@@ -10,6 +10,7 @@
  * and taps Send to Wavelog (`sendToWavelog`). With it on, the outbox sends by itself as in 0.5.0.
  */
 
+import { features } from '../state/features.svelte';
 import { settings } from '../state/settings.svelte';
 import { checkRefs } from './activation';
 import { fileParts, markHandled, markSubmitted, reconcile, requeue, retry, UNDO_MS, type DestinationFacts } from './ledger';
@@ -282,7 +283,8 @@ function persistStorage() {
 export async function addQso(record: LogQsoRecord): Promise<Qso> {
   await loadLog();
   const at = now();
-  const activation = record.activationId === undefined ? log.current : activationOf(record.activationId);
+  // With Activations off (Settings › Optional features) a running activation is hidden, and new QSOs stay out of it.
+  const activation = record.activationId === undefined ? (features.activations ? log.current : null) : activationOf(record.activationId);
   const q = createQso(record, { id: newId(), now: at, activation, callsign: settings.callsign });
   byId.set(q.id, q);
   await commit({ qsos: [q], ledger: settleQso(q, at) });

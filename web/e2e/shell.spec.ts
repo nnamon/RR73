@@ -1,6 +1,7 @@
 // The app shell: tabs, headings, settings stored in IndexedDB, version history and the update notice.
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
+import { emptySeed, seed, withFeatures } from './log-data';
 
 const VERSION = (JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
@@ -8,6 +9,7 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
   await page.goto('./');
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link', { name: 'Operate' })).toHaveAttribute('aria-current', 'page');
+  await seed(page, withFeatures(emptySeed(), { activations: true }));
   for (const [name, heading] of [
     ['Log', 'Log'],
     ['Spots', 'Spots'],
@@ -23,12 +25,25 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
 test('the empty tabs say what will appear', async ({ page }) => {
   await page.goto('./#/log');
   await expect(page.getByText('No QSOs yet')).toBeVisible();
+  await seed(page, withFeatures(emptySeed(), { activations: true, potaSpots: true }));
   await page.goto('./#/spots');
   await expect(page.getByRole('button', { name: /^Start activation/ })).toBeVisible();
-  await expect(page.getByText(/^No spots yet\./)).toBeVisible();
+  await expect(page.getByText(/^No spots yet\. POTA spots on your bands/)).toBeVisible();
 });
 
-test('four tabs, and an old Activate link opens Spots', async ({ page }) => {
+test('three tabs on a new install, and an old Activate link opens Optional features', async ({ page }) => {
+  await page.goto('./#/activate');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Settings']);
+  await expect(page).toHaveURL(/#\/settings\/features$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Settings' })).toHaveAttribute('aria-current', 'page');
+  await expect(page.getByText('Spots is off. Turn on Activations, POTA spots or Cluster spots to show it.')).toBeVisible();
+});
+
+test('with Activations on, an old Activate link opens Spots', async ({ page }) => {
+  await page.goto('./');
+  await seed(page, withFeatures(emptySeed(), { activations: true }));
   await page.goto('./#/activate');
   const nav = page.getByRole('navigation', { name: 'Main' });
   await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Spots', 'Settings']);

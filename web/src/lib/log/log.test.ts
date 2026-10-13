@@ -251,6 +251,7 @@ describe('the log store', () => {
   });
 
   it('runs an activation: QSOs join it, files are ready, and the station location follows it', async () => {
+    settings.features.activations = true;
     const a = await startActivation({
       refs: [
         { programme: 'POTA', ref: 'VK-0921' },
@@ -318,5 +319,16 @@ describe('the log store', () => {
     expect(s.migrations).toEqual([SEND_AUTOMATICALLY_OFF]);
     expect(s.destinations.map((d) => d.id).sort()).toEqual(['adif-file', 'wavelog']);
     expect((await (await db()).get('kv', 'logging'))?.value).toEqual({ sendAutomatically: false, sendEdits: true });
+  });
+
+  it('keeps new QSOs out of a running activation while Activations is off', async () => {
+    const a = await startActivation({ refs: [{ programme: 'POTA', ref: 'VK-0921' }], callsign: 'VK3/9V1NE', operator: '9V1NE', grid: 'QF22', gridSource: 'typed', wavelogStationId: null });
+    settings.features.activations = false;
+    const q = await addQso({ ...RECORD, call: 'JA1KXM' });
+    expect(q).toMatchObject({ activationId: null, stationCallsign: '9V1NE', mySig: '' });
+    // Turning it back on shows the same activation, still running, and QSOs join it again.
+    settings.features.activations = true;
+    expect(log.current?.id).toBe(a.id);
+    expect((await addQso({ ...RECORD, call: 'ZL1TQK' })).activationId).toBe(a.id);
   });
 });

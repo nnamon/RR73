@@ -9,6 +9,22 @@
   import { audio, band, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
   import { log } from '../lib/log/log.svelte';
+  import { features, setFeature, spotsShown, type FeatureId } from '../lib/state/features.svelte';
+
+  /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
+  let { section = null }: { section?: string | null } = $props();
+
+  let featuresHead = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (section === 'features') featuresHead?.scrollIntoView({ block: 'start' });
+  });
+
+  const optional: { id: FeatureId; title: string; sub: string }[] = [
+    { id: 'activations', title: 'Activations', sub: 'Start POTA, SOTA, WWFF and IOTA activations, and follow their progress and files.' },
+    { id: 'potaSpots', title: 'POTA spots', sub: 'Parks on the air now, from the POTA spot list.' },
+    { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster spots through HamQTH.' },
+    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW. Downloads the LoTW user list.' },
+  ];
 
   let callsign = $state(settings.callsign);
   $effect(() => {
@@ -66,7 +82,8 @@
   });
 
   const loggingSummary = $derived.by(() => {
-    const on = log.facts.filter((f) => f.active).map((f) => f.name);
+    // Activation files count only while Activations is on.
+    const on = log.facts.filter((f) => f.active && (features.activations || f.transport !== 'file')).map((f) => f.name);
     if (!on.length) return 'Only on this phone';
     return on.length > 2 ? `${on.length} destinations` : on.join(' and ');
   });
@@ -217,7 +234,26 @@
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
-    <p class="section-foot">Wavelog and the POTA, SOTA and WWFF files.</p>
+    <p class="section-foot">{features.activations ? 'Wavelog and the POTA, SOTA and WWFF files.' : 'Wavelog.'}</p>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head" id="features" bind:this={featuresHead}>Optional features</h2>
+    {#if section === 'features' && !spotsShown()}
+      <p class="section-note" role="status">Spots is off. Turn on Activations, POTA spots or Cluster spots to show it.</p>
+    {/if}
+    <div class="group">
+      {#each optional as f (f.id)}
+        <label class="row">
+          <span class="row-main">
+            <span class="row-title">{f.title}</span>
+            <span class="row-sub">{f.sub}</span>
+          </span>
+          <input type="checkbox" role="switch" class="switch" checked={features[f.id]} onchange={(e) => void setFeature(f.id, e.currentTarget.checked)} />
+        </label>
+      {/each}
+    </div>
+    <p class="section-foot">Each is off until you turn it on. Nothing downloads for a feature that is off, and turning one off keeps what it stored.</p>
   </div>
 
   <div class="section">
@@ -290,6 +326,16 @@
 
   .link :global(.row-chevron) {
     color: var(--rr-chev);
+  }
+
+  .section-note {
+    margin: 0 var(--rr-space-4) var(--rr-space-2);
+    padding: var(--rr-space-2) var(--rr-space-3);
+    border-radius: var(--rr-radius-l);
+    background: var(--rr-accent-soft);
+    color: var(--rr-label);
+    font-size: var(--rr-text-sub);
+    line-height: var(--rr-leading-sub);
   }
 
   .field {
