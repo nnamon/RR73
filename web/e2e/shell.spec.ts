@@ -10,7 +10,6 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
   await expect(nav.getByRole('link', { name: 'Operate' })).toHaveAttribute('aria-current', 'page');
   for (const [name, heading] of [
     ['Log', 'Log'],
-    ['Activate', 'Activate'],
     ['Spots', 'Spots'],
     ['Settings', 'Settings'],
   ] as const) {
@@ -24,10 +23,16 @@ test('the tab bar moves between screens and marks the current one', async ({ pag
 test('the empty tabs say what will appear', async ({ page }) => {
   await page.goto('./#/log');
   await expect(page.getByText('No QSOs yet')).toBeVisible();
-  await page.goto('./#/activate');
-  await expect(page.getByText('No activation running')).toBeVisible();
   await page.goto('./#/spots');
-  await expect(page.getByText('No spots yet')).toBeVisible();
+  await expect(page.getByText('No spots or activation yet')).toBeVisible();
+});
+
+test('four tabs, and an old Activate link opens Spots', async ({ page }) => {
+  await page.goto('./#/activate');
+  const nav = page.getByRole('navigation', { name: 'Main' });
+  await expect(nav.getByRole('link')).toHaveText(['Operate', 'Log', 'Spots', 'Settings']);
+  await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
+  await expect(nav.getByRole('link', { name: 'Spots' })).toHaveAttribute('aria-current', 'page');
 });
 
 test('Operate shows the band, the frequency and the empty decode list', async ({ page }) => {

@@ -44,7 +44,6 @@ export const ICONS = {
     ],
     width: 1.75,
   },
-  activate: { stroke: ['M2.6 20.2L9.4 9.2L13.3 15.3L15.6 12L21.4 20.2Z', 'M9.4 9.2V3.6L13.4 5.1L9.4 6.6'], width: 1.75 },
   spots: { stroke: ['M3.2 12H20.8'], rings: [[12, 12, 9, 9], [12, 12, 3.9, 9]], width: 1.75 },
   settings: { stroke: [gearPath()], rings: [[12, 12, 3.1, 3.1]], width: 1.75 },
   chevdown: { stroke: ['M6.5 9.5L12 15L17.5 9.5'], width: 2.4 },
