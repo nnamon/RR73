@@ -14,6 +14,7 @@ docker compose run --rm rust rr73-bench run --preset baseline corpus/synthetic/s
 docker compose run --rm rust wasm-pack build crates/rr73-wasm --target web --out-dir ../../web/src/wasm/pkg
 docker compose run --rm node npm --prefix web ci
 docker compose run --rm node npm --prefix web run check      # svelte-check
+docker compose run --rm node npm --prefix web run lint:css   # stylelint
 docker compose run --rm node npm --prefix web test           # vitest
 docker compose run --rm node npm run lint:copy               # style guide lint
 docker compose run --rm e2e npx --prefix web playwright test
