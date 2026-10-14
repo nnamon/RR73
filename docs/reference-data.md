@@ -42,7 +42,7 @@ The country file is core: the service worker precaches it with the app, and no s
 
 ### Country on CQ rows
 
-Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s where `requestIdleCallback` is missing), the country file loads and its index is built. CQ rows then name the calling station's DXCC entity, as the country file writes it, before the numbers: "Australia" on the row for "CQ VK2LAW QF56". A WAE entity shows its DXCC entity: Sicily shows Italy. Rows drawn before the file loads show no country and fill in later; the row keeps its 32 pt height. Other rows, our own transmissions and calls with no entity (/MM, /AM, unknown prefixes, hashed calls not heard in full) show none.
+Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s where `requestIdleCallback` is missing), the country file loads and its index is built. CQ rows then name the calling station's DXCC entity by its short name (below) before the numbers: "Australia" on the row for "CQ VK2LAW QF56", "Germany" for DL1ABC. A WAE entity shows its DXCC entity: Sicily shows Italy, European Turkey shows Turkey. Rows drawn before the file loads show no country and fill in later; the row keeps its 32 pt height. Other rows, our own transmissions and calls with no entity (/MM, /AM, unknown prefixes, hashed calls not heard in full) show none.
 
 The message keeps its whole width. The country takes the space left before the numbers, ends in an ellipsis when short of room and drops out under 36 px (`DecodeList.svelte`).
 
@@ -50,6 +50,103 @@ Decision: look up on the main thread, per row as it is drawn. A lookup takes abo
 
 - Lookups in the decoder worker, sent with each decode: a change to the decode protocol and a second copy of the index, for about 50 µs of work per slot.
 - A country column of fixed width: it takes room from the message on every row, and most rows are not CQs.
+
+Rows show a short name where the country file's name is longer than 14 characters, or where operators use another name (`lib/reference/names.ts`). Separate DXCC entities keep separate names, and a unit test checks that no two share one. Six names stay longer than 14 characters because operators use no shorter form: European Russia, Franz Josef Land, Minami Torishima, NZ Subantarctic, Papua New Guinea and Tristan da Cunha. The changes, country file name first:
+
+| Country file | Shown |
+| --- | --- |
+| Agalega & St. Brandon | Agalega |
+| Amsterdam & St. Paul Is. | Amsterdam Is. |
+| Andaman & Nicobar Is. | Andaman Is. |
+| Antigua & Barbuda | Antigua |
+| Ascension Island | Ascension |
+| Asiatic Turkey | Turkey |
+| Austral Islands | Austral Is. |
+| Baker & Howland Islands | Baker/Howland |
+| Balearic Islands | Balearic Is. |
+| Bosnia-Herzegovina | Bosnia |
+| British Virgin Islands | Br. Virgin Is. |
+| Brunei Darussalam | Brunei |
+| Central African Republic | Central Africa |
+| Central Kiribati | C. Kiribati |
+| Ceuta & Melilla | Ceuta/Melilla |
+| Chatham Islands | Chatham Is. |
+| Chesterfield Islands | Chesterfield |
+| Christmas Island | Christmas Is. |
+| Clipperton Island | Clipperton |
+| Cocos (Keeling) Islands | Cocos Keeling |
+| Dem. Rep. of the Congo | DR Congo |
+| Desecheo Island | Desecheo |
+| Dominican Republic | Dominican Rep. |
+| DPR of Korea | North Korea |
+| Eastern Kiribati | E. Kiribati |
+| Equatorial Guinea | Eq. Guinea |
+| European Turkey | Eur. Turkey |
+| Falkland Islands | Falklands |
+| Fed. Rep. of Germany | Germany |
+| Fernando de Noronha | F. de Noronha |
+| French Polynesia | Fr. Polynesia |
+| Galapagos Islands | Galapagos |
+| Glorioso Islands | Glorioso Is. |
+| Johnston Island | Johnston Is. |
+| Juan de Nova, Europa | Juan de Nova |
+| Juan Fernandez Islands | Juan Fernandez |
+| Kerguelen Islands | Kerguelen |
+| Kermadec Islands | Kermadec |
+| Kingdom of Eswatini | Eswatini |
+| Lakshadweep Islands | Lakshadweep |
+| Lord Howe Island | Lord Howe |
+| Macquarie Island | Macquarie |
+| Madeira Islands | Madeira |
+| Mariana Islands | Mariana Is. |
+| Marquesas Islands | Marquesas |
+| Marshall Islands | Marshall Is. |
+| N.Z. Subantarctic Is. | NZ Subantarctic |
+| North Cook Islands | North Cook Is. |
+| North Macedonia | N. Macedonia |
+| Northern Ireland | N. Ireland |
+| Palmyra & Jarvis Islands | Palmyra/Jarvis |
+| Pitcairn Island | Pitcairn |
+| Pr. Edward & Marion Is. | Marion Island |
+| Republic of Korea | South Korea |
+| Republic of Kosovo | Kosovo |
+| Republic of South Sudan | South Sudan |
+| Republic of the Congo | Congo |
+| Rodriguez Island | Rodriguez Is. |
+| Saba & St. Eustatius | Saba & Statia |
+| San Andres & Providencia | San Andres |
+| San Felix & San Ambrosio | San Felix |
+| Sao Tome & Principe | Sao Tome |
+| Scarborough Reef | Scarborough |
+| Shetland Islands | Shetland Is. |
+| Slovak Republic | Slovakia |
+| Solomon Islands | Solomon Is. |
+| South Cook Islands | South Cook Is. |
+| South Georgia Island | South Georgia |
+| South Orkney Islands | South Orkney |
+| South Sandwich Islands | South Sandwich |
+| South Shetland Islands | South Shetland |
+| Sov Mil Order of Malta | SMOM |
+| Spratly Islands | Spratly |
+| St. Kitts & Nevis | St. Kitts |
+| St. Paul Island | St. Paul Is. |
+| St. Peter & St. Paul | St. Peter/Paul |
+| St. Pierre & Miquelon | St. Pierre |
+| Temotu Province | Temotu |
+| Timor - Leste | Timor-Leste |
+| Tokelau Islands | Tokelau |
+| Trindade & Martim Vaz | Trindade |
+| Trinidad & Tobago | Trinidad |
+| Tristan da Cunha & Gough | Tristan da Cunha |
+| Tromelin Island | Tromelin |
+| Turks & Caicos Islands | Turks & Caicos |
+| UK Base Areas on Cyprus | UK Base Areas |
+| United Arab Emirates | UAE |
+| United Nations HQ | UN HQ |
+| US Virgin Islands | US Virgin Is. |
+| Vienna Intl Ctr | Vienna Intl |
+| Wallis & Futuna Islands | Wallis/Futuna |
+| Western Kiribati | W. Kiribati |
 
 The LoTW list and the park and summit lists belong to optional features and are not precached. Their loaders take the feature switch as a boolean: `reference.lotw(settings.lotwUsers)`, `reference.parks(settings.activations)`, `reference.summits(settings.activations)`. With the switch off they return null and make no request. With it on, files load on first use and stay on the phone in the Cache API (`rr73-reference`), each under a stable slot name with the content-hashed file it came from. A later load reads the kept copy when it is the current build's file, fetches the new file when it is not, and falls back to the older kept copy, marked stale, when the fetch fails. An operator who updated the app at home therefore keeps the park lists in the field. `reference.forget(source)` removes a source when its feature is turned off.
 

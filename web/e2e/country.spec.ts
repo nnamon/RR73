@@ -25,7 +25,7 @@ test('a CQ row names the caller’s country before the numbers, and a QSO row do
   });
   await page.goto('./');
   await page.waitForFunction(() => !!window.__rr73);
-  const texts = ['CQ VK2LAW QF56', 'JA1XYZ VK2LAW -09', 'CQ DX DL1ABC JO62', 'CQ POTA DL1ABC/QRP JO62'];
+  const texts = ['CQ VK2LAW QF56', 'JA1XYZ VK2LAW -09', 'CQ DX P29ABC/P QI24', 'CQ POTA P29WWW/QRPP QI24'];
   await page.evaluate((ts) => {
     const slot = Math.floor(Date.now() / 15_000) * 15_000 - 15_000;
     window.__rr73!.decoded(
@@ -46,12 +46,12 @@ test('a CQ row names the caller’s country before the numbers, and a QSO row do
 
   // With room, the whole name; short of room, an ellipsis; with none, no country. The message
   // stays whole, and the numbers keep their column.
-  const [vk, qso, dl, dlLong] = await Promise.all(texts.map((t) => widths(page, t)));
+  const [vk, qso, png, pngTight] = await Promise.all(texts.map((t) => widths(page, t)));
   expect(vk.country![0]).toBe(vk.country![1]);
-  expect(dl.country![0]).toBeGreaterThan(20);
-  expect(dl.country![1]).toBeGreaterThan(dl.country![0]);
-  await expect(row(page, 'CQ DX DL1ABC JO62').locator('.c-country > span')).toHaveCSS('text-overflow', 'ellipsis');
-  await expect(row(page, 'CQ POTA DL1ABC/QRP JO62').locator('.c-country > span')).toBeHidden();
-  for (const w of [vk, dl, dlLong]) expect(w.msg[0]).toBe(w.msg[1]);
-  expect(new Set([vk, qso, dl, dlLong].map((w) => w.numbers)).size).toBe(1);
+  expect(png.country![0]).toBeGreaterThan(20);
+  expect(png.country![1]).toBeGreaterThan(png.country![0]);
+  await expect(row(page, 'CQ DX P29ABC/P QI24').locator('.c-country > span')).toHaveCSS('text-overflow', 'ellipsis');
+  await expect(row(page, 'CQ POTA P29WWW/QRPP QI24').locator('.c-country > span')).toBeHidden();
+  for (const w of [vk, png, pngTight]) expect(w.msg[0]).toBe(w.msg[1]);
+  expect(new Set([vk, qso, png, pngTight].map((w) => w.numbers)).size).toBe(1);
 });

@@ -52,7 +52,7 @@ describe('the country on CQ rows', () => {
 
   it('names the country of the station calling CQ, between the message and the numbers', () => {
     const rows = renderWith({ countries });
-    expect(rows.map((r) => r.querySelector('.c-country')?.textContent ?? null)).toEqual([null, 'Australia', null, null, 'Fed. Rep. of Germany', null]);
+    expect(rows.map((r) => r.querySelector('.c-country')?.textContent ?? null)).toEqual([null, 'Australia', null, null, 'Germany', null]);
     const cells = [...rows[1].children].map((c) => c.classList[0]);
     expect(cells).toEqual(['c-msg', 'c-country', 'c-num']);
     // The whole message stays: the country takes the space after it.
@@ -64,7 +64,7 @@ describe('the country on CQ rows', () => {
     const rows = renderWith({ countries });
     expect(rows[1].getAttribute('aria-label')).toBe('−11 dB, DT 0.1 s, 763 Hz, CQ VK2LAW QF56, calling CQ, Australia');
     expect(rows[4].classList.contains('old')).toBe(true);
-    expect(rows[4].getAttribute('aria-label')).toContain('calling CQ, Fed. Rep. of Germany');
+    expect(rows[4].getAttribute('aria-label')).toContain('calling CQ, Germany');
     expect(rows[2].getAttribute('aria-label')).not.toContain('Australia');
   });
 

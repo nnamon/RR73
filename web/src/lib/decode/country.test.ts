@@ -28,8 +28,14 @@ describe('the country on a CQ row', () => {
     // WAE entities show their DXCC entity: Sicily is Italy, Shetland is Scotland.
     ['CQ IT9ABC JM77', 'Italy'],
     ['CQ GM3ZET IP90', 'Scotland'],
+    ['CQ TA1ABC KN41', 'Turkey'],
+    // Short names for the long official ones.
+    ['CQ DL1ABC JO62', 'Germany'],
+    ['CQ HL2ABC PM37', 'South Korea'],
+    ['CQ 9Q1AB JI75', 'DR Congo'],
     // An exact callsign in the country file wins.
     ['CQ 3D2AG/P RG78', 'Rotuma Island'],
+    ['CQ ZS8ABC KE83', 'Marion Island'],
     // A hashed callsign whose full form is known.
     ['CQ <VK2LAW> QF56', 'Australia'],
   ])('%s shows %s', (text, country) => {

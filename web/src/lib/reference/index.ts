@@ -38,6 +38,7 @@ export {
 } from './refs';
 export { bearingDeg, distanceKm, gridBounds, gridCentre, gridFromLatLon, gridPath, isGrid, normaliseGrid, type GridBounds, type LatLon } from './grid';
 export { normaliseCallsign, parsePortable, type PortableCall } from './callsign';
+export { displayName } from './names';
 export { HttpStore, ReferenceUnavailableError, type DataStore, type ReferenceProblem } from './store';
 export { ReferenceFormatError, type Continent, type ManifestJson, type ManifestSource, type SourceId, type SourceStatus } from './format';
 
