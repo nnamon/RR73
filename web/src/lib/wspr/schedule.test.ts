@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEAD_MS, TX_PCTS, durationText, firstTxSlot, gapSlots, nextStopAfter, nextTxSlot, normalisePct, normaliseStopAfter, soonestSlot, stopsAtMs } from './schedule';
+import { LEAD_MS, TX_PCTS, beaconOnSlot, durationText, firstTxSlot, gapSlots, minGapSlots, nextStopAfter, nextTxSlot, normalisePct, normaliseStopAfter, soonestSlot, stopsAtMs } from './schedule';
 
 const at = (h: number, m: number, s = 0, ms = 0) => Date.UTC(2026, 9, 14, h, m, s, ms);
 
@@ -48,13 +48,26 @@ describe('the gap between transmissions', () => {
     for (let i = 0; i < 200; i++) expect(gapSlots(100, r)).toBe(1);
   });
 
-  for (const [pct, max] of [
-    [20, 9],
-    [50, 3],
-    [5, 39],
-    [25, 7],
+  it('leaves a receive slot between transmissions at 50% and below; above, they may follow at once', () => {
+    for (const pct of TX_PCTS) expect(minGapSlots(pct)).toBe(pct <= 50 ? 2 : 1);
+    // At 20% the lowest draw gave a gap of 1 slot: two transmissions back to back.
+    expect(gapSlots(20, () => 0)).toBe(2);
+  });
+
+  it('is every other slot at 50%', () => {
+    const r = seeded(2);
+    for (let i = 0; i < 200; i++) expect(gapSlots(50, r)).toBe(2);
+  });
+
+  for (const [pct, min, max] of [
+    [20, 2, 8],
+    [5, 2, 38],
+    [25, 2, 6],
+    [10, 2, 18],
+    [55, 1, 3],
+    [75, 1, 2],
   ] as const) {
-    it(`at ${pct}% runs from 1 to ${max} slots with a mean of ${100 / pct}`, () => {
+    it(`at ${pct}% runs from ${min} to ${max} slots with a mean of ${100 / pct}`, () => {
       const r = seeded(pct);
       const n = 40_000;
       const seen = new Map<number, number>();
@@ -64,11 +77,11 @@ describe('the gap between transmissions', () => {
         sum += g;
         seen.set(g, (seen.get(g) ?? 0) + 1);
       }
-      expect(Math.min(...seen.keys())).toBe(1);
+      expect(Math.min(...seen.keys())).toBe(min);
       expect(Math.max(...seen.keys())).toBe(max);
       expect(sum / n).toBeCloseTo(100 / pct, 1);
-      // Every gap from 1 to the longest occurs.
-      expect(seen.size).toBe(max);
+      // Every gap from the shortest to the longest occurs.
+      expect(seen.size).toBe(max - min + 1);
     });
   }
 
@@ -83,11 +96,11 @@ describe('the gap between transmissions', () => {
   });
 
   it('rounds the drawn gap up in proportion to its fraction', () => {
-    // At 20%, x = 0.25 × 8 = 2: no fraction, gap 3 whatever the second draw.
-    expect(gapSlots(20, (() => { const v = [0.25, 0.99]; return () => v.shift()!; })())).toBe(3);
-    // x = 0.3 × 8 = 2.4: up when the second draw is under 0.4.
-    expect(gapSlots(20, (() => { const v = [0.3, 0.39]; return () => v.shift()!; })())).toBe(4);
-    expect(gapSlots(20, (() => { const v = [0.3, 0.41]; return () => v.shift()!; })())).toBe(3);
+    // At 20%, x = 0.5 × 6 = 3: no fraction, gap 2 + 3 whatever the second draw.
+    expect(gapSlots(20, (() => { const v = [0.5, 0.99]; return () => v.shift()!; })())).toBe(5);
+    // x = 0.4 × 6 = 2.4: up when the second draw is under 0.4.
+    expect(gapSlots(20, (() => { const v = [0.4, 0.39]; return () => v.shift()!; })())).toBe(5);
+    expect(gapSlots(20, (() => { const v = [0.4, 0.41]; return () => v.shift()!; })())).toBe(4);
   });
 });
 
@@ -101,11 +114,23 @@ describe('the next Tx slot', () => {
     expect(nextTxSlot(at(14, 7, 51, 600), 100, at(14, 6), 0)).toBe(at(14, 8));
   });
 
-  it('counts from the first slot Beacon on would take when nothing has gone out', () => {
+  it('puts the shortest gap on the first slot Beacon on could take when nothing has gone out', () => {
     const zero = () => 0;
     expect(nextTxSlot(at(14, 5, 28), 20, null, LEAD_MS, zero)).toBe(at(14, 6));
+    // 0.5 at 20%: a gap of 5, 3 slots after the first one.
     const half = () => 0.5;
-    expect(nextTxSlot(at(14, 5, 28), 20, null, LEAD_MS, half)).toBe(at(14, 14));
+    expect(nextTxSlot(at(14, 5, 28), 20, null, LEAD_MS, half)).toBe(at(14, 12));
+  });
+
+  it('keeps a receive slot after the last transmission when Beacon turns on again, a cut one included', () => {
+    const zero = () => 0;
+    // Cut short in 14:04, Beacon on at 14:05:28: 14:06 would follow at once; 14:08 leaves 14:06 to receive.
+    expect(beaconOnSlot(at(14, 5, 28), 20, at(14, 4), zero)).toBe(at(14, 8));
+    // Long after the last transmission, the first slot is drawn as with none.
+    expect(beaconOnSlot(at(14, 5, 28), 20, at(13, 0), zero)).toBe(at(14, 6));
+    expect(beaconOnSlot(at(14, 5, 28), 20, null, zero)).toBe(at(14, 6));
+    // Above 50% the next slot may follow at once.
+    expect(beaconOnSlot(at(14, 5, 28), 100, at(14, 4))).toBe(at(14, 6));
   });
 
   it('never picks a slot that has started or is less than the lead away', () => {

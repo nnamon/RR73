@@ -9,8 +9,10 @@
  * the row period follows the canvas height. A change between views starts the picture afresh. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
  * In the slots RR73 transmitted in, the receive audio is the radio's own transmission, so those
- * rows show the transmitted audio instead (setTxWave), as a strong signal over an even floor. A
- * row in such a slot that no transmitted audio covers is blank.
+ * rows show the transmitted audio instead (setTxWave), as a strong signal over an even floor.
+ * Before the transmission starts and after it ends, or Halt cuts it, the radio receives: those
+ * rows show the received audio, which every row keeps. A row in such a slot is blank while the
+ * slot's transmission is not known yet.
  */
 
 import { buildLut, type WaterfallPalette } from './colormap';
@@ -66,9 +68,12 @@ const TX_FLOOR = Math.round(NOISE_POSITION * 255);
 const TX_TOP = 240;
 
 interface Row {
+  /** What the row shows. */
   levels: Uint8Array;
   utcMs: number;
   blank: boolean;
+  /** The received audio's levels, kept for rows a transmission covers; null without a full frame of audio. */
+  rx: Uint8Array | null;
 }
 
 /** For each pixel column, the bins it covers. */
@@ -244,17 +249,38 @@ export class WaterfallRenderer {
     let changed = false;
     for (const r of this.history) {
       if (!this.inTxSlot(r.utcMs)) continue;
-      const lv = this.txLevels(r.utcMs);
-      if (lv) {
-        r.levels = lv;
-        r.blank = false;
-        changed = true;
-      } else if (!r.blank) {
-        r.blank = true;
+      const shown = this.txRow(r.utcMs, r.rx);
+      if (shown.levels !== r.levels || shown.blank !== r.blank) {
+        r.levels = shown.levels;
+        r.blank = shown.blank;
         changed = true;
       }
     }
     if (changed) this.redraw();
+  }
+
+  /**
+   * What a row in a transmitted slot shows: the transmitted audio where the transmission covers
+   * it; the received audio `rx` before it starts and after it ends or Halt cuts it; blank while
+   * the slot's transmission is not known yet, or without received audio.
+   */
+  private txRow(utcMs: number, rx: Uint8Array | null): { levels: Uint8Array; blank: boolean } {
+    const tx = this.txLevels(utcMs);
+    if (tx) return { levels: tx, blank: false };
+    if (rx && this.txKnown(utcMs)) return { levels: rx, blank: false };
+    return { levels: this.blankLevels(), blank: true };
+  }
+
+  /** True when the transmission of the slot holding `utcMs` is known, so its start and end are. */
+  private txKnown(utcMs: number): boolean {
+    if (!hasSlots(this.mode)) return false;
+    const slot = SLOT_MS[this.mode];
+    const s = Math.floor(utcMs / slot);
+    return this.txWaves.some((w) => Math.floor(w.startUtcMs / slot) === s);
+  }
+
+  private blankLevels(): Uint8Array {
+    return new Uint8Array(this.bins);
   }
 
   /**
@@ -322,7 +348,7 @@ export class WaterfallRenderer {
       if (jump > GAP_MS) {
         const count = Math.min(this.height, Math.floor(jump / this.rowMs));
         const from = this.lastRowUtc ?? utcMs - jump;
-        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(this.bins), utcMs: from + i * this.rowMs, blank: true });
+        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(this.bins), utcMs: from + i * this.rowMs, blank: true, rx: null });
       }
       if (this.expectedUtc !== null && Math.abs(jump) > GAP_MS) {
         // The frame holds audio from before the break; a row across it would smear.
@@ -351,17 +377,19 @@ export class WaterfallRenderer {
         // Only full frames of audio get a spectrum: a window that starts in silence splatters
         // across every bin. Until then the row is blank, so the time scale keeps moving.
         if (this.valid < fft) {
-          rows.push({ levels: new Uint8Array(this.bins), utcMs: t, blank: true });
-          continue;
-        }
-        if (this.inTxSlot(t)) {
-          const lv = this.txLevels(t);
-          rows.push(lv ? { levels: lv, utcMs: t, blank: false } : { levels: new Uint8Array(this.bins), utcMs: t, blank: true });
+          rows.push({ levels: new Uint8Array(this.bins), utcMs: t, blank: true, rx: null });
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
+        if (this.inTxSlot(t)) {
+          // The radio's own transmission may be in this audio: the levels do not learn from it.
+          const rx = this.mapper.peek(this.db);
+          rows.push({ ...this.txRow(t, rx), utcMs: t, rx });
+          continue;
+        }
         if (isFt(this.mode)) this.quiet.add(this.db, t);
-        rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
+        const rx = this.mapper.map(this.db);
+        rows.push({ levels: rx, utcMs: t, blank: false, rx });
       }
     }
     if (!rows.length) return null;

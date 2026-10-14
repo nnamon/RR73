@@ -237,7 +237,7 @@ describe('WaterfallRenderer in transmitted slots', () => {
   const SLOT = Date.UTC(2026, 9, 13, 13, 15, 0);
   const background = [...PALETTE.background, 255];
 
-  it('draws the slots RR73 transmitted in blank, rows drawn before it was known included', () => {
+  it('draws the slots RR73 transmitted in blank until their transmission is known, rows drawn before included', () => {
     const ctx = new FakeContext();
     const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 200);
     const x = Math.floor((1000 / 3000) * 300);
@@ -278,9 +278,55 @@ describe('WaterfallRenderer in transmitted slots', () => {
     // Rows drawn later in the transmission show it as they arrive.
     feed(r, signal(4, [1000], 3), T0 + 14_000, 14 * 12000);
     expect(bright(ctx.pixel(txX, 2))).toBeGreaterThan(2 * floor);
-    // Halt at 13:15:06: rows after it are blank, rows before keep the tone.
+    // Halt at 13:15:06: rows after it show what the radio receives again, the 1000 Hz tone; rows
+    // before keep the transmitted tone. They were blank until the slot ended, 2 min in WSPR.
     r.setTxWave({ startUtcMs: start, endUtcMs: SLOT + 6000, samples: tone });
-    expect(ctx.pixel(txX, 2)).toEqual(background);
+    expect(bright(ctx.pixel(rx, 2))).toBeGreaterThan(3 * bright(background));
+    expect(bright(ctx.pixel(txX, 2))).toBeLessThan(on / 2);
     expect(bright(ctx.pixel(txX, rows(4)))).toBeGreaterThan(2 * floor);
+    // Rows arriving after Halt show the received audio as they are drawn.
+    feed(r, signal(2, [1000], 4), T0 + 18_000, 18 * 12000);
+    expect(bright(ctx.pixel(rx, 2))).toBeGreaterThan(3 * bright(background));
+  });
+
+  it('draws the received audio before a transmission that starts late in its slot', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const rx = Math.floor((1000 / 3000) * 300);
+    const rows = (s: number) => Math.round((s * 1000) / r.rowMs);
+    // A call answered 3 s late: the transmission runs from 13:15:03.
+    feed(r, signal(14, [1000]), T0);
+    r.setTxSlots([SLOT]);
+    expect(ctx.pixel(rx, rows(2.5))).toEqual(background);
+    const start = SLOT + 3000;
+    r.setTxWave({ startUtcMs: start, endUtcMs: start + 9_640, samples: signal(9.64, [1500], 7, 0) });
+    // 13:15:01.5 is before the transmission: the received tone. 13:15:03.5 is in it: no received tone.
+    expect(bright(ctx.pixel(rx, rows(2.5)))).toBeGreaterThan(3 * bright(background));
+    expect(bright(ctx.pixel(rx, rows(0.5)))).toBeLessThan(2 * bright(ctx.pixel(rx, rows(2.5))) / 3);
+  });
+
+  it('keeps its noise level through a transmission: the radio’s own signal does not raise it', () => {
+    const quiet = new FakeContext();
+    const a = new WaterfallRenderer(quiet as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const loud = new FakeContext();
+    const b = new WaterfallRenderer(loud as unknown as Context2D, PALETTE, 'FT8', 300, 200);
+    const x = Math.floor((1000 / 3000) * 300);
+    b.setTxSlots([SLOT]);
+    b.setTxWave({ startUtcMs: SLOT + 500, endUtcMs: SLOT + 6000, samples: signal(5.5, [1500], 7, 0) });
+    // The same receive audio, except that in b the transmission from 13:15:00.5 to 13:15:06 comes
+    // back 26 dB stronger, as the radio's own signal does.
+    feed(a, signal(10, [1000]), T0);
+    feed(b, signal(10, [1000]), T0);
+    const own = signal(6, [1000, 1500, 2000], 2);
+    for (let i = 0; i < own.length; i++) own[i] *= 20;
+    feed(a, signal(6, [1000], 2), T0 + 10_000, 10 * 12000);
+    feed(b, own, T0 + 10_000, 10 * 12000);
+    feed(a, signal(4, [1000], 3), T0 + 16_000, 16 * 12000);
+    feed(b, signal(4, [1000], 3), T0 + 16_000, 16 * 12000);
+    // 13:15:09.5, 3.5 s after the transmission: both draw the received tone and the noise alike, within a level tracker still settling.
+    for (const px of [x, Math.floor((2500 / 3000) * 300)]) {
+      const want = bright(quiet.pixel(px, 2));
+      expect(Math.abs(bright(loud.pixel(px, 2)) - want)).toBeLessThan(0.25 * want);
+    }
   });
 });

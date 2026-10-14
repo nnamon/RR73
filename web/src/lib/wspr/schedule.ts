@@ -2,11 +2,13 @@
  * The WSPR beacon's schedule (docs/design/wspr.md, Beacon schedule). Slots are 2 minutes from
  * an even UTC minute; a transmission starts 1 s into its slot and lasts 110.6 s.
  *
- * - Beacon on: the first Tx is the next slot that starts at least 10 s later, the time needed to
- *   build and queue the audio.
- * - Each later gap is 1 + x slots, where n = 100 ÷ Tx percentage and x is drawn uniformly from
- *   0 to 2(n − 1), then rounded up or down at random in proportion to its fraction: the mean gap
- *   is n slots and the longest 2n − 1 (at 20%: 1 to 9 slots, mean 5).
+ * - Beacon on: the first Tx is drawn from the next slot that starts at least 10 s later, the time
+ *   needed to build and queue the audio, and keeps the shortest gap after the last transmission,
+ *   a cut-short one included.
+ * - Each later gap is m + x slots, where n = 100 ÷ Tx percentage, m is the shortest gap (2 at 50%
+ *   and below, so at least one receive slot separates transmissions; 1 above 50%) and x is drawn
+ *   uniformly from 0 to 2(n − m), then rounded up or down at random in proportion to its
+ *   fraction: the mean gap is n slots (at 20%: 2 to 8 slots, mean 5; at 50%: every other slot).
  * - Stop beacon after counts from Beacon on; 0 is Off.
  *
  * Pure functions of the time and a random source, so tests run them on any clock.
@@ -51,29 +53,47 @@ export function firstTxSlot(nowMs: number): number {
 }
 
 /**
- * Slots from one transmission to the next, at `pct` percent: 1 + x, x uniform from 0 to
- * 2(n − 1) with n = 100 ÷ pct, rounded at random in proportion to its fraction. `random`
- * returns values in [0, 1), as Math.random.
+ * The shortest gap between transmissions, slots: 2 at 50% and below, so a receive slot always
+ * separates them; 1 above 50%, where the beacon has to transmit in consecutive slots.
+ */
+export function minGapSlots(pct: number): number {
+  return pct <= 50 ? 2 : 1;
+}
+
+/**
+ * Slots from one transmission to the next, at `pct` percent: m + x, m the shortest gap and x
+ * uniform from 0 to 2(n − m) with n = 100 ÷ pct, rounded at random in proportion to its fraction.
+ * `random` returns values in [0, 1), as Math.random.
  */
 export function gapSlots(pct: number, random: () => number = Math.random): number {
   const n = 100 / pct;
-  const x = random() * 2 * (n - 1);
+  const min = minGapSlots(pct);
+  const x = random() * 2 * (n - min);
   const whole = Math.floor(x);
-  return 1 + (random() < x - whole ? whole + 1 : whole);
+  return min + (random() < x - whole ? whole + 1 : whole);
 }
 
 /**
  * The next Tx slot, drawn at `nowMs`. After a transmission in `lastTxSlot` the gap counts from
- * it; with none yet (Beacon just on), from the slot before the first one Beacon on would take,
- * so a gap of 1 is that slot. The slot is at least `leadMs` away: LEAD_MS when Beacon turns on
- * or the percentage changes, 0 when a transmission has just ended and the next one may follow
- * at once.
+ * it; with none, the shortest gap lands on the first slot Beacon on could take. The slot is at
+ * least `leadMs` away: LEAD_MS when Beacon turns on or the percentage changes, 0 when a
+ * transmission has just ended and the next one may follow at once.
  */
 export function nextTxSlot(nowMs: number, pct: number, lastTxSlot: number | null, leadMs: number = LEAD_MS, random: () => number = Math.random): number {
   const gap = gapSlots(pct, random);
   const soonest = soonestSlot(nowMs, leadMs);
-  if (lastTxSlot === null) return soonest + (gap - 1) * WSPR_SLOT_MS;
+  if (lastTxSlot === null) return soonest + (gap - minGapSlots(pct)) * WSPR_SLOT_MS;
   return Math.max(lastTxSlot + gap * WSPR_SLOT_MS, soonest);
+}
+
+/**
+ * The first Tx slot when Beacon turns on at `nowMs`: drawn as with nothing sent, and no sooner
+ * than the shortest gap after `lastTxSlot`, the last transmission, a cut-short one included. A
+ * Halt and Beacon on again keep a receive slot between transmissions at 50% and below.
+ */
+export function beaconOnSlot(nowMs: number, pct: number, lastTxSlot: number | null, random: () => number = Math.random): number {
+  const slot = nextTxSlot(nowMs, pct, null, LEAD_MS, random);
+  return lastTxSlot === null ? slot : Math.max(slot, lastTxSlot + minGapSlots(pct) * WSPR_SLOT_MS);
 }
 
 /** When Stop beacon after ends a beacon turned on at `startedAtMs`, UTC ms; null when it is Off. */

@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- At 50% and below, the WSPR beacon leaves at least one receive slot between transmissions: at 20% the gap is 2 to 8 slots, mean 5. It could send in 2 slots back to back, about 1 gap in 16 at 20%.
+- Halt and Beacon on again no longer transmits in the next slot after the one Halt cut short. Transmit next slot no longer leaves the beacon's own slot right after it.
+- After Halt the waterfall shows the band again at once. The rest of the slot stayed black: up to 2 min in WSPR, 15 s in FT8. A transmission that starts late shows the band before it too.
+
 ## 0.15.0 · 2026-10-14
 
 - Spots lists POTA and DX cluster spots, newest first, while POTA spots or Cluster spots is on in Settings › Optional features. The list refreshes every minute while Spots is open and online, and offline shows the last list with its time.

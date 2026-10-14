@@ -138,28 +138,43 @@ export class LevelMapper {
     return this.floor;
   }
 
-  /** Levels 0..255 for one row of dB values. */
+  /** Levels 0..255 for one row of dB values, which the baseline and the noise level learn from. */
   map(db: Float32Array, out = new Uint8Array(db.length)): Uint8Array {
+    return this.levels(db, out, true);
+  }
+
+  /**
+   * Levels for one row as `map` gives them, without learning from it: for a row that may hold the
+   * radio's own transmission, which would raise the noise level for the rows after it.
+   */
+  peek(db: Float32Array, out = new Uint8Array(db.length)): Uint8Array {
+    return this.levels(db, out, false);
+  }
+
+  private levels(db: Float32Array, out: Uint8Array, learn: boolean): Uint8Array {
     const { bins, low, high, half } = this.band;
     const n = Math.min(db.length, bins);
     let any = false;
     for (let k = 0; k < n && !any; k++) any = Number.isFinite(db[k]);
     if (!any) return out.fill(0);
     const v = (k: number) => (Number.isFinite(db[k]) ? db[k] : SILENT_DB);
-    const t = (this.track ??= new Float32Array(bins));
-    const w = Math.max(this.slow, 1 / ++this.count);
-    for (let k = 0; k < n; k++) t[k] += w * (v(k) - t[k]);
-    if (this.count >= this.warm) {
-      // The noise level is measured afresh on the levelled scale.
-      if (this.count === this.warm) this.floor = null;
-      baseline(t, half, this.work[0], this.work[1], this.base);
-    } else this.base.fill(0);
+    if (learn) {
+      const t = (this.track ??= new Float32Array(bins));
+      const w = Math.max(this.slow, 1 / ++this.count);
+      for (let k = 0; k < n; k++) t[k] += w * (v(k) - t[k]);
+      if (this.count >= this.warm) {
+        // The noise level is measured afresh on the levelled scale.
+        if (this.count === this.warm) this.floor = null;
+        baseline(t, half, this.work[0], this.work[1], this.base);
+      } else this.base.fill(0);
+    }
     for (let k = 0; k < n; k++) this.level[k] = v(k) - this.base[k];
     this.scratch.set(this.level.subarray(low, high + 1));
     this.scratch.sort();
     const p30 = this.scratch[Math.floor(0.3 * (this.scratch.length - 1))];
-    this.floor = this.floor === null ? p30 : this.floor + this.alpha * (p30 - this.floor);
-    const noise = this.floor + MEAN_OVER_P30_DB;
+    const floor = this.floor === null ? p30 : this.floor + this.alpha * (p30 - this.floor);
+    if (learn) this.floor = floor;
+    const noise = (learn ? floor : (this.floor ?? p30)) + MEAN_OVER_P30_DB;
     for (let k = 0; k < db.length; k++) {
       if (k >= n || !Number.isFinite(db[k])) {
         out[k] = 0;

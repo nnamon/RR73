@@ -90,10 +90,10 @@ describe('the beacon', () => {
       Math.random = () => 0.5;
       setBeacon(true, at(14, 5, 28));
       expect(wspr.next?.slotStartMs).toBe(at(14, 6));
-      // At 20%, 0.5 draws x = 4: a gap of 5 slots from the slot before the first one.
+      // At 20%, 0.5 draws x = 3: a gap of 5 slots, the shortest (2) landing on the first slot.
       setTxPct(20, at(14, 5, 30));
       expect(settings.wspr.txPct).toBe(20);
-      expect(wspr.next?.slotStartMs).toBe(at(14, 14));
+      expect(wspr.next?.slotStartMs).toBe(at(14, 12));
     } finally {
       Math.random = random;
     }

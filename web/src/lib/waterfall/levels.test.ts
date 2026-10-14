@@ -58,6 +58,22 @@ describe('baseline', () => {
 });
 
 describe('LevelMapper', () => {
+  it('peeks at a row without learning from it', () => {
+    const r = prng(5);
+    const row = () => Float32Array.from({ length: DISPLAY_BINS }, () => -90 + 6 * r());
+    const a = new LevelMapper();
+    const b = new LevelMapper();
+    for (let i = 0; i < 40; i++) {
+      const x = row();
+      a.map(x);
+      b.map(x);
+    }
+    // b peeks at rows 40 dB stronger, as the radio's own transmission comes back; a sees none.
+    for (let i = 0; i < 20; i++) expect(Math.max(...b.peek(row().map((v) => v + 40)))).toBe(255);
+    expect(b.floorDb).toBe(a.floorDb);
+    const next = row();
+    expect(b.map(next)).toEqual(a.map(next));
+  });
   it('puts average noise on the noise position at any input level', () => {
     for (const meanDb of [-90, -60, -30]) {
       const r = prng(5);

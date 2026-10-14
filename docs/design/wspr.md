@@ -68,8 +68,9 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006). `views/Operate
 
 ## Beacon schedule
 
-- Beacon on: the first Tx is the next slot that starts at least 10 s later, the time needed to build and queue 110.6 s of audio.
-- Each later gap is 1 + x slots, where n = 100 ÷ Tx percentage and x is drawn uniformly from 0 to 2(n − 1), then rounded up or down at random in proportion to its fraction. The mean gap is n slots and the longest 2n − 1. At 20%: gaps of 1 to 9 slots, mean 5.
+- Beacon on: the first Tx is drawn from the next slot that starts at least 10 s later, the time needed to build and queue 110.6 s of audio, and keeps the shortest gap after the last transmission. A transmission Halt cut short counts, so Halt and Beacon on again never sends in the next slot at 50% and below.
+- Each later gap is m + x slots, where n = 100 ÷ Tx percentage, m is the shortest gap and x is drawn uniformly from 0 to 2(n − m), then rounded up or down at random in proportion to its fraction. The mean gap is n slots. m is 2 at 50% and below, so at least one receive slot separates transmissions; above 50% it is 1, since the beacon has to transmit in consecutive slots. At 20%: gaps of 2 to 8 slots, mean 5. At 50%: every other slot.
+- Transmit next slot sends in the next slot whatever the gap. A beacon slot it leaves closer than the shortest gap is drawn again from it.
 - The next Tx slot is drawn when a transmission ends, when Beacon turns on and when the percentage changes, so the button can show it.
 - Reason: a known next slot lets the button say "Tx at :06", and a bounded gap keeps spots arriving at a steady rate. Random gaps stop two beacons on one frequency from colliding every time.
 - Stop beacon after: 1 h by default, set to any duration or Off. It counts from Beacon on. When it fires, it stops a transmission on air too, as FT8's watchdog does, and the status line says "Beacon stopped after 1 h". Changing the setting while the beacon runs moves its stop time, still counted from Beacon on.
@@ -249,6 +250,7 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - A filter bar in WSPR: it costs 36 pt, one row more of spots, and Sort by in ••• covers the need.
 - DT in the row: it is close to 0 for most stations, so it goes to touch and hold.
 - A coin flip per slot: gaps have no upper bound and the next Tx slot is unknown until it starts.
+- Gaps from 1 slot at every percentage (0.12.0 to 0.15.0): at 20% about 1 gap in 16 put two transmissions back to back, with no slot to hear other stations between them. Changed on 14 October 2026 at the owner's report.
 - Fixed spacing between transmissions: it repeats collisions with a station on the same spacing.
 - Modes as its own screen under Settings: one more tap.
 - Band hopping: RR73 has no CAT control of the radio, so a hop would need the operator to retune by hand.

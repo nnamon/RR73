@@ -16,7 +16,7 @@ import { STATUS } from '../qso/status';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
 import { beaconMessages } from '../wspr/message';
-import { durationText, firstTxSlot, nextStopAfter, nextTxSlot, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
+import { beaconOnSlot, durationText, firstTxSlot, minGapSlots, nextStopAfter, nextTxSlot, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
 import { SORT_LABELS, SPOT_SORTS, learnGrids, toSpots, type Spot } from '../wspr/spots';
 import { log } from '../log/log.svelte';
 import { features } from './features.svelte';
@@ -69,7 +69,10 @@ export const wspr = new WsprRuntime();
 /** The beacon's slot and Transmit next slot's, UTC ms; the earlier one is next. */
 let beaconSlot: number | null = null;
 let onceSlot: number | null = null;
-/** The last slot the beacon transmitted in, for the next gap. */
+/**
+ * The last slot RR73 transmitted in, a cut-short or single transmission included, for the next
+ * gap. It outlasts Beacon off, so Beacon on keeps a receive slot after it.
+ */
 let lastTxSlot: number | null = null;
 /** Which of the messages goes next: a compound callsign alternates Type 2 and Type 3. */
 let part = 0;
@@ -151,8 +154,7 @@ export function setBeacon(on: boolean, nowMs = Date.now()) {
     if (!ready(nowMs)) return;
     void checkCall(nowMs);
     wspr.beacon = { on: true, startedAtMs: nowMs, stopsAtMs: stopsAtMs(nowMs, settings.wspr.stopAfterMin) };
-    lastTxSlot = null;
-    beaconSlot = nextTxSlot(nowMs, settings.wspr.txPct, null, LEAD_MS);
+    beaconSlot = beaconOnSlot(nowMs, settings.wspr.txPct, lastTxSlot);
   } else {
     wspr.beacon = { on: false, startedAtMs: 0, stopsAtMs: null };
     beaconSlot = null;
@@ -273,13 +275,18 @@ export function tick(nowMs = Date.now()) {
   void scheduler.schedule({ text, mode: 'WSPR', slotStartMs: n.slotStartMs, startOffsetS: TX_OFFSET_S, f0Hz: settings.wspr.txHz, level: txLevel(settings.outputLevel) });
 }
 
-/** After a slot is done with, sent or not: the single transmission goes, and the beacon draws its next slot. */
+/**
+ * After a slot is done with, sent or not: the single transmission goes, and the beacon draws its
+ * next slot, again when a single transmission left it closer than the shortest gap.
+ */
 function afterSlot(slotStartMs: number, nowMs: number, sent: boolean) {
   if (onceSlot === slotStartMs) onceSlot = null;
   if (scheduledFor === slotStartMs) scheduledFor = null;
-  if (wspr.beacon.on && (beaconSlot === null || beaconSlot <= slotStartMs)) {
-    if (sent) lastTxSlot = slotStartMs;
-    beaconSlot = nextTxSlot(nowMs, settings.wspr.txPct, lastTxSlot, sent ? 0 : LEAD_MS);
+  if (sent) lastTxSlot = slotStartMs;
+  const pct = settings.wspr.txPct;
+  const tooSoon = sent && beaconSlot !== null && beaconSlot < slotStartMs + minGapSlots(pct) * WSPR_SLOT_MS;
+  if (wspr.beacon.on && (beaconSlot === null || beaconSlot <= slotStartMs || tooSoon)) {
+    beaconSlot = nextTxSlot(nowMs, pct, lastTxSlot, sent ? 0 : LEAD_MS);
   }
   updateNext();
 }
