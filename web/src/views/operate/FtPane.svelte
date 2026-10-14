@@ -2,6 +2,12 @@
   /**
    * FT8 and FT4 in Operate's frame (views/Operate.svelte): the decode list with its filters, and
    * the bottom bar with Tx, CQ, Hunt, ••• and Halt (TxBar).
+   *
+   * The middle and the controls are the pane's two parts (data-part), which the frame places by
+   * size class. In regular width the middle is two panes, as in WSJT-X: Band activity, every
+   * decode with the All, CQ and To me filters and a grey bar for each slot we sent in, and Rx
+   * frequency, the decodes within 50 Hz of Rx, messages to you and our own Next, Sending and Sent
+   * rows. Return calls the selected station and the arrows move the selection (lib/app/shortcuts.ts).
    */
   import { tick } from 'svelte';
   import DecodeList from '../../ui/DecodeList.svelte';
@@ -11,11 +17,13 @@
   import MessagesSheet from '../../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../../ui/StationDetailSheet.svelte';
   import type { PaneProps } from './panes';
-  import { callStation, clearDecodeList, qso, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
+  import { callStation, clearDecodeList, qso, select, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
+  import { layout } from '../../lib/app/layout.svelte';
+  import { setListKeys, stepSelection } from '../../lib/app/shortcuts';
   import type { ListItem } from '../../lib/decode/list';
   import { SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
-  import { buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
+  import { RX_PANE_HZ, buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
   import { highlightDecode } from '../../lib/decode/highlight';
   import { log } from '../../lib/log/log.svelte';
@@ -196,7 +204,13 @@
   // While calling a station or in a QSO, rows unrelated to it dim. The focus is a callsign or
   // null, so the sequencer's 1 s tick does not rebuild the list.
   const focus = $derived(focusCall(qso.st));
-  const items = $derived(applyFocus([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, ftMode, classify, outgoing)], focus));
+  const regular = $derived(layout.size === 'regular');
+  // Regular width: the Rx frequency pane takes the place of the Rx freq filter.
+  const shownFilter = $derived<Filter>(regular && filter === 'rx' ? 'all' : filter);
+  const items = $derived(
+    applyFocus([...callers, ...buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar' } : {})], focus),
+  );
+  const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true }), focus) : []);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -204,6 +218,36 @@
     { id: 'me', label: 'To me' },
     { id: 'rx', label: 'Rx freq' },
   ];
+  const shownChips = $derived(regular ? chips.filter((c) => c.id !== 'rx') : chips);
+  const callWord = $derived(layout.pointer === 'mouse' ? 'Double-click' : 'Double-tap');
+
+  // Return calls the selected station; the arrows move the selection through the list's rows.
+  const selectable = $derived(items.filter((i): i is RowItem => i.kind === 'row' && i.out?.stage !== 'next'));
+  async function reveal() {
+    await tick();
+    listEl?.querySelector('[aria-pressed=true]')?.scrollIntoView({ block: 'nearest' });
+  }
+  $effect(() => {
+    if (!active) return;
+    return setListKeys({
+      call() {
+        const s = qso.selected;
+        if (s) callStation(s.decode, s.slotStartMs);
+      },
+      move(step) {
+        const rows = selectable;
+        const id = stepSelection(
+          rows.map((r) => r.id),
+          qso.selected?.id ?? null,
+          step,
+        );
+        const row = rows.find((r) => r.id === id);
+        if (!row) return;
+        select(asSelected(row));
+        void reveal();
+      },
+    });
+  });
 
   const FAILED = {
     missing: 'This version was built without the decoder.',
@@ -213,27 +257,32 @@
   } as const;
 </script>
 
+{#snippet failed()}
   {#if band.decoder.state === 'failed'}
     <div class="decoder-error" role="alert">
       <p class="t">{band.decoder.reason === 'crashed' ? 'Decoding stopped' : 'No decodes: the decoder did not load'}</p>
       <p class="s">{FAILED[band.decoder.reason]} The waterfall and Save slot still work. Reload RR73 to try again.</p>
     </div>
   {/if}
-  <div class="filters">
-    <div class="chips" role="radiogroup" aria-label="Show decodes">
-      {#each chips as c (c.id)}
-        <button class="chip" class:on={filter === c.id} role="radio" aria-checked={filter === c.id} onclick={() => (filter = c.id)}>
-          <span class="pill">{c.label} <span class="n">{counts[c.id]}</span></span>
-        </button>
-      {/each}
-    </div>
-    <button class="save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" size={22} /></button>
+{/snippet}
+
+{#snippet chipRow()}
+  <div class="chips" role="radiogroup" aria-label="Show decodes">
+    {#each shownChips as c (c.id)}
+      <button class="chip" class:on={shownFilter === c.id} role="radio" aria-checked={shownFilter === c.id} onclick={() => (filter = c.id)}>
+        <span class="pill">{c.label} <span class="n">{counts[c.id]}</span></span>
+      </button>
+    {/each}
   </div>
+  <button class="save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" size={22} /></button>
+{/snippet}
+
+{#snippet decodes(label: string)}
   <div class="list-wrap">
     {#if unseen > 0}
       <button class="newpill" onclick={showNewest}><Icon name="chevdown" size={13} class="up" />{unseen} new {unseen === 1 ? 'decode' : 'decodes'}</button>
     {/if}
-    <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
+    <div class="list" bind:this={listEl} role="region" aria-label={label} data-testid="decode-list" data-keys="list">
       {#if items.length}
         <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
@@ -243,7 +292,7 @@
             <p>Decodes appear here after each {slotSeconds} s slot ends.</p>
           {:else if live}
             <h2>No decodes yet</h2>
-            <p>Decodes appear here after each {slotSeconds} s slot ends. Double-tap one to call the station.</p>
+            <p>Decodes appear here after each {slotSeconds} s slot ends. {callWord} one to call the station.</p>
           {:else}
             <h2>No decodes yet</h2>
             <p>Decodes appear here after each {slotSeconds} s slot ends, while audio runs.</p>
@@ -252,7 +301,52 @@
       {/if}
     </div>
   </div>
-  <TxBar onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
+{/snippet}
+
+{#if regular}
+  <div class="middle" data-part="middle">
+    {@render failed()}
+    <div class="panes">
+      <section class="pane band" aria-labelledby="band-activity">
+        <div class="phd">
+          <h2 id="band-activity">Band activity</h2>
+          {@render chipRow()}
+        </div>
+        {@render decodes('Band activity, newest slot first')}
+      </section>
+      <section class="pane rx" aria-labelledby="rx-frequency">
+        <div class="phd">
+          <h2 id="rx-frequency">Rx frequency</h2>
+          <span class="v">{settings.rxHz} Hz</span>
+        </div>
+        <div class="list" role="region" aria-label="Rx frequency, newest slot first" data-testid="rx-list" data-keys="list">
+          {#if rxItems.length}
+            <DecodeList items={rxItems} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {onselect} {oncall} {ondetail} />
+          {:else if band.decoder.state !== 'failed'}
+            <div class="empty">
+              <h2>Nothing near Rx yet</h2>
+              <p>Decodes within {RX_PANE_HZ} Hz of {settings.rxHz} Hz, messages to you and your own messages appear here.</p>
+            </div>
+          {/if}
+        </div>
+      </section>
+    </div>
+  </div>
+  <div class="controls" data-part="controls">
+    <TxBar variant={layout.upright ? 'bottom' : 'panel'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
+  </div>
+{:else}
+  <div class="middle" data-part="middle">
+    {@render failed()}
+    <div class="filters">
+      {@render chipRow()}
+    </div>
+    {@render decodes('Decodes, newest slot first')}
+  </div>
+  <div class="controls" data-part="controls">
+    <TxBar variant={layout.size === 'compact-height' ? 'side' : 'phone'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
+  </div>
+{/if}
 
 <svelte:window onpointerup={up} onpointercancel={up} />
 
@@ -402,5 +496,68 @@
 
   .empty {
     margin-top: var(--rr-space-6);
+  }
+
+  /* Regular width: Band activity and Rx frequency side by side, each with a 44 pt header. */
+  .panes {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .pane {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--rr-plain);
+  }
+
+  .pane.band {
+    flex: 1.25;
+  }
+
+  .pane.rx {
+    flex: 1;
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
+  }
+
+  :global([data-upright]) .pane.band {
+    flex: 1;
+  }
+
+  .phd {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex: none;
+    gap: var(--rr-space-1);
+    align-items: center;
+    height: var(--rr-tap);
+    padding: 0 var(--rr-space-1-5) 0 var(--rr-space-4);
+    background: var(--rr-plain);
+    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+    white-space: nowrap;
+  }
+
+  .phd h2 {
+    margin-right: var(--rr-space-2);
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-semibold);
+  }
+
+  .phd .v {
+    font-size: var(--rr-text-sub);
+    color: var(--rr-label2);
+  }
+
+  .phd .save {
+    margin-left: auto;
+  }
+
+  .pane.rx .list {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 </style>

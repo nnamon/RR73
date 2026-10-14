@@ -50,13 +50,36 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 
 - Our transmissions use one slot parity: the opposite of the station we answer, or the parity the operator chose for CQ.
 - A transmission starts 0.5 s after its slot boundary, scheduled on the audio clock.
-- Late start: when the decision for a slot is made after its start (decodes arrive about 0.1 to 0.5 s after the previous slot ends), the transmission may start up to 1.5 s late in FT8 and 1.0 s late in FT4. Later than that it moves to the next slot of the same parity, and the dock says which.
-- The sequencer decides on the final decoding pass of each slot. An early pass may only add a caller to the queue. A later pass (the decoder's deeper FT8 stages, up to 2 s after the slot) brings only new decodes and acts on them as the final pass would: a reply, a lost station, a caller, a CQ for Hunt. The answer starts late in the slot under way when the late-start limit allows and no transmission is on air in it, else a cycle later. A later pass never repeats a message or counts a retry for what it lacks.
+- Late start: when the decision for a slot is made after its start (decodes arrive about 0.1 to 0.5 s after the previous slot ends, and a tap on a decode comes seconds later), the transmission may start up to 4 s late in FT8 and 1.25 s late in FT4, that is up to 4.5 s and 1.75 s into the slot. Later than that it moves to the next slot of the same parity, and the dock says which.
+  - Up to 1.5 s late in FT8 and 0.5 s in FT4 the whole message goes out late. Later, it keeps its place in the slot and leaves out its first part, faded in over 5 ms, so it ends on time with DT near 0.
+  - Measured with the `late-start` bench set (docs/bench.md), 25 slots per cell, WSJT-X 2.7.0-rc3's `jt9 -d 3` as the receiving station, SNR50 being the level at which half decode:
+
+    | | On time | Whole, late | First part left out |
+    | --- | --- | --- | --- |
+    | FT8 | -21.2 dB | -20.1 dB at 2.0 s; at 2.5 s jt9 decodes 15 of 25 at -8 dB; from 3 s none | -20.3 dB at 2.0 s, -19.7 at 3.0, -18.6 at 4.0, -15.7 at 5.0, -8.6 at 6.0 |
+    | FT4 | -17.7 dB | -17.1 dB at 0.875 s; from 1.0 s none, at any level | -16.0 dB at 1.0 s, -15.7 at 1.25, -14.2 at 1.5, -12.3 at 2.0 |
+
+  - At the limits jt9 decodes every slot at -16 dB and stronger in FT8 and -12 dB in FT4, and the late start costs 2.6 dB (FT8) and 2 dB (FT4) at the weak end. A reply that weak would otherwise wait 30 s (FT8) or 15 s (FT4).
+  - Our own decoder loses more with the first part left out: SNR50 -19.4 dB on time, -16.2 at 3 s and -11.8 at 4 s in FT8. Most stations we answer run WSJT-X or a decoder like it, so the limits follow jt9.
+  - Rejected: sending the whole message later than the shift limits. jt9 finds no FT8 transmission sent whole from 3 s late, or FT4 from 1.0 s late. The previous FT4 limit, 1.0 s, sat on that edge.
+  - Unverified: WSJT-X decodes the slot as audio arrives, so a whole message that ends past about 14.5 s may lose its end there; jt9 on a 15 s file does not show this. The shift limits end FT8 by 14.64 s, as before, and FT4 by 6.04 s, 0.5 s earlier than before.
+  - Measured with exact DT values, jt9 missed 8 of 75 FT8 signals at -12 to -8 dB sent whole exactly 0.50 s late, and none at 0, 1.5 or 2.0 s. Our decoder found all 75. Real late starts are never exactly 0.5 s.
+- The sequencer decides on the final decoding pass of each slot. An early pass may only add a caller to the queue. A later pass (the decoder's deeper FT8 stages, up to 2 s after the slot) brings only new decodes and acts on them as the final pass would: a reply, a lost station, a caller, a CQ for Hunt. The answer starts late in the slot under way when the late-start limit allows, else a cycle later. A later pass never repeats a message or counts a retry for what it lacks.
+- A newer message for the slot under way replaces ours on air in it early in the slot: a call to a CQ heard while our CQ plays goes out in that slot, and so does the answer a later pass finds while a repeat plays. RR73, RRR and 73 play out, since they end a QSO, as does the same message; the new one then goes a cycle later. Before 0.12.6 a transmission on air always kept its slot, so a call made while calling CQ waited 30 s.
+  - The replacement goes only while the new message can go out whole: up to 1.5 s late in FT8 and 0.5 s in FT4, as the late start's shift limits. Measured with the `late-start` set's `replace` and `splice` subsets (part of our CQ at the same frequency, then the reply), jt9 SNR50 for the reply:
+
+    | | On time | Reply whole after the CQ | Reply with its first part left out after the CQ |
+    | --- | --- | --- | --- |
+    | FT8 | -21.1 dB | -20.6 dB at 1.5 s, -20.5 at 2.0, then as a whole message late | -20.8 dB at 1.5 s, -19.5 at 2.0, -14.3 at 3.0; from 3.5 s at most 8 of 25 at any level |
+    | FT4 | -17.8 dB | -17.2 dB at 0.5 s, -16.9 at 0.875 | -16.6 dB at 0.5 s, -14.5 at 0.875, -12.8 at 1.0; from 1.25 s at most 12 of 25 at any level |
+
+  - Rejected: replacing up to the late-start limit. Past the shift limits the reply would have to leave out its first part, and the CQ symbols sent before the switch then spoil it: the reply fails and the CQ is lost as well. Neither decoder decoded the cut-short CQ in any slot.
 
 ## Retries
 
-- With no reply, the last message repeats in the next slot of our parity, up to 3 times (configurable).
-- Calling CQ, a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does; Hunt moves on to the next CQ.
+- With no reply, the last message repeats in the next slot of our parity, up to 3 times.
+- Calling CQ, a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does.
+- Hunt calls a station that has not answered 4 times by default, then moves on to the next CQ. Hunt calls, in Settings › FT8 and FT4, takes 1 to 99: 1 works through the CQs fastest. Once the station answers, the QSO keeps the usual 3 repeats, so a lost R-report does not end a QSO half done.
 
 ## Logging
 
@@ -72,7 +95,10 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 - **Tx on** only starts from an operator action: CQ, Hunt, Tx on, or a double-tap on a decode, which calls the station with Tx on. Run starts nothing by itself.
 - **Halt** stops audio within the current audio render quantum, disables Tx and stops Hunt. It is red, always visible in the bottom bar, and takes one tap.
 - **End QSO**, in the ••• menu, stops Tx and Hunt and returns to idle without logging.
-- **Watchdog**, WSJT-X's rule: a counter of minutes since the operator last touched the screen or since the transmitted message last changed. At the limit Tx and Hunt stop and a notice says why. The limit is a setting: 6 min by default, any number of minutes, or off. WSPR beacon schedules are exempt; they are not QSOs.
+- **Watchdog**: a counter of minutes since the operator last touched the screen. At the limit Tx and Hunt stop and the status line says "Watchdog stopped Tx after 6 min". The limit is a setting: 6 min by default, any number of minutes, or off. WSPR beacon schedules are exempt; they are not QSOs.
+  - A QSO under way at the limit finishes first: the status line says "Watchdog ends Tx after this QSO", the dock shows Last QSO, and once the QSO logs or ends Tx goes off with Hunt, Repeat CQ and the queue starting nothing after it. A QSO is under way once the station has sent us a message, or has called us after our CQ. A call nobody has answered yet stops at once, because Tx1 to a silent station, and a Hound's Tx1 to the Fox above all, has no end of its own. A QSO that pauses after its retries stops at once too. A touch while the last QSO finishes restarts the count, and Hunt and Repeat CQ carry on after it.
+  - Responses refresh watchdog, a setting off by default, also restarts the count each time the transmitted message changes, as WSJT-X does. Off, Hunt and Repeat CQ run for the limit from the last touch however many QSOs they make, which is what the operator expects of a timer they set.
+  - Rejected: stopping mid-QSO at the limit. It leaves the other station without its RR73 or 73 and a QSO half-logged at their end.
 - **Audio interruption** (another app, a call, the screen locking): Tx and Hunt stop, the QSO keeps its state, and transmitting needs Resume audio first.
 - **Band change**: choosing a band in the band sheet applies it, and Tx and the QSO keep their state; QSOs record the band chosen. A mode change (FT8, FT4) changes the slot length, so it stops Tx and ends the QSO.
 - **Own transmissions**: the receive audio of a slot RR73 transmitted in is not decoded or shown. The radio feeds RR73's own signal back at +40 dB or more, which decoded as a strong station; the list shows what was sent in its place.
@@ -95,3 +121,4 @@ effects: scheduleTx(text, slotStart, startOffsetS, freqHz) | cancelTx | logQso(r
 - Hunt's "in a QSO" test only sees the slot just decoded: a station that answered a caller we did not decode looks free. The lost-station check stops the call one slot later.
 - Hunt's pick uses the SNR of one decode; fading can make a weaker station look strongest for a slot. Not tested on a device.
 - Tail-end waits at most 8 slots. A long QSO with repeats outlasts it, and the call pauses.
+- A late start that leaves out its first part, and a CQ replaced on air, are measured on synthetic slots only. Not tested on a device: between the CQ stopping and the call starting the output is silent while the call synthesises, up to the 0.2 s the sequencer allows for it, which VOX hang time should bridge.

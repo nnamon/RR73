@@ -34,6 +34,27 @@ const iphone = (width: number, height: number, scale: number) => ({
   userAgent: IPHONE_UA,
 });
 
+const IPAD_UA =
+  'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1';
+/** An iPad in WebKit, upright or on its side: a touch screen, regular width. */
+const ipad = (width: number, height: number) => ({
+  permissions: ['microphone'],
+  browserName: 'webkit' as const,
+  viewport: { width, height },
+  deviceScaleFactor: 2,
+  isMobile: true,
+  hasTouch: true,
+  userAgent: IPAD_UA,
+});
+/** A desktop window with a mouse, regular width. */
+const desk = (browserName: 'chromium' | 'webkit') => ({
+  ...(browserName === 'chromium' ? devices['Desktop Chrome'] : devices['Desktop Safari']),
+  viewport: { width: 1440, height: 900 },
+  ...(browserName === 'webkit' ? { permissions: ['microphone'] } : {}),
+});
+/** Large screens (large.spec.ts): regular width and a phone on its side. */
+const LARGE = /large\.spec/;
+
 /**
  * RR73_REVIEW=1 adds the projects CI leaves out: review-375x667 and review-393x852 capture every
  * screen, sheet and Operate state in both themes for the visual review (AGENTS.md), and
@@ -48,11 +69,17 @@ const reviewProjects = REVIEW
       // layout.spec also matches colours-layout.spec. Screenshots go to test-results/screens.
       { name: 'review-375x667', testMatch: /(layout|states|operate|hound|wspr|rtty)\.spec/, use: iphone(375, 667, 2) },
       { name: 'review-393x852', testMatch: /(layout|states|operate|hound|wspr|rtty)\.spec/, use: iphone(393, 852, 3) },
+      // Large screens in both themes, for the side-by-side review with the approved mockup.
+      { name: 'review-820x1180', testMatch: LARGE, use: ipad(820, 1180) },
+      { name: 'review-1180x820', testMatch: LARGE, use: ipad(1180, 820) },
+      { name: 'review-1440x900', testMatch: LARGE, use: desk('webkit') },
+      { name: 'review-1440x900-chromium', testMatch: LARGE, use: { ...desk('chromium'), ...fakeMic } },
+      { name: 'review-852x393', testMatch: LARGE, use: iphone(852, 393, 3) },
     ]
   : [];
 
 /** Projects that finish before the transmit timing tests start. */
-const QUIET = ['mic', 'decode', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852', ...reviewProjects.map((p) => p.name)];
+const QUIET = ['mic', 'decode', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852', 'webkit-1180x820', 'webkit-852x393', 'chromium-1440x900', ...reviewProjects.map((p) => p.name)];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -90,6 +117,11 @@ export default defineConfig({
     // colours-layout.spec.
     { name: 'webkit-375x667', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
     { name: 'webkit-393x852', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
+    // Large screens, light theme: one geometry test per size class (regular width on an iPad, in
+    // both orientations; compact height on a phone on its side) and the keyboard shortcuts.
+    { name: 'webkit-1180x820', testMatch: LARGE, grep: /@ci-regular/, use: ipad(1180, 820) },
+    { name: 'webkit-852x393', testMatch: LARGE, grep: /@ci-compact-height/, use: iphone(852, 393, 3) },
+    { name: 'chromium-1440x900', testMatch: LARGE, grep: /@ci-keys/, use: desk('chromium') },
     ...reviewProjects,
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine

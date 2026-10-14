@@ -49,6 +49,14 @@ pub struct SimSignal {
     pub fading: Option<Watterson>,
     /// Linear frequency drift, in Hz per second.
     pub drift_hz_per_s: f64,
+    /// Seconds cut from the start of the transmission, the rest keeping its place in time: a
+    /// late start that skips the first symbols. 0 sends it whole.
+    #[serde(default)]
+    pub cut_s: f64,
+    /// Seconds of the transmission sent, from its start: a transmission stopped part way.
+    /// `None` sends it to the end.
+    #[serde(default)]
+    pub length_s: Option<f64>,
 }
 
 impl SimSignal {
@@ -61,6 +69,8 @@ impl SimSignal {
             snr_db,
             fading: None,
             drift_hz_per_s: 0.0,
+            cut_s: 0.0,
+            length_s: None,
         }
     }
 }
@@ -128,7 +138,9 @@ fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<
         if !(s.freq_hz.is_finite()
             && s.dt_s.is_finite()
             && s.snr_db.is_finite()
-            && s.drift_hz_per_s.is_finite())
+            && s.drift_hz_per_s.is_finite()
+            && s.cut_s.is_finite()
+            && s.length_s.is_none_or(f64::is_finite))
         {
             return Err(RenderError::NotFinite(i));
         }
@@ -147,7 +159,11 @@ fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<
         let wave = channel::apply(&wave, s.drift_hz_per_s, s.fading, &mut rng, &mut plans);
         let start = ((f64::from(params.start_offset_s) + s.dt_s) * channel::SAMPLE_RATE).round() as i64;
         let slot_len = len as i64;
-        for (k, &v) in wave.iter().enumerate() {
+        let cut = (s.cut_s.max(0.0) * channel::SAMPLE_RATE).round() as usize;
+        let end = s.length_s.map_or(wave.len(), |l| {
+            (l.max(0.0) * channel::SAMPLE_RATE).round() as usize
+        });
+        for (k, &v) in wave.iter().enumerate().take(end).skip(cut) {
             let n = start + k as i64;
             let n = if wrap { n.rem_euclid(slot_len.max(1)) } else { n };
             if n >= 0
@@ -192,6 +208,8 @@ pub fn single<R: Rng>(mode: Mode, snr_db: f64, fading: Option<Watterson>, rng: &
         snr_db,
         fading,
         drift_hz_per_s: 0.0,
+        cut_s: 0.0,
+        length_s: None,
     };
     Scene {
         mode,
@@ -247,6 +265,8 @@ pub fn crowded<R: Rng>(
             snr_db: rng.random_range(snr_range_db.0..=snr_range_db.1),
             fading: None,
             drift_hz_per_s: 0.0,
+            cut_s: 0.0,
+            length_s: None,
         })
         .collect();
     Scene {

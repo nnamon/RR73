@@ -4,7 +4,8 @@
  * Runs in the waterfall worker on an OffscreenCanvas, or on the main thread where
  * OffscreenCanvas is missing; both use this class.
  *
- * The visible height covers the view's span (45 s, three FT8 slots; 240 s, two WSPR slots), so
+ * The visible height covers the view's span (45 s, three FT8 slots; 240 s, two WSPR slots; four
+ * FT8 slots in regular width, setSpan), so
  * the row period follows the canvas height. A change between views starts the picture afresh. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
  * In the slots RR73 transmitted in, the receive audio is the radio's own transmission, so those
@@ -189,6 +190,16 @@ export class WaterfallRenderer {
     return isFt(this.mode) ? quietestHz(this.quiet.slots(nowMs), this.mode, nearHz) : null;
   }
 
+  /** The time the picture covers, s; null for the view's own. */
+  private spanS: number | null = null;
+
+  /** Sets the time the picture covers, s, or null for the view's own: four FT8 slots in regular width. */
+  setSpan(seconds: number | null) {
+    if (seconds === this.spanS) return;
+    this.spanS = seconds;
+    this.resize(this.width, this.height);
+  }
+
   /** Sets the canvas size in device pixels and redraws the history. */
   resize(width: number, height: number) {
     this.width = Math.max(1, Math.round(width));
@@ -196,7 +207,7 @@ export class WaterfallRenderer {
     this.ctx.canvas.width = this.width;
     this.ctx.canvas.height = this.height;
     this.cols = columns(this.width, this.view);
-    this.hop = Math.max(64, Math.round((this.view.visibleS * DISPLAY_RATE) / this.height));
+    this.hop = Math.max(64, Math.round(((this.spanS ?? this.view.visibleS) * DISPLAY_RATE) / this.height));
     this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
     this.redraw();

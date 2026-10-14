@@ -30,7 +30,9 @@
    *
    * A tap selects a row (or clears the selection, on the selected row), a double-tap calls, and
    * touch and hold opens the station's details. The Next row takes no gestures. `preview` draws
-   * the rows without actions, for the example in Settings.
+   * the rows without actions, for the example in Settings. With a mouse, a click selects, a
+   * double-click calls and a right-click opens the details; outside compact width the row under
+   * the pointer shows it.
    */
   import { dt, snr } from '../lib/clock/format';
   import { cqCountry } from '../lib/decode/country';
@@ -140,8 +142,11 @@
 
   let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
   let lastTap: { id: string; at: number } | null = null;
+  let pointerType = '';
 
   function down(e: PointerEvent, item: RowItem) {
+    pointerType = e.pointerType;
+    if (e.button !== 0) return;
     if (press) clearTimeout(press.timer);
     const p = { id: item.id, x: e.clientX, y: e.clientY, held: false, timer: setTimeout(() => {
       p.held = true;
@@ -247,7 +252,10 @@
             onpointermove={move}
             onpointerup={up}
             onpointercancel={up}
-            oncontextmenu={(e) => e.preventDefault()}
+            oncontextmenu={(e) => {
+              e.preventDefault();
+              if (pointerType === 'mouse') ondetail?.(item);
+            }}
             onclick={(e) => click(e, item)}
           >
             {@render cells(r, t, o, false, country, lostRow)}
@@ -356,6 +364,12 @@
     bottom: 0;
     left: 0;
     width: var(--rr-mark-bar);
+  }
+
+  @media (hover: hover) {
+    :global(:root:not([data-size='compact'])) button.dr:hover {
+      background-image: linear-gradient(var(--rr-hover), var(--rr-hover));
+    }
   }
 
   .dr-item + .dr-item .dr::before {

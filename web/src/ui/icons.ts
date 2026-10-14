@@ -79,6 +79,16 @@ export const ICONS = {
   // The ••• menu: three dots on the bar glyphs' 18-unit ink box.
   more: { dots: [[4.6, 12, 1.9], [12, 12, 1.9], [19.4, 12, 1.9]] },
   globe: { stroke: ['M3.6 12H20.4M5 7.6H19M5 16.4H19'], rings: [[12, 12, 8.6, 8.6], [12, 12, 3.6, 8.6]], width: 1.6 },
+  // Glyphs on the coloured tiles of the Settings sections (regular width), from the large-screens mockup.
+  person: { stroke: ['M5.5 19c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5'], rings: [[12, 9, 3.5, 3.5]], width: 2.2 },
+  wave: { stroke: ['M3 12h3l2.2-6 3.4 12 3.2-9 2 3H21'], width: 2.2 },
+  book: { stroke: ['M6 4h10a3 3 0 0 1 3 3v13H9a3 3 0 0 1-3-3zM9.5 8.5h6'], width: 2.2 },
+  play: { stroke: ['M8.5 6l9 6-9 6z'], width: 2.2 },
+  addbox: { stroke: ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zM12 8.5v7M8.5 12h7'], width: 2.2 },
+  colours: { stroke: ['M12 4.5v15'], rings: [[12, 12, 7.5, 7.5]], width: 2.2 },
+  sun: { stroke: ['M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4'], rings: [[12, 12, 3.5, 3.5]], width: 2.2 },
+  info: { stroke: ['M12 11v5.5M12 7.8v.01'], rings: [[12, 12, 8.5, 8.5]], width: 2.2 },
+  antenna: { stroke: ['M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 5.4a9.3 9.3 0 0 0 0 13.2M18.6 5.4a9.3 9.3 0 0 1 0 13.2'], dots: [[12, 12, 1.8]], width: 2.2 },
 } satisfies Record<string, IconShape>;
 
 export type IconName = keyof typeof ICONS;

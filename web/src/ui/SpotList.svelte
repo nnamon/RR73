@@ -11,6 +11,9 @@
    *
    * A tap selects a row (or clears the selection, on the selected row) and marks its trace on the
    * waterfall; touch and hold opens the spot's details. Double-tap does nothing in WSPR.
+   *
+   * `table`, in regular width: the columns run Callsign, Grid, Power, SNR, Drift and Distance under
+   * a header row that stays at the top.
    */
   import { MINUS, signed } from '../lib/clock/format';
   import { TX_OFFSET_S, TX_SECONDS } from '../lib/wspr/schedule';
@@ -27,6 +30,7 @@
     sentColour = null,
     onselect,
     ondetail,
+    table = false,
   }: {
     items: WsprItem[];
     nowMs: number;
@@ -35,6 +39,8 @@
     sentColour?: string | null;
     onselect?: (spot: Spot) => void;
     ondetail?: (spot: Spot) => void;
+    /** Regular width: columns with their names over them. */
+    table?: boolean;
   } = $props();
 
   const HOLD_MS = 500;
@@ -67,8 +73,11 @@
   const oldInk = $derived(sentColour ? oldInkFor(sentColour) : null);
 
   let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
+  let pointerType = '';
 
   function down(e: PointerEvent, s: Spot) {
+    pointerType = e.pointerType;
+    if (e.button !== 0) return;
     if (press) clearTimeout(press.timer);
     const p = {
       id: s.id,
@@ -102,7 +111,12 @@
   }
 </script>
 
-<ul class="list" aria-label="Spots, newest slot first">
+<ul class="list" class:table aria-label="Spots, newest slot first">
+  {#if table}
+    <li class="cols" aria-hidden="true">
+      <span class="call">Callsign</span><span class="grid">Grid</span><span class="n pw">Power</span><span class="n db">SNR</span><span class="n dr">Drift</span><span class="n km">Distance</span>
+    </li>
+  {/if}
   {#each items as item (item.id)}
     {#if item.kind === 'header'}
       <li class="slot-bar {item.tone}">
@@ -137,7 +151,10 @@
           onpointermove={move}
           onpointerup={up}
           onpointercancel={up}
-          oncontextmenu={(e) => e.preventDefault()}
+          oncontextmenu={(e) => {
+            e.preventDefault();
+            if (pointerType === 'mouse') ondetail?.(s);
+          }}
           onclick={(e) => click(e, s)}
         >
           <span class="call" aria-hidden="true">{s.call ?? '<...>'}</span>
@@ -240,6 +257,12 @@
     width: var(--rr-mark-bar);
   }
 
+  @media (hover: hover) {
+    :global(:root:not([data-size='compact'])) button.sr:hover {
+      background-image: linear-gradient(var(--rr-hover), var(--rr-hover));
+    }
+  }
+
   .sr-item + .sr-item .sr::before {
     content: '';
     position: absolute;
@@ -306,6 +329,71 @@
 
   .pw {
     min-width: 3.9em;
+  }
+
+  /* Regular width: six columns, named in a header row that stays at the top of the list. */
+  .table .sr,
+  .cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.5fr) repeat(4, minmax(0, 1fr));
+    gap: var(--rr-space-4);
+    padding: 0 var(--rr-space-4);
+  }
+
+  .table .call {
+    grid-column: 1;
+  }
+
+  .table .grid {
+    grid-column: 2;
+  }
+
+  .table .pw {
+    grid-column: 3;
+  }
+
+  .table .db {
+    grid-column: 4;
+  }
+
+  .table .dr {
+    grid-column: 5;
+  }
+
+  .table .km {
+    grid-column: 6;
+  }
+
+  .table .sr > *,
+  .cols > * {
+    grid-row: 1;
+    min-width: 0;
+  }
+
+  .cols {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    align-items: center;
+    height: var(--rr-table-head);
+    background: var(--rr-plain);
+    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    color: var(--rr-label2);
+    white-space: nowrap;
+  }
+
+  .cols .call,
+  .cols .grid {
+    font-size: inherit;
+    font-weight: inherit;
+    color: inherit;
+  }
+
+  .cols .n {
+    font-size: inherit;
+    color: inherit;
   }
 
   /* A spot carrying the station's own callsign: the My call colour, as in FT8. */

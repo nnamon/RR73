@@ -3,7 +3,14 @@
    * The log: every QSO on this phone by UTC day, the To do list (not sent, waiting, refused and changed
    * QSOs and files not yet submitted) and the activations with their files. Export ADIF shares
    * what is shown.
+   *
+   * Beside the list (compact height and regular width) a QSO opens in the detail pane on the
+   * right (QsoEditor) instead of the sheet; in regular width the list column carries the large
+   * title and its bar buttons, as the tabs replace the way back to Operate.
    */
+  import QsoEditor from '../ui/QsoEditor.svelte';
+  import { layout, split } from '../lib/app/layout.svelte';
+  import { qsoPane } from '../lib/log/editor-pane.svelte';
   import ActivationCard from '../ui/ActivationCard.svelte';
   import Icon from '../ui/Icon.svelte';
   import { practice } from '../lib/state/practice.svelte';
@@ -13,7 +20,7 @@
   import { go, href, route } from '../lib/app/router.svelte';
   import { buildExport, shareFile } from '../lib/log/files';
   import SendBar from '../ui/SendBar.svelte';
-  import { log, markQsoHandled, openEditor, retryQso } from '../lib/log/log.svelte';
+  import { closeEditor, log, markQsoHandled, openEditor, retryQso } from '../lib/log/log.svelte';
   import { activationFiles, groupByDay, matches, todoQsos } from '../lib/log/view';
   import type { LedgerEntry, Qso } from '../lib/log/types';
   import { features } from '../lib/state/features.svelte';
@@ -72,15 +79,61 @@
     status = r.kind === 'downloaded' ? `Downloaded ${file.name}` : r.kind === 'shared' ? `Shared ${file.name}` : '';
   }
 
+
+  // Beside the list, the QSO opens in the pane: the sheet stays closed while the Log shows. The
+  // QSO in the pane closes with it, so the sheet does not open in its place on another screen.
+  $effect(() => {
+    if (!split()) return;
+    qsoPane.shown = true;
+    return () => {
+      if (log.editor.open) closeEditor();
+      qsoPane.shown = false;
+    };
+  });
+  const opened = $derived(split() && log.editor.open ? log.editor.qsoId : undefined);
+  const title = $derived(practice.on ? 'Practice log' : 'Log');
 </script>
 
-<section class="screen" aria-labelledby="log-title">
-  <BackLink to={href('operate')} label="Operate" title={practice.on ? 'Practice log' : 'Log'} id="log-title">
-    {#snippet trailing()}
-      <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
-      <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
-    {/snippet}
-  </BackLink>
+{#snippet actions()}
+  <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
+  <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
+{/snippet}
+
+{#if split()}
+  <section class="split" aria-labelledby="log-title">
+    {#if layout.size === 'compact-height'}
+      <BackLink to={href('operate')} label="Operate" {title} id="log-title" trailing={actions} />
+    {/if}
+    <div class="cols">
+      <div class="list-col">
+        {#if layout.size === 'regular'}
+          <div class="nb"><div class="bar-buttons">{@render actions()}</div></div>
+          <h1 class="large-title" id="log-title">{title}</h1>
+        {/if}
+        {@render list()}
+      </div>
+      <div class="detail-col">
+        {#if log.editor.open && opened !== undefined}
+          {#key log.editor}
+            <QsoEditor inline qsoId={opened} onclose={closeEditor} />
+          {/key}
+        {:else}
+          <div class="empty">
+            <h2>No QSO open</h2>
+            <p>Pick a QSO in the list to see and edit it here.</p>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </section>
+{:else}
+  <section class="screen" aria-labelledby="log-title">
+    <BackLink to={href('operate')} label="Operate" {title} id="log-title" trailing={actions} />
+    {@render list()}
+  </section>
+{/if}
+
+{#snippet list()}
 
   {#if log.storageError}
     <p class="banner" role="alert">{log.storageError}</p>
@@ -122,7 +175,7 @@
           <div class="section">
             <h2 class="section-head">{g.label}</h2>
             <ul class="group">
-              {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
+              {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
             </ul>
           </div>
         {/each}
@@ -149,7 +202,7 @@
         <div class="section">
           <h2 class="section-head">QSOs</h2>
           <ul class="group">
-            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
+            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
           </ul>
         </div>
       {/if}
@@ -172,20 +225,59 @@
         <div class="group card"><ActivationCard activation={a} /></div>
         {#if qsos.length}
           <ul class="group sub">
-            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
+            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
           </ul>
         {/if}
       </div>
     {/each}
   {/if}
   <p class="visually-hidden" role="status">{status}</p>
-</section>
+{/snippet}
 
 <StationSheet bind:open={stationOpen} qso={stationQso} />
 
 <style>
+  /* List and detail: each column scrolls on its own. */
+  .split {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: var(--rr-safe-top);
+    background: var(--rr-bg);
+  }
 
+  :global([data-size='regular']) .split {
+    padding-top: 0;
+  }
 
+  .cols {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .list-col {
+    flex: none;
+    width: clamp(var(--rr-list-column-narrow), 30vw, var(--rr-list-column));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 0 var(--rr-space-8) var(--rr-safe-left);
+    box-shadow: inset calc(-1 * var(--rr-hairline)) 0 0 var(--rr-sep-strong);
+  }
+
+  .nb {
+    display: flex;
+    justify-content: flex-end;
+    height: var(--rr-tap);
+    padding-right: var(--rr-space-2);
+  }
+
+  .detail-col {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 
   .search {
     display: flex;

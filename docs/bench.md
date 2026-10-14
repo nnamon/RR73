@@ -41,6 +41,7 @@ The decode lists record neither the WSJT-X version nor the decode depth. Some en
 | `wspr-noise` | `wspr-noise` | `--noise-count`, default 1000 | WSPR noise only (120 s slots). |
 | `wspr-snr-sweep` | `wspr-snr-sweep/awgn`, `wspr-snr-sweep/fading` | 15 x `--per-step` each, default 40 | One type 1 WSPR signal per slot at -34 to -20 dB in 1 dB steps; `fading` adds Watterson fading at 0.1 Hz spread and 1 ms delay. |
 | `wspr-band` | `wspr-band` | `--crowded-count`, default 20 | 20 WSPR signals per slot, SNR uniform in -28 to -10 dB, centres at least 8 Hz apart, drift uniform in ±0.01 Hz/s. |
+| `late-start` | `late-start/<mode>-<how>-<late s>`, such as `late-start/ft8-cut-3.000` | 8 x `--per-step` each, default 40 | One steady signal per slot started late: FT8 0 to 6 s at -22 to -8 dB, FT4 0 to 2.5 s at -20 to -6 dB, in 2 dB steps, DT 0 before the delay. `shift` sends the whole message late, cut at the end of the slot; `cut` keeps it on time and leaves out its first part; `replace` and `splice` are `shift` and `cut` after a CQ at the same frequency for the first part, as when a reply replaces our CQ on air. 4 x 12 subsets for FT8 and 4 x 11 for FT4: 18400 slots and about 4.8 GB at `--per-step 25`. |
 
 Signals are random standard QSO messages (CQ with a grid, call pairs with a grid, report, R-report, RRR, RR73, 73) at a base tone uniform in 300 to 2700 Hz and DT uniform in -0.5 to 0.5 s. WSPR signals are random type 1 messages (standard callsign, 4-character locator, one of the 19 power levels) with the centre uniform in 1405 to 1595 Hz and DT uniform in -1 to 2 s; their truth gives the centre frequency and DT from 1 s into the slot. SNR is the WSJT-X convention: signal power over the noise power in 2500 Hz. Noise is white Gaussian with 0.02 RMS per sample; a slot whose peak would pass 0.98 is scaled down as a whole. Fading SNR is the average over the fading process.
 
@@ -121,7 +122,7 @@ Set summary:
 
 ## Other decoders
 
-`rr73-bench import --decodes out.txt --label NAME [--dt-offset S] --out results/NAME.json <paths>` scores another decoder's text output on the same slots and writes a results file for `compare`. The output file holds a line `== <name>` per slot followed by decode lines in the WSJT-X layout (`HHMMSS SNR DT FREQ ~ MESSAGE`), as `jt9` and ft8_lib's `decode_ft8` print them. The name is the slot's path below `corpus/` without extension, a trailing part of it, or the bare stem when no other slot shares it. `--dt-offset` is subtracted from every DT: `decode_ft8` prints the start of symbol 0 plus 0.16 s, which is DT + 0.66 s. Timing fields are zero.
+`rr73-bench import --decodes out.txt --label NAME [--dt-offset S] --out results/NAME.json <paths>` scores another decoder's text output on the same slots and writes a results file for `compare`. The output file holds a line `== <name>` per slot followed by decode lines in the WSJT-X layout (`HHMMSS SNR DT FREQ ~ MESSAGE`, with `+` in place of `~` for FT4), as `jt9` and ft8_lib's `decode_ft8` print them. The name is the slot's path below `corpus/` without extension, a trailing part of it, or the bare stem when no other slot shares it. `--dt-offset` is subtracted from every DT: `decode_ft8` prints the start of symbol 0 plus 0.16 s, which is DT + 0.66 s. Timing fields are zero.
 
 ## End-to-end fixture
 

@@ -9,6 +9,18 @@
     watchdogMin = String(settings.watchdogMin);
   });
 
+  let huntCalls = $state(String(settings.huntCalls));
+  $effect(() => {
+    huntCalls = String(settings.huntCalls);
+  });
+
+  /** A whole number of calls from 1 to 99; anything else puts back the stored value. */
+  function saveHuntCalls() {
+    const n = Number(huntCalls);
+    if (Number.isInteger(n) && n >= 1 && n <= 99) void updateSettings({ huntCalls: n });
+    else huntCalls = String(settings.huntCalls);
+  }
+
   /** Any positive number of minutes; anything else puts back the stored value. */
   function saveWatchdog() {
     const m = normaliseMinutes(Number(watchdogMin.replace(',', '.')));
@@ -42,6 +54,20 @@
         <input class="switch" type="checkbox" role="switch" checked={settings.tailEnd} onchange={(e) => void updateSettings({ tailEnd: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
+        <span class="row-main"><span class="row-title">Hunt calls</span><span class="row-sub">Then moves to the next CQ</span></span>
+        <input
+          class="field num count"
+          type="text"
+          inputmode="numeric"
+          bind:value={huntCalls}
+          onblur={saveHuntCalls}
+          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+          autocomplete="off"
+          aria-label="Hunt calls, times"
+        />
+        <span class="unit">{settings.huntCalls === 1 ? 'time' : 'times'}</span>
+      </label>
+      <label class="row">
         <span class="row-main"><span class="row-title">Watchdog</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.watchdog} onchange={(e) => void updateSettings({ watchdog: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
@@ -59,6 +85,10 @@
             aria-label="Stop Tx after, min"
           />
           <span class="unit">min</span>
+        </label>
+        <label class="row">
+          <span class="row-main"><span class="row-title">Responses refresh watchdog</span><span class="row-sub">Each new message restarts it</span></span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.watchdogRefresh} onchange={(e) => void updateSettings({ watchdogRefresh: (e.currentTarget as HTMLInputElement).checked })} />
         </label>
       {/if}
       <label class="row">
@@ -91,6 +121,12 @@
 
   .field.num {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* Up to 2 digits: the row's text keeps the width. */
+  .field.count {
+    flex: none;
+    width: 3em;
   }
 
   .unit {

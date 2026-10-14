@@ -8,9 +8,11 @@ describe('bottom bar view', () => {
   it('shows the next message with its slot and second', () => {
     const s = new Sim();
     s.call(1, 'CQ JA1KXM PM95');
-    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · 1st · :30');
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :30');
     s.call(1, 'CQ JA1KXM PM95', 2.5);
-    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :32');
+    s.call(1, 'CQ JA1KXM PM95', 4.5);
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :00');
   });
 
   it('shows what is on air, then what it waits for', () => {
@@ -19,7 +21,7 @@ describe('bottom bar view', () => {
     s.run(2, 2);
     expect(barText(s.st)).toBe('JA1KXM · waiting for a reply');
     s.hear(3, ['9V1NE JA1KXM -09']);
-    expect(barText(s.st)).toBe('Tx3 · JA1KXM 9V1NE R-10 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx3 · JA1KXM 9V1NE R-10 · Even · :00');
   });
 
   it('says when the retries ran out, and is empty when idle', () => {
@@ -33,7 +35,7 @@ describe('bottom bar view', () => {
   it('waits for callers after a CQ', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    expect(barText(s.st)).toBe('Tx6 · CQ 9V1NE OJ11 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx6 · CQ 9V1NE OJ11 · Even · :00');
   });
 
   it('marks the steps of the exchange as they happen, the first with the grid our Tx1 sends', () => {
@@ -63,6 +65,14 @@ describe('bottom bar view', () => {
     expect(watchdogText(s.st, s.at(1, 20.1))).toBe('Watchdog 5:25');
     s.send({ type: 'halt', nowMs: s.at(2) });
     expect(watchdogText(s.st, s.at(2))).toBe('Tx off');
+  });
+
+  it('says Last QSO while the watchdog lets a QSO finish', () => {
+    const s = new Sim({ watchdogMs: 30_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'tick', nowMs: s.at(4, 1) });
+    expect(watchdogText(s.st, s.at(4, 1))).toBe('Last QSO');
   });
 
   it('says the watchdog is off', () => {

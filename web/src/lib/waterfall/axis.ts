@@ -62,3 +62,24 @@ export function ruler(mode: Mode): { ticks: Tick[]; labels: RulerLabel[] } {
   for (let hz = v.minHz; hz <= v.maxHz; hz += 50) labels.push({ hz, text: String(hz), x: (hz - v.minHz) / span, align: hz === v.minHz ? 'start' : hz === v.maxHz ? 'end' : 'centre' });
   return { ticks: t, labels };
 }
+
+/** Regular width: labels at least this far apart, px, so 12 pt numbers keep a gap. */
+export const DENSE_LABEL_PX = 38;
+
+/**
+ * The ruler in regular width, where the waterfall runs the width of an iPad or a desktop window:
+ * the same ticks, with a label on every tick when they are 38 px apart, else on every second
+ * tick, else every fifth. The ends carry none.
+ */
+export function denseRuler(mode: Mode, widthPx: number): { ticks: Tick[]; labels: RulerLabel[] } {
+  const { ticks: t } = ruler(mode);
+  const v = viewOf(mode);
+  const lo = mode === 'WSPR' ? v.minHz : 0;
+  const hi = mode === 'WSPR' ? v.maxHz : MAX_HZ;
+  const tick = mode === 'WSPR' ? 10 : 100;
+  const px = (widthPx / (hi - lo)) * tick;
+  const every = px >= DENSE_LABEL_PX ? tick : px >= DENSE_LABEL_PX / 2 ? tick * 2 : tick * 5;
+  const labels: RulerLabel[] = [];
+  for (let hz = lo + tick; hz < hi; hz += tick) if (hz % every === 0) labels.push({ hz, text: String(hz), x: (hz - lo) / (hi - lo), align: 'centre' });
+  return { ticks: t, labels };
+}

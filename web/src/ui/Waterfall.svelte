@@ -29,7 +29,8 @@
   import type { FrameInfo } from '../lib/waterfall/renderer';
   import { FREQ_LIMITS, hzAtX, xOfHz } from '../lib/waterfall/pick';
   import { STEP_HZ_OF, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
-  import { bracket, ruler } from '../lib/waterfall/axis';
+  import { bracket, denseRuler, ruler } from '../lib/waterfall/axis';
+  import { layout } from '../lib/app/layout.svelte';
   import { viewOf } from '../lib/waterfall/spectrum';
   import type { Contrast } from '../lib/waterfall/levels';
   import { utcHm, utcTime } from '../lib/clock/format';
@@ -93,7 +94,10 @@
   const labels = $derived(
     marks.map((b) => ({ key: b.utcMs, text: `${timeText(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0 && l.top + 13 <= height - rulerH),
   );
-  const axis = $derived(ruler(mode));
+  // Regular width: labels as dense as 12 pt numbers allow, and four FT8 slots in the picture.
+  const regular = $derived(layout.size === 'regular');
+  const axis = $derived(regular && width ? denseRuler(mode, width) : ruler(mode));
+  const spanS = $derived(regular && mode !== 'WSPR' ? 60 : null);
   const view = $derived(viewOf(mode));
   const step = $derived(STEP_HZ_OF[mode]);
 
@@ -129,6 +133,11 @@
   $effect(() => {
     const c = contrast;
     client?.setContrast(c);
+  });
+
+  $effect(() => {
+    const s = spanS;
+    client?.setSpan(s);
   });
 
   $effect(() => {
@@ -217,6 +226,7 @@
       if (!client) {
         client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
         client.setContrast(contrast);
+        client.setSpan(spanS);
         client.setTxSlots(txSlots);
         for (const w of recentTxWaves()) client.setTxWave(w);
       } else client.resize(w, h);
@@ -567,5 +577,14 @@
 
   .tag.rx {
     background: var(--rr-run);
+  }
+
+  /* Regular width: a taller ruler with 12 pt labels. */
+  :global([data-size='regular']) .wf {
+    --rr-ruler: var(--rr-ruler-regular);
+  }
+
+  :global([data-size='regular']) .rl {
+    font-size: var(--rr-text-ruler-regular);
   }
 </style>

@@ -6,8 +6,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rr73_chansim::{
-    Noise, Scene, Truth, Watterson, WsprScene, WsprSignal, crowded, noise_only, render, render_wspr, single,
-    wspr_band, wspr_noise_only, wspr_single,
+    Noise, Scene, SimSignal, Truth, Watterson, WsprScene, WsprSignal, crowded, noise_only, render,
+    render_wspr, single, wspr_band, wspr_noise_only, wspr_single,
 };
 use rr73_corpus::{Entry, SlotMeta, SlotMode, Source, SourceKind, Timing, TimingReference, write_slot};
 use rr73_ft8::Mode;
@@ -23,6 +23,7 @@ pub const SETS: &[&str] = &[
     "wspr-noise",
     "wspr-snr-sweep",
     "wspr-band",
+    "late-start",
 ];
 
 /// Slow Watterson fading for WSPR sets: 0.1 Hz spread, 1 ms delay. WSPR's 1.46 Hz tone
@@ -248,6 +249,56 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
                 add(&mut |_| wspr_noise_only());
             }
         }
+        "late-start" => {
+            // A transmission that starts late by L s, four ways: `shift` sends it whole, L s
+            // late, cut at the end of the slot; `cut` keeps it on time and drops its first L s;
+            // `splice` and `replace` are `cut` and `shift` after a CQ at the same frequency sent
+            // for the first L s, as when a reply replaces our CQ on air.
+            // Steady signals from -22 to -8 dB (FT8) and -20 to -6 dB (FT4) in 2 dB steps, DT 0
+            // before the delay.
+            for (mode, name, lates, snrs) in [
+                (
+                    Mode::Ft8,
+                    "ft8",
+                    &[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0, 6.0][..],
+                    &[-22.0, -20.0, -18.0, -16.0, -14.0, -12.0, -10.0, -8.0][..],
+                ),
+                (
+                    Mode::Ft4,
+                    "ft4",
+                    &[0.0, 0.25, 0.5, 0.625, 0.75, 0.875, 1.0, 1.25, 1.5, 2.0, 2.5][..],
+                    &[-20.0, -18.0, -16.0, -14.0, -12.0, -10.0, -8.0, -6.0][..],
+                ),
+            ] {
+                for how in ["shift", "cut", "splice", "replace"] {
+                    for &late in lates {
+                        let sub = format!("{name}-{how}-{late:.3}");
+                        let mut i = 0;
+                        for &snr in snrs {
+                            for _ in 0..opts.per_step {
+                                push(&sub, i, &mut |r| {
+                                    let mut s = single(mode, snr, None, r);
+                                    let sig = &mut s.signals[0];
+                                    if how == "shift" || how == "replace" {
+                                        sig.dt_s = late;
+                                    } else {
+                                        sig.dt_s = 0.0;
+                                        sig.cut_s = late;
+                                    }
+                                    if (how == "splice" || how == "replace") && late > 0.0 {
+                                        let mut cq = SimSignal::new("CQ 9V1NE OJ11", sig.freq_hz, 0.0, snr);
+                                        cq.length_s = Some(late);
+                                        s.signals.push(cq);
+                                    }
+                                    JobScene::Ft(s)
+                                });
+                                i += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         "wspr-noise" => {
             for i in 0..opts.noise_count {
                 push("", i, &mut |_| JobScene::Wspr(wspr_noise_only()));
@@ -375,6 +426,11 @@ mod tests {
             Ok(15 * 3 * 2)
         );
         assert_eq!(jobs_for("wspr-band", base, &opts).map(|j| j.len()), Ok(2));
+        // FT8: 4 ways x 12 delays, FT4: 4 x 11, each at 8 SNRs.
+        assert_eq!(
+            jobs_for("late-start", base, &opts).map(|j| j.len()),
+            Ok((4 * 12 + 4 * 11) * 8 * 3)
+        );
         assert!(jobs_for("bogus", base, &opts).is_err());
     }
 

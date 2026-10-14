@@ -94,11 +94,12 @@ test('a double-tap on a decode calls the station with Tx on at once, and ends CQ
     ['CQ VJ6X OF78', 506],
     ['BH1LKO VK4SHG 73', 1641],
   ]);
-  // A tap selects and says how to call; a second tap on the selected row clears it.
+  // A tap selects and says how to call (with a mouse, as here: a double-click); a second tap on
+  // the selected row clears it.
   await row(page, 'CQ VJ6X OF78').click();
   await expect(row(page, 'CQ VJ6X OF78')).toHaveAttribute('aria-pressed', 'true');
   await expect(bar.getByRole('status')).toContainText('VJ6X · OF78');
-  await expect(bar.getByRole('status')).toContainText('Double-tap to call');
+  await expect(bar.getByRole('status')).toContainText('Double-click to call');
   await page.waitForTimeout(500);
   await row(page, 'CQ VJ6X OF78').click();
   await expect(row(page, 'CQ VJ6X OF78')).toHaveAttribute('aria-pressed', 'false');
@@ -142,14 +143,14 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st (Even)', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
 
   // Values change in place; the menu stays open.
   await menu.getByRole('menuitem', { name: /^Transmit in/ }).click();
-  await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd');
+  await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd (Odd)');
   await menu.getByRole('menuitem', { name: /^Answer order/ }).click();
   await expect(menu.getByRole('menuitem', { name: /^Answer order/ })).toHaveText('Answer order Strongest');
   await menu.getByRole('menuitemcheckbox', { name: /^Work dupes/ }).click();
@@ -200,7 +201,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await page.waitForTimeout(500);
   await page.reload();
   await bar.getByRole('button', { name: 'More' }).click();
-  await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd');
+  await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd (Odd)');
   await expect(menu.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ })).toHaveAttribute('aria-checked', 'true');
   await expect(menu.getByRole('menuitem', { name: /^Hunt order/ })).toHaveText('Hunt order Strongest');
 });

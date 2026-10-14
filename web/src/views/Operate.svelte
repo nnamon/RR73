@@ -1,34 +1,31 @@
 <script lang="ts">
   /**
    * Operate: one frame for every mode. The top bar, the audio banner and the waterfall stay; the
-   * mode's pane (operate/panes.ts) fills the middle and brings its bottom bar, with Halt.
+   * mode's pane (operate/panes.ts) brings the middle of the screen and its controls, with Halt.
+   *
+   * In compact width the frame is one column, as on the phone. In compact height (a phone on its
+   * side) the middle takes the left and the full height, with the waterfall above the controls
+   * on the right. In regular width the waterfall runs across at a third of the height, over the
+   * middle and the transmit panel on the right, or over a bottom bar in a window taller than
+   * wide. The top bar moves to the app in regular width, above every screen.
    */
   import ActivationChip from '../ui/ActivationChip.svelte';
   import AudioBanner from '../ui/AudioBanner.svelte';
-  import BandSheet from '../ui/BandSheet.svelte';
-  import TopBar from '../ui/TopBar.svelte';
+  import StationBar from '../ui/StationBar.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
   import { PANES, familyOf } from './operate/panes';
-  import { houndOn, qso, setFrequencies } from '../lib/state/qso.svelte';
-  import { utcTime } from '../lib/clock/format';
-  import { hasSlots, slotProgress } from '../lib/clock/slots';
-  import { dialHz } from '../lib/radio/bands';
-  import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { qso, setFrequencies } from '../lib/state/qso.svelte';
+  import { layout } from '../lib/app/layout.svelte';
   import { markedTxHz } from '../lib/qso/view';
-  import { spotsShown } from '../lib/state/features.svelte';
-  import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
-  import { practice } from '../lib/state/practice.svelte';
   import { audio, resumeAudio, startAudio, tx } from '../lib/state/station.svelte';
   import { setWsprTxHz, wspr } from '../lib/state/wspr.svelte';
-  import { currentDialHz, keyboard, session, settle, tapToTune, tuneMark } from '../lib/state/keyboard.svelte';
-  import { dial4 } from '../lib/rtty/dial';
+  import { keyboard, session, settle, tapToTune, tuneMark } from '../lib/state/keyboard.svelte';
   import { spaceHz } from '../lib/rtty/settings';
 
   /** False while another screen is pushed over Operate: the list keeps its place for the return. */
   let { active = true }: { active?: boolean } = $props();
 
-  let bandOpen = $state(false);
   let wf = $state<ReturnType<typeof Waterfall>>();
 
   const family = $derived(familyOf(settings.mode));
@@ -45,51 +42,23 @@
   });
 
   const live = $derived(audio.status === 'running');
-  const onAir = $derived(isWspr ? !!wspr.onAir : isKeyboard ? session.tx !== 'off' : !!qso.onAir);
-  const transmitting = $derived(onAir || tx.tuning);
-  const stateText = $derived(
-    onAir
-      ? 'Transmitting'
-      : tx.tuning
-        ? 'Tuning'
-        : live
-          ? 'Receiving'
-          : audio.status === 'starting'
-            ? 'Starting audio'
-            : audio.status === 'stopped'
-              ? 'Audio stopped'
-              : 'Audio off',
-  );
 </script>
 
-<section class="operate" aria-labelledby="operate-title">
+<section class="operate {layout.size}" class:upright={layout.upright} aria-labelledby="operate-title">
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
-  <TopBar
-    band={settings.band}
-    mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
-    dialHz={isWspr ? dialHz(settings.band, 'WSPR') : isKeyboard ? currentDialHz() : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
-    dialText={isKeyboard ? dial4(currentDialHz()) : undefined}
-    utc={utcTime(clock.ms)}
-    progress={hasSlots(settings.mode) ? slotProgress(clock.ms, settings.mode) : null}
-    tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
-    state={stateText}
-    onair={transmitting}
-    rmsDb={audio.rmsDb}
-    {live}
-    spots={spotsShown()}
-    practice={practice.on}
-    onband={() => (bandOpen = true)}
-  />
-  <ActivationChip />
+  {#if layout.size !== 'regular'}<StationBar />{/if}
+  <div class="notes" data-part="notes">
+    <ActivationChip />
 
-  <AudioBanner
-    status={audio.status}
-    reason={audio.reason}
-    error={audio.error}
-    stoppedAtUtcMs={audio.stoppedAtUtcMs}
-    onstart={() => void startAudio()}
-    onresume={() => void resumeAudio()}
-  />
+    <AudioBanner
+      status={audio.status}
+      reason={audio.reason}
+      error={audio.error}
+      stoppedAtUtcMs={audio.stoppedAtUtcMs}
+      onstart={() => void startAudio()}
+      onresume={() => void resumeAudio()}
+    />
+  </div>
 
   {#if isWspr}
     <Waterfall
@@ -139,8 +108,6 @@
   <Pane {active} waterfall={wf} />
 </section>
 
-<BandSheet bind:open={bandOpen} />
-
 <style>
   /* On short screens with a banner, Operate scrolls; the bottom bar stays at the bottom, so Halt
      never leaves the screen. */
@@ -154,6 +121,99 @@
 
     /* The status bar's inset takes the top bar's material. */
     background: linear-gradient(var(--rr-dock), var(--rr-dock)) top / 100% var(--rr-safe-top) no-repeat, var(--rr-plain);
+  }
+
+  /* The phone: one column, the pane's parts in the frame's own flow. */
+  .notes,
+  .compact > :global([data-part]) {
+    display: contents;
+  }
+
+  /*
+   * A phone on its side: the middle on the left at full height; the waterfall and the controls in
+   * a column on the right. Panes that bring no parts of their own fill the frame below the bar.
+   */
+  .compact-height {
+    --rr-waterfall: var(--rr-side-waterfall);
+
+    display: grid;
+    grid-template:
+      'top top' auto
+      'notes notes' auto
+      'middle wf' auto
+      'middle controls' minmax(0, 1fr)
+      / minmax(0, 1fr) calc(var(--rr-side) + var(--rr-safe-right));
+    overflow: hidden;
+  }
+
+  .compact-height > :global(.top) {
+    grid-area: top;
+  }
+
+  .compact-height > :global(.wf-wrap) {
+    grid-area: wf;
+    padding-right: var(--rr-safe-right);
+    background: var(--rr-dock);
+  }
+
+  /*
+   * Regular width: the waterfall across at a third of the height, the middle and the transmit
+   * panel under it; upright, the controls along the bottom. On its side, the waterfall gives way
+   * down to a quarter of the height where the panel would not show Tx1 to Tx6 and Halt whole.
+   */
+  .regular {
+    --rr-waterfall: clamp(25dvh, 100dvh - var(--rr-safe-top) - var(--rr-top-regular) - var(--rr-panel-tall), 100dvh / 3);
+
+    display: grid;
+    grid-template:
+      'notes notes' auto
+      'wf wf' auto
+      'middle controls' minmax(0, 1fr)
+      / minmax(0, 1fr) var(--rr-panel);
+    overflow: hidden;
+    padding-top: 0;
+  }
+
+  .regular.upright {
+    --rr-waterfall: calc(100dvh / 3);
+
+    grid-template:
+      'notes' auto
+      'wf' auto
+      'middle' minmax(0, 1fr)
+      'controls' auto
+      / minmax(0, 1fr);
+  }
+
+  .regular > :global(.wf-wrap) {
+    grid-area: wf;
+  }
+
+  .notes {
+    grid-area: notes;
+  }
+
+  .compact-height > .notes,
+  .regular > .notes {
+    display: block;
+  }
+
+  .compact-height > :global([data-part='middle']),
+  .regular > :global([data-part='middle']) {
+    display: flex;
+    grid-area: middle;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .compact-height > :global([data-part='controls']),
+  .regular > :global([data-part='controls']) {
+    display: flex;
+    grid-area: controls;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
 
 </style>
