@@ -376,6 +376,7 @@ dependencies = [
  "rr73-corpus",
  "rr73-decode",
  "rr73-ft8",
+ "rr73-rtty",
  "serde",
  "serde_json",
  "toml",
@@ -440,6 +441,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr73-rtty"
+version = "0.12.2"
+dependencies = [
+ "rand",
+ "rand_chacha",
+ "rand_distr",
+ "rr73-chansim",
+ "rr73-dsp",
+ "rustfft",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rr73-wasm"
 version = "0.12.2"
 dependencies = [
@@ -447,6 +463,7 @@ dependencies = [
  "rr73-decode",
  "rr73-dsp",
  "rr73-ft8",
+ "rr73-rtty",
  "rr73-wspr",
  "serde",
  "serde_json",

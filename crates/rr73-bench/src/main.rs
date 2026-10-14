@@ -5,6 +5,7 @@ mod gate;
 mod import;
 mod loop_fixture;
 mod results;
+mod rtty;
 mod run;
 mod synth;
 mod util;
@@ -170,6 +171,75 @@ enum Command {
         /// Preset to print.
         name: Option<String>,
     },
+    /// RTTY: synthesise transmissions, decode them, score minimodem's output and report.
+    Rtty {
+        #[command(subcommand)]
+        command: RttyCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RttyCommand {
+    /// Write synthetic RTTY sets (awgn, ccir-good, ccir-moderate, ccir-poor, noise).
+    Synth {
+        /// Set to write; repeat for several.
+        #[arg(long = "set", required = true, value_name = "NAME")]
+        sets: Vec<String>,
+        /// Directory the sets go in.
+        #[arg(long, default_value = "corpus/rtty/synthetic")]
+        out: PathBuf,
+        /// Transmissions per SNR step.
+        #[arg(long, default_value_t = 3)]
+        per_step: usize,
+        /// Keying time of each transmission, in seconds.
+        #[arg(long, default_value_t = 60.0)]
+        seconds: f64,
+        /// Files in the noise set.
+        #[arg(long, default_value_t = 10)]
+        noise_files: usize,
+    },
+    /// Decode RTTY files with rr73-rtty and write a results file.
+    Run {
+        /// Name in reports.
+        #[arg(long, default_value = "rr73")]
+        label: String,
+        /// Decoder configuration override; repeat for several.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        overrides: Vec<String>,
+        /// Decoder threads (default: all CPUs).
+        #[arg(long)]
+        threads: Option<usize>,
+        /// Results file.
+        #[arg(long)]
+        out: PathBuf,
+        /// Files or directories.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Score another decoder's text output (tools/minimodem/decode.sh) as a results file.
+    Import {
+        /// Name in reports.
+        #[arg(long)]
+        label: String,
+        /// Directory holding `<set>/<stem>.txt` and `<set>/<stem>.time`.
+        #[arg(long)]
+        texts: PathBuf,
+        /// Command line that produced the texts, recorded in the results.
+        #[arg(long, default_value = "")]
+        command: String,
+        /// Results file.
+        #[arg(long)]
+        out: PathBuf,
+        /// Files or directories the texts cover.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Print CER against SNR, false characters on noise and CPU time for results files.
+    Report {
+        /// Results files, one column each.
+        #[arg(required = true)]
+        results: Vec<PathBuf>,
+    },
 }
 
 fn main() -> ExitCode {
@@ -331,6 +401,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 ExitCode::from(1)
             })
         }
+        Command::Rtty { command } => run_rtty(command),
         Command::Presets { name } => {
             match name {
                 Some(n) => {
@@ -346,4 +417,67 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+fn run_rtty(command: RttyCommand) -> Result<ExitCode, String> {
+    match command {
+        RttyCommand::Synth {
+            sets,
+            out,
+            per_step,
+            seconds,
+            noise_files,
+        } => {
+            let started = std::time::Instant::now();
+            let n = rtty::synth(&rtty::SynthOptions {
+                out: out.clone(),
+                sets,
+                per_step,
+                seconds,
+                noise_files,
+            })?;
+            println!(
+                "{n} files in {} ({:.1} s)",
+                out.display(),
+                started.elapsed().as_secs_f64()
+            );
+        }
+        RttyCommand::Run {
+            label,
+            overrides,
+            threads,
+            out,
+            paths,
+        } => {
+            let r = rtty::run(&rtty::RunOptions {
+                label,
+                overrides,
+                threads,
+                paths,
+            })?;
+            rtty::save(&r, &out)?;
+            print!("{}", rtty::report(std::slice::from_ref(&r)));
+            println!("{} files. Results: {}", r.files.len(), out.display());
+        }
+        RttyCommand::Import {
+            label,
+            texts,
+            command,
+            out,
+            paths,
+        } => {
+            let r = rtty::import(&label, &texts, &command, &paths)?;
+            rtty::save(&r, &out)?;
+            print!("{}", rtty::report(std::slice::from_ref(&r)));
+            println!("{} files scored. Results: {}", r.files.len(), out.display());
+        }
+        RttyCommand::Report { results } => {
+            let runs = results
+                .iter()
+                .map(|p| rtty::load(p))
+                .collect::<Result<Vec<_>, _>>()?;
+            print!("{}", rtty::report(&runs));
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }

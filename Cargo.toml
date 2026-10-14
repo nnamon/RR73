@@ -16,6 +16,7 @@ rr73-dsp = { path = "crates/rr73-dsp" }
 rr73-decode = { path = "crates/rr73-decode" }
 rr73-chansim = { path = "crates/rr73-chansim" }
 rr73-corpus = { path = "crates/rr73-corpus" }
+rr73-rtty = { path = "crates/rr73-rtty" }
 clap = { version = "4", features = ["derive"] }
 hound = "3"
 rand = "0.9"

@@ -255,3 +255,38 @@ Decoded out of 40 per SNR step in `snr-sweep/awgn`: none at -22 dB and below, 1 
 ### Gate baseline
 
 `bench/baseline.json` holds the CI sets (`public/ft8_lib`, `smoke/ft8`, `smoke/ft4`, `noise-ci`; 290 slots) from the same commit, slimmed. The gate passes against it for the CI run and for the full run above.
+
+## RTTY
+
+`rr73-bench rtty` measures the RTTY decoder (`rr73-rtty`) on continuous transmissions with known text, with minimodem as the reference. Results and the decision are in `docs/experiments/0005-rtty.md`.
+
+```sh
+docker compose run --rm rust rr73-bench rtty synth --set awgn --set ccir-good --set ccir-moderate --set ccir-poor --set noise
+docker compose run --rm rust rr73-bench rtty run --out results/rtty/rr73.json corpus/rtty/synthetic
+docker compose run --rm minimodem decode.sh corpus/rtty/synthetic corpus/rtty/out/minimodem
+docker compose run --rm rust rr73-bench rtty import --label minimodem --texts corpus/rtty/out/minimodem \
+  --out results/rtty/minimodem.json corpus/rtty/synthetic
+docker compose run --rm rust rr73-bench rtty report results/rtty/minimodem.json results/rtty/rr73.json
+```
+
+| Set | Directory | Files | Content |
+| --- | --- | --- | --- |
+| `awgn` | `corpus/rtty/synthetic/awgn` | 17 x `--per-step`, default 3 | -16 to 0 dB in 1 dB steps. |
+| `ccir-good` | `ccir-good` | 13 x `--per-step` | -12 to +12 dB in 2 dB steps; Watterson fading at 0.1 Hz spread and 0.5 ms delay (CCIR 520 good). |
+| `ccir-moderate` | `ccir-moderate` | 15 x `--per-step` | -12 to +16 dB in 2 dB steps; 0.5 Hz and 1 ms (CCIR 520 moderate). |
+| `ccir-poor` | `ccir-poor` | 15 x `--per-step` | -12 to +16 dB in 2 dB steps; 1 Hz and 2 ms (CCIR 520 poor). |
+| `noise` | `noise` | `--noise-files`, default 10 | Noise only, `--seconds` long. |
+
+Each file holds `--seconds` (default 60) of keying at 45.45 baud, 170 Hz shift, 1.5 stop bits, mark 1585 Hz and space 1415 Hz, from the `rr73-rtty` encoder, with 1 s of noise before and after. SNR is in 3000 Hz. The sidecar `<stem>.json` (`rr73-rtty/1`) holds the text, the line code, the tones, the channel and the seed. The text mixes callsigns, serial numbers, contest and conversation words in lines of 6 to 10 words, using letters, digits and `- ? : ( ) . , /`, which the ITA2 and US figures tables share. Seeds come from the set name, the SNR and the file number, so the same command writes the same audio.
+
+- `rtty run [--label NAME] [--set key=value ...] [--threads N] --out FILE <paths>` decodes each file with the default `DecoderConfig`, the sidecar's line code and tones, and the overrides (dotted keys, as for `run`; `squelch_db=null` turns the squelch off).
+- `tools/minimodem/decode.sh <corpus dir> <out dir> [minimodem options]` runs `minimodem --rx -q -f <file> -M <mark> -S <space> [options] rtty` on every file and writes `<set>/<stem>.txt` and `<set>/<stem>.time` (CPU seconds, user plus system). `RR73_JOBS` sets the files decoded at once. `rtty import` scores the texts.
+- CER is the edit distance between the text sent and the text received over the characters sent, after CR LF becomes LF and control characters are dropped. Characters printed from the noise around a transmission count as insertions. `rtty report` interpolates the SNR for 1 % and 10 % CER in log CER between the steps either side of the last crossing, counts characters printed per minute of the `noise` set and divides decoding CPU time by audio time. For timing, run with `--threads 1` and `RR73_JOBS=1`.
+
+The cost of the WebAssembly exports in browsers comes from `tools/wasm-cost/rtty.mjs`:
+
+```sh
+docker compose run --rm rust wasm-pack build crates/rr73-wasm --release --target web --out-dir ../../target/rtty-pkg
+docker compose run --rm node npm --prefix web ci
+docker compose run --rm e2e node tools/wasm-cost/rtty.mjs target/rtty-pkg chromium webkit
+```

@@ -14,6 +14,8 @@
 //! WSPR has its own entry points: [`decode_wspr`] for a 120 s slot, [`pack_wspr`] and
 //! [`synthesize_wspr`]. The WSPR decoder keeps its own context per worker, so callsigns from
 //! type 1 and type 2 messages resolve the hashed callsigns of type 3 messages in later slots.
+//!
+//! RTTY, a continuous mode, has its own streaming exports in [`rtty`].
 
 use std::cell::RefCell;
 
@@ -22,6 +24,8 @@ use rr73_decode::{Decode, DecodeContext, DecodeSession, DecoderConfig, SlotAudio
 use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+pub mod rtty;
 
 thread_local! {
     static CONTEXT: RefCell<DecodeContext> = RefCell::new(DecodeContext::new());
