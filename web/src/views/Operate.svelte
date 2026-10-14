@@ -11,7 +11,7 @@
   import Waterfall from '../ui/Waterfall.svelte';
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
-  import { callStation, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, houndOn, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
@@ -22,7 +22,8 @@
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
   import { orderQueue } from '../lib/qso/sequencer';
-  import { dialHz } from '../lib/radio/bands';
+  import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { markedTxHz } from '../lib/qso/view';
   import { STATUS } from '../lib/qso/status';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
@@ -228,8 +229,8 @@
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   <TopBar
     band={settings.band}
-    mode={settings.mode}
-    dialHz={dialHz(settings.band, settings.mode)}
+    mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
+    dialHz={operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
     utc={utcTime(clock.ms)}
     progress={slotProgress(clock.ms, settings.mode)}
     tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
@@ -256,7 +257,7 @@
     bind:this={wf}
     mode={settings.mode}
     rxHz={settings.rxHz}
-    txHz={settings.txHz}
+    txHz={markedTxHz(qso.st, settings.txHz)}
     txSlots={tx.slots}
     contrast={settings.waterfallContrast}
     stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}

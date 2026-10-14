@@ -1,7 +1,7 @@
 // The practice band's scenarios, as the ••• menu in Operate lists them. Each one sets how the
 // stations that answer your CQ, or that you call, behave. The rest of the band carries on the same.
 
-export type ScenarioId = 'random' | 'cq-one' | 'cq-pileup' | 'cq-quiet' | 'cq-repeat' | 'answer' | 'answer-busy' | 'answer-deaf' | 'directed' | 'hunt-busy';
+export type ScenarioId = 'random' | 'cq-one' | 'cq-pileup' | 'cq-quiet' | 'cq-repeat' | 'answer' | 'answer-busy' | 'answer-deaf' | 'directed' | 'hunt-busy' | 'fox';
 
 export interface Scenario {
   id: ScenarioId;
@@ -30,6 +30,8 @@ export const SCENARIOS: readonly Scenario[] = [
   { id: 'directed', name: 'CQ DX and CQ NA' },
   // Many stations call CQ. Those weaker than −10 dB do not hear the operator.
   { id: 'hunt-busy', name: 'Hunt: busy band' },
+  // A Fox works 3 Hounds a slot and answers the operator after a few calls at 1000 Hz or above.
+  { id: 'fox', name: 'Fox (DXpedition)' },
 ];
 
 export function isScenario(v: unknown): v is ScenarioId {

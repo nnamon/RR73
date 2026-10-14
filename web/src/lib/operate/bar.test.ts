@@ -20,6 +20,7 @@ const CONFIG: SeqConfig = {
   cqParity: 'even',
   cqModifier: null,
   preset: 'baseline',
+  hound: false,
 };
 
 const idle = (): SeqState => initialState(CONFIG);
@@ -39,6 +40,7 @@ const partner = (extra: Partial<Partner> = {}): Partner => ({
   rcvdAck: false,
   startMs: null,
   logged: false,
+  foxHz: null,
   ...extra,
 });
 

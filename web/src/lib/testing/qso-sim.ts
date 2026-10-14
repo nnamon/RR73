@@ -29,6 +29,7 @@ export function config(over: Partial<SeqConfig> = {}): SeqConfig {
     cqParity: 'even',
     cqModifier: null,
     preset: 'subtract-3',
+    hound: false,
     ...over,
   };
 }
@@ -38,6 +39,8 @@ export interface Transmission {
   tx: TxNum;
   text: string;
   offsetS: number;
+  /** Tx audio frequency the sequencer set (Hound), Hz; null for the operator's. */
+  freqHz: number | null;
 }
 
 export function decode(text: string, snr_db = -10, freq_hz = 1200, dt_s = 0.1): Decode {
@@ -48,7 +51,7 @@ export class Sim {
   st: SeqState;
   effects: SeqEffect[] = [];
   sent: Transmission[] = [];
-  pending: { tx: TxNum; text: string; slotStartMs: number; startOffsetS: number } | null = null;
+  pending: { tx: TxNum; text: string; slotStartMs: number; startOffsetS: number; freqHz: number | null } | null = null;
   readonly mode: Mode;
 
   constructor(over: Partial<SeqConfig> = {}) {
@@ -70,7 +73,7 @@ export class Sim {
     this.st = r.state;
     this.effects.push(...r.effects);
     for (const f of r.effects) {
-      if (f.type === 'scheduleTx') this.pending = { tx: f.tx, text: f.text, slotStartMs: f.slotStartMs, startOffsetS: f.startOffsetS };
+      if (f.type === 'scheduleTx') this.pending = { tx: f.tx, text: f.text, slotStartMs: f.slotStartMs, startOffsetS: f.startOffsetS, freqHz: f.freqHz };
       if (f.type === 'cancelTx') this.pending = null;
     }
     return r.effects;
@@ -82,7 +85,7 @@ export class Sim {
     if (!p || p.slotStartMs !== this.at(i)) return;
     this.pending = null;
     this.send({ type: 'txStarted', slotStartMs: p.slotStartMs, text: p.text, nowMs: p.slotStartMs + p.startOffsetS * 1000 });
-    this.sent.push({ slot: i, tx: p.tx, text: p.text, offsetS: p.startOffsetS });
+    this.sent.push({ slot: i, tx: p.tx, text: p.text, offsetS: p.startOffsetS, freqHz: p.freqHz });
     if (haltAtS !== undefined) {
       this.send({ type: 'halt', nowMs: this.at(i, haltAtS) });
       this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: false, nowMs: this.at(i, haltAtS) });

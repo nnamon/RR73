@@ -20,6 +20,10 @@ export const STATUS = {
   txSet: (hz: number) => `Tx set to ${hz} Hz`,
   noClear: 'Not enough audio yet',
   practice: (scenario: string) => `Practice · ${scenario}`,
+  foxUnknown: 'Fox callsign not in this message',
+  houndCalling: (call: string) => `Calling the Fox · ${call}`,
+  houndReport: (db: string, call: string) => `Report received · ${db} dB from ${call}`,
+  houndLogged: (call: string) => `Logged · ${call}`,
 } as const;
 
 /** Why a call paused on its last message, after the message in the status line: "Tx1 · VK2LAW 9V1NE OJ11 · no reply". */

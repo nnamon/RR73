@@ -7,7 +7,7 @@ import { MINUS, signed as signedNum, utcTime } from '../clock/format';
 import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
 import { messages, type SeqState } from './sequencer';
-import { PAUSED } from './status';
+import { PAUSED, STATUS } from './status';
 
 export type StepState = 'done' | 'now' | 'next' | 'todo';
 
@@ -42,7 +42,8 @@ export function steps(st: SeqState): Step[] {
         [rcvd ?? 'Report', p.rcvdRpt],
         [sent ? `R${sent}` : 'R-report', p.sentRRpt],
         [st.config.ack, p.rcvdAck],
-        ['73', p.logged && !st.onAir && st.current !== 5],
+        // A Hound logs on the Fox's RR73 and sends no 73.
+        st.config.hound ? ['Logged', p.logged] : ['73', p.logged && !st.onAir && st.current !== 5],
       ];
   let marked = false;
   return list.map(([label, done]) => {
@@ -95,6 +96,35 @@ export function huntText(st: SeqState): string | null {
     else what = `calling ${call} (${db > 0 ? '+' : ''}${signedNum(db)} dB)`;
   }
   return `Hunt · ${what}${tally}`;
+}
+
+/**
+ * Hound's status line, the stage of the QSO with the Fox: "Calling the Fox · KH7Z",
+ * "Report received · −13 dB from KH7Z", "Logged · KH7Z". Null outside Hound mode, with no Fox
+ * called, or when answering has given up.
+ */
+export function houndText(st: SeqState): string | null {
+  if (!st.config.hound) return null;
+  const p = st.partner;
+  if (!p) return st.houndLogged ? STATUS.houndLogged(st.houndLogged) : null;
+  const call = bare(p.call);
+  if (p.logged) return STATUS.houndLogged(call);
+  if (st.paused) return null;
+  if (p.rcvdRpt && p.reportRcvd !== null) return STATUS.houndReport(signed(formatReport(p.reportRcvd)), call);
+  return STATUS.houndCalling(call);
+}
+
+/**
+ * The Tx frequency the waterfall marks, Hz: where the transmission on air or planned goes. In
+ * Hound mode the R-report and its repeats go where the Fox called us, and the mark stays there
+ * between repeats; otherwise, and after the QSO, it is the operator's Tx frequency.
+ */
+export function markedTxHz(st: SeqState, operatorHz: number): number {
+  if (st.onAir) return st.onAir.freqHz ?? operatorHz;
+  if (st.next) return st.next.freqHz ?? operatorHz;
+  const p = st.partner;
+  if (st.config.hound && p?.rcvdRpt && !p.logged && st.lastSent?.tx === 3) return st.lastSent.freqHz ?? operatorHz;
+  return operatorHz;
 }
 
 /** "Watchdog 5:40", the time left before the watchdog stops Tx; "Tx off" while Tx is off. */

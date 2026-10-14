@@ -15,11 +15,11 @@
   import { bare, parseExchange } from '../lib/qso/messages';
   import { pathBetween } from '../lib/qso/grid';
   import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
-  import { barText, huntText, runTally, watchdogText } from '../lib/qso/view';
+  import { barText, houndText, huntText, runTally, watchdogText } from '../lib/qso/view';
   import { active, barSteps, txButton } from '../lib/operate/bar';
   import { clock } from '../lib/state/now.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
-  import { callCq, endQso, qso, runRate, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
+  import { callCq, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { chooseScenario } from '../lib/practice/runtime.svelte';
@@ -33,6 +33,7 @@
   const blocked = $derived(st.phase !== 'idle' || st.hunt ? notReady(st) : null);
   const text = $derived(barText(st));
   const hunting = $derived(huntText(st));
+  const hounding = $derived(houndText(st));
   /** CQ is on until a station is called by hand or Hunt starts. */
   const cqOn = $derived(st.phase === 'cq' && !st.hunt);
   const running = $derived(cqOn && st.config.run);
@@ -71,8 +72,10 @@
     if (notice) return { text: notice.text, aside: st.phase === 'idle' && !st.hunt ? '' : aside };
     if (blocked) return { text: blocked, aside };
     if (hunting) return { text: hunting, aside };
+    if (hounding && st.partner) return { text: hounding, aside };
     if (text) return { text, aside };
     if (selLine) return { text: selLine, aside: 'Double-tap to call' };
+    if (hounding) return { text: hounding, aside };
     return null;
   });
 
@@ -180,6 +183,11 @@
       <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
         Repeat CQ <span class="v">{settings.run ? 'On' : 'Off'}</span>
       </button>
+      {#if settings.mode === 'FT8'}
+        <button class="mi" role="menuitemcheckbox" aria-checked={houndOn()} onclick={() => setHound(!houndOn())}>
+          Hound <span class="v">{houndOn() ? 'On' : 'Off'}</span>
+        </button>
+      {/if}
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ queueOrder: ORDERS[(ORDERS.indexOf(order) + 1) % ORDERS.length].id })}>
         Answer order <span class="v">{order.label}</span>
       </button>

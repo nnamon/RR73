@@ -6,12 +6,13 @@
  */
 
 import { untrack } from 'svelte';
-import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
+import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
 import { parity as parityOf, type Parity } from '../clock/slots';
-import { dialHz } from '../radio/bands';
+import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
+import type { BandId } from '../radio/bands';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
@@ -65,7 +66,7 @@ export function configNow() {
     myGrid: a?.grid || settings.grid,
     mode: settings.mode,
     band: settings.band,
-    dialHz: dialHz(settings.band, settings.mode) ?? 0,
+    dialHz: operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,
@@ -78,7 +79,27 @@ export function configNow() {
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
+    hound: houndOn(),
   };
+}
+
+/** Hound mode is on for this band: FT8 only, as WSJT-X's FT8 DXpedition mode. */
+export function houndOn(): boolean {
+  return settings.mode === 'FT8' && settings.houndBands.includes(settings.band);
+}
+
+/**
+ * Turns Hound mode on or off for the band in use. A Tx frequency below 1000 Hz moves to
+ * 1000 Hz, where a Fox answers calls.
+ */
+export function setHound(on: boolean) {
+  const bands = on ? [...new Set([...settings.houndBands, settings.band])] : settings.houndBands.filter((b) => b !== settings.band);
+  void updateSettings({ houndBands: bands, ...(on && settings.txHz < HOUND_MIN_HZ ? { txHz: houndCallHz(settings.txHz) } : {}) });
+}
+
+/** Stores the DXpedition's dial frequency for Hound mode on `band`, Hz. */
+export function setHoundDial(band: BandId, hz: number) {
+  void updateSettings({ houndDialHz: { ...settings.houndDialHz, [band]: hz } });
 }
 
 const scheduler = new TxScheduler({
@@ -101,7 +122,8 @@ export function dispatch(e: SeqEvent) {
   const p = r.state.partner;
   if (p && (p.call !== before || e.type === 'callStation')) {
     const hz = clampHz(p.freqHz, r.state.config.mode);
-    void updateSettings(settings.holdTx ? { rxHz: hz } : { rxHz: hz, txHz: hz });
+    // A Hound calls above 1000 Hz, away from the Fox: only Rx moves to it.
+    void updateSettings(settings.holdTx || r.state.config.hound ? { rxHz: hz } : { rxHz: hz, txHz: hz });
   }
   for (const f of r.effects) {
     switch (f.type) {
@@ -111,7 +133,7 @@ export function dispatch(e: SeqEvent) {
           mode: r.state.config.mode,
           slotStartMs: f.slotStartMs,
           startOffsetS: f.startOffsetS,
-          f0Hz: settings.txHz,
+          f0Hz: f.freqHz ?? settings.txHz,
           level: txLevel(settings.outputLevel),
         });
         break;
@@ -134,14 +156,17 @@ export function dispatch(e: SeqEvent) {
 function onTxReport(r: TxReport) {
   const now = Date.now();
   if (r.type === 'started') {
+    // Hound sets its own frequency for some transmissions; the plan still holds it here.
+    const n = qso.st.next;
+    const hz = (n && n.slotStartMs === r.slotStartMs && n.text === r.text ? n.freqHz : null) ?? settings.txHz;
     const txn = (Object.entries(messages(qso.st)).find(([, t]) => t === r.text)?.[0] ?? '6') as unknown as TxNum;
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
     const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
     // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
-    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: settings.txHz });
-    qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
-    void showTx(r.startUtcMs, r.text, qso.st.config.mode, settings.txHz);
+    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: hz });
+    qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: hz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
+    void showTx(r.startUtcMs, r.text, qso.st.config.mode, hz);
   } else if (r.type === 'ended') {
     qso.onAir = null;
     if (!r.complete) cutTx(now);
@@ -170,7 +195,8 @@ export function setFrequencies(f: { rxHz?: number; txHz?: number }) {
   const mode = settings.mode;
   const patch: { rxHz?: number; txHz?: number; freqPicked: true } = { freqPicked: true };
   if (f.rxHz !== undefined) patch.rxHz = clampHz(f.rxHz, mode);
-  if (f.txHz !== undefined) patch.txHz = clampHz(f.txHz, mode);
+  // A Hound's calls stay at 1000 Hz or above.
+  if (f.txHz !== undefined) patch.txHz = clampHz(houndOn() ? houndCallHz(f.txHz) : f.txHz, mode);
   const moved = patch.txHz !== undefined && patch.txHz !== settings.txHz;
   void updateSettings(patch);
   if (moved) retune();
@@ -187,7 +213,7 @@ function retune() {
     mode: qso.st.config.mode,
     slotStartMs: p.slotStartMs,
     startOffsetS: p.offsetS,
-    f0Hz: settings.txHz,
+    f0Hz: p.freqHz ?? settings.txHz,
     level: txLevel(settings.outputLevel),
   });
 }
@@ -343,6 +369,7 @@ export function startQso() {
         tailEnd: c.tailEnd,
         huntOrder: c.huntOrder,
         watchdogMs: c.watchdogMs,
+        hound: c.hound,
       };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));

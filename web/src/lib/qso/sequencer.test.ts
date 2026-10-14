@@ -882,7 +882,7 @@ describe('the audio layer', () => {
     s.hear(-1, ['9V1NE K1ABC FN42']);
     // The reply to K1ABC replaced CQ for slot 0, but the CQ was already on air.
     s.send({ type: 'txStarted', slotStartMs: s.at(0), text: 'CQ 9V1NE OJ11', nowMs: s.at(0, 0.5) });
-    expect(s.st.onAir).toEqual({ tx: 6, text: 'CQ 9V1NE OJ11', slotStartMs: s.at(0) });
+    expect(s.st.onAir).toEqual({ tx: 6, text: 'CQ 9V1NE OJ11', slotStartMs: s.at(0), freqHz: null });
     expect(s.st.next).toMatchObject({ tx: 2, slotStartMs: s.at(0) });
     s.send({ type: 'txMissed', slotStartMs: s.at(0), nowMs: s.at(0, 0.6) });
     expect(s.st.next).toMatchObject({ tx: 2, slotStartMs: s.at(2) });

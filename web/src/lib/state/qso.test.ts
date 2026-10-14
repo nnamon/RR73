@@ -16,7 +16,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 import { silentClipUri } from '../audio/unlock';
 import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
-import { callCq, callStation, dispatch, haltTx, qso, setFrequencies, setHunt, setTxEnabled } from './qso.svelte';
+import { callCq, callStation, configNow, dispatch, haltTx, qso, setFrequencies, setHound, setHoundDial, setHunt, setTxEnabled } from './qso.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import type { Activation } from '../log/types';
 
@@ -134,12 +134,25 @@ describe('the sequencer’s notices', () => {
       vi.setSystemTime(t + 1000);
       callStation(decode('CQ VK2LAW QF56', -8, 1200), t - 15_000);
       expect(qso.st.phase).toBe('answering');
-      // In his next slot he answers DV5CEL.
+      // In its next slot VK2LAW answers DV5CEL.
       vi.setSystemTime(t + 30_100);
       dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('DV5CEL VK2LAW -05', -8, 1200)], nowMs: Date.now() });
       expect(qso.notice).toMatchObject({ kind: 'lost', text: 'VK2LAW answered DV5CEL' });
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Hound dial frequency', () => {
+  it('is the dial the sequencer logs with Hound on, and the usual one with Hound off', async () => {
+    await updateSettings({ band: '20m', mode: 'FT8', houndBands: [], houndDialHz: {} });
+    setHoundDial('20m', 14_090_000);
+    expect(configNow().dialHz).toBe(14_074_000);
+    setHound(true);
+    expect(configNow().dialHz).toBe(14_090_000);
+    expect(settings.houndDialHz).toEqual({ '20m': 14_090_000 });
+    setHound(false);
+    expect(configNow().dialHz).toBe(14_074_000);
   });
 });

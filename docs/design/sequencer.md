@@ -40,6 +40,8 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 - Hunt and CQ stop each other. Starting Hunt during a QSO lets the QSO finish and picks after it. Stopping Hunt during a QSO lets it finish, then Tx goes off. Halt, End QSO, an audio stop and the watchdog stop Hunt.
 - The status line names the state: "Hunt · calling VJ6X (−12 dB) · 2 QSOs".
 
+**Hound.** A switch per band, in the band sheet and •••, for working a DXpedition in FT8 DXpedition mode (`docs/design/hound.md`). Tx1 goes to the Fox's base callsign at 1000 Hz or above and repeats until the Fox answers. The Fox's report to us, alone or inside its multi-call message (`K1ABC RR73; 9V1NE <KH1/KH7Z> -08`), gets Tx3 at the frequency the Fox sent it on; repeats move 300 Hz. The Fox's RR73 to us logs the QSO and Tx turns off, with no 73. Only parts addressed to us count, so the Fox working other Hounds never reads as a lost station or starts a tail-end call.
+
 **Lost station.** When the station we call, before it has answered us, sends a report, `R<report>`, RR73, RRR or 73 to another station, calling stops and a notice names it: "VK2LAW answered DV5CEL." A CQ or a call with a grid from that station is not a QSO under way, and calling continues.
 
 **Tail-end.** A setting, on by default. After a lost station sends RR73, RRR or 73 to the other station, or calls CQ, the sequencer calls it once more in the next slot of the opposite parity, with the late start allowed. One unanswered call ends the attempt. Nothing goes out while the station is in its QSO, Tx on included. Waiting ends after 8 slots. With tail-end off, the call pauses at once. Hunt never tail-ends: it moves on to the next CQ as soon as the station it calls answers another, whatever the setting, because another CQ is a quicker QSO than waiting out theirs.
@@ -82,11 +84,11 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | callCq | enableTx(on)
          | hunt(on) | stopAfterQso(on) | halt | txStarted(slotStart) | txEnded(slotStart) | audioStopped
          | endQso | configure(band, mode, dialHz, ...) | touch(t) | tick(t) | editMessage(slot, text)
-effects: scheduleTx(text, slotStart, startOffsetS) | cancelTx | logQso(record)
+effects: scheduleTx(text, slotStart, startOffsetS, freqHz) | cancelTx | logQso(record)
          | notice(kind, text) | queueChanged(callers)
 ```
 
-`state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Hunt's order and the watchdog limit come in through `configure`. The UI renders from state; the audio layer executes effects.
+`state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Hunt's order, Hound and the watchdog limit come in through `configure`. `freqHz` is null except where Hound sets the Tx frequency. The UI renders from state; the audio layer executes effects.
 
 ## Open risks
 
