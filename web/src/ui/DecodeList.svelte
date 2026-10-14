@@ -386,9 +386,10 @@
   }
 
   /* SNR and frequency on the right, in one column. */
+  /* Wide enough for "−24 dB · 2999 Hz" in tabular digits, so the numbers start at one x on every row. */
   .c-num {
     flex: none;
-    min-width: 100px;
+    min-width: 9em;
     font-size: var(--rr-text-caption);
     line-height: var(--rr-leading-caption);
     font-variant-numeric: tabular-nums;
