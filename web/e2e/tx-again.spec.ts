@@ -24,7 +24,8 @@ test('after a CQ and Halt, calling a station goes on air', async ({ page }) => {
   await page.waitForTimeout(5000);
   await expectOnUtc(page, 'before Tx');
 
-  await waitForSlotPhase(page, 3, 12);
+  // Past the 4.3 s in which CQ would start late in the slot under way: a whole CQ, on time.
+  await waitForSlotPhase(page, 5, 12);
   await dock.getByRole('button', { name: 'CQ', exact: true }).click();
   await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
   await page.waitForTimeout(2000);

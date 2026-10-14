@@ -17,9 +17,9 @@ test('Call CQ sends CQ 9V1NE OJ11 at slot + 0.5 s on the Tx frequency, and Halt 
   await page.mouse.click(Math.round(wf.x + (wf.width * 1846) / 3000), Math.round(wf.y + wf.height / 2));
   const txHz = Number(await page.getByRole('slider', { name: 'Transmit frequency, Hz' }).inputValue());
   expect(Math.abs(txHz - 1846)).toBeLessThanOrEqual(10);
-  // Tapped in the first 1.5 s of an even slot, CQ would start late in it; this test wants a CQ
-  // on time, so it taps 3 to 12 s into a slot.
-  await waitForSlotPhase(page, 3, 12);
+  // Tapped in the first 4.3 s of an even slot, CQ would start late in it; this test wants a CQ
+  // on time, so it taps 5 to 12 s into a slot.
+  await waitForSlotPhase(page, 5, 12);
   await dock.getByRole('button', { name: 'CQ', exact: true }).click();
 
   const [first] = await waitForTransmissions(page, 1, 50_000);
