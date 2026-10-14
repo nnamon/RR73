@@ -1,6 +1,6 @@
 import { deleteDB, openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { DEFAULTS, FEATURES_OFF, loadSettings, migration, normaliseCallsign, resetSettings, settings, settingsStatus, SETTINGS_SCHEMA, updateSettings, validate } from './settings.svelte';
+import { DEFAULTS, FEATURES_OFF, WSPR_DEFAULTS, loadSettings, migration, normaliseCallsign, resetSettings, settings, settingsStatus, SETTINGS_SCHEMA, updateSettings, validate } from './settings.svelte';
 import { closeDb, DB_NAME, getKv, setKv } from './db';
 import { defaultHighlights } from '../decode/highlight';
 
@@ -47,7 +47,7 @@ describe('settings', () => {
     expect(
       validate({
         callsign: '9v1ne',
-        band: '2m',
+        band: '4m',
         mode: 'JT65',
         outputLevel: 3,
         rxHz: 50,
@@ -84,7 +84,7 @@ describe('the optional features migration', () => {
     await setKv('settings', { callsign: '9V1NE', theme: 'dark', band: '40m' });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF });
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps the features of a current record', async () => {
@@ -98,7 +98,7 @@ describe('the optional features migration', () => {
     await loadSettings();
     expect(settings).toEqual(DEFAULTS);
     expect(await getKv('settings')).toBeUndefined();
-    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal' });
+    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
   });
 
   it('keeps a feature turned on before the stored settings arrived', async () => {
@@ -117,7 +117,7 @@ describe('the decode colours migration', () => {
     expect(settings.highlights).toEqual(defaultHighlights());
     expect(settings.highlights.every((h) => h.on)).toBe(true);
     expect(settings.features.activations).toBe(true);
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps a stored order, colours and switches', async () => {
@@ -135,10 +135,10 @@ describe('the sequencer settings migration', () => {
   it('stores Run off, tail-ending on, not worked first and a 6 min watchdog on a phone that ran 0.9', async () => {
     const stored = { callsign: '9V1NE', highlights: defaultHighlights(), schema: 3 };
     await setKv('settings', stored);
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...SEQ, waterfallContrast: 'normal' });
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', ...SEQ });
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps sequencer settings the operator changed', async () => {
@@ -161,10 +161,10 @@ describe('the waterfall contrast migration', () => {
     const mine = { run: true, tailEnd: false, huntOrder: 'farthest', watchdog: false, watchdogMin: 2.5 };
     const stored = { callsign: '9V1NE', highlights: defaultHighlights(), ...mine, schema: 5 };
     await setKv('settings', stored);
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, waterfallContrast: 'normal' });
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
     await loadSettings();
-    expect(settings).toMatchObject({ ...mine, waterfallContrast: 'normal' });
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, waterfallContrast: 'normal', schema: SETTINGS_SCHEMA });
+    expect(settings).toMatchObject({ ...mine, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps a stored contrast and drops an unknown one', async () => {
@@ -172,6 +172,38 @@ describe('the waterfall contrast migration', () => {
     await loadSettings();
     expect(settings.waterfallContrast).toBe('high');
     expect(validate({ waterfallContrast: 'max' }).waterfallContrast).toBe('normal');
+  });
+});
+
+describe('the WSPR settings migration', () => {
+  it('adds WSPR at its defaults on a phone that ran 0.11, keeping every other value, and stores that once', async () => {
+    const mine = { callsign: '9V1NE', band: '40m', mode: 'FT4', rxHz: 900, txHz: 1200, watchdogMin: 4, waterfallContrast: 'high' };
+    const stored = { ...mine, schema: 6 };
+    await setKv('settings', stored);
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, wspr: WSPR_DEFAULTS });
+    await loadSettings();
+    expect(settings).toMatchObject({ ...mine, wspr: WSPR_DEFAULTS });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+  });
+
+  it('starts at 20%, 37 dBm, 1500 Hz, Stop beacon after 1 h, sorted by distance', () => {
+    expect(WSPR_DEFAULTS).toEqual({ txPct: 20, powerDbm: 37, txHz: 1500, stopAfterMin: 60, sort: 'distance' });
+  });
+
+  it('keeps stored WSPR values that are valid and drops the rest', () => {
+    expect(validate({ mode: 'WSPR', wspr: { txPct: 35, powerDbm: 23, txHz: 1555.4, stopAfterMin: 0, sort: 'snr' } })).toMatchObject({
+      mode: 'WSPR',
+      wspr: { txPct: 35, powerDbm: 23, txHz: 1555, stopAfterMin: 0, sort: 'snr' },
+    });
+    expect(validate({ wspr: { txPct: 33, powerDbm: 31, txHz: 1700, stopAfterMin: -1, sort: 'newest' } }).wspr).toEqual({ ...WSPR_DEFAULTS, txHz: 1590 });
+    expect(validate({ wspr: 'x' }).wspr).toEqual(WSPR_DEFAULTS);
+  });
+
+  it('keeps a band and mode pair that has a dial frequency, and takes WSPR on 2m', () => {
+    expect(validate({ band: '2m', mode: 'WSPR' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+    expect(validate({ band: '2m', mode: 'FT8' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+    expect(validate({ band: '2m' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+    expect(validate({ band: '60m', mode: 'FT4' })).toMatchObject({ band: '60m', mode: 'FT8' });
   });
 });
 
