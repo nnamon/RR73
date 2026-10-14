@@ -44,7 +44,7 @@
   const live = $derived(audio.status === 'running');
 </script>
 
-<section class="operate {layout.size}" class:upright={layout.upright} aria-labelledby="operate-title">
+<section class="operate {layout.size}" class:upright={layout.upright} class:whole={isKeyboard} aria-labelledby="operate-title">
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   {#if layout.size !== 'regular'}<StationBar />{/if}
   <div class="notes" data-part="notes">
@@ -182,6 +182,15 @@
       'wf' auto
       'middle' minmax(0, 1fr)
       'controls' auto
+      / minmax(0, 1fr);
+  }
+
+  /* A pane that marks no parts (the keyboard modes) takes the whole width under the waterfall. */
+  .regular.whole {
+    grid-template:
+      'notes' auto
+      'wf' auto
+      'middle' minmax(0, 1fr)
       / minmax(0, 1fr);
   }
 
