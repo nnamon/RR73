@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { applyFocus, focusCall, mentions, related, toYou } from './focus';
-import { buildList, callerItems, type ListItem, type RowItem, type SlotDecodes } from './list';
+import { buildList, type ListItem, type RowItem, type SlotDecodes } from './list';
 import { Sim, decode } from '../testing/qso-sim';
 
 describe('toYou', () => {
@@ -160,10 +160,4 @@ describe('applyFocus', () => {
     expect(items.some((i) => i.kind === 'row' && i.dim)).toBe(false);
   });
 
-  it('keeps Run callers clear: they are messages to you', () => {
-    const callers = callerItems(SLOTS, '9V1NE', 'FT8', { call: 'K1ABC', grid: 'FN42', snrDb: -12, dtS: 0.2, freqHz: 2341 }, [], false);
-    const rows = applyFocus(callers, 'K1ABC').filter((i): i is RowItem => i.kind === 'row');
-    expect(rows.map((r) => [r.toYou, r.dim])).toEqual([[true, undefined]]);
-    expect(related(rows[0], 'ZL1TQK')).toBe(true);
-  });
 });

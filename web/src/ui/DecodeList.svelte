@@ -37,6 +37,7 @@
   import { dt, snr } from '../lib/clock/format';
   import { cqCountry } from '../lib/decode/country';
   import { isLost, type LostMark } from '../lib/decode/lost';
+  import { queueSpoken, queueTag, type QueueMark } from '../lib/decode/queue';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
   import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
   import { outText, type RowItem } from '../lib/decode/list';
@@ -52,6 +53,7 @@
     nowMs = 0,
     countries = null,
     lost = [],
+    queue = [],
     onselect,
     oncall,
     ondetail,
@@ -68,6 +70,8 @@
     countries?: DxccIndex | null;
     /** Stations we called that answered another station: their rows read Lost where a CQ row has its country. */
     lost?: readonly LostMark[];
+    /** Callers waiting while we call CQ with Repeat CQ on: their latest message to us reads Next, 2nd or Dupe there too. */
+    queue?: readonly QueueMark[];
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
@@ -82,7 +86,7 @@
 
   type Out = ReturnType<typeof outText>;
 
-  function spoken(item: RowItem, o: Out | null, country: string | null = null, lostRow = false): string {
+  function spoken(item: RowItem, o: Out | null, country: string | null = null, lostRow = false, queued: string | null = null): string {
     const r = item.row;
     const parts = [
       o ? o.tag.replace(' · :', ', :') : '',
@@ -93,6 +97,7 @@
       r.mark && !item.out ? MARK_TEXT[r.mark] : '',
       country ?? '',
       lostRow ? 'lost, answered another station' : '',
+      queued ? queueSpoken(queued) : '',
       r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
       r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
@@ -182,7 +187,7 @@
   }
 </script>
 
-{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null, lostRow = false)}
+{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null, lostRow = false, queued: string | null = null)}
   {#if o}<span class="c-tag" aria-hidden="true">{o.tag}</span>{/if}
   <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
   {#if r.badge}
@@ -194,7 +199,7 @@
     <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
     {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
   {:else}
-    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{:else if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{/if}
+    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{:else if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{:else if queued}<span class="c-queue" class:next={queued === 'Next'} class:dupe={queued === 'Dupe'} aria-hidden="true">{queued}</span>{/if}
     <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
@@ -223,6 +228,7 @@
       {@const next = item.out?.stage === 'next'}
       {@const country = item.out ? null : cqCountry(r, countries)}
       {@const lostRow = !item.out && isLost(r.decode.text, item.slotStartMs, lost)}
+      {@const queued = !item.out && r.mark === 'me' ? queueTag(r.decode.text, item.slotStartMs, queue) : null}
       <li class="dr-item">
         {#if preview || next}
           <div
@@ -235,7 +241,7 @@
             data-testid={next ? 'next-row' : undefined}
           >
             <span class="visually-hidden">{spoken(item, o)}</span>
-            {@render cells(r, t, o, next, country, lostRow)}
+            {@render cells(r, t, o, next, country, lostRow, queued)}
           </div>
         {:else}
           <button
@@ -246,7 +252,7 @@
             style:--rr-ink-dark={ink?.dark}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
-            aria-label={spoken(item, o, country, lostRow)}
+            aria-label={spoken(item, o, country, lostRow, queued)}
             aria-pressed={selectedId === item.id}
             onpointerdown={(e) => down(e, item)}
             onpointermove={move}
@@ -258,7 +264,7 @@
             }}
             onclick={(e) => click(e, item)}
           >
-            {@render cells(r, t, o, false, country, lostRow)}
+            {@render cells(r, t, o, false, country, lostRow, queued)}
           </button>
         {/if}
       </li>
@@ -626,6 +632,23 @@
     font-weight: var(--rr-weight-bold);
     line-height: var(--rr-leading-caption);
     color: var(--rr-tx-text);
+  }
+
+  /* A caller waiting while we call CQ: Next in the tint, later places and Dupe in grey, where a CQ row has its country. */
+  .c-queue {
+    flex: none;
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-bold);
+    line-height: var(--rr-leading-caption);
+    color: var(--rr-label2);
+  }
+
+  .c-queue.next {
+    color: var(--rr-accent);
+  }
+
+  .c-queue.dupe {
+    font-weight: var(--rr-weight-regular);
   }
 
   .hl-ink .c-country {

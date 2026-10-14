@@ -161,7 +161,9 @@ for (const theme of ['light', 'dark'] as const) {
       now = await phase(page, 2, 11, 'even');
     }
     await inject(page, now - SLOT, CALLERS);
-    await expect(page.getByTestId('decode-list').getByText('Working')).toBeVisible();
+    // The first caller is answered; those waiting read Next and 2nd on their messages to you.
+    await expect(page.getByTestId('decode-list').locator('.c-queue')).toHaveText(['Next', '2nd']);
+    await shot('7-run-callers');
     await bar.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('menu', { name: 'More' })).toBeVisible();
     await shot('7-run');

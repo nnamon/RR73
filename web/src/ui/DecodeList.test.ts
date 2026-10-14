@@ -123,6 +123,29 @@ describe('DecodeList', () => {
     expect(other.querySelector('.c-lost')).toBeNull();
   });
 
+  it('tags waiting callers on their latest message to you: Next in the tint, then 2nd, and Dupe', () => {
+    const earlier = slotStartMs - 30_000;
+    const items: DecodeListItem[] = [
+      { kind: 'row', id: 'q1', slotStartMs, row: row(d('9V1NE ZL1TQK RF73', -10, 0.1, 2430)) },
+      { kind: 'row', id: 'q2', slotStartMs, row: row(d('9V1NE DU1XYZ PK04', -12, 0.1, 900)) },
+      { kind: 'row', id: 'q3', slotStartMs, row: row(d('9V1NE W1AW FN31', -8, 0.1, 1700)) },
+      { kind: 'row', id: 'q4', slotStartMs: earlier, row: row(d('9V1NE ZL1TQK RF73', -11, 0.1, 2430)) },
+      { kind: 'row', id: 'q5', slotStartMs, row: row(d('ZL1TQK JA1KXM -09', -9, 0.1, 1418)) },
+    ];
+    const queue = [
+      { call: 'ZL1TQK', slotStartMs, tag: 'Next' },
+      { call: 'DU1XYZ', slotStartMs, tag: '2nd' },
+      { call: 'W1AW', slotStartMs, tag: 'Dupe' },
+    ];
+    const el = render(items, { queue });
+    const rows = [...el.querySelectorAll('button.dr')];
+    expect(rows.map((r) => r.querySelector('.c-queue')?.textContent ?? null)).toEqual(['Next', '2nd', 'Dupe', null, null]);
+    expect(rows[0].querySelector('.c-queue.next')).not.toBeNull();
+    expect(rows[0].getAttribute('aria-label')).toContain('answered next');
+    expect(rows[1].getAttribute('aria-label')).toContain('answered 2nd');
+    expect(rows[2].getAttribute('aria-label')).toContain('dupe, skipped');
+  });
+
   it('renders an empty list without rows', () => {
     const el = render([]);
     expect(el.querySelectorAll('li')).toHaveLength(0);

@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Calling CQ with Repeat CQ on, the stations waiting read Next, 2nd and so on, or Dupe, on their latest message to you in the decode list, where a CQ row has its country. The callers panel at the top of the list, which repeated those messages, is gone.
+
 ## 0.14.1 · 2026-10-14
 
 - The Report macro ends the transmission after its text, as every RTTY macro but Over does. It kept Tx on, sending the idle signal until the 1 min idle stop. A line typed while it goes out follows in the same over. A Report macro you have not edited is changed on update.

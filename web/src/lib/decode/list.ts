@@ -8,8 +8,6 @@
 
 import { utcTime } from '../clock/format';
 import { SLOT_MS, parity, type FtMode as Mode, type Parity } from '../clock/slots';
-import { bare, formatReport, parseExchange, sameCall } from '../qso/messages';
-import type { Caller } from '../qso/sequencer';
 import { toYou } from './focus';
 import type { DecodeHighlight } from './highlight';
 import { markDecode, type DecodeRowData } from './marking';
@@ -270,55 +268,4 @@ export function filterCounts(slots: SlotDecodes[], myCall: string, rxHz: number)
   };
 }
 
-/** The station being worked in Run. */
-export interface Working {
-  call: string;
-  grid: string | null;
-  snrDb: number;
-  dtS: number;
-  freqHz: number;
-}
 
-const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
-
-/**
- * Run's callers at the top of the list, in answering order: the station being worked, then the
- * queue (`callers`, already ordered), tagged Working, Next, 3rd. Each row is the caller's latest
- * decode addressed to `myCall` in `slots` (newest first), or one made from what the sequencer
- * kept. Dupes show as Dupe and are skipped unless `workDupes`. Empty when nobody calls.
- */
-export function callerItems(slots: SlotDecodes[], myCall: string, mode: Mode, working: Working | null, callers: Caller[], workDupes: boolean, classify?: Classify): ListItem[] {
-  if (!working && !callers.length) return [];
-  const latest = (call: string): { d: Decode; slotStartMs: number } | null => {
-    for (const s of slots) {
-      for (let i = s.decodes.length - 1; i >= 0; i--) {
-        const ex = parseExchange(s.decodes[i].text);
-        if (sameCall(ex.from, call) && sameCall(ex.to, myCall)) return { d: s.decodes[i], slotStartMs: s.startUtcMs };
-      }
-    }
-    return null;
-  };
-  const me = myCall.trim().toUpperCase();
-  const made = (call: string, end: string | null, snrDb: number, dtS: number, freqHz: number): Decode => ({ text: [me, call, end].filter(Boolean).join(' '), snr_db: snrDb, dt_s: dtS, freq_hz: freqHz });
-  const ends = (c: Caller) => (c.kind === 'report' && c.report !== null ? formatReport(c.report) : c.kind === 'rreport' && c.report !== null ? `R${formatReport(c.report)}` : c.grid);
-  const rows: ListItem[] = [];
-  let newest = 0;
-  const add = (call: string, meta: string, fallback: Decode, heardMs: number) => {
-    const found = latest(call);
-    const d = found?.d ?? fallback;
-    const at = found?.slotStartMs ?? heardMs;
-    newest = Math.max(newest, at);
-    const item: RowItem = { kind: 'row', id: `c-${bare(call)}`, row: { decode: d, ...markDecode(d, myCall), meta, ...colours(classify, d, false) }, slotStartMs: at };
-    rows.push(toYou(d.text, myCall) ? { ...item, toYou: true } : item);
-  };
-  if (working) add(working.call, 'Working', made(working.call, working.grid, working.snrDb, working.dtS, working.freqHz), 0);
-  let n = working ? 1 : 0;
-  for (const c of callers) {
-    const live = workDupes || !c.dupe;
-    const meta = !live ? 'Dupe' : n === (working ? 1 : 0) ? 'Next' : ordinal(n + 1);
-    if (live) n++;
-    add(c.call, meta, made(c.call, ends(c), c.snrDb, c.dtS, c.freqHz), c.heardMs);
-  }
-  const bar = newest ? header('hcallers', newest, mode, 'callers, in answering order') : { ...header('hcallers', 0, mode, 'in answering order'), time: 'Callers', text: 'Callers, in answering order' };
-  return [bar, ...rows];
-}

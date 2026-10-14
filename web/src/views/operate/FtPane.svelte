@@ -23,7 +23,8 @@
   import type { ListItem } from '../../lib/decode/list';
   import { SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
-  import { RX_PANE_HZ, buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
+  import { RX_PANE_HZ, buildList, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
+  import { queueMarks, type QueueMark } from '../../lib/decode/queue';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
   import { highlightDecode } from '../../lib/decode/highlight';
   import { log } from '../../lib/log/log.svelte';
@@ -183,11 +184,14 @@
     return (d, sent) => highlightDecode({ text: d.text, sent }, me, index, where, entries);
   });
 
-  const callers = $derived.by(() => {
+  // Calling CQ with Repeat CQ on, the callers waiting are tagged on their latest message to us.
+  // Kept as text first, so the sequencer's 1 s tick redraws the list only when the queue changes.
+  const queueKey = $derived.by(() => {
     const st = qso.st;
-    if (!st.config.run || st.phase !== 'cq' || (filter !== 'all' && filter !== 'me')) return [];
-    return callerItems(shown, settings.callsign, ftMode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes, classify);
+    if (!st.config.run || st.phase !== 'cq' || !st.queue.length) return '';
+    return JSON.stringify(queueMarks(orderQueue(st.queue, st.config.order), settings.workDupes));
   });
+  const queue = $derived<QueueMark[]>(queueKey ? JSON.parse(queueKey) : []);
   // Our transmission at the top of the list: planned while Tx is on, then on air. Kept to plain
   // values first, so the sequencer's 1 s tick does not rebuild the list.
   const planSlot = $derived(qso.st.txEnabled && qso.st.next && !qso.onAir ? qso.st.next.slotStartMs : null);
@@ -208,7 +212,7 @@
   // Regular width: the Rx frequency pane takes the place of the Rx freq filter.
   const shownFilter = $derived<Filter>(regular && filter === 'rx' ? 'all' : filter);
   const items = $derived(
-    applyFocus([...callers, ...buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar' } : {})], focus),
+    applyFocus(buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar' } : {}), focus),
   );
   const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true }), focus) : []);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
@@ -284,7 +288,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label={label} data-testid="decode-list" data-keys="list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}
@@ -321,7 +325,7 @@
         </div>
         <div class="list" role="region" aria-label="Rx frequency, newest slot first" data-testid="rx-list" data-keys="list">
           {#if rxItems.length}
-            <DecodeList items={rxItems} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {onselect} {oncall} {ondetail} />
+            <DecodeList items={rxItems} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {onselect} {oncall} {ondetail} />
           {:else if band.decoder.state !== 'failed'}
             <div class="empty">
               <h2>Nothing near Rx yet</h2>

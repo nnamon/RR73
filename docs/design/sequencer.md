@@ -25,7 +25,8 @@ A station the operator calls by hand always follows the answering path, also whi
 
 **Run.** A switch in Operate's ••• menu, stored, off by default. It decides what follows a QSO from CQ:
 
-- On: the next queued caller is answered in the very next slot, or Tx6 when the queue is empty. Callers queue across slots in the order the operator chose: First (decode order), Strongest, Farthest, New (new DXCC, grid or call first). Dupes for the band and mode in the current activation, or in the UTC day outside an activation, are skipped unless the operator works dupes.
+- On: the next queued caller is answered in the very next slot, or Tx6 when the queue is empty. Callers queue across slots in the order the operator chose: First (decode order), Strongest, Farthest, New (new DXCC, grid or call first). Dupes for the band and mode in the current activation, or in the UTC day outside an activation, are skipped unless the operator works dupes. A caller leaves the queue when it has not been heard for 4 slots.
+  - The decode list marks the callers waiting on their latest message to you, where a CQ row has its country: Next in the tint, then 2nd, 3rd in grey, and Dupe for one Repeat CQ skips. The station being worked has no mark. Until 0.14.2 a panel at the top of the list repeated those messages in answering order; with one caller it only repeated the row under it, so it went.
 - Off: Tx turns off once the QSO ends, as WSJT-X does with "Disable Tx after sending 73". Only callers of the latest slot are candidates.
 - A station called by hand from CQ returns to CQ after it is logged only with Run on. An unanswered or lost call never returns to CQ.
 
