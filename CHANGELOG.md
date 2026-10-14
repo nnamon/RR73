@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- WSPR spot rows show the reported power in dBm after the distance: "8558 km 23 dBm −23 dB 0 Hz". The audio frequency moves to the spot's details; a tap still marks the trace on the waterfall.
+
 ## 0.12.0 · 2026-10-14
 
 - WSPR is a third mode in the band sheet, beside FT8 and FT4. Set the radio to shows WSPRnet's dial for the band: 14.0956 MHz USB on 20m.
