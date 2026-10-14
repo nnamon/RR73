@@ -159,6 +159,20 @@ for (const theme of ['light', 'dark'] as const) {
     expect(meter.x + meter.width).toBeLessThanOrEqual(page.viewportSize()!.width - 8);
     await shot(page, info, SHOTS, `${theme}-listen`, 300);
 
+    // A tap on the waterfall tunes there (nothing to find: the receiver hears nothing); a drag
+    // moves the pair with the finger, keeping the shift.
+    const wf = (await page.getByTestId('waterfall-area').boundingBox())!;
+    const xOf = (hz: number) => wf.x + (wf.width * hz) / 3000;
+    await page.mouse.click(xOf(2000), wf.y + wf.height / 3);
+    await expect(bar(page).getByRole('status')).toHaveText(/Tuned to 2085 Hz/);
+    await expect(page.getByRole('slider', { name: 'Mark tone, Hz' })).toHaveValue('2085');
+    await page.mouse.move(xOf(2000), wf.y + wf.height / 3);
+    await page.mouse.down();
+    await page.mouse.move(xOf(1800), wf.y + wf.height / 3, { steps: 8 });
+    await page.mouse.up();
+    expect(Math.abs(Number(await page.getByRole('slider', { name: 'Mark tone, Hz' }).inputValue()) - 1885)).toBeLessThanOrEqual(3);
+    await page.evaluate(() => window.__rr73!.rttyTune(1612));
+
     // JA1XYZ answers; a tap on his callsign fills the strip from his text.
     await lines(page, ['@14:05', ...RX_REPLY], at(14, 5, 0));
     await word(page, 'JA1XYZ').last().click();
