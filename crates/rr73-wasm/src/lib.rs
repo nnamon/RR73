@@ -6,6 +6,8 @@
 //!
 //! For transmitting, [`pack_message`] checks operator text and gives its canonical form, and
 //! [`synthesize`] renders a message as GFSK audio at the audio output's sample rate.
+//!
+//! RTTY, a continuous mode, has its own streaming exports in [`rtty`].
 
 use std::cell::RefCell;
 
@@ -13,6 +15,8 @@ use rr73_decode::{DecodeContext, DecoderConfig, SlotAudio, decode};
 use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
+
+pub mod rtty;
 
 thread_local! {
     static CONTEXT: RefCell<DecodeContext> = RefCell::new(DecodeContext::new());
