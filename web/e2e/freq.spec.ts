@@ -57,6 +57,7 @@ test('a drag moves Tx with a live label, sets it on release, and the hint goes f
   await expect(page.getByTestId('waterfall-area')).toBeVisible();
   await expect(hint).toBeHidden();
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: 'FT8 and FT4' }).click();
   await expect(page.getByRole('switch', { name: 'Hold Tx frequency' })).toBeChecked();
 });
 

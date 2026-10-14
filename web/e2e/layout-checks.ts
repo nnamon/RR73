@@ -54,8 +54,8 @@ export async function smallTargets(page: Page, scope: string): Promise<string[]>
       .join(', ');
     for (const el of document.querySelectorAll<HTMLElement>(targets)) {
       if (el.closest('[hidden]') || el.closest('dialog:not([open])') || el.classList.contains('visually-hidden')) continue;
-      // Decode rows are 32 pt: dense rows, full width.
-      if (el.matches('button.dr')) continue;
+      // Decode and spot rows are 32 pt: dense rows, full width.
+      if (el.matches('button.dr, button.sr')) continue;
       const r = el.getBoundingClientRect();
       if (!r.width) continue;
       if (r.height < 43.5 || r.width < 43.5) out.push(`${el.tagName.toLowerCase()} "${el.textContent?.trim().slice(0, 30)}" ${Math.round(r.width)}x${Math.round(r.height)}`);

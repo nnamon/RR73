@@ -30,6 +30,8 @@ export const SCREENS: readonly Screen[] = [
   { name: 'settings', path: '#/settings', heading: 'Settings' },
   { name: 'settings-features', path: '#/spots', heading: 'Settings' },
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },
+  { name: 'ft8-settings', path: '#/settings/ft8', heading: 'FT8 and FT4' },
+  { name: 'wspr-settings', path: '#/settings/wspr', heading: 'WSPR' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
   { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
   { name: 'colours', path: '#/settings/colours', heading: 'Decode colours' },
