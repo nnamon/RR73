@@ -4,10 +4,6 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- The first step of a QSO you answer shows the grid your call sends, "OJ11", where it said Grid. Every step now shows what went out or came in.
-- When the station you call answers another station, its messages to that station show a small red Lost where a CQ row has its country, for a minute after.
-- A QSO logged on your RR73 ends quietly when its repeats to a caller who keeps sending the R-report run out. It showed "not logged" before.
-- A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
 - The watchdog counts from your last touch, so Hunt and Repeat CQ stop at its limit however many QSOs they make. Responses refresh watchdog, in Settings › FT8 and FT4, restarts it with each new message as before. It starts off.
 - A QSO under way when the watchdog runs out now finishes and logs, then Tx goes off. The watchdog countdown reads Last QSO meanwhile. A call nobody has answered still stops at once.
 - Slots are named Even and Odd everywhere, as on the decode list's slot bars. ••• says Transmit in 1st (Even) or 2nd (Odd), and the status line "Tx6 · CQ 9V1NE OJ11 · Even · :30".
@@ -15,6 +11,13 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Calling a station in the first 2 s of a slot your CQ is on air in (1 s in FT4) replaces the CQ with the call. It waited 30 s before. Later in the slot the CQ plays out and the call goes a cycle later, because the part of the CQ already sent would weaken the call. RR73, RRR and 73 always play out.
 - A reply can start up to 4.5 s into an FT8 slot and 1.75 s into an FT4 slot, where it waited a full cycle after 2 s and 1.5 s. Later than 1.5 s (FT8) or 0.5 s (FT4) past the usual start, it leaves out its first part and ends on time: WSJT-X still decodes it at −16 dB in FT8 and −12 dB in FT4.
 - An FT4 transmission that started about 1 s late, the old limit, went out where WSJT-X could not decode it at any level. It now leaves out its first part.
+
+## 0.12.5 · 2026-10-14
+
+- The first step of a QSO you answer shows the grid your call sends, "OJ11", where it said Grid. Every step now shows what went out or came in.
+- When the station you call answers another station, its messages to that station show a small red Lost where a CQ row has its country, for a minute after.
+- A QSO logged on your RR73 ends quietly when its repeats to a caller who keeps sending the R-report run out. It showed "not logged" before.
+- A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
 
 ## 0.12.4 · 2026-10-14
 
