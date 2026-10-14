@@ -134,5 +134,5 @@ export function statusText(view: SpotFeedView): string {
     if (retry.length) parts.push(`Next try at ${utcHm(Math.min(...retry))} UTC.`);
     return parts.join(' ');
   }
-  return at ? `Spots refresh every minute while online. Last update ${at}.` : 'Spots refresh every minute while online.';
+  return at ? `Updated ${at}` : '';
 }

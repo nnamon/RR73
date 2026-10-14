@@ -143,7 +143,7 @@
         <button type="button" class="btn compact soft" onclick={() => addRef()}>Add</button>
       </div>
     </div>
-    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else}<p class="section-foot">POTA parks, SOTA summits, WWFF references and IOTA groups. One activation can hold several parks.</p>{/if}
+    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else}<p class="section-foot">One activation can hold several parks.</p>{/if}
   </div>
 
   <div class="block">

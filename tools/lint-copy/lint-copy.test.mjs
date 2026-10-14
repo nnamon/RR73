@@ -126,6 +126,16 @@ test('flags a footer over 15 words and passes a short one', () => {
   assert.deepEqual(lengths('<p class="section-foot">Set the level for <b>4 to 5 ALC bars</b> during Tune, no more.</p>'), []);
 });
 
+test('flags a footer that opens with a verb and no subject', () => {
+  assert.deepEqual(lengths('<p class="section-foot">Uploads the spots your radio decodes.</p>'), ['1:footer-fragment']);
+  assert.deepEqual(lengths('<p class="section-foot">Brings web SDR audio to RR73. Carries no passwords.</p>'), ['1:footer-fragment']);
+  assert.deepEqual(lengths('<p class="section-foot">Tunes to the band’s dial.</p>'), ['1:footer-fragment']);
+  assert.deepEqual(lengths('<p class="section-foot">Spots appear here after each slot ends.</p>'), []);
+  assert.deepEqual(lengths('<p class="section-foot">Stations that report your signal appear here.</p>'), []);
+  assert.deepEqual(lengths('<p class="section-foot">Set the level with the radio’s AGC on.</p>'), []);
+  assert.deepEqual(lengths('<span class="row-sub">Keys the radio when audio starts</span>'), []);
+});
+
 test('flags a subtitle over 6 words, in markup, in expressions and in sub strings', () => {
   assert.deepEqual(lengths('<span class="row-sub">Stations already worked today on this band and mode</span>'), ['1:subtitle-length']);
   assert.deepEqual(lengths('<span class="row-sub">Same day, band and mode</span>'), []);
@@ -158,6 +168,9 @@ test('flags RR73 opening a sentence in the views, and passes RR73 as a message',
 test('interface sources flag reassurance and plans, and the changelog may quote them', () => {
   const source = (text) => lintText(text, 'x', { screen: true, source: true }).map((f) => `${f.level}:${f.rule}`);
   assert.deepEqual(source('Create a key in Wavelog. The key stays on this phone.'), ['error:reassurance']);
+  assert.deepEqual(source('The relay never receives passwords for other services.'), ['error:reassurance']);
+  assert.deepEqual(source('Uploads the spots your radio decodes, as WSJT-X does.'), ['error:other-program']);
+  assert.deepEqual(source('The WSJT-X preset colours every category.'), []);
   assert.deepEqual(source('It is planned and not built yet.'), ['error:planned']);
   assert.deepEqual(source('The 7 QSOs stay on this phone.'), []);
   assert.deepEqual(screen('Relay is planned. The key stays on this phone.'), []);

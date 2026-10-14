@@ -135,8 +135,6 @@
     </div>
     {#if addressError}
       <p class="section-foot err" role="alert">{addressError}</p>
-    {:else if adding}
-      <p class="section-foot">The relay’s operator gives you its API base.</p>
     {/if}
   </div>
 
@@ -165,7 +163,6 @@
           </span>
         </button>
       </div>
-      <p class="section-foot">The relay’s operator issues access keys. The relay never receives passwords for other services.</p>
     </div>
 
     <div class="section center">

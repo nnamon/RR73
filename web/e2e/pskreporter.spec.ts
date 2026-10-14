@@ -36,7 +36,7 @@ test('reports the senders of each slot through the relay', async ({ page }) => {
   await page.getByRole('link', { name: /^PSK Reporter/ }).click();
   const on = page.getByRole('switch', { name: /^Report to PSK Reporter/ });
   await on.check();
-  await expect(page.getByTestId('psk-status')).toHaveText('Needs a relay. Add one in Settings › Relay.');
+  await expect(page.getByTestId('psk-status')).toHaveText('Needs a relay');
 
   await page.getByRole('link', { name: /^Relay/ }).click();
   await page.getByRole('button', { name: 'Add relay' }).click();

@@ -26,7 +26,7 @@ test('the empty tabs say what will appear', async ({ page }) => {
   await seed(page, withFeatures(emptySeed(), { activations: true, potaSpots: true }));
   await page.goto('./#/spots');
   await expect(page.getByRole('button', { name: /^Start activation/ })).toBeVisible();
-  await expect(page.getByText(/^Spots refresh every minute while online\./)).toBeVisible();
+  await expect(page.getByText(/^(Fetching spots\.|Spots appear here when )/)).toBeVisible();
 });
 
 test('Operate shows the band, the frequency and the empty decode list', async ({ page }) => {

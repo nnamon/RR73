@@ -137,7 +137,7 @@ export class WebSdrInput implements InputSource {
     const connect = async () => {
       this.cfg.status({ state: 'connecting' });
       if (!base || !receiver) {
-        end('relay', 'Choose a relay and a receiver in Settings › Web SDR.');
+        end('relay', 'Choose a relay in Settings › Relay and a receiver in Settings › Web SDR.');
         return;
       }
       try {

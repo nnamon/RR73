@@ -44,7 +44,7 @@
   const stateText = $derived.by(() => {
     const hold = pskHold();
     if (hold === 'off') return '';
-    if (hold === 'relay') return 'Needs a relay. Add one in Settings › Relay.';
+    if (hold === 'relay') return 'Needs a relay';
     if (offered === false) return 'This relay does not report to PSK Reporter';
     if (hold === 'station') return 'Needs your callsign and grid';
     if (hold === 'practice') return 'Paused while the practice band is on';
@@ -61,7 +61,7 @@
     if (practice.on) return 'Paused while the practice band is on';
     if (heard.feed === 'live') return heard.list.length ? `Live · ${heard.list.length} in the last 30 min` : 'Live';
     if (heard.feed === 'refused') return 'PSK Reporter’s feed refused the connection';
-    if (heard.feed === 'retrying') return 'Feed unreachable. Trying again.';
+    if (heard.feed === 'retrying') return 'Feed unreachable, trying again';
     return 'Connecting';
   });
 </script>
@@ -104,7 +104,6 @@
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
-    <p class="section-foot">PSK Reporter shows your antenna on its map. The relay reports every 5 min.</p>
   </div>
 
   <div class="section">
@@ -112,16 +111,12 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Show who heard you</span>
-          <span class="row-sub">On Spots, live from PSK Reporter</span>
+          <span class="row-sub">Listed on Spots</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={heardYou.on} onchange={(e) => void setHeardYou(e.currentTarget.checked)} />
       </label>
     </div>
-    {#if heardText}
-      <p class="section-foot" role="status" data-testid="heard-status">{heardText}</p>
-    {:else}
-      <p class="section-foot">Your phone connects to PSK Reporter’s feed directly. No relay is needed.</p>
-    {/if}
+    {#if heardText}<p class="section-foot" role="status" data-testid="heard-status">{heardText}</p>{/if}
   </div>
 </section>
 

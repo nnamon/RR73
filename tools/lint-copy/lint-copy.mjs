@@ -74,9 +74,24 @@ const SCREEN_RULES = [
 
 /** Errors for interface strings in web/src only; the changelog may record what earlier versions said. */
 const SOURCE_RULES = [
-  { id: 'reassurance', re: /\bstays on this phone\b/gi, message: 'reassurance nobody asked for; state the effect or drop it' },
+  {
+    id: 'reassurance',
+    re: /\b(stays on this phone|never (?:receives|stores|sees|keeps|shares) (?:your )?passwords?)\b/gi,
+    message: 'reassurance nobody asked for; state the effect or drop it',
+  },
+  {
+    id: 'other-program',
+    re: /\bas (?:WSJT-X|JTDX|MSHV|iFTx|JS8Call|fldigi)(?: [\d.]+)? does\b/gi,
+    message: 'comparison to another program; state what happens',
+  },
   { id: 'planned', re: /\bplanned\b/gi, message: 'unbuilt feature on screen; show only what is built' },
 ];
+
+/**
+ * A footer that opens with a verb in -s and no subject, "Uploads the spots…", "Brings web SDR
+ * audio…": a feature description. A footer is a sentence that stops a costly mistake.
+ */
+const FOOTER_FRAGMENT = /^\s*[A-Z][a-z]+s\s+(?:the|a|an|your|to|no|web|each|every|its|their|this|from|with|all|any)\b/;
 
 /** A footer says only what stops a costly mistake; a subtitle only what the title would get wrong. */
 export const FOOTER_MAX_WORDS = 15;
@@ -330,6 +345,11 @@ export function lengthFindings(text, ext, file = 'x') {
     const limit = classes.includes('section-foot') ? ['footer-length', FOOTER_MAX_WORDS, 'footer'] : classes.includes('row-sub') ? ['subtitle-length', SUBTITLE_MAX_WORDS, 'subtitle'] : null;
     if (!limit) continue;
     const body = elementBody(markup, m[1], open.lastIndex);
+    if (limit[0] === 'footer-length') {
+      const first = body.split('\u0002')[0].replace(/<[^<>]*>/g, ' ').replace(/\u0001\d+\u0001/g, ' ');
+      if (FOOTER_FRAGMENT.test(first))
+        findings.push({ file, line: mat(m.index) + 1, level: 'error', rule: 'footer-fragment', match: first.trim().slice(0, 80), message: 'footer opens with a verb and no subject; write a sentence that stops a mistake, or drop the footer' });
+    }
     const words = Math.max(
       ...body.split('\u0002').map((branch) =>
         branch

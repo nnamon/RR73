@@ -20,7 +20,7 @@ test('POTA spots: the list, Go to a spot on 80m, and the station marked in the d
   await expect(spotRow(page, 'KC5JEC').locator('.badge')).toHaveText('New park');
   await expect(spotRow(page, 'JL1VNI/P').locator('.badge')).toHaveText('QRT');
   await expect(spotRow(page, 'KC5JEC').locator('.age')).toHaveText('4 min');
-  await expect(page.getByText(/^Spots refresh every minute while online\. Last update 13:14 UTC\.$/)).toBeVisible();
+  await expect(page.getByText(/^Updated 13:14 UTC$/)).toBeVisible();
   expect(stand.requests).toEqual({ pota: 1, hamqth: 0 });
 
   // 70 cm has no FT8 dial in RR73: its spot opens without Go.

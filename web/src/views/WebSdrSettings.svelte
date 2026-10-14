@@ -95,7 +95,7 @@
           <p class="none">Loading receivers from the relay</p>
         {/if}
       </div>
-      <p class="section-foot">The receiver tunes to the band’s dial. Its other listeners see your callsign.</p>
+      <p class="section-foot">Other listeners on the receiver see your callsign.</p>
     </div>
   {/if}
 </section>

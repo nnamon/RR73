@@ -33,8 +33,8 @@ test('lists the stations that heard you, live from the feed', async ({ page, bas
   feed.ws!.send(publish('pskr/filter/v2/20m/FT8/9V1NE/JA1XYZ/OJ11/PM95/381/339', spot('JA1XYZ', 'PM95qq', -3, '20m', 15)));
   const list = page.getByRole('list', { name: 'Stations that heard you in the last 30 minutes' });
   await expect(list.getByRole('listitem')).toHaveCount(2);
-  await expect(page.getByRole('heading', { name: 'Heard you · 2' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Heard you, last 30 min' })).toBeVisible();
   const rows = await list.getByRole('listitem').allInnerTexts();
-  expect(rows[0]).toMatch(/^JA1XYZ\s+PM95qq · 5,\d{3} km · 20m\s+−03 dB\s+\d\d:\d\d$/);
-  expect(rows[1]).toMatch(/^VK3QRP\s+QF22lb · 6,\d{3} km · 20m\s+\d\d:\d\d$/);
+  expect(rows[0]).toMatch(/^JA1XYZ\s+PM95qq · 5,\d{3} km · 20m\s+−03 dB\s+\d\d:\d\d UTC$/);
+  expect(rows[1]).toMatch(/^VK3QRP\s+QF22lb · 6,\d{3} km · 20m\s+\d\d:\d\d UTC$/);
 });

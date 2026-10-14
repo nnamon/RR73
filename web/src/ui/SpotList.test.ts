@@ -170,7 +170,7 @@ describe('SpotList states', () => {
   it('says when the list was updated and credits HamQTH', () => {
     const el = render();
     expect([...el.querySelectorAll('p.status')].map((p) => p.textContent)).toEqual([
-      'Spots refresh every minute while online. Last update 05:56 UTC.',
+      'Updated 05:56 UTC',
       'DX cluster data provided by HamQTH.com.',
     ]);
   });

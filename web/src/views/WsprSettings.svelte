@@ -197,18 +197,12 @@
   <div class="section">
     <div class="group">
       <label class="row">
-        <span class="row-main">
-          <span class="row-title">Upload spots to WSPRnet</span>
-          <span class="row-sub">Straight from this phone</span>
-        </span>
+        <span class="row-main"><span class="row-title">Upload spots to WSPRnet</span></span>
         <input type="checkbox" role="switch" class="switch" checked={wsprnet.on} onchange={(e) => void setWsprnet(e.currentTarget.checked)} />
       </label>
     </div>
-    {#if uploadText}
-      <p class="section-foot" role="status" data-testid="wsprnet-status">{uploadText}</p>
-    {:else}
-      <p class="section-foot">Uploads the spots your radio decodes, as WSJT-X does.</p>
-    {/if}
+    {#if uploadText}<p class="section-foot" role="status" data-testid="wsprnet-status">{uploadText}</p>{/if}
+    <p class="section-foot">WSPRnet sends no confirmation. Check your spots on wsprnet.org.</p>
   </div>
 </section>
 

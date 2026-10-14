@@ -2,14 +2,20 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- With no relay chosen, the web SDR's error points to Settings › Relay. It pointed to Settings › Web SDR, which has no relay field.
+- Settings › Relay, PSK Reporter, Web SDR and WSPR, Spots and the activation form have shorter text.
+- The spot list's footer reads "Updated 13:14 UTC".
+
 ## 0.19.0 · 2026-10-14
 
-- Settings › WSPR uploads your spots to WSPRnet, straight from this phone, as WSJT-X does. Off by default. A slot without spots reports your station as listening.
+- Settings › WSPR uploads your spots to WSPRnet. Off by default. A slot without spots reports your station as listening.
 
 ## 0.18.0 · 2026-10-14
 
 - Spots lists the stations that heard you in the last 30 min, live from PSK Reporter's MQTT feed: callsign, grid, distance, band, SNR and time. Turn it on in Settings › PSK Reporter. No relay is needed.
-- PSK Reporter reports carry the time each station was decoded. They carried the slot's start, which PSK Reporter and its MQTT feed read as a decode time one slot early.
+- PSK Reporter reports carry the time each station was decoded. They carried the slot's start, so PSK Reporter placed each report one slot early.
 
 ## 0.17.0 · 2026-10-14
 
@@ -18,7 +24,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.16.1 · 2026-10-14
 
-- New wording for Settings › Relay, Settings › Web SDR and the relay's error messages. Settings › Relay describes the relay as a server for any service a web page cannot reach directly.
+- Settings › Relay, Settings › Web SDR and the relay's error messages have new text.
 
 ## 0.16.0 · 2026-10-14
 
@@ -52,7 +58,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.14.3 · 2026-10-14
 
-- With Repeat CQ on, a QSO is followed by a station that called in the slot just ended, or by CQ. A caller heard earlier and not since is no longer answered: on the air they have usually moved on, and the report to them repeated into silence for up to 2 min.
+- With Repeat CQ on, a QSO is followed by a station that called in the slot just ended, or by CQ. A caller heard earlier and not since is no longer answered. The report to them repeated for up to 2 min with no reply.
 - Switching the practice band to RTTY or WSPR silences its FT8 stations at once. An FT8 slot already under way played on for up to 13 s, and the RTTY receiver chased its tones, garbling JA1XYZ's first CQ. The RTTY stations now start once the receiver is ready.
 
 ## 0.14.2 · 2026-10-14
@@ -268,7 +274,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.7.2 · 2026-10-13
 
-- The wording on Operate, Messages, Save a slot, Spots, Settings, Radio and audio, Logging, Wavelog, Version history and the update notice now follows the style guide, as do the notes for 0.6.0 to 0.7.1. Settings › Operating is now called FT8 and FT4, as its settings apply only to those modes.
+- Operate, Messages, Save a slot, Spots, Settings, Radio and audio, Logging, Wavelog, Version history, the update notice and the notes for 0.6.0 to 0.7.1 have new text. Settings › Operating is now called FT8 and FT4, as its settings apply only to those modes.
 
 ## 0.7.1 · 2026-10-13
 

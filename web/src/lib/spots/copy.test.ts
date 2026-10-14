@@ -140,8 +140,8 @@ describe('statusText', () => {
   });
 
   it('says how often the list refreshes and when it last did', () => {
-    expect(statusText(view())).toBe('Spots refresh every minute while online. Last update 13:21 UTC.');
-    expect(statusText(view({ updatedAt: null }))).toBe('Spots refresh every minute while online.');
+    expect(statusText(view())).toBe('Updated 13:21 UTC');
+    expect(statusText(view({ updatedAt: null }))).toBe('');
   });
 
   it('says nothing while spots are off', () => {

@@ -27,7 +27,7 @@
 </script>
 
 <div class="section">
-  <h2 class="section-head">Heard you{heard.list.length ? ` · ${heard.list.length}` : ''}</h2>
+  <h2 class="section-head">Heard you, last 30 min</h2>
   {#if heard.list.length}
     <ul class="group" aria-label="Stations that heard you in the last 30 minutes">
       {#each heard.list as h (`${h.receiver}|${h.band}`)}
@@ -39,12 +39,11 @@
           </span>
           <span class="side">
             <span class="snr mono">{snr(h.snrDb)}</span>
-            <span class="row-sub mono">{utcHm(h.atS * 1000)}</span>
+            <span class="row-sub mono">{utcHm(h.atS * 1000)} UTC</span>
           </span>
         </li>
       {/each}
     </ul>
-    <p class="section-foot">Last 30 min, from PSK Reporter. Times are UTC.</p>
   {:else}
     <div class="group"><p class="none" role="status">{empty}</p></div>
   {/if}
