@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.5 · 2026-10-14
 
 - Settings › Web SDR offers only the receivers the relay lists. Receivers added by address are gone.
 
