@@ -1,6 +1,6 @@
 // CQ rows name the caller's country from the country file, which Operate loads when the page is
-// idle. The file comes from fixtures/ (Big CTY of 15 September 2026), so the test does not
-// depend on the data the build fetched. Decodes come through the e2e hooks.
+// idle. The file is converted from the Big CTY release in refdata/bigcty by the test helper, so
+// the test does not depend on a build of the reference data. Decodes come through the e2e hooks.
 import { expect, test, type Page } from '@playwright/test';
 import { bigCtyFixture } from '../src/lib/reference/testing';
 

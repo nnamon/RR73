@@ -19,6 +19,7 @@ export const STATUS = {
   encode: 'Message cannot be encoded',
   txSet: (hz: number) => `Tx set to ${hz} Hz`,
   noClear: 'Not enough audio yet',
+  decodesCleared: 'Decodes cleared',
   practice: (scenario: string) => `Practice · ${scenario}`,
   foxUnknown: 'Fox callsign not in this message',
   houndCalling: (call: string) => `Calling the Fox · ${call}`,
@@ -30,6 +31,7 @@ export const STATUS = {
   beaconStopAfter: (after: string) => `Stop beacon after ${after}`,
   beaconPct: (pct: number) => `Tx in ${pct}% of slots`,
   noWsprCall: 'Callsign cannot be sent in WSPR',
+  spotsCleared: 'Spots cleared',
 } as const;
 
 /** Why a call paused on its last message, after the message in the status line: "Tx1 · VK2LAW 9V1NE OJ11 · no reply". */

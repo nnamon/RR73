@@ -36,7 +36,12 @@
   import { SCENARIOS } from '../lib/practice/scenarios';
 
   type Variant = 'phone' | 'panel' | 'bottom' | 'side';
-  let { onmessages, onfindclear, variant = 'phone' }: { onmessages: () => void; onfindclear: () => void; variant?: Variant } = $props();
+  let {
+    onmessages,
+    onfindclear,
+    onclear,
+    variant = 'phone',
+  }: { onmessages: () => void; onfindclear: () => void; onclear: () => void; variant?: Variant } = $props();
 
   /** The panel lists Tx1 to Tx6; elsewhere they are in the messages sheet, from •••. */
   const listed = $derived(variant === 'panel');
@@ -220,7 +225,8 @@
       {/if}
       {#if !listed}<button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>{/if}
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
-      <button class="mi gap" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
+      <button class="mi" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
+      <button class="mi gap" role="menuitem" onclick={act(onclear)}>Clear decodes</button>
       <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
         Repeat CQ <span class="v">{settings.run ? 'On' : 'Off'}</span>
       </button>

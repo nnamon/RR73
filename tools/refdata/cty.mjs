@@ -1,6 +1,11 @@
 // Big CTY, the country file for everyday logging, by Jim Reisert AD1C. The site publishes each
 // release as a dated zip (bigcty-YYYYMMDD.zip) linked from its Big CTY category page; the zip holds
 // cty.dat, cty.csv (which adds ADIF DXCC codes) and copyright.txt (MIT licence).
+//
+// The app ships the release committed in refdata/bigcty: cty.dat.gz (cty.dat as released),
+// cty-columns.csv.gz (cty.csv without its alias column, which repeats cty.dat), copyright.txt as
+// released, and release.json (the release date and the zip it came from). build.mjs converts it
+// on every build with no request; update-bigcty.mjs replaces it with a newer release.
 
 import { readFileSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -55,27 +60,53 @@ export function bigCtyPosts(text) {
 
 /**
  * The newest release from the category page: its own zip link, or the zip link on the newest
- * release post when the post is newer than any zip the page links. get(url) returns the page text.
+ * release post when the post is newer than any zip the page links. A post dated `after`
+ * (YYYY-MM-DD) or earlier is not read: the result then gives its date and a null url. get(url)
+ * returns the page text.
  */
-export async function findLatestBigCty(get) {
+export async function findLatestBigCty(get, { after = '' } = {}) {
   const list = await get(BIGCTY_LIST);
   let latest = latestBigCty(list);
   const post = bigCtyPosts(list)[0];
-  if (post && (!latest || post.date > latest.date)) latest = latestBigCty(await get(post.url)) ?? latest;
+  if (post && (!latest || post.date > latest.date)) {
+    latest = post.date <= after ? { url: null, date: post.date } : (latestBigCty(await get(post.url)) ?? latest);
+  }
   if (!latest) throw new Error(`${BIGCTY_LIST} links no Big CTY release`);
   return latest;
 }
 
-/** The release pinned in fixtures/, shipped when no download and no cached copy is available. */
-export const PINNED_BIGCTY = { url: 'https://www.country-files.com/bigcty/download/2026/bigcty-20260915.zip', date: '2026-09-15' };
+/** The committed release: refdata/bigcty in the repository. */
+export const BIGCTY_DIR = new URL('../../refdata/bigcty/', import.meta.url);
 
-/** Converts the pinned release (fixtures/reference/bigcty-20260915) as convertBigCty converts a zip. */
-export function convertPinnedBigCty() {
-  const dir = new URL('../../fixtures/reference/bigcty-20260915/', import.meta.url);
-  const dat = gunzipSync(readFileSync(new URL('cty.dat.gz', dir)));
-  const csv = gunzipSync(readFileSync(new URL('cty-columns.csv.gz', dir)));
-  const copyright = readFileSync(new URL('copyright.txt', dir));
-  return convertBigCtyFiles({ dat, csv, copyright }, PINNED_BIGCTY);
+/** The committed release's date (YYYY-MM-DD) and zip URL, from release.json in dir. */
+export function readBigCtyRelease(dir = BIGCTY_DIR) {
+  const r = JSON.parse(readFileSync(new URL('release.json', dir), 'utf8'));
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(r?.date ?? '') || typeof r?.url !== 'string') throw new Error(`${new URL('release.json', dir).pathname} needs a date (YYYY-MM-DD) and a url`);
+  return { date: r.date, url: r.url };
+}
+
+/** The committed release's files: cty.dat and the cty.csv columns, unpacked, and copyright.txt. */
+export function readBigCtyFiles(dir = BIGCTY_DIR) {
+  return {
+    dat: gunzipSync(readFileSync(new URL('cty.dat.gz', dir))),
+    csv: gunzipSync(readFileSync(new URL('cty-columns.csv.gz', dir))),
+    copyright: readFileSync(new URL('copyright.txt', dir)),
+  };
+}
+
+/** Converts the committed release (refdata/bigcty) as convertBigCty converts its zip. */
+export function convertCommittedBigCty(dir = BIGCTY_DIR) {
+  const release = readBigCtyRelease(dir);
+  return { ...convertBigCtyFiles(readBigCtyFiles(dir), release), url: release.url };
+}
+
+/**
+ * cty.csv without its last column, the aliases, which cty.dat carries too: the first 9 fields of
+ * each line and the closing ";", CRLF as released. parseCtyCsvCodes reads the DXCC code from it.
+ */
+export function ctyCsvColumns(csv) {
+  const lines = csv.split(/\r?\n/).filter((l) => l.trim());
+  return lines.map((l) => `${l.split(',').slice(0, 9).join(',')};`).join('\r\n') + '\r\n';
 }
 
 function findFile(files, name) {
@@ -88,11 +119,17 @@ function findFile(files, name) {
  * date and warnings for anything incomplete.
  */
 export function convertBigCty(zip, { url, date }) {
-  const files = unzip(zip);
-  return convertBigCtyFiles({ dat: findFile(files, 'cty.dat'), csv: findFile(files, 'cty.csv'), copyright: findFile(files, 'copyright.txt') }, { url, date });
+  return convertBigCtyFiles(bigCtyZipFiles(zip), { url, date });
 }
 
-function convertBigCtyFiles({ dat, csv, copyright }, { url, date }) {
+/** cty.dat, cty.csv and copyright.txt from a Big CTY zip, each null when the zip lacks it. */
+export function bigCtyZipFiles(zip) {
+  const files = unzip(zip);
+  return { dat: findFile(files, 'cty.dat'), csv: findFile(files, 'cty.csv'), copyright: findFile(files, 'copyright.txt') };
+}
+
+/** Converts cty.dat, cty.csv (or its columns) and copyright.txt, as Buffers, to cty.json. */
+export function convertBigCtyFiles({ dat, csv, copyright }, { url, date }) {
   if (!dat) throw new Error('the Big CTY zip has no cty.dat');
   const warnings = [];
   const codes = csv ? parseCtyCsvCodes(csv.toString('utf8')) : new Map();

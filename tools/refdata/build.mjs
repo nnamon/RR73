@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Builds RR73's reference data into web/public/data, where Vite copies it into the app:
 //
-//   cty.json                 country file (Big CTY), precached by the service worker
+//   cty.json                 country file (Big CTY), precached by the service worker; built from
+//                            the release committed in refdata/bigcty, with no request
 //   lotw.<hash>.json         LoTW users and last upload dates
 //   pota/index.<hash>.json   POTA parks index, and one shard per prefix
 //   sota/index.<hash>.json   SOTA summits index, and one shard per association
@@ -12,12 +13,15 @@
 //   docker compose run --rm node node tools/refdata/build.mjs
 //
 // Options: --out DIR (default web/public/data), --cache DIR (default .refdata-cache),
-// --only cty,lotw,pota,sota, --ask cty,lotw (the sources that may be requested; the others build
+// --only cty,lotw,pota,sota, --ask lotw,pota (the sources that may be requested; the others build
 // from the cache; CI chooses them with ci-plan.mjs), --offline (no requests: build from what the
 // cache holds), --strict (exit 1 when a source is stale or missing).
 //
-// Each source is requested at most once per UTC day, with one attempt and no retries. The
-// attempt is recorded in the cache before the request goes out. The cache
+// The build makes no request for the country file: tools/refdata/update-bigcty.mjs updates the
+// committed release. LoTW, POTA and SOTA are downloaded.
+//
+// Each downloaded source is requested at most once per UTC day, with one attempt and no retries.
+// The attempt is recorded in the cache before the request goes out. The cache
 // keeps each source's download, its HTTP validators and the converted files, stamped with a hash
 // of the converter code. A later day's request can come back 304 Not Modified, and a changed
 // converter converts the kept download again without a request. When a download fails, the build
@@ -30,7 +34,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { download } from './http.mjs';
-import { BIGCTY_PAGE, PINNED_BIGCTY, convertBigCty, convertPinnedBigCty, findLatestBigCty } from './cty.mjs';
+import { BIGCTY_PAGE, convertCommittedBigCty } from './cty.mjs';
 import { LOTW_URL, convertLotw } from './lotw.mjs';
 import { POTA_URL, convertPota } from './pota.mjs';
 import { SOTA_URL, convertSota } from './sota.mjs';
@@ -40,7 +44,7 @@ const CHECKED = '13 October 2026';
 /** A hash of the code that turns downloads into data files: a change re-converts cached downloads. */
 export const CONVERTER = (() => {
   const h = createHash('sha256');
-  for (const f of ['cty.mjs', 'lotw.mjs', 'pota.mjs', 'sota.mjs', 'refs.mjs', 'csv.mjs', 'zip.mjs', '../../web/src/lib/reference/cty.ts', '../../web/src/lib/reference/format.ts']) {
+  for (const f of ['lotw.mjs', 'pota.mjs', 'sota.mjs', 'refs.mjs', 'csv.mjs', '../../web/src/lib/reference/format.ts']) {
     h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url))));
   }
   return h.digest('hex').slice(0, 12);
@@ -58,16 +62,9 @@ export const SOURCES = {
     url: BIGCTY_PAGE,
     publisher: 'Jim Reisert AD1C, https://www.country-files.com',
     terms: 'MIT licence (https://www.country-files.com/copyright/). cty.json carries the copyright and permission notice.',
-    async fetch({ get, prev }) {
-      const latest = await findLatestBigCty(async (url) => (await get(url)).body.toString('utf8'));
-      if (prev?.url === latest.url) return { unchanged: true };
-      const zip = await get(latest.url);
-      return { url: latest.url, body: zip.body, info: { date: latest.date } };
-    },
-    convert: (body, { url, info }) => convertBigCty(body, { url, date: info.date }),
-    // The country file is core: the app precaches it and every CQ row reads it. With no download
-    // and no cached copy, the build ships the release pinned in fixtures/.
-    pinned: () => ({ ...convertPinnedBigCty(), url: PINNED_BIGCTY.url }),
+    // The country file is core: the app precaches it and every CQ row reads it, so it comes from
+    // the repository and never depends on the site.
+    committed: () => convertCommittedBigCty(),
   },
   lotw: {
     title: 'LoTW user activity list',
@@ -244,10 +241,8 @@ function manifestEntry(src, meta, hasFiles, outDir) {
       entry.gzipBytes += gzipSync(body, { level: 9 }).length;
     }
   }
-  if (meta.pinned) {
-    entry.status = 'stale';
-    entry.note = `${meta.error ? `The download on ${day(meta.attemptedAt)} failed (${meta.error}), and` : 'This build made no download, and'} no cached copy was available. This copy is the release of ${meta.dataDate} pinned in fixtures/.`;
-  } else if (entry.status === 'stale') entry.note = `The download on ${day(meta.attemptedAt)} failed (${meta.error}). This copy is from ${day(meta.fetchedAt)}.`;
+  if (meta.committed) entry.note = `The release of ${meta.dataDate} committed in the repository (refdata/bigcty).`;
+  else if (entry.status === 'stale') entry.note = `The download on ${day(meta.attemptedAt)} failed (${meta.error}). This copy is from ${day(meta.fetchedAt)}.`;
   if (entry.status === 'missing') entry.note = meta.error ? `The download on ${day(meta.attemptedAt)} failed (${meta.error}).` : 'This build has no copy.';
   return entry;
 }
@@ -263,8 +258,8 @@ function prepareOut(outDir) {
 
 /**
  * Builds the sources named in only into outDir and writes manifest.json. Returns the manifest.
- * Only the sources named in ask may be requested. fetch, now and converter are injectable for
- * tests.
+ * Only the downloaded sources named in ask may be requested; the country file is never requested.
+ * fetch, now and converter are injectable for tests.
  */
 export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, ask = SOURCE_IDS, offline = false, now = new Date(), fetch = globalThis.fetch, converter = CONVERTER, log = () => {} }) {
   const unknown = [...only, ...ask].filter((id) => !SOURCES[id]);
@@ -273,16 +268,20 @@ export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, ask = SOUR
   const manifest = { format: 1, generatedAt: now.toISOString(), sources: {} };
   for (const id of only) {
     const src = SOURCES[id];
-    const { meta, hasFiles, dir } = await refresh(id, src, { cacheDir, now, fetch, offline, ask, converter, log });
-    if (hasFiles) for (const f of meta.files) cpSync(join(dir, 'files', f), join(outDir, f));
-    if (!hasFiles && src.pinned) {
-      const pinned = src.pinned();
-      for (const [path, body] of Object.entries(pinned.files)) writeFileSync(join(outDir, path), body);
-      log(`${id}: no download and no cached copy; shipping the release pinned in fixtures/ (${pinned.dataDate})`, 'warning');
-      const pinnedMeta = { ...meta, url: pinned.url, fetchedAt: null, checkedAt: null, dataDate: pinned.dataDate, rawBytes: null, records: pinned.records, entry: pinned.entry, files: Object.keys(pinned.files), pinned: true };
-      manifest.sources[id] = manifestEntry(src, pinnedMeta, true, outDir);
+    if (src.committed) {
+      // Builds up to 0.12.3 downloaded Big CTY into the cache. Dropping that entry stops the CI
+      // cache from carrying it.
+      rmSync(join(cacheDir, id), { recursive: true, force: true });
+      const c = src.committed();
+      for (const [path, body] of Object.entries(c.files)) writeFileSync(join(outDir, path), body);
+      for (const w of c.warnings ?? []) log(`${id}: ${w}`, 'warning');
+      log(`${id}: built from the release of ${c.dataDate} committed in the repository: ${c.records} records`);
+      const meta = { url: c.url, fetchedAt: null, checkedAt: null, dataDate: c.dataDate, rawBytes: null, records: c.records, entry: c.entry, files: Object.keys(c.files), committed: true };
+      manifest.sources[id] = manifestEntry(src, meta, true, outDir);
       continue;
     }
+    const { meta, hasFiles, dir } = await refresh(id, src, { cacheDir, now, fetch, offline, ask, converter, log });
+    if (hasFiles) for (const f of meta.files) cpSync(join(dir, 'files', f), join(outDir, f));
     manifest.sources[id] = manifestEntry(src, meta, hasFiles, outDir);
   }
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

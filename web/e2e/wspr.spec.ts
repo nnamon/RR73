@@ -153,7 +153,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('selected-marker')).toBeVisible();
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Save slot', /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Save slot', 'Clear spots', /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
     await shot(page, info, SHOTS, `${theme}-menu`, 300);
     await menu.getByRole('menuitem', { name: /Sort by/ }).click();
     await expect(menu.getByRole('menuitem', { name: /Sort by/ })).toHaveText(/SNR/);

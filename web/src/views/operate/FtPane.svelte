@@ -17,7 +17,7 @@
   import MessagesSheet from '../../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../../ui/StationDetailSheet.svelte';
   import type { PaneProps } from './panes';
-  import { callStation, qso, select, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
+  import { callStation, clearDecodeList, qso, select, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
   import { layout } from '../../lib/app/layout.svelte';
   import { setListKeys, stepSelection } from '../../lib/app/shortcuts';
   import type { ListItem } from '../../lib/decode/list';
@@ -75,6 +75,13 @@
     }
     setFrequencies({ txHz: hz });
     showNotice(STATUS.txSet(hz));
+  }
+
+  /** Clear decodes in •••: the list empties at once, even while a touch holds new slots back. */
+  function clearList() {
+    clearDecodeList();
+    shown = band.slots;
+    unseen = 0;
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
@@ -326,7 +333,7 @@
     </div>
   </div>
   <div class="controls" data-part="controls">
-    <TxBar variant={layout.upright ? 'bottom' : 'panel'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} />
+    <TxBar variant={layout.upright ? 'bottom' : 'panel'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
   </div>
 {:else}
   <div class="middle" data-part="middle">
@@ -337,7 +344,7 @@
     {@render decodes('Decodes, newest slot first')}
   </div>
   <div class="controls" data-part="controls">
-    <TxBar variant={layout.size === 'compact-height' ? 'side' : 'phone'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} />
+    <TxBar variant={layout.size === 'compact-height' ? 'side' : 'phone'} onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
   </div>
 {/if}
 
