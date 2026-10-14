@@ -27,21 +27,16 @@ export async function shot(page: Page, info: TestInfo, dir: string, name: string
 
 /**
  * Nothing wider than the screen, in the page or in any element, and every control at least 44 by
- * 44 px. A row that scrolls sideways (overflow-x auto or scroll, such as the macro row) may hold
- * more than fits.
+ * 44 px. A row made to scroll sideways, marked data-scroll-x (the macro row), may hold more than fits.
  */
 export async function checkLayout(page: Page) {
   const wide = await page.evaluate(() => {
     const w = document.documentElement.clientWidth;
     const out: string[] = [];
     if (document.documentElement.scrollWidth > w) out.push('document');
-    const inScroller = (el: HTMLElement) => {
-      for (let p = el.parentElement; p; p = p.parentElement) if (/auto|scroll/.test(getComputedStyle(p).overflowX)) return true;
-      return false;
-    };
     for (const el of document.querySelectorAll<HTMLElement>('main *')) {
       const r = el.getBoundingClientRect();
-      if (r.width && (r.right > w + 0.5 || r.left < -0.5) && getComputedStyle(el).position !== 'fixed' && !el.closest('.visually-hidden') && !el.closest('[hidden]') && !inScroller(el)) {
+      if (r.width && (r.right > w + 0.5 || r.left < -0.5) && getComputedStyle(el).position !== 'fixed' && !el.closest('.visually-hidden') && !el.closest('[hidden]') && !el.parentElement?.closest('[data-scroll-x]')) {
         out.push(`${el.tagName.toLowerCase()}.${el.className}`);
       }
     }

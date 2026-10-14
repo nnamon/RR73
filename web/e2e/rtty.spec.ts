@@ -154,6 +154,9 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(word(page, 'VK4TQ').first()).not.toHaveClass(/hl/);
     await expect(bar(page).getByRole('button', { name: 'Log QSO' })).toHaveAttribute('aria-disabled', 'true');
     await checkLayout(page);
+    // The signal meter and its value end inside the row's margin.
+    const meter = (await page.getByRole('meter', { name: 'Signal' }).boundingBox())!;
+    expect(meter.x + meter.width).toBeLessThanOrEqual(page.viewportSize()!.width - 8);
     await shot(page, info, SHOTS, `${theme}-listen`, 300);
 
     // JA1XYZ answers; a tap on his callsign fills the strip from his text.

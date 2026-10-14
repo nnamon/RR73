@@ -115,6 +115,10 @@
     box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep);
   }
 
+  .f.rcvd {
+    min-width: calc(var(--rr-tap) + var(--rr-space-1));
+  }
+
   .f.call {
     width: calc(7ch + 2 * var(--rr-space-1-5));
   }

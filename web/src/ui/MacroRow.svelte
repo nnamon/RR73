@@ -8,7 +8,7 @@
   let { macros, ontap }: { macros: readonly Macro[]; ontap: (m: Macro) => void } = $props();
 </script>
 
-<div class="mr" role="toolbar" aria-label="Macros">
+<div class="mr" role="toolbar" aria-label="Macros" data-scroll-x>
   {#each macros as m (m.id)}
     <button class="mc" onclick={() => ontap(m)} onpointerdown={(e) => e.preventDefault()}><span class="face">{m.label}</span></button>
   {/each}

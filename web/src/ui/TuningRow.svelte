@@ -98,7 +98,7 @@
     gap: var(--rr-space-1);
     align-items: center;
     height: var(--rr-chip);
-    padding: 0 calc(var(--rr-space-2) + var(--rr-space-half));
+    padding: 0 var(--rr-space-2);
     border-radius: var(--rr-radius-pill);
     background: var(--rr-fill-bg);
     font-size: var(--rr-text-row);
@@ -175,5 +175,17 @@
   .v {
     min-width: 3.4em;
     text-align: right;
+  }
+
+  /* At 375 pt the row keeps the chips and the bars whole; the value gives up its spare width. */
+  @media (width < 390px) {
+    .tr {
+      padding-right: calc(var(--rr-space-2) + var(--rr-safe-right));
+      padding-left: calc(var(--rr-space-2) + var(--rr-safe-left));
+    }
+
+    .v {
+      min-width: 0;
+    }
   }
 </style>
