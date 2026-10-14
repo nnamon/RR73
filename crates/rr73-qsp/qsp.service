@@ -1,0 +1,27 @@
+# QSP under systemd (crates/rr73-qsp/README.md, Without Docker).
+[Unit]
+Description=QSP, the RR73 relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=qsp
+Group=qsp
+ExecStart=/usr/local/bin/rr73-qsp --config /etc/qsp/qsp.toml
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Limits for a small server shared with other services.
+CPUQuota=50%
+MemoryMax=256M
+
+[Install]
+WantedBy=multi-user.target

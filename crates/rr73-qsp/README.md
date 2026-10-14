@@ -14,7 +14,31 @@ sudo mkdir -p /etc/qsp && sudo cp crates/rr73-qsp/qsp.example.toml /etc/qsp/qsp.
 docker run -d --name qsp --restart unless-stopped -p 127.0.0.1:7373:7373 -v /etc/qsp:/etc/qsp:ro rr73-qsp
 ```
 
-In the container, set `listen = "0.0.0.0:7373"`; the `-p 127.0.0.1:7373:7373` keeps the port off the internet. Then in Caddy:
+In the container, set `listen = "0.0.0.0:7373"`; the `-p 127.0.0.1:7373:7373` keeps the port off the internet.
+
+### Without Docker
+
+On a small server, run the binary under systemd with `qsp.service` from this directory. Build it for the server's architecture; from an Apple silicon Mac, for an x86-64 server:
+
+```sh
+docker build --platform linux/amd64 -f docker/qsp.Dockerfile --target build -t rr73-qsp-build .
+docker cp "$(docker create rr73-qsp-build)":/src/target/release/rr73-qsp .
+```
+
+On the server, as root:
+
+```sh
+useradd --system --no-create-home --shell /usr/sbin/nologin qsp
+install -m 0755 rr73-qsp /usr/local/bin/rr73-qsp
+install -d -m 0750 -o root -g qsp /etc/qsp
+install -m 0640 -o root -g qsp qsp.toml /etc/qsp/qsp.toml
+install -m 0644 qsp.service /etc/systemd/system/qsp.service
+systemctl daemon-reload && systemctl enable --now qsp
+```
+
+Keep `listen = "127.0.0.1:7373"`. The unit limits QSP to half a CPU and 256 MB, and `journalctl -u qsp` shows its log.
+
+### Caddy
 
 ```
 relay.example.org {
@@ -24,7 +48,7 @@ relay.example.org {
 }
 ```
 
-Caddy proxies WebSockets without extra settings. If the site already uses `handle` blocks, put the `/qsp/*` block first.
+Caddy proxies WebSockets without extra settings. If the site already ends in a catch-all `reverse_proxy`, wrap that in a `handle` block after the `/qsp/*` block.
 
 Check it with `curl https://relay.example.org/qsp/about`. The API reference is at `/docs`, and the OpenAPI document at `/openapi.json`.
 

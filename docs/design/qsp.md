@@ -27,15 +27,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 
 - One program, `rr73-qsp` (`crates/rr73-qsp`), configured by one TOML file (`crates/rr73-qsp/qsp.example.toml`).
 - It listens on plain HTTP on the loopback interface behind an HTTPS front. The front strips the API base's path: the app's address is the API base and every request joins onto it, so QSP serves from its own root and has no path to configure.
-- The owner's instance runs at `https://dmr.pwn.sg/qsp`, behind the Caddy that already serves that host:
-
-  ```
-  dmr.pwn.sg {
-      handle_path /qsp/* {
-          reverse_proxy 127.0.0.1:7373
-      }
-  }
-  ```
+- The owner's instance runs at `https://dmr.pwn.sg/qsp` under systemd (`crates/rr73-qsp/qsp.service`), behind Caddy. It is open, with no access key.
 
 ## The API
 
