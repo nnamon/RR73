@@ -16,7 +16,7 @@ import { STATUS } from '../qso/status';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
 import { beaconMessages } from '../wspr/message';
-import { beaconOnSlot, durationText, firstTxSlot, minGapSlots, nextStopAfter, nextTxSlot, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
+import { beaconOnSlot, durationText, minGapSlots, nextStopAfter, nextTxSlot, onceSlotAt, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
 import { SORT_LABELS, SPOT_SORTS, learnGrids, toSpots, type Spot } from '../wspr/spots';
 import { log } from '../log/log.svelte';
 import { features } from './features.svelte';
@@ -179,12 +179,17 @@ async function checkCall(nowMs: number) {
   }
 }
 
-/** Transmits once in the next slot at least 10 s away, with the beacon on or off. Call from the tap. */
+/**
+ * Transmits once in the next slot at least 10 s away, with the beacon on or off, keeping the
+ * shortest gap after the last transmission, one on air and the beacon's next slot. Call from the
+ * tap.
+ */
 export function transmitNextSlot(nowMs = Date.now()) {
   unmute();
   if (!ready(nowMs)) return;
   void checkCall(nowMs);
-  onceSlot = firstTxSlot(nowMs);
+  const busy = [lastTxSlot, wspr.onAir?.slotStartMs ?? null, beaconSlot].filter((s): s is number => s !== null);
+  onceSlot = onceSlotAt(nowMs, settings.wspr.txPct, busy);
   updateNext();
   tick(nowMs);
 }

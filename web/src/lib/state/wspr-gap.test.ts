@@ -95,4 +95,29 @@ describe('the beacon at 20%', () => {
     // 14:12 would follow at once; a gap of 5 from 14:10.
     expect(wspr.next).toEqual({ slotStartMs: at(14, 20), once: false });
   });
+
+  it('waits a slot with Transmit next slot tapped while the beacon is on air', () => {
+    Math.random = () => 0;
+    setBeacon(true, at(14, 5, 28));
+    tick(at(14, 5, 53));
+    expect(fake.scheduled.at(-1)?.slotStartMs).toBe(at(14, 6));
+    // On air in 14:06; a tap at 14:06:30 would take 14:08, right after it.
+    vi.setSystemTime(at(14, 6, 1));
+    fake.report!({ type: 'started', slotStartMs: at(14, 6), text: TEXT, startUtcMs: at(14, 6, 1), lateS: 0, skippedS: 0 });
+    transmitNextSlot(at(14, 6, 30));
+    // The beacon draws a gap of 5 after 14:06: 14:16.
+    Math.random = () => 0.5;
+    vi.setSystemTime(at(14, 7, 51));
+    fake.report!({ type: 'ended', slotStartMs: at(14, 6), text: TEXT, complete: true });
+    expect(wspr.next).toEqual({ slotStartMs: at(14, 10), once: true });
+  });
+
+  it('waits a slot with Transmit next slot right after a transmission Halt cut short', () => {
+    Math.random = () => 0;
+    setBeacon(true, at(14, 5, 28));
+    tick(at(14, 5, 53));
+    play(at(14, 6), 30, true);
+    transmitNextSlot(at(14, 6, 40));
+    expect(wspr.next).toEqual({ slotStartMs: at(14, 10), once: true });
+  });
 });
