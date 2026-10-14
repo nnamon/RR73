@@ -14,7 +14,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 });
 
 import { silentClipUri } from '../audio/unlock';
-import { addSlot, clearSpots, haltWspr, resetWspr, setBeacon, setTxPct, stepSort, stepStopAfter, tick, transmitNextSlot, wspr } from './wspr.svelte';
+import { addSlot, clearSpots, haltWspr, nextText, resetWspr, setBeacon, setPowerDbm, setTxPct, stepSort, stepStopAfter, tick, transmitNextSlot, wspr } from './wspr.svelte';
 import { WSPR_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { audio } from './station.svelte';
 
@@ -97,6 +97,16 @@ describe('the beacon', () => {
     } finally {
       Math.random = random;
     }
+  });
+
+  it('sends a new power from the next message on, and says so; the beacon keeps its slot', () => {
+    setBeacon(true, at(14, 5, 28));
+    expect(nextText()).toBe('9V1NE OJ11 37');
+    setPowerDbm(27, at(14, 5, 30));
+    expect(settings.wspr.powerDbm).toBe(27);
+    expect(nextText()).toBe('9V1NE OJ11 27');
+    expect(wspr.notice?.text).toBe('Power set to 27 dBm');
+    expect(wspr.next?.slotStartMs).toBe(at(14, 6));
   });
 
   it('sends once in the next slot with Transmit next slot, the beacon off', () => {

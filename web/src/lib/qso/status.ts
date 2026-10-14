@@ -30,6 +30,7 @@ export const STATUS = {
   beaconOff: 'Audio stopped · Beacon off',
   beaconSort: (by: string) => `Spots sorted by ${by}`,
   beaconStopAfter: (after: string) => `Stop beacon after ${after}`,
+  wsprPower: (dbm: number) => `Power set to ${dbm} dBm`,
   beaconPct: (pct: number) => `Tx in ${pct}% of slots`,
   noWsprCall: 'Callsign cannot be sent in WSPR',
   spotsCleared: 'Spots cleared',

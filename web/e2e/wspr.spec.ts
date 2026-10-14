@@ -153,12 +153,26 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('selected-marker')).toBeVisible();
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Save slot', 'Clear spots', /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Save slot', 'Clear spots', /Power\s*37 dBm/, /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
     await shot(page, info, SHOTS, `${theme}-menu`, 300);
     await menu.getByRole('menuitem', { name: /Sort by/ }).click();
     await expect(menu.getByRole('menuitem', { name: /Sort by/ })).toHaveText(/SNR/);
     await page.keyboard.press('Escape');
     expect((await calls(page)).slice(0, 3)).toEqual(['DU1IVT', 'VK6XLR', 'HS1FVL']);
+
+    // Power from •••: every level with its watts, the one in use ticked; a choice applies at once.
+    await bar.getByRole('button', { name: 'More' }).click();
+    await menu.getByRole('menuitem', { name: /^Power/ }).click();
+    const power = page.getByRole('menu', { name: 'Power' });
+    await expect(power.getByRole('menuitemradio')).toHaveCount(19);
+    await expect(power.getByRole('menuitemradio', { name: '37 dBm · 5 W' })).toHaveAttribute('aria-checked', 'true');
+    await shot(page, info, SHOTS, `${theme}-power`, 300);
+    await power.getByRole('menuitemradio', { name: '27 dBm · 500 mW' }).click();
+    await expect(power).toBeHidden();
+    await expect(bar.getByRole('status')).toHaveText(/Power set to 27 dBm/);
+    await bar.getByRole('button', { name: 'More' }).click();
+    await expect(menu.getByRole('menuitem', { name: /^Power/ })).toHaveText(/27 dBm/);
+    await page.keyboard.press('Escape');
 
     // Touch and hold: the spot's details.
     const row = list(page).locator('button.sr', { hasText: 'G4ZFQ' }).first();

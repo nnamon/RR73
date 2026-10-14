@@ -6,6 +6,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - The Report macro ends the transmission after its text, as every RTTY macro but Over does. It kept Tx on, sending the idle signal until the 1 min idle stop. A line typed while it goes out follows in the same over. A Report macro you have not edited is changed on update.
 - A macro that needs your name, QTH or grid sends nothing while it is empty, and the status line says which to set in Settings › Station. Report went out as "NAME QTH" without them.
+- WSPR's ••• menu has Power: a tap shows the 19 levels with their watts, and a choice applies at once, to a transmission waiting for its slot too. Settings › WSPR's Power now updates a waiting transmission as well.
 
 ## 0.14.0 · 2026-10-14
 

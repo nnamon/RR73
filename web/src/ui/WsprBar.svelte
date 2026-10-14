@@ -7,8 +7,9 @@
    * Beacon reads "Beacon" with a grey dot when off, "Tx at :06" in the accent tint while a
    * transmission waits for its slot (as Tx on does in FT8), and "On air" in solid red with a
    * blinking dot. The percentage opens a menu of percentages; a choice applies at once. ••• holds
-   * Transmit next slot, Tune for 10 s, Save slot, Clear spots, Sort by and Stop beacon after. Halt
-   * ends a transmission and turns the beacon off in one tap.
+   * Transmit next slot, Tune for 10 s, Save slot, Clear spots, Power, Sort by and Stop beacon after;
+   * Power opens a menu of the power levels, and a choice applies at once. Halt ends a transmission
+   * and turns the beacon off in one tap.
    *
    * Larger windows place the same parts as TxBar does: `panel` on the right in regular width,
    * `bottom` along the bottom of a window taller than wide, `side` under the waterfall on a phone
@@ -19,11 +20,12 @@
   import BarMenu, { type BarMenuItem } from './BarMenu.svelte';
   import { utcHm } from '../lib/clock/format';
   import { TX_PCTS, durationText } from '../lib/wspr/schedule';
+  import { POWERS_DBM, powerText } from '../lib/wspr/power';
   import { SORT_LABELS } from '../lib/wspr/spots';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
-  import { beaconTexts, clearSpots, nextText, setBeacon, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
+  import { beaconTexts, clearSpots, nextText, setBeacon, setPowerDbm, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
 
   let { onsave, variant = 'phone' }: { onsave: () => void; variant?: 'phone' | 'panel' | 'bottom' | 'side' } = $props();
 
@@ -55,13 +57,14 @@
     return () => document.documentElement.style.removeProperty('--rr-bar-h');
   });
 
-  let open = $state<'pct' | 'more' | null>(null);
+  let open = $state<'pct' | 'more' | 'power' | null>(null);
   let barEl: HTMLElement;
 
   function close(focus: boolean) {
     const was = open;
     open = null;
-    if (focus && was) barEl?.querySelector<HTMLButtonElement>(`[data-id=${was}]`)?.focus();
+    // The power menu opens from •••: focus goes back to •••.
+    if (focus && was) barEl?.querySelector<HTMLButtonElement>(`[data-id=${was === 'power' ? 'more' : was}]`)?.focus();
   }
 
   const beaconButton = $derived.by((): Pick<BarButton, 'label' | 'tone' | 'dot'> => {
@@ -73,17 +76,20 @@
   const buttons: BarButton[] = $derived([
     { id: 'beacon', ...beaconButton, pressed: wspr.beacon.on, onclick: () => setBeacon(!wspr.beacon.on) },
     { id: 'pct', label: `${w.txPct}%`, trail: 'updown', menu: { open: open === 'pct' }, onclick: () => (open = open === 'pct' ? null : 'pct') },
-    { id: 'more', label: 'More', icon: 'more', menu: { open: open === 'more' }, onclick: () => (open = open === 'more' ? null : 'more') },
+    { id: 'more', label: 'More', icon: 'more', menu: { open: open === 'more' || open === 'power' }, onclick: () => (open = open === 'more' ? null : 'more') },
     { id: 'halt', label: 'Halt', tone: 'halt', grow: true, kbd: variant === 'panel' && layout.pointer === 'mouse' ? 'esc' : undefined, onclick: () => halt() },
   ]);
 
   const pctItems: BarMenuItem[] = $derived(TX_PCTS.map((p) => ({ id: `p${p}`, label: `${p}%`, checked: p === w.txPct, onclick: () => setTxPct(p) })));
+
+  const powerItems: BarMenuItem[] = $derived(POWERS_DBM.map((p) => ({ id: `w${p}`, label: powerText(p), checked: p === w.powerDbm, onclick: () => setPowerDbm(p) })));
 
   const moreItems: BarMenuItem[] = $derived([
     { id: 'once', label: 'Transmit next slot', onclick: () => transmitNextSlot() },
     { id: 'tune', label: 'Tune for 10 s', onclick: () => startTune(w.txHz) },
     { id: 'save', label: 'Save slot', onclick: onsave },
     { id: 'clear', label: 'Clear spots', gap: true, onclick: () => clearSpots() },
+    { id: 'power', label: 'Power', value: `${w.powerDbm} dBm`, onclick: () => (open = 'power') },
     { id: 'sort', label: 'Sort by', value: SORT_LABELS[w.sort], stay: true, onclick: () => stepSort() },
     { id: 'stop', label: 'Stop beacon after', value: durationText(w.stopAfterMin), stay: true, onclick: () => stepStopAfter() },
   ]);
@@ -102,6 +108,8 @@
       <BarMenu label="Tx percentage" align="left" items={pctItems} onclose={close} />
     {:else if open === 'more'}
       <BarMenu label="More" items={moreItems} onclose={close} />
+    {:else if open === 'power'}
+      <BarMenu label="Power" items={powerItems} onclose={close} />
     {/if}
   </div>
 </section>

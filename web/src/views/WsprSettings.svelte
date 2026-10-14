@@ -12,7 +12,7 @@
   import { FREQ_LIMITS, clampHz } from '../lib/waterfall/pick';
   import { settings, updateSettings, type WsprSettings } from '../lib/state/settings.svelte';
   import { codec } from '../lib/state/station.svelte';
-  import { beaconTexts, setTxPct, setWsprTxHz, wspr } from '../lib/state/wspr.svelte';
+  import { beaconTexts, setPowerDbm, setTxPct, setWsprTxHz, wspr } from '../lib/state/wspr.svelte';
 
   const w = $derived(settings.wspr);
   const limits = FREQ_LIMITS.WSPR;
@@ -104,7 +104,7 @@
       </div>
       <label class="row">
         <span class="row-title">Reported power</span>
-        <select class="select" value={w.powerDbm} onchange={(e) => save({ powerDbm: Number(e.currentTarget.value) })}>
+        <select class="select" value={w.powerDbm} onchange={(e) => setPowerDbm(Number(e.currentTarget.value))}>
           {#each POWERS_DBM as p (p)}
             <option value={p}>{powerText(p)}</option>
           {/each}

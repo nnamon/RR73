@@ -198,6 +198,19 @@ export function setTxPct(pct: number, nowMs = Date.now()) {
   tick(nowMs);
 }
 
+/**
+ * Sets the power the message reports, dBm (••• menu and Settings). A transmission waiting for its
+ * slot is made again with it while more than 1.5 s remain, as for a new Tx frequency; one on air
+ * goes out as it is.
+ */
+export function setPowerDbm(dbm: number, nowMs = Date.now()) {
+  if (dbm === settings.wspr.powerDbm) return;
+  void updateSettings({ wspr: { ...settings.wspr, powerDbm: dbm } });
+  if (scheduledFor !== null && !wspr.onAir && scheduledFor - nowMs > 1500) withdraw();
+  notice(STATUS.wsprPower(dbm), nowMs);
+  tick(nowMs);
+}
+
 /** Steps Stop beacon after to its next value (••• menu). A running beacon counts from when it turned on. */
 export function stepStopAfter(nowMs = Date.now()) {
   const min = nextStopAfter(settings.wspr.stopAfterMin);
