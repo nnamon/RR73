@@ -397,7 +397,7 @@ async fn create_session(
                 free_channels: 1,
                 public_only: true,
             };
-            (format!("{}:{}", c.host, c.port), t, 1)
+            (format!("{}:{}", address::url_host(&c.host), c.port), t, 1)
         }
         _ => {
             return Err(ApiError(

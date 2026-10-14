@@ -277,12 +277,16 @@ async fn user_receivers_must_be_on_the_public_internet() {
         );
     }
     assert!(heard.lock().unwrap().is_empty());
-    // A public address gets a session; nothing connects until its stream opens.
-    let public = serde_json::json!({"custom": {"kind": "kiwisdr", "host": "8.8.8.8", "port": 8073}, "dialHz": 14074000});
-    assert_eq!(
-        call(&app, "POST", "/v1/sdr/sessions", Some(public), true).await.0,
-        StatusCode::CREATED
-    );
+    // A public address gets a session; nothing connects until its stream opens. An IPv6 address
+    // goes in brackets in the session's receiver.
+    for (host, receiver) in [
+        ("8.8.8.8", "8.8.8.8:8073"),
+        ("2001:4860:4860::8888", "[2001:4860:4860::8888]:8073"),
+    ] {
+        let public = serde_json::json!({"custom": {"kind": "kiwisdr", "host": host, "port": 8073}, "dialHz": 14074000});
+        let (s, v) = call(&app, "POST", "/v1/sdr/sessions", Some(public), true).await;
+        assert_eq!((s, v["receiver"].as_str()), (StatusCode::CREATED, Some(receiver)));
+    }
 }
 
 #[tokio::test]
