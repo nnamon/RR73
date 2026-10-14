@@ -273,7 +273,7 @@ function onSlot(slot: AssembledSlot) {
   }
   const t0 = performance.now();
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
-  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }, (more) => addDecodes(slot.startUtcMs, more)).then(
     (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0 }),
     (e: unknown) => {
       if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode, decodes: [], ms: 0, skipped: true });
@@ -374,6 +374,18 @@ export function deliverDecodes(entry: DecodedSlot) {
   keepSlot(entry);
   for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes);
   calibrate(entry);
+}
+
+/**
+ * Adds what the later decoder stages found in a slot already delivered, to the decode list
+ * only. The sequencer and the receive calibration act on the slot's first decodes, which come
+ * at once; these come up to DEEP.budgetMs after decoding started.
+ */
+export function addDecodes(startUtcMs: number, decodes: Decode[]) {
+  const entry = band.slots.find((s) => s.startUtcMs === startUtcMs);
+  if (!entry || transmitted.has(startUtcMs)) return;
+  const fresh = decodes.filter((d) => !entry.decodes.some((e) => e.text === d.text));
+  if (fresh.length) keepSlot({ ...entry, decodes: [...entry.decodes, ...fresh] });
 }
 
 /** Listens to each slot's decodes as they arrive (the sequencer). */

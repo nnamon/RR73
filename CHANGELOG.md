@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT8 decoding goes on after each slot's first decodes with two finer searches of what is left, and adds what they find to the slot in the list within 2 s. Of the messages WSJT-X decodes, RR73 now finds 95 % on the ft8_lib test files, up from 89 %, and 84 % on 40m recordings, up from 74 %. It decodes signals 0.9 dB weaker in steady noise and 1.6 dB weaker with fading.
+
 ## 0.12.0 · 2026-10-14
 
 - WSPR is a third mode in the band sheet, beside FT8 and FT4. Set the radio to shows WSPRnet's dial for the band: 14.0956 MHz USB on 20m.

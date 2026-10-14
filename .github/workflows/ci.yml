@@ -124,6 +124,18 @@ jobs:
       - name: Gate subtract-3-osd2 against bench/subtract-3-osd2.json
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3-osd2.json --baseline bench/subtract-3-osd2.json
+      # The later FT8 stages the app runs after subtract-3-osd2 (DEEP in
+      # web/src/lib/decode/worker-client.ts), gated against bench/subtract-3-osd2-deep.json.
+      - name: Run subtract-3-osd2 with the later stages
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: >-
+          cargo run --release -p rr73-bench -- run --preset subtract-3-osd2
+          --then "subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23"
+          --then "subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2"
+          --out results/ci-subtract-3-osd2-deep.json corpus/public corpus/synthetic
+      - name: Gate the later stages against bench/subtract-3-osd2-deep.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3-osd2-deep.json --baseline bench/subtract-3-osd2-deep.json
       # WSPR: the wspr preset on wspr-smoke and 50 wspr-noise slots, rendered in memory so no
       # 2.9 MB WAV file per 120 s slot is written. Gated against bench/wspr.json with
       # bench/gate-wspr.toml.
@@ -140,6 +152,7 @@ jobs:
           path: |
             results/ci.json
             results/ci-subtract-3-osd2.json
+            results/ci-subtract-3-osd2-deep.json
             results/ci-wspr.json
 
   wasm:

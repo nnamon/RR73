@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { existsSync, readFileSync } from 'node:fs';
-import { DecoderBusyError, DecoderUnavailableError, PRESET, WorkerDecoder, type WorkerLike } from './worker-client';
+import { DEEP, DecoderBusyError, DecoderUnavailableError, PRESET, WorkerDecoder, type WorkerLike } from './worker-client';
 import type { FromDecoder, ToDecoder } from './protocol';
 import type { DecoderStatus } from './types';
 
@@ -68,6 +68,29 @@ describe('WorkerDecoder', () => {
     await expect(a).rejects.toThrow('bad');
   });
 
+  it('runs the later stages for FT8 slots that ask for them and passes on what they find', async () => {
+    const { d, workers } = setup();
+    const more: string[][] = [];
+    const done = d.decodeSlot(slot(), (x) => more.push(x.map((m) => m.text)));
+    expect(workers[0].sent[1].m).toMatchObject({ type: 'decode', id: 1, deep: DEEP });
+    workers[0].reply({ type: 'decoded', id: 1, decodes: [], ms: 90 });
+    await expect(done).resolves.toEqual([]);
+    // The slot no longer counts as waiting while its later stages run.
+    void d.decodeSlot(slot());
+    void d.decodeSlot(slot());
+    workers[0].reply({ type: 'decodedMore', id: 1, decodes: [{ text: 'CQ 9V1NE OJ11', freq_hz: 900, dt_s: 0.2, snr_db: -22 }], ms: 400, done: false });
+    workers[0].reply({ type: 'decodedMore', id: 1, decodes: [], ms: 600, done: true });
+    workers[0].reply({ type: 'decodedMore', id: 1, decodes: [{ text: 'CQ K1ABC FN42', freq_hz: 500, dt_s: 0, snr_db: -3 }], ms: 700, done: true });
+    expect(more).toEqual([['CQ 9V1NE OJ11']]);
+  });
+
+  it('runs no later stages for FT4, or without a listener', () => {
+    const { d, workers } = setup();
+    void d.decodeSlot({ ...slot(), mode: 'FT4', samples: new Float32Array(90000) }, () => undefined);
+    void d.decodeSlot(slot());
+    expect(workers[0].sent.slice(1).map((s) => 'deep' in s.m)).toEqual([false, false]);
+  });
+
   it('refuses a third waiting slot', async () => {
     const { d } = setup();
     void d.decodeSlot(slot());
@@ -108,6 +131,14 @@ describe('shipped preset', () => {
     const gate = new URL(`../../../../bench/${PRESET}.json`, import.meta.url);
     expect(existsSync(gate)).toBe(true);
     expect(JSON.parse(readFileSync(gate, 'utf8')).preset).toBe(PRESET);
+  });
+
+  it('has a CI gate file recorded for the same later stages', () => {
+    const gate = new URL(`../../../../bench/${PRESET}-deep.json`, import.meta.url);
+    expect(existsSync(gate)).toBe(true);
+    const recorded = JSON.parse(readFileSync(gate, 'utf8')) as { preset: string; then: string[] };
+    expect(recorded.preset).toBe(PRESET);
+    expect(recorded.then).toEqual(DEEP.plan.split(';').map((s) => s.trim()));
   });
 });
 

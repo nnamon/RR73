@@ -88,15 +88,19 @@ pub struct Check {
 }
 
 /// Compares every set present in both files, and requires the configured sets. The two
-/// files must come from the same preset and overrides.
+/// files must come from the same preset, overrides and later stages (`--then`).
 pub fn gate(results: &Results, baseline: &Results, config: &GateConfig) -> Vec<Check> {
     let mut checks = Vec::new();
     let describe = |r: &Results| {
-        if r.overrides.is_empty() {
+        let mut d = if r.overrides.is_empty() {
             r.preset.clone()
         } else {
             format!("{} [{}]", r.preset, r.overrides.join(", "))
+        };
+        for stage in &r.then {
+            d.push_str(&format!(" then {stage}"));
         }
+        d
     };
     let (want, have) = (describe(baseline), describe(results));
     checks.push(Check {
@@ -357,6 +361,14 @@ mod tests {
             .map(|k| k.metric)
             .collect();
         assert_eq!(failed, vec!["preset"]);
+        let mut staged = results(vec![("synthetic/smoke", summary(0.9, 0, Some(-19.0), 1.0))]);
+        staged.then = vec!["subtract-3-osd2 spectrogram.time_osr=4".into()];
+        let failed: Vec<String> = gate(&staged, &base, &c)
+            .into_iter()
+            .filter(|k| !k.pass)
+            .map(|k| k.metric)
+            .collect();
+        assert_eq!(failed, vec!["preset"]);
         let no_fit = results(vec![("synthetic/smoke", summary(0.85, 0, None, 1.0))]);
         assert!(
             gate(&no_fit, &base, &c)
@@ -408,5 +420,9 @@ mod recorded_baselines {
             assert!(r.overrides.is_empty(), "{preset}");
             assert!(r.slim, "{preset}");
         }
+        let deep = load(&dir.join("subtract-3-osd2-deep.json")).expect("deep");
+        assert_eq!(deep.preset, "subtract-3-osd2");
+        assert!(deep.overrides.is_empty() && deep.slim);
+        assert_eq!(deep.then.len(), 2);
     }
 }

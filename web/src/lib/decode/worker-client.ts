@@ -5,7 +5,7 @@
  * a queue.
  */
 
-import { WSPR_PRESET, type FromDecoder, type ToDecoder, type DecoderFailure, type Packed } from './protocol';
+import { WSPR_PRESET, type DeepStages, type FromDecoder, type ToDecoder, type DecoderFailure, type Packed } from './protocol';
 import type { WsprDecode } from '../wspr/spots';
 import type { Mode } from '../clock/slots';
 import type { Decode, DecoderClient, DecoderStatus, SlotAudio } from './types';
@@ -28,6 +28,8 @@ export interface WorkerLike {
 
 interface Pending {
   resolve: (d: Decode[]) => void;
+  /** Receives the later stages' decodes of an FT8 slot. */
+  more?: (d: Decode[]) => void;
   reject: (e: Error) => void;
   /** Set for a WSPR slot. */
   wspr?: (r: { decodes: WsprDecode[]; ms: number }) => void;
@@ -47,6 +49,23 @@ interface Request<T> {
  */
 export const PRESET = 'subtract-3-osd2';
 
+/**
+ * Later stages for FT8 slots, after PRESET. Each decodes what the stages before it left: the
+ * first on a grid of 4 frames per symbol and 4 bins per tone spacing, the second on 8 frames
+ * per symbol with 400 candidates from a 2 dB sync threshold and OSD over all 91 information
+ * bits. Both leave frames that overlap digital silence out of the sync score and accept OSD
+ * decodes from -23 dB, 1 dB above the preset, as they try more candidates. CI gates them
+ * against bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has the
+ * measurements and the budget.
+ */
+export const DEEP: DeepStages = {
+  plan: [
+    'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23',
+    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2',
+  ].join('; '),
+  budgetMs: 2000,
+};
+
 export class WorkerDecoder implements DecoderClient {
   private worker: WorkerLike | null = null;
   private readonly pending = new Map<number, Pending>();
@@ -58,15 +77,20 @@ export class WorkerDecoder implements DecoderClient {
   private readonly create: () => WorkerLike;
   private readonly preset: string;
   private readonly maxPending: number;
+  private readonly deep: DeepStages | null;
+  /** Slots whose later stages are still running, by id. */
+  private readonly more = new Map<number, (d: Decode[]) => void>();
 
   constructor(
     create: () => WorkerLike = () => new Worker(new URL('./decoder.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike,
     preset = PRESET,
     maxPending = 2,
+    deep: DeepStages | null = DEEP,
   ) {
     this.create = create;
     this.preset = preset;
     this.maxPending = maxPending;
+    this.deep = deep;
   }
 
   get available(): boolean {
@@ -102,15 +126,20 @@ export class WorkerDecoder implements DecoderClient {
     w.postMessage({ type: 'load' });
   }
 
-  /** Decodes one slot. The samples are transferred to the worker: pass a copy. */
-  decodeSlot(slot: SlotAudio): Promise<Decode[]> {
+  /**
+   * Decodes one slot. The samples are transferred to the worker: pass a copy. With `more`, an
+   * FT8 slot also runs the later stages, and `more` receives what each finds after the
+   * returned decodes.
+   */
+  decodeSlot(slot: SlotAudio, more?: (d: Decode[]) => void): Promise<Decode[]> {
     if (this.statusValue.state === 'failed') return Promise.reject(new DecoderUnavailableError(this.statusValue.detail));
     this.load();
     if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
     if (this.pending.size >= this.maxPending) return Promise.reject(new DecoderBusyError(`${this.pending.size} slots waiting`));
     const id = this.nextId++;
-    const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject }));
-    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples }, [slot.samples.buffer]);
+    const deep = more && slot.mode === 'FT8' && this.deep ? this.deep : undefined;
+    const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject, more: deep && more }));
+    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}) }, [slot.samples.buffer]);
     return done;
   }
 
@@ -153,6 +182,7 @@ export class WorkerDecoder implements DecoderClient {
     for (const r of this.requests.values()) r.reject(new DecoderUnavailableError('disposed'));
     this.pending.clear();
     this.requests.clear();
+    this.more.clear();
   }
 
   private onMessage(m: FromDecoder) {
@@ -165,10 +195,15 @@ export class WorkerDecoder implements DecoderClient {
       if (m.type === 'packed') (r as Request<Packed>).resolve(m.packed);
       else if (m.type === 'synthesized') (r as Request<Float32Array>).resolve(m.samples);
       else r.reject(new Error(m.detail));
+    } else if (m.type === 'decodedMore') {
+      const more = this.more.get(m.id);
+      if (m.done) this.more.delete(m.id);
+      if (more && m.decodes.length) more(m.decodes);
     } else {
       const p = this.pending.get(m.id);
       if (!p) return;
       this.pending.delete(m.id);
+      if (m.type === 'decoded' && p.more) this.more.set(m.id, p.more);
       if (m.type === 'decoded') p.resolve(m.decodes);
       else if (m.type === 'decodedWspr') p.wspr?.({ decodes: m.decodes, ms: m.ms });
       else p.reject(new Error(m.detail));
@@ -183,6 +218,7 @@ export class WorkerDecoder implements DecoderClient {
     for (const r of this.requests.values()) r.reject(new DecoderUnavailableError(detail));
     this.pending.clear();
     this.requests.clear();
+    this.more.clear();
   }
 
   private setStatus(s: DecoderStatus) {

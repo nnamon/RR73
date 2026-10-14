@@ -1,6 +1,6 @@
 # Experiment 0003: anytime decoding
 
-Status: hypothesis recorded 2026-10-13, before implementation. Part 1 measured; part 2 partly measured and paused.
+Status: hypothesis recorded 2026-10-13, before implementation. Part 1 measured. Part 2 measured 2026-10-14; the chosen stages ship (decision 0007).
 
 ## Question
 
@@ -94,8 +94,6 @@ The session refactor that carries both parts changes no decode: `compare` agains
 
 ### Part 2: deeper passes after the deadline
 
-Status: partly measured, paused on 2026-10-13. Stress tests, SNR50, single-threaded time per stage and the chained stages are not measured yet; no stage is accepted.
-
 Each candidate stage ran alone after stage 1 (the shipped `subtract-3-osd2`) with `rr73-bench run --then`, over the public files, the 350 SARTS slots, `crowded` and the 5000 noise slots. A stage starts from the residual left by all stage 1 decodes and returns only new decodes. "Matched" and "unmatched" count the stage's new decodes against the reference lists; stage 1 alone has recall 0.8937 (public) and 0.7394 (SARTS).
 
 | Stage 2 (`subtract-3-osd2` plus) | Public: matched, unmatched, recall | SARTS: matched, unmatched, recall | `crowded` matched | False, 5000 noise slots and `crowded` |
@@ -124,4 +122,21 @@ What the numbers say so far: the finer search grid gives most of the gain, as ex
 
 The times printed by these runs (10 threads, host load average 15 to 16) are not usable for the budget. Steps of the session now compute at most 32 spectrogram frames and subtract at most 2 earlier decodes each; the longest step has not been measured on a quiet host.
 
-Still to do, in order: stress test (threshold 0 dB on the 5000 noise slots) and SNR sweep for each stage (`results/p2_stress_next.sh`); check the unmatched decodes of the deeper stages; single-threaded time per stage and longest step, best of 3; time the chain per stage; choose the stages and record the decision.
+#### Measured 2026-10-14, after merging 0.12.0
+
+The chain of stage 2 `time_osr=4`, `freq_osr=4`, `window_symbols=2` and stage 3 `time_osr=8`, `freq_osr=4`, `window_symbols=2`, `osd_window=91`, 400 candidates from 2 dB ships, with the sync silence option and an OSD floor of -23 dB in both later stages. Decision 0007 has its recall, false decodes, SNR50, stress, partly silent slots, unmatched decodes and time per slot, native and in WebKit and Chromium workers. Against the hypothesis: recall on SARTS rises by 0.100 (expected 0.02 to 0.05) and SNR50 falls by 0.86 dB on AWGN and 1.58 dB with fading (expected 0.3 to 0.8 dB); no stage made a false decode on the 5000 noise slots or in the stress runs, as expected.
+
+Stage 3 alone after the preset gives the same final recall (0.945 public, 0.839 SARTS) as the chain. Stage 3 with 600 candidates from 1 dB adds 7 matches on SARTS for 35 % more stage time and is not used. The sessions' 32-frame spectrogram steps change no decode: `subtract-3-osd2` through a session gives the same decodes, frequencies, DTs, SNRs and passes as 0.12.0's one-shot pipeline on 7400 slots.
+
+#### Silent frames
+
+0.12.0 leaves frames that overlap digital silence out of the SNR estimate. Two more options do the same for the sync score (`search.skip_silent_frames`) and the demodulator (`demod.skip_silent_frames`: symbols in such frames are erased and left out of the LLR variance). Each was measured with `subtract-3-osd2` on slots with part of the audio set to zeros (`--silent-s`), over the public files, SARTS, the 5000 noise slots, `crowded`, `smoke` and the SNR sweep.
+
+| Silent span | Sync option: matched | Demodulator option: matched | Both |
+| --- | --- | --- | --- |
+| 0 to 2 s | +180 | -52 | +115 |
+| 0 to 4 s | +60 | -80 | -26 |
+| 6 to 6.5 s | +4 | -144 | -142 |
+| 12.5 to 15 s | +203 | -4 | +193 |
+
+No option made a false decode. Silence counted in the sync score reads 0 dB against silence and pulls the mean down by about a third when a Costas array lies in it; the option restores the score of the arrays in the audio. Over 11 silent spans the sync option gains 771 matches in all, but in 4 of them one set loses 1 to 4 decodes or 0.2 dB of SNR50, so the preset keeps its sync score and the option runs in the later stages only, where it cannot lose a stage 1 decode. The demodulator option loses decodes and is not used.

@@ -135,7 +135,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
-| `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
+| `lib/decode` | Decoder workers wrapping `rr73-wasm`. An FT8 slot is decoded with the shipped preset and its decodes go to the list and the sequencer at once; the worker then runs the later stages (`DEEP` in `worker-client.ts`) as a `DecoderSession` in slices of at most 40 ms, answering encoder requests between slices, and adds what they find to the slot in the list. They stop when done, 2 s after the slot's decoding started, or when the next slot arrives (`docs/decisions/0007-deeper-ft8-stages.md`). |
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ, Run and Hunt. See `docs/design/sequencer.md`. |
 | `lib/wspr` | WSPR's pure parts: the beacon schedule, its messages, spots (distance, sorting, drift) and the rows of Operate's spot list. The runtime that drives them is `lib/state/wspr.svelte.ts`. See `docs/design/wspr.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |

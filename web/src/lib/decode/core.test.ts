@@ -141,3 +141,97 @@ describe('DecoderCore for WSPR', () => {
     expect(posted[2]).toMatchObject({ type: 'synthesized', id: 2 });
   });
 });
+
+describe('DecoderCore later stages', () => {
+  const d = (text: string) => ({ text, freq_hz: 1000, dt_s: 0.1, snr_db: -20 });
+
+  /** A session whose preset finds one decode and whose later stage takes `steps` steps, finding `late` on step 2. */
+  function sessionModule(steps: number, late = d('CQ 9V1NE OJ11')) {
+    const made: { plan: string; steps: number; freed: boolean }[] = [];
+    class FakeSession {
+      readonly s = { plan: '', steps: 0, freed: false };
+      constructor(_samples: Float32Array, _mode: string, plan: string) {
+        this.s.plan = plan;
+        made.push(this.s);
+      }
+      next_stage() {
+        return JSON.stringify([d('CQ K1ABC FN42')]);
+      }
+      step() {
+        if (this.s.freed) throw new Error('null pointer passed to rust');
+        this.s.steps++;
+        const done = this.s.steps >= steps;
+        return JSON.stringify({ decodes: this.s.steps === 2 ? [late] : [], stage: 1, stage_done: this.s.steps === 2 || done, done });
+      }
+      get done() {
+        return this.s.steps >= steps;
+      }
+      free() {
+        this.s.freed = true;
+      }
+    }
+    return { mod: fakeModule({ DecoderSession: FakeSession }), made };
+  }
+
+  function deepSetup(mod: WasmModule, pause: () => Promise<void> = async () => undefined) {
+    const posted: FromDecoder[] = [];
+    let t = 1000;
+    const core = new DecoderCore(async () => mod, (m) => posted.push(m), () => (t += 5), pause);
+    return { core, posted };
+  }
+
+  const deepSlot = (id: number, budgetMs = 2000) => ({ ...slot(id), deep: { plan: 'subtract-3-osd2 spectrogram.time_osr=4', budgetMs } });
+
+  it('posts the preset decodes first, then what the later stages add', async () => {
+    const { mod, made } = sessionModule(4);
+    const { core, posted } = deepSetup(mod);
+    await core.handle(deepSlot(5));
+    await vi.waitFor(() => expect(posted.at(-1)).toMatchObject({ type: 'decodedMore', done: true }));
+    expect(made[0].plan).toBe('baseline; subtract-3-osd2 spectrogram.time_osr=4');
+    expect(posted.slice(1).map((m) => [m.type, 'decodes' in m ? m.decodes.map((x) => x.text) : null])).toEqual([
+      ['decoded', ['CQ K1ABC FN42']],
+      ['decodedMore', ['CQ 9V1NE OJ11']],
+      ['decodedMore', []],
+    ]);
+    expect(made[0]).toMatchObject({ steps: 4, freed: true });
+    expect(mod.decode_slot).not.toHaveBeenCalled();
+  });
+
+  it('stops the later stages when the budget has passed', async () => {
+    const { mod, made } = sessionModule(1_000_000);
+    const { core, posted } = deepSetup(mod);
+    await core.handle(deepSlot(6, 300));
+    await vi.waitFor(() => expect(posted.at(-1)).toMatchObject({ type: 'decodedMore', id: 6, done: true }));
+    const last = posted.at(-1) as { ms: number };
+    // The clock advances 5 ms per reading: the budget ends the work within one step of 300 ms.
+    expect(last.ms).toBeGreaterThanOrEqual(300);
+    expect(last.ms).toBeLessThan(330);
+    expect(made[0].freed).toBe(true);
+  });
+
+  it('answers encoder requests between slices and ends the later stages when the next slot arrives', async () => {
+    const { mod, made } = sessionModule(1_000_000);
+    let release!: () => void;
+    const { core, posted } = deepSetup(mod, () => new Promise<void>((r) => (release = r)));
+    await core.handle(deepSlot(7, 60_000));
+    // The first slice ran and the work waits for the message loop.
+    expect(made[0].steps).toBeGreaterThan(0);
+    await core.handle({ type: 'pack', id: 8, text: 'CQ 9V1NE OJ11', mode: 'FT8' });
+    expect(posted.at(-1)).toMatchObject({ type: 'packed', id: 8 });
+    await core.handle(slot(9));
+    // The session was freed before the next slot was decoded, and its last message says done.
+    expect(made[0].freed).toBe(true);
+    expect(posted.slice(-2).map((m) => m.type + ('id' in m ? m.id : ''))).toEqual(['decodedMore7', 'decoded9']);
+    release();
+    await Promise.resolve();
+    expect(posted.filter((m) => m.type === 'decodedMore')).toHaveLength(2);
+  });
+
+  it('decodes FT8 without later stages when the module has no sessions', async () => {
+    const mod = fakeModule();
+    const { core, posted } = deepSetup(mod);
+    await core.handle(deepSlot(10));
+    expect(mod.decode_slot).toHaveBeenCalledOnce();
+    expect(posted.slice(1).map((m) => m.type)).toEqual(['decoded']);
+  });
+});
