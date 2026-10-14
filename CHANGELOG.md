@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.15.1 · 2026-10-14
 
 - At 50% and below, the WSPR beacon leaves at least one receive slot between transmissions: at 20% the gap is 2 to 8 slots, mean 5. It could send in 2 slots back to back, about 1 gap in 16 at 20%.
 - Halt and Beacon on again no longer transmits in the next slot after the one Halt cut short. Transmit next slot no longer leaves the beacon's own slot right after it.
