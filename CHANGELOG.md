@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.12.4 · 2026-10-14
 
 - Clear decodes in ••• empties the FT8 and FT4 decode list, and Clear spots the WSPR spot list. A QSO under way, its next transmission and Hunt carry on, and new decodes list as usual.
 - Every version carries its country file, Big CTY of 15 September 2026, so CQ rows name the caller's country whatever the country file's website does. Newer releases arrive with app updates.
