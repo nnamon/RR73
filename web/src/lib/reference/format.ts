@@ -130,21 +130,22 @@ export interface SotaShardJson {
 export type SourceId = 'cty' | 'lotw' | 'pota' | 'sota';
 
 /**
- * ok: the data was fetched or confirmed current on the build date. stale: the last attempt
- * failed and an older copy is shipped. missing: no copy, the app works without this source.
+ * ok: the data was fetched or confirmed current on the build date, or is the copy committed in the
+ * repository (the country file). stale: the last attempt failed and an older copy is shipped.
+ * missing: no copy, the app works without this source.
  */
 export type SourceStatus = 'ok' | 'stale' | 'missing';
 
 export interface ManifestSource {
   title: string;
   status: SourceStatus;
-  /** The file downloaded. */
+  /** The file downloaded; for the country file, the release zip the committed copy came from. */
   url: string;
   /** Who publishes the data. */
   publisher: string;
   /** Licence or terms as published, or a statement that none were found. */
   terms: string;
-  /** When the shipped copy was downloaded, ISO 8601 UTC; null when there is none. */
+  /** When the shipped copy was downloaded, ISO 8601 UTC; null when there is none or it is committed. */
   fetchedAt: string | null;
   /** When the source last confirmed the copy is current, ISO 8601 UTC. */
   checkedAt: string | null;
@@ -164,7 +165,7 @@ export interface ManifestSource {
   /** Their total size, bytes, and after gzip -9 (close to what GitHub Pages sends). */
   bytes: number;
   gzipBytes: number;
-  /** Plain-words reason when the status is stale or missing. */
+  /** Plain words on the copy: committed in the repository, or why the status is stale or missing. */
   note?: string;
 }
 

@@ -25,7 +25,7 @@ export function verifyDist(dist) {
     return [`data/manifest.json does not read: ${e.message}`];
   }
   // The country file is core: every CQ row reads it, and 0.11.1 to 0.12.2 shipped without it.
-  if (!manifest.sources.cty?.entry) problems.push('cty: the country file is missing; the build pins a release in fixtures/ for this');
+  if (!manifest.sources.cty?.entry) problems.push('cty: the country file is missing; build.mjs builds it from refdata/bigcty');
   for (const [id, s] of Object.entries(manifest.sources)) {
     if (!s.entry) {
       if (s.status !== 'missing') problems.push(`${id}: status ${s.status} without an entry file`);

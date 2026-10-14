@@ -1,23 +1,19 @@
-import { readFileSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
 import { describe, expect, it } from 'vitest';
-import { parseCtyCsvCodes, parseCtyDat, toCtyJson } from './cty';
 import { DxccIndex, type DxccMatch } from './dxcc';
+import { bigCtyDat, bigCtyFixture } from './testing';
 
-// Big CTY of 15 September 2026, pinned in fixtures/reference/bigcty-20260915: cty.dat as
-// released, and cty.csv without its alias column (it carries the ADIF DXCC codes). The index is
-// built through cty.json, the path the app takes.
-const dir = new URL('../../../../fixtures/reference/bigcty-20260915/', import.meta.url);
-const dat = gunzipSync(readFileSync(new URL('cty.dat.gz', dir))).toString('latin1');
-const csv = gunzipSync(readFileSync(new URL('cty-columns.csv.gz', dir))).toString('latin1');
-const json = toCtyJson(parseCtyDat(dat), parseCtyCsvCodes(csv), { version: '2026-09-15', source: 'fixture', notice: 'MIT' });
-const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(json)));
+// The Big CTY release the app ships, committed in refdata/bigcty: cty.dat as released, and cty.csv
+// without its alias column (it carries the ADIF DXCC codes). The index is built through cty.json,
+// the path the app takes. The cases were written against the release of 15 September 2026; when
+// an update of the release changes one, its release notes say why.
+const dat = bigCtyDat();
+const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(bigCtyFixture())));
 
 type Expect = [call: string, entity: string, dxcc: number, cq?: number, itu?: number];
 
 // Expected entities and ADIF DXCC codes come from the ADIF DXCC entity list; README.TXT and
-// HISTORY.TXT of this release give the cases marked "Big CTY". Zones are given where the case is
-// about them.
+// HISTORY.TXT of the 15 September 2026 release give the cases marked "Big CTY". Zones are given
+// where the case is about them.
 const TABLE: Expect[] = [
   // Prefixes and the longest match
   ['K1ABC', 'United States', 291, 5, 8],
@@ -77,7 +73,6 @@ const TABLE: Expect[] = [
   ['EA8LU/7', 'Spain', 281], // Big CTY
   ['SV1ELW/9', 'Crete', 40], // Big CTY
   ['SV2ASP/A', 'Mount Athos', 180],
-  ['VERSION', 'Rotuma Island', 460], // Big CTY: the version entity of this release
   // Portable forms
   ['VK3/9V1NE', 'Australia', 150, 30, 59],
   ['VK6/9V1NE', 'Australia', 150, 29, 58],
@@ -101,10 +96,13 @@ const TABLE: Expect[] = [
   ['9v1ne', 'Singapore', 381],
 ];
 
-describe('callsign lookups against Big CTY 15 September 2026', () => {
-  it('has the pinned release', () => {
-    expect(cty.entities).toHaveLength(346);
+describe('callsign lookups against the committed Big CTY release', () => {
+  it('has every DXCC entity, each with its code, and the version entity', () => {
+    // 340 current DXCC entities, and the WAE entities on top (346 in all on 15 September 2026).
+    expect(cty.entities.length).toBeGreaterThanOrEqual(340);
     expect(cty.entities.every((e) => e.dxcc !== null)).toBe(true);
+    // Each release lists the callsign VERSION under one entity, named in its release notes.
+    expect(cty.lookup('VERSION').found).toBe(true);
   });
 
   it.each(TABLE)('%s is %s (DXCC %i)', (call, entity, dxcc, cq, itu) => {
