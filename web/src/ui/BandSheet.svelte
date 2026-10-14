@@ -246,4 +246,24 @@
     line-height: var(--rr-leading-row);
     color: var(--rr-label2);
   }
+
+  /* A phone on its side: six bands to a row and the dial on one line, so the sheet fits its height. */
+  :global([data-size='compact-height']) .bands {
+    grid-template-columns: repeat(6, 1fr);
+    margin-top: 0;
+  }
+
+  :global([data-size='compact-height']) .setblock {
+    display: flex;
+    gap: var(--rr-space-3);
+    align-items: baseline;
+    margin-top: var(--rr-space-3);
+    padding: var(--rr-space-2) var(--rr-space-4);
+  }
+
+  :global([data-size='compact-height']) .f {
+    margin-top: 0;
+    font-size: var(--rr-hero);
+    line-height: var(--rr-leading-title);
+  }
 </style>
