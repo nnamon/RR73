@@ -13,8 +13,9 @@ export const DRAG_PX = 6;
 /** The most a tap moves, px, and its longest press, ms. */
 export const TAP_PX = 10;
 export const TAP_MS = 1000;
-/** Frequencies set by touch step by this much, Hz. */
+/** Frequencies set by touch step by this much, Hz: 5 Hz across FT8's 3000 Hz, 1 Hz across WSPR's 200 Hz. */
 export const STEP_HZ = 5;
+export const STEP_HZ_OF: Record<Mode, number> = { FT8: STEP_HZ, FT4: STEP_HZ, WSPR: 1 };
 
 export type Marker = 'rx' | 'tx';
 export type Gesture = 'pending' | 'drag' | 'scroll';
@@ -23,9 +24,10 @@ export type Gesture = 'pending' | 'drag' | 'scroll';
  * The marker a press at `x` CSS px moves on a waterfall `width` px wide: Rx when the press lands
  * on the Rx marker and nearer to it than to Tx, otherwise Tx.
  */
-export function grabbed(x: number, width: number, rxHz: number, txHz: number): Marker {
-  const toRx = Math.abs(x - xOfHz(rxHz) * width);
-  const toTx = Math.abs(x - xOfHz(txHz) * width);
+export function grabbed(x: number, width: number, rxHz: number | null, txHz: number, mode: Mode = 'FT8'): Marker {
+  if (rxHz === null) return 'tx';
+  const toRx = Math.abs(x - xOfHz(rxHz, mode) * width);
+  const toTx = Math.abs(x - xOfHz(txHz, mode) * width);
   return toRx <= GRAB_PX && toRx < toTx ? 'rx' : 'tx';
 }
 
@@ -48,9 +50,10 @@ export function isTap(dx: number, dy: number, ms: number): boolean {
   return Math.hypot(dx, dy) <= TAP_PX && ms <= TAP_MS;
 }
 
-/** The frequency under `x`, Hz: in STEP_HZ steps, inside the mode's limits. */
+/** The frequency under `x`, Hz: in the mode's steps, inside its limits. */
 export function dragHz(x: number, width: number, mode: Mode): number {
-  return clampHz(Math.round(hzAtX(x, width, mode) / STEP_HZ) * STEP_HZ, mode);
+  const step = STEP_HZ_OF[mode];
+  return clampHz(Math.round(hzAtX(x, width, mode) / step) * step, mode);
 }
 
 /** Left edge of a label `labelWidth` px wide, centred on `markerX` and kept `margin` px inside the waterfall. */

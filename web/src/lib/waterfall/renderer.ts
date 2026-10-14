@@ -1,10 +1,11 @@
 /**
- * Draws the waterfall: newest time at the top, 0 to 3000 Hz across, one device pixel per row.
+ * Draws the waterfall: newest time at the top, the mode's view across (spectrum.ts: 0 to 3000 Hz
+ * for FT8 and FT4, 1400 to 1600 Hz for WSPR), one device pixel per row.
  * Runs in the waterfall worker on an OffscreenCanvas, or on the main thread where
  * OffscreenCanvas is missing; both use this class.
  *
- * The visible height covers about 45 s (three FT8 slots), so the row period follows the canvas
- * height. A slot boundary paints a hairline into the row that contains it. When audio stops and
+ * The visible height covers the view's span (45 s, three FT8 slots; 240 s, two WSPR slots), so
+ * the row period follows the canvas height. A change between views starts the picture afresh. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
  * In the slots RR73 transmitted in, the receive audio is the radio's own transmission, so those
  * rows show the transmitted audio instead (setTxWave), as a strong signal over an even floor. A
@@ -12,10 +13,10 @@
  */
 
 import { buildLut, type WaterfallPalette } from './colormap';
-import { LevelMapper, type Contrast } from './levels';
-import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
+import { LevelMapper, bandFor, type Contrast } from './levels';
+import { DISPLAY_RATE, DisplaySpectrum, FT_VIEW, binHz, binsOf, viewOf, type View } from './spectrum';
 import { NOISE_POSITION } from './levels';
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, isFt, type Mode } from '../clock/slots';
 import { QuietTracker, quietestHz } from './pick';
 
 /** The parts of a 2D context the renderer uses, shared by canvas and OffscreenCanvas. */
@@ -40,8 +41,8 @@ export interface FrameInfo {
   rowMs: number;
 }
 
-/** Visible span of the waterfall, s. */
-export const VISIBLE_S = 45;
+/** Visible span of the FT8 and FT4 waterfall, s. */
+export const VISIBLE_S = FT_VIEW.visibleS;
 /** A jump of more than this between chunks is a gap in the audio, ms. */
 const GAP_MS = 150;
 
@@ -55,7 +56,7 @@ export interface TxWave {
   samples: Float32Array;
 }
 
-/** Transmissions kept for drawing: the visible 45 s holds at most 4 FT8 or 7 FT4 slots. */
+/** Transmissions kept for drawing: the visible 45 s holds at most 4 FT8 or 7 FT4 slots, 240 s 3 WSPR slots. */
 const TX_WAVES_KEPT = 8;
 /** dB under its peak where a transmitted row reaches the floor colour. */
 const TX_RANGE_DB = 30;
@@ -77,16 +78,19 @@ interface Column {
   peak: boolean;
 }
 
-export function columns(width: number): Column[] {
+export function columns(width: number, view: View = FT_VIEW): Column[] {
   const out: Column[] = [];
+  const bin = binHz(view);
+  const { first, count } = binsOf(view);
+  const span = view.maxHz - view.minHz;
   for (let x = 0; x < width; x++) {
-    const b0 = ((x * MAX_HZ) / width) / BIN_HZ;
-    const b1 = (((x + 1) * MAX_HZ) / width) / BIN_HZ;
+    const b0 = (view.minHz + (x * span) / width) / bin - first;
+    const b1 = (view.minHz + ((x + 1) * span) / width) / bin - first;
     if (b1 - b0 >= 1) {
-      out.push({ i0: Math.floor(b0), i1: Math.min(DISPLAY_BINS - 1, Math.ceil(b1) - 1), frac: 0, peak: true });
+      out.push({ i0: Math.floor(b0), i1: Math.min(count - 1, Math.ceil(b1) - 1), frac: 0, peak: true });
     } else {
       const c = (b0 + b1) / 2;
-      const i0 = Math.min(DISPLAY_BINS - 2, Math.floor(c));
+      const i0 = Math.max(0, Math.min(count - 2, Math.floor(c)));
       out.push({ i0, i1: i0 + 1, frac: c - i0, peak: false });
     }
   }
@@ -102,18 +106,19 @@ export class WaterfallRenderer {
   private readonly palette: WaterfallPalette;
   private cols: Column[] = [];
   private hop = 1000;
-  private readonly spectrum = new DisplaySpectrum();
-  private readonly mapper = new LevelMapper();
-  private readonly db = new Float32Array(DISPLAY_BINS);
-  /** The newest DISPLAY_FFT samples. */
-  private readonly frame = new Float32Array(DISPLAY_FFT);
+  private view: View;
+  private spectrum: DisplaySpectrum;
+  private mapper: LevelMapper;
+  private db: Float32Array<ArrayBuffer>;
+  /** The newest view.fft samples. */
+  private frame: Float32Array<ArrayBuffer>;
   private sinceRow = 0;
   /** UTC of the sample after the last one received, ms. */
   private expectedUtc: number | null = null;
   /** Sample index and UTC the row times are counted from. */
   private anchor: { index: number; utcMs: number } | null = null;
   private nextIndex = -1;
-  /** Samples of real audio in the frame, up to DISPLAY_FFT. */
+  /** Samples of real audio in the frame, up to view.fft. */
   private valid = 0;
   /** Exact zeros in a row at the end of the frame. */
   private zeroRun = 0;
@@ -126,16 +131,44 @@ export class WaterfallRenderer {
   /** Starts of the slots RR73 transmitted in, UTC ms. */
   private txSlots = new Set<number>();
   private txWaves: TxWave[] = [];
-  private readonly txFrame = new Float32Array(DISPLAY_FFT);
-  private readonly txDb = new Float32Array(DISPLAY_BINS);
+  private txFrame: Float32Array<ArrayBuffer>;
+  private txDb: Float32Array<ArrayBuffer>;
 
   constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
     this.ctx = ctx;
     this.palette = palette;
     this.mode = mode;
-    this.quiet = new QuietTracker(mode);
+    this.quiet = new QuietTracker(isFt(mode) ? mode : 'FT8');
     this.lut = buildLut(palette.stops);
+    this.view = viewOf(mode);
+    this.spectrum = new DisplaySpectrum(this.view);
+    this.mapper = new LevelMapper(12, bandFor(this.view));
+    this.db = new Float32Array(this.spectrum.bins);
+    this.frame = new Float32Array(this.view.fft);
+    this.txFrame = new Float32Array(this.view.fft);
+    this.txDb = new Float32Array(this.spectrum.bins);
     this.resize(width, height);
+  }
+
+  /** Bins in a row. */
+  private get bins(): number {
+    return this.spectrum.bins;
+  }
+
+  /** Sets up the spectrum, levels and frames for another view, and starts the picture afresh. */
+  private useView(view: View) {
+    this.view = view;
+    this.spectrum = new DisplaySpectrum(view);
+    const contrast = this.contrast;
+    this.mapper = new LevelMapper(1000 / this.rowMs, bandFor(view));
+    this.mapper.setContrast(contrast);
+    this.db = new Float32Array(this.spectrum.bins);
+    this.frame = new Float32Array(view.fft);
+    this.txFrame = new Float32Array(view.fft);
+    this.txDb = new Float32Array(this.spectrum.bins);
+    this.history = [];
+    this.resize(this.width, this.height);
+    this.clear();
   }
 
   /** Row period, ms. */
@@ -145,13 +178,15 @@ export class WaterfallRenderer {
 
   setMode(mode: Mode) {
     this.mode = mode;
-    this.quiet.setMode(mode);
-    this.redraw();
+    if (isFt(mode)) this.quiet.setMode(mode);
+    const view = viewOf(mode);
+    if (view !== this.view) this.useView(view);
+    else this.redraw();
   }
 
   /** The quietest Tx frequency from the last 2 to 4 slots, nearest `nearHz` among equals, Hz; or null. */
   quietest(nowMs: number, nearHz: number): number | null {
-    return quietestHz(this.quiet.slots(nowMs), this.mode, nearHz);
+    return isFt(this.mode) ? quietestHz(this.quiet.slots(nowMs), this.mode, nearHz) : null;
   }
 
   /** Sets the canvas size in device pixels and redraws the history. */
@@ -160,15 +195,18 @@ export class WaterfallRenderer {
     this.height = Math.max(1, Math.round(height));
     this.ctx.canvas.width = this.width;
     this.ctx.canvas.height = this.height;
-    this.cols = columns(this.width);
-    this.hop = Math.max(64, Math.round((VISIBLE_S * DISPLAY_RATE) / this.height));
+    this.cols = columns(this.width, this.view);
+    this.hop = Math.max(64, Math.round((this.view.visibleS * DISPLAY_RATE) / this.height));
     this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
     this.redraw();
   }
 
+  private contrast: Contrast = 'normal';
+
   /** Sets the contrast of the colormap for the rows drawn from now on. */
   setContrast(c: Contrast) {
+    this.contrast = c;
     this.mapper.setContrast(c);
   }
 
@@ -215,15 +253,16 @@ export class WaterfallRenderer {
   private txLevels(utcMs: number): Uint8Array | null {
     const w = this.txWaves.find((x) => utcMs >= x.startUtcMs && utcMs < x.endUtcMs);
     if (!w) return null;
+    const fft = this.view.fft;
     const centre = Math.round(((utcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
     const end = Math.round(((w.endUtcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
-    for (let i = 0, j = centre - DISPLAY_FFT / 2; i < DISPLAY_FFT; i++, j++) this.txFrame[i] = j >= 0 && j < end && j < w.samples.length ? w.samples[j] : 0;
+    for (let i = 0, j = centre - fft / 2; i < fft; i++, j++) this.txFrame[i] = j >= 0 && j < end && j < w.samples.length ? w.samples[j] : 0;
     this.spectrum.compute(this.txFrame, this.txDb);
     let peak = -Infinity;
     for (const v of this.txDb) if (v > peak) peak = v;
-    const out = new Uint8Array(DISPLAY_BINS);
+    const out = new Uint8Array(this.bins);
     if (!Number.isFinite(peak)) return out.fill(TX_FLOOR);
-    for (let k = 0; k < DISPLAY_BINS; k++) {
+    for (let k = 0; k < this.bins; k++) {
       const p = Math.min(1, Math.max(0, (this.txDb[k] - (peak - TX_RANGE_DB)) / TX_RANGE_DB));
       out[k] = Math.round(TX_FLOOR + p * (TX_TOP - TX_FLOOR));
     }
@@ -272,7 +311,7 @@ export class WaterfallRenderer {
       if (jump > GAP_MS) {
         const count = Math.min(this.height, Math.floor(jump / this.rowMs));
         const from = this.lastRowUtc ?? utcMs - jump;
-        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: from + i * this.rowMs, blank: true });
+        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(this.bins), utcMs: from + i * this.rowMs, blank: true });
       }
       if (this.expectedUtc !== null && Math.abs(jump) > GAP_MS) {
         // The frame holds audio from before the break; a row across it would smear.
@@ -285,31 +324,32 @@ export class WaterfallRenderer {
     }
     this.nextIndex = index + samples.length;
     this.expectedUtc = t0 + (samples.length / DISPLAY_RATE) * 1000;
+    const fft = this.view.fft;
     let at = 0;
     while (at < samples.length) {
-      const n = Math.min(samples.length - at, this.hop - this.sinceRow, DISPLAY_FFT);
+      const n = Math.min(samples.length - at, this.hop - this.sinceRow, fft);
       this.frame.copyWithin(0, n);
-      this.frame.set(samples.subarray(at, at + n), DISPLAY_FFT - n);
+      this.frame.set(samples.subarray(at, at + n), fft - n);
       this.countValid(samples, at, n);
       at += n;
       this.sinceRow += n;
       if (this.sinceRow >= this.hop) {
         this.sinceRow = 0;
         // The row shows the window's centre.
-        const t = t0 + ((at - DISPLAY_FFT / 2) / DISPLAY_RATE) * 1000;
+        const t = t0 + ((at - fft / 2) / DISPLAY_RATE) * 1000;
         // Only full frames of audio get a spectrum: a window that starts in silence splatters
         // across every bin. Until then the row is blank, so the time scale keeps moving.
-        if (this.valid < DISPLAY_FFT) {
-          rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+        if (this.valid < fft) {
+          rows.push({ levels: new Uint8Array(this.bins), utcMs: t, blank: true });
           continue;
         }
         if (this.inTxSlot(t)) {
           const lv = this.txLevels(t);
-          rows.push(lv ? { levels: lv, utcMs: t, blank: false } : { levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+          rows.push(lv ? { levels: lv, utcMs: t, blank: false } : { levels: new Uint8Array(this.bins), utcMs: t, blank: true });
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
-        this.quiet.add(this.db, t);
+        if (isFt(this.mode)) this.quiet.add(this.db, t);
         rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
       }
     }
@@ -328,7 +368,7 @@ export class WaterfallRenderer {
       if (samples[i] === 0) {
         if (++this.zeroRun >= 32) this.valid = 0;
       } else this.zeroRun = 0;
-      if (this.valid < DISPLAY_FFT) this.valid++;
+      if (this.valid < this.view.fft) this.valid++;
     }
   }
 
