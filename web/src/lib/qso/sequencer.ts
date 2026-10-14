@@ -44,7 +44,7 @@ export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25 };
 export const SHIFT_LIMIT_S: Record<Mode, number> = { FT8: 1.5, FT4: 0.5 };
 /** Time the audio layer needs to synthesise and start a transmission after a decision, s. */
 export const LEAD_S = 0.2;
-/** A caller not heard for this many slots leaves the queue; Hunt forgets a CQ as old. */
+/** Hunt forgets a CQ heard more than this many slots ago. */
 const STALE_SLOTS = 4;
 /** Hunt does not call a station that ignored it again for this long, ms. */
 export const IGNORE_MS = 10 * 60_000;
@@ -795,23 +795,20 @@ class Machine {
   }
 
   /**
-   * Adds stations calling us to the queue (CQ and Run). Returns true when the queue changed. A
-   * later pass (`more`) only adds: the final pass of its slot already renewed the queue.
+   * Puts the stations calling us in the slot just decoded in the queue (CQ and Repeat CQ). Only
+   * that slot's callers are candidates, with Repeat CQ on or off: a station heard earlier and not
+   * since has most likely moved on, and a report to it would repeat into silence for up to 4
+   * transmissions. Returns true when the queue changed. A later pass (`more`) only adds: the
+   * final pass of its slot already renewed the queue. A slot of our own parity renews nothing.
    */
   addCallers(slotStartMs: number, decodes: Decode[], nowMs: number, more = false): boolean {
     const st = this.st;
     const me = this.cfg.myCall;
     let changed = false;
-    if (more) {
-      // Nothing to renew.
-    } else if (!this.cfg.run) {
-      // Without Run, only the stations calling in the latest slot are candidates.
+    const ours = st.parity !== null && parityOf(slotStartMs, this.cfg.mode) === st.parity;
+    if (!more && !ours) {
       if (st.queue.length) changed = true;
       st.queue = [];
-    } else {
-      const before = st.queue.length;
-      st.queue = st.queue.filter((c) => slotStartMs - c.heardMs <= STALE_SLOTS * this.len);
-      changed ||= st.queue.length !== before;
     }
     for (const d of decodes) {
       const ex = parseExchange(d.text);
