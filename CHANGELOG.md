@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.14.3 · 2026-10-14
 
 - With Repeat CQ on, a QSO is followed by a station that called in the slot just ended, or by CQ. A caller heard earlier and not since is no longer answered: on the air they have usually moved on, and the report to them repeated into silence for up to 2 min.
 
