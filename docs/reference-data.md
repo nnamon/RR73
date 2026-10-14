@@ -19,15 +19,15 @@ Unverified: the copyright line on the country file reads "Copyright © 1994-" wi
 
 ## What the app gets
 
-Measured on 13 October 2026. Gzipped sizes are `gzip -9`, close to what GitHub Pages sends.
+Measured on the CI build of 14 October 2026 (run 38488353741, sources fetched at 00:08 UTC), from Big CTY of 15 September 2026, the LoTW list of 12 October and the SOTA list of 13 October. Gzipped sizes are `gzip -9`, close to what GitHub Pages sends.
 
 | File | Records | Size | Gzipped | Loads |
 | --- | --- | --- | --- | --- |
 | `cty.json` | 346 entities, 29,321 aliases (23,011 exact callsigns) | 341 kB | 111 kB | With the app (precached) |
 | `lotw.<hash>.json` | 236,500 callsigns | 1.73 MB | 957 kB | When "LoTW users" is on |
-| `pota/index.<hash>.json` and 238 shards | 96,536 parks | 6.49 MB | 2.0 MB in all; index 17 kB; median shard 0.6 kB; largest FR 388 kB, US 259 kB, AU 193 kB | When "Activations" is on, shard by shard |
-| `sota/index.<hash>.json` and one shard per association | 182,280 summits in 227 associations (from a 25.2 MB list) | Reported by CI | Reported by CI | When "Activations" is on, shard by shard |
-| `manifest.json` | Sources, dates, counts, sizes, terms | 2 kB | | With the app (precached) |
+| `pota/index.<hash>.json` and 238 shards | 96,585 parks (from a 9.5 MB list) | 6.50 MB | 2.0 MB in all; index 16 kB; median shard 0.6 kB; largest FR 388 kB, US 260 kB, AU 193 kB | When "Activations" is on, shard by shard |
+| `sota/index.<hash>.json` and 227 shards, one per association | 182,280 summits (from a 25.2 MB list) | 11.0 MB | 3.2 MB in all; index 13 kB; median shard 4.0 kB; largest XE2 159 kB, KLA 146 kB, LA 127 kB | When "Activations" is on, shard by shard |
+| `manifest.json` | Sources, dates, counts, sizes, terms | 3 kB | | With the app (precached) |
 
 Fields kept:
 
@@ -42,7 +42,7 @@ The country file is core: the service worker precaches it with the app, and no s
 
 ### Country on CQ rows
 
-Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s where `requestIdleCallback` is missing, as in Safari), the country file loads and its index is built. CQ rows then name the calling station's DXCC entity, as the country file writes it, before the numbers: "Australia" on the row for "CQ VK2LAW QF56". A WAE entity shows its DXCC entity: Sicily shows Italy. Rows drawn before the file loads show no country and fill in later; the row keeps its 32 pt height. Other rows, our own transmissions and calls with no entity (/MM, /AM, unknown prefixes, hashed calls not heard in full) show none.
+Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s where `requestIdleCallback` is missing), the country file loads and its index is built. CQ rows then name the calling station's DXCC entity, as the country file writes it, before the numbers: "Australia" on the row for "CQ VK2LAW QF56". A WAE entity shows its DXCC entity: Sicily shows Italy. Rows drawn before the file loads show no country and fill in later; the row keeps its 32 pt height. Other rows, our own transmissions and calls with no entity (/MM, /AM, unknown prefixes, hashed calls not heard in full) show none.
 
 The message keeps its whole width. The country takes the space left before the numbers, ends in an ellipsis when short of room and drops out under 36 px (`DecodeList.svelte`).
 
