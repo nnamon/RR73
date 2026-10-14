@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.14.1 · 2026-10-14
 
 - The Report macro ends the transmission after its text, as every RTTY macro but Over does. It kept Tx on, sending the idle signal until the 1 min idle stop. A line typed while it goes out follows in the same over. A Report macro you have not edited is changed on update.
 - A macro that needs your name, QTH or grid sends nothing while it is empty, and the status line says which to set in Settings › Station. Report went out as "NAME QTH" without them.
