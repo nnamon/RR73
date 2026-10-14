@@ -153,9 +153,10 @@ function emitTxWave(w: TxWave) {
  * Draws a transmission on the waterfall from its start. The audio is made again at 12 kHz for the
  * display: the same tones the radio sends, at the waterfall's rate.
  */
-export async function showTx(startUtcMs: number, text: string, mode: Mode, f0Hz: number): Promise<void> {
+export async function showTx(startUtcMs: number, text: string, mode: Mode, f0Hz: number, skippedS = 0): Promise<void> {
   try {
-    const samples = await codec().synthesize(text, mode, f0Hz, DISPLAY_RATE);
+    // A transmission that started part way through shows from there.
+    const samples = (await codec().synthesize(text, mode, f0Hz, DISPLAY_RATE)).subarray(Math.round(skippedS * DISPLAY_RATE));
     emitTxWave({ startUtcMs, endUtcMs: startUtcMs + (samples.length / DISPLAY_RATE) * 1000, samples });
   } catch {
     // Without the audio the slot stays blank.

@@ -28,8 +28,20 @@ export const HUNT_ORDERS: readonly HuntOrder[] = ['unworked', 'strongest', 'newe
 /** Answering: we call them (by hand or from Hunt). CQ: they call us. */
 export type Phase = 'idle' | 'answering' | 'cq';
 
-/** How late a transmission may start after slot + 0.5 s, s. */
-export const LATE_S: Record<Mode, number> = { FT8: 1.5, FT4: 1.0 };
+/**
+ * How late a transmission may start after slot + 0.5 s, s. Past the shift limit it leaves out its
+ * first part and ends on time. At the limit WSJT-X's jt9 decodes every one at -16 dB (FT8) and
+ * -12 dB (FT4), and loses 2.6 dB (FT8) and 2 dB (FT4) at the weak end (docs/design/sequencer.md).
+ */
+export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25 };
+/**
+ * Up to this late, s, a transmission goes out whole (tx/scheduler.ts), and a newer message may
+ * replace ours on air in its slot. jt9 finds none sent whole from 2.5 s late in FT8 and 1.0 s in
+ * FT4; the limits keep 1 s and 0.5 s clear of that. A replacement sent whole after part of our CQ
+ * decodes as well as one sent alone; cut after it, it fails from 3 s (FT8) and 1 s (FT4) whatever
+ * the level (docs/design/sequencer.md).
+ */
+export const SHIFT_LIMIT_S: Record<Mode, number> = { FT8: 1.5, FT4: 0.5 };
 /** Time the audio layer needs to synthesise and start a transmission after a decision, s. */
 export const LEAD_S = 0.2;
 /** A caller not heard for this many slots leaves the queue; Hunt forgets a CQ as old. */
@@ -445,8 +457,17 @@ class Machine {
       return;
     }
     let slot = ourSlot(st, nowMs);
-    // The slot a transmission is on air in keeps it: the new one goes a cycle later.
-    if (st.onAir?.slotStartMs === slot.slotStartMs) slot = { slotStartMs: slot.slotStartMs + 2 * this.len, offsetS: 0.5, tooLateFor: slot.slotStartMs };
+    const air = st.onAir;
+    if (air?.slotStartMs === slot.slotStartMs) {
+      // A newer message replaces ours on air in the slot early in it: a call to a CQ heard while
+      // our CQ plays goes out now. Later, or when ours ends a QSO (RR73, RRR, 73) or is the same
+      // message, ours plays out and the new one goes a cycle later.
+      const early = slot.offsetS - 0.5 <= SHIFT_LIMIT_S[this.cfg.mode] + 1e-9;
+      if (early && air.text !== text && air.tx !== 4 && air.tx !== 5) {
+        this.fx.push({ type: 'cancelTx', stopPlaying: true });
+        st.onAir = null;
+      } else slot = { slotStartMs: slot.slotStartMs + 2 * this.len, offsetS: 0.5, tooLateFor: slot.slotStartMs };
+    }
     st.next = { tx, text, ...slot, scheduled: false, freqHz: this.txFreq(tx) };
     this.flush();
   }

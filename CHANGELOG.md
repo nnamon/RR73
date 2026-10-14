@@ -12,6 +12,9 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - A QSO under way when the watchdog runs out now finishes and logs, then Tx goes off. The watchdog countdown reads Last QSO meanwhile. A call nobody has answered still stops at once.
 - Slots are named Even and Odd everywhere, as on the decode list's slot bars. ••• says Transmit in 1st (Even) or 2nd (Odd), and the status line "Tx6 · CQ 9V1NE OJ11 · Even · :30".
 - Hunt calls, in Settings › FT8 and FT4, sets how many times Hunt calls a station that does not answer before moving on to the next CQ: 4 by default, 1 for working through CQs fastest. A station that answers gets the usual repeats.
+- Calling a station in the first 2 s of a slot your CQ is on air in (1 s in FT4) replaces the CQ with the call. It waited 30 s before. Later in the slot the CQ plays out and the call goes a cycle later, because the part of the CQ already sent would weaken the call. RR73, RRR and 73 always play out.
+- A reply can start up to 4.5 s into an FT8 slot and 1.75 s into an FT4 slot, where it waited a full cycle after 2 s and 1.5 s. Later than 1.5 s (FT8) or 0.5 s (FT4) past the usual start, it leaves out its first part and ends on time: WSJT-X still decodes it at −16 dB in FT8 and −12 dB in FT4.
+- An FT4 transmission that started about 1 s late, the old limit, went out where WSJT-X could not decode it at any level. It now leaves out its first part.
 
 ## 0.12.4 · 2026-10-14
 

@@ -489,7 +489,8 @@ describe('tail-ending', () => {
     for (const [delay, slot, offset, tooLate] of [
       [0.1, 7, 0.5, null],
       [1.0, 7, 1.2, null],
-      [1.9, 9, 0.5, 7],
+      [1.9, 7, 2.1, null],
+      [4.4, 9, 0.5, 7],
     ] as const) {
       const s = new Sim();
       s.call(2, 'CQ VK2LAW QF56');
@@ -662,27 +663,87 @@ describe('Hunt', () => {
   });
 });
 
+describe('our transmission on air', () => {
+  /** Calling CQ in `cqParity`, with the CQ of slot `i` on air since 0.5 s. */
+  function cqOnAir(i: number, over: ConstructorParameters<typeof Sim>[0] = {}) {
+    const s = new Sim({ cqParity: i % 2 === 0 ? 'even' : 'odd', ...over });
+    s.send({ type: 'callCq', nowMs: s.at(i - 2, 1) });
+    s.play(i - 2);
+    s.hear(i - 1, []);
+    s.send({ type: 'txStarted', slotStartMs: s.at(i), text: 'CQ 9V1NE OJ11', nowMs: s.at(i, 0.5) });
+    s.pending = null;
+    return s;
+  }
+
+  it('gives way to a station called by hand: the call goes out in the same slot', () => {
+    for (const i of [2, 3]) {
+      const s = cqOnAir(i);
+      const fx = s.call(i - 1, 'CQ JA1KXM PM95', 0.6);
+      expect(fx.filter((f) => f.type === 'cancelTx').at(-1), String(i)).toEqual({ type: 'cancelTx', stopPlaying: true });
+      expect(fx.at(-1), String(i)).toMatchObject({ type: 'scheduleTx', tx: 1, text: 'JA1KXM 9V1NE OJ11', slotStartMs: s.at(i), startOffsetS: 0.8 });
+      expect(s.st.onAir).toBeNull();
+    }
+  });
+
+  it('plays out after 1.5 s in FT8 and 0.5 s in FT4, where the switch would spoil the new message', () => {
+    const s = cqOnAir(2);
+    const fx = s.call(1, 'CQ JA1KXM PM95', 1.81);
+    expect(fx.filter((f) => f.type === 'cancelTx' && f.stopPlaying)).toEqual([]);
+    expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(4), tooLateFor: s.at(2) });
+    expect(s.st.onAir).toMatchObject({ text: 'CQ 9V1NE OJ11' });
+    const t = cqOnAir(2);
+    t.call(1, 'CQ JA1KXM PM95', 1.8);
+    expect(t.st.next).toMatchObject({ slotStartMs: t.at(2), offsetS: 2 });
+
+    for (const [after, slot] of [
+      [0.8, 2],
+      [0.81, 4],
+    ] as const) {
+      const f = cqOnAir(2, { mode: 'FT4' });
+      f.call(1, 'CQ JA1KXM PM95', after);
+      expect(f.st.next, String(after)).toMatchObject({ slotStartMs: f.at(slot) });
+    }
+  });
+
+  it('plays out RR73, RRR, 73 and the same message, and the new one goes a cycle later', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM R-09'] });
+    // RR73 on air in slot 4; the operator calls another station heard in slot 3.
+    s.send({ type: 'txStarted', slotStartMs: s.at(4), text: 'JA1KXM 9V1NE RR73', nowMs: s.at(4, 0.5) });
+    const fx = s.call(3, 'CQ K1ABC FN42', 0.6);
+    expect(fx.filter((f) => f.type === 'cancelTx' && f.stopPlaying)).toEqual([]);
+    expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(6), tooLateFor: s.at(4) });
+
+    const t = cqOnAir(2);
+    t.send({ type: 'callCq', nowMs: t.at(2, 0.8) });
+    expect(t.st.next).toMatchObject({ tx: 6, slotStartMs: t.at(4) });
+    expect(t.st.onAir).toMatchObject({ text: 'CQ 9V1NE OJ11' });
+  });
+});
+
 describe('late start', () => {
-  it('starts up to 1.5 s late in FT8 and moves to the next slot of our parity after that', () => {
+  it('starts up to 4 s late in FT8 and moves to the next slot of our parity after that', () => {
     const s = new Sim();
     for (const [after, slot, offset, tooLate] of [
       [0.1, 2, 0.5, null],
       [0.3, 2, 0.5, null],
       [1.0, 2, 1.2, null],
       [1.8, 2, 2.0, null],
-      [1.81, 4, 0.5, 2],
+      [4.3, 2, 4.5, null],
+      [4.31, 4, 0.5, 2],
     ] as const) {
       s.call(1, 'CQ JA1KXM PM95', after);
       expect(s.st.next, String(after)).toMatchObject({ slotStartMs: s.at(slot), offsetS: offset, tooLateFor: tooLate === null ? null : s.at(tooLate) });
     }
-    expect(LATE_S.FT8).toBe(1.5);
+    expect(LATE_S.FT8).toBe(4);
   });
 
-  it('allows 1.0 s in FT4', () => {
+  it('allows 1.25 s in FT4', () => {
     const s = new Sim({ mode: 'FT4' });
-    s.call(1, 'CQ JA1KXM PM95', 1.3);
-    expect(s.st.next).toMatchObject({ slotStartMs: s.at(2), offsetS: 1.5 });
-    s.call(1, 'CQ JA1KXM PM95', 1.31);
+    s.call(1, 'CQ JA1KXM PM95', 1.55);
+    expect(s.st.next).toMatchObject({ slotStartMs: s.at(2), offsetS: 1.75 });
+    s.call(1, 'CQ JA1KXM PM95', 1.56);
     expect(s.st.next).toMatchObject({ slotStartMs: s.at(4), offsetS: 0.5, tooLateFor: s.at(2) });
   });
 
@@ -711,24 +772,27 @@ describe('later decoding passes', () => {
     expect(s.logged()).toHaveLength(1);
   });
 
-  it('plan a cycle later when the reply comes too late for the slot, and never stop a transmission on air', () => {
-    // 1.9 s into slot 4 the start would be 2.1 s, past the 1.5 s late start.
+  it('plan a cycle later when the reply comes too late for the slot', () => {
+    // 4.4 s into slot 4 the start would be 4.6 s, past the 4 s late start.
     const a = new Sim();
     a.call(1, 'CQ JA1KXM PM95');
     a.run(2, 3);
-    a.hear(3, ['9V1NE JA1KXM -09'], 1.9, 'late');
+    a.hear(3, ['9V1NE JA1KXM -09'], 4.4, 'late');
     expect(a.st.next).toMatchObject({ tx: 3, slotStartMs: a.at(6), offsetS: 0.5, tooLateFor: a.at(4) });
+  });
 
-    // Tx1 went on air in slot 4 before the later pass came: it plays on, and Tx3 goes in slot 6.
+  it('replace a repeat on air with the answer they found', () => {
     const b = new Sim();
     b.call(1, 'CQ JA1KXM PM95');
     b.run(2, 3);
     b.send({ type: 'txStarted', slotStartMs: b.at(4), text: 'JA1KXM 9V1NE OJ11', nowMs: b.at(4, 0.5) });
     const fx = b.hear(3, ['9V1NE JA1KXM -09'], 0.9, 'late');
-    expect(fx.filter((f) => f.type === 'cancelTx')).toEqual([]);
-    expect(fx).toContainEqual(expect.objectContaining({ type: 'scheduleTx', tx: 3, slotStartMs: b.at(6), startOffsetS: 0.5 }));
-    expect(b.st.onAir).toMatchObject({ tx: 1, slotStartMs: b.at(4) });
-    expect(b.st.next).toMatchObject({ tx: 3, slotStartMs: b.at(6), tooLateFor: b.at(4) });
+    expect(fx.filter((f) => f.type === 'cancelTx')).toEqual([{ type: 'cancelTx', stopPlaying: true }]);
+    expect(fx).toContainEqual(expect.objectContaining({ type: 'scheduleTx', tx: 3, slotStartMs: b.at(4), startOffsetS: 1.1 }));
+    expect(b.st.onAir).toBeNull();
+    // The Tx1 cut short is not a call sent: the audio layer's end report changes nothing.
+    b.send({ type: 'txEnded', slotStartMs: b.at(4), text: 'JA1KXM 9V1NE OJ11', complete: false, nowMs: b.at(4, 1) });
+    expect(b.st.next).toMatchObject({ tx: 3, slotStartMs: b.at(4), scheduled: true });
   });
 
   it('add a caller only they found to the queue, answered at once when nobody else called', () => {

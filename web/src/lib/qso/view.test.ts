@@ -10,6 +10,8 @@ describe('bottom bar view', () => {
     s.call(1, 'CQ JA1KXM PM95');
     expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :30');
     s.call(1, 'CQ JA1KXM PM95', 2.5);
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :32');
+    s.call(1, 'CQ JA1KXM PM95', 4.5);
     expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :00');
   });
 
