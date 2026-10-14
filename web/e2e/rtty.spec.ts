@@ -170,7 +170,8 @@ for (const theme of ['light', 'dark'] as const) {
     await page.mouse.down();
     await page.mouse.move(xOf(1800), wf.y + wf.height / 3, { steps: 8 });
     await page.mouse.up();
-    expect(Math.abs(Number(await page.getByRole('slider', { name: 'Mark tone, Hz' }).inputValue()) - 1885)).toBeLessThanOrEqual(3);
+    // Within a pixel of the finger: 7.6 Hz at 393 pt.
+    expect(Math.abs(Number(await page.getByRole('slider', { name: 'Mark tone, Hz' }).inputValue()) - 1885)).toBeLessThanOrEqual(8);
     await page.evaluate(() => window.__rr73!.rttyTune(1612));
 
     // JA1XYZ answers; a tap on his callsign fills the strip from his text.
