@@ -3,6 +3,7 @@
 import type { Page } from '@playwright/test';
 import type { Features } from '../src/lib/state/settings.svelte';
 import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
+import { RELAY_SET_UP, routeRelay } from './relay-stand-in';
 import { FIXED_TIME } from './time';
 
 export { FIXED_TIME };
@@ -18,6 +19,8 @@ export interface Screen {
   features?: Partial<Features>;
   /** Practice band on (Settings › Practice band), stored before the screen opens. */
   practice?: boolean;
+  /** A relay added with Web SDR on (relay-stand-in.ts), stored before the screen opens. */
+  relay?: boolean;
 }
 
 const ACTIVATIONS = { activations: true };
@@ -47,20 +50,27 @@ export const SCREENS: readonly Screen[] = [
   { name: 'practice-on', path: '#/settings/practice', heading: 'Practice band', practice: true },
   { name: 'operate-practice', path: '#/operate', heading: 'Operate', practice: true },
   { name: 'log-practice', path: '#/log', heading: 'Practice log', practice: true },
+  { name: 'relay', path: '#/settings/relay', heading: 'Relay' },
+  { name: 'relay-set-up', path: '#/settings/relay', heading: 'Relay', relay: true },
+  { name: 'web-sdr', path: '#/settings/sdr', heading: 'Web SDR' },
+  { name: 'web-sdr-set-up', path: '#/settings/sdr', heading: 'Web SDR', relay: true },
+  { name: 'operate-web-sdr', path: '#/operate', heading: 'Operate', relay: true },
 ];
 
 /**
  * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false) {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
-  if (withSeed || features || practice) {
+  if (relay) await routeRelay(page);
+  if (withSeed || features || practice || relay) {
     await page.goto('./');
     const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
     const all = features ? withFeatures(data, features) : data;
-    await seed(page, practice ? { ...all, kv: [...all.kv, { key: 'practice', value: { on: true } }] } : all);
+    const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: RELAY_SET_UP }] : [])];
+    await seed(page, { ...all, kv });
   }
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });

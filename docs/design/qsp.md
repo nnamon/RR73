@@ -4,7 +4,7 @@ QSP, after the Q-code for relaying, is a small server RR73 can use for the few t
 
 ## Principles
 
-- No relay is built into the app. Settings › Relay is None by default. A list offers the owner's Singapore instance, and a European one for friends if it runs; neither is ever chosen for anyone. A field takes any other address.
+- No relay is built into the app. Settings › Relay is None by default. The operator adds each relay by its API base, and the list keeps the relays added, each with its own access key, to choose from. Remove relay takes one off, with Undo.
 - QSP carries no credentials for other services. It does only what needs no account. Logbooks are reached from the phone directly (Wavelog, later Cloudlog) or through Wavelog, which uploads to QRZ Logbook, eQSL and Club Log.
 - Nothing goes out one callsign at a time. Every link batches, and each service gets the fewest requests its own published rules allow.
 - No self-spotting.
@@ -93,7 +93,7 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 - At most one datagram every 5 min, unless one fills up. The timer counts from start-up and never from the clock, with a random part, so instances do not send in step.
 - Each callsign at most once per 5 min, and once per hour while nothing about it changes. A change of band counts as a change.
 - The record format descriptors go in the first 3 datagrams and then once an hour. The receiver information record goes in every datagram.
-- The header's sequence number counts reports, not datagrams. Its observation domain is a random number kept for the session.
+- The header's sequence number is the count of reports sent so far. Its observation domain is a random number kept for the session.
 - informationSource is 1, automatically extracted. While developing, the 0x80 test bit is set (`test = true` in the settings).
 - Sender records use the page's fourth descriptor: senderCallsign, frequency, sNR, iMD, mode, informationSource, senderLocator, flowStartSeconds. RR73 has no IMD figure and sends 0; the page offers no descriptor with sNR and without iMD, and asks software that fits none to ask for one. A locator not received is an empty string.
 - Receiver records: receiverCallsign, receiverLocator, decodingSoftware (`RR73 0.x.y`) and antennaInformation when the operator gives one.

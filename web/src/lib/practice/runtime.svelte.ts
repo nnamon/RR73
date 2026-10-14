@@ -19,6 +19,7 @@ import { practice, updatePractice } from '../state/practice.svelte';
 import { endQso, qso, showNotice } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
 import { codec, setInputSource, startAudio } from '../state/station.svelte';
+import { webSdrInput } from '../state/relay.svelte';
 import { STATUS } from '../qso/status';
 import { scenarioOf, type ScenarioId } from './scenarios';
 import { PracticeBand, type OperatorTx } from './sim';
@@ -96,7 +97,8 @@ const standIn = wavelogStandIn(myStation);
 
 async function apply(on: boolean): Promise<void> {
   setFetch(on ? standIn.fetch : null);
-  setInputSource(on ? input : null);
+  // Off, the web SDR comes back when it was on (lib/state/relay.svelte.ts).
+  setInputSource(on ? input : webSdrInput());
   await useLog(on);
   if (on && log.wavelog.url !== STAND_IN_URL) {
     const s = myStation();

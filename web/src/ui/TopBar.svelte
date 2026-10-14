@@ -30,6 +30,7 @@
     live,
     spots,
     practice = false,
+    sdr = false,
     onband,
     regular = false,
     tab = 'operate',
@@ -55,6 +56,8 @@
     spots: boolean;
     /** The practice band runs in place of the radio. */
     practice?: boolean;
+    /** A web SDR, through a relay, receives in place of the radio. */
+    sdr?: boolean;
     onband: () => void;
     /** Regular width: tabs in the middle, and Halt on the other screens while Tx is on. */
     regular?: boolean;
@@ -97,6 +100,7 @@
     <div class="side">
       {@render bandButton()}
       {#if practice}<span class="practice">Practice</span>{/if}
+      {#if sdr}<span class="sdr">Web SDR</span>{/if}
     </div>
     <nav class="tabs" aria-label="Screens">
       {#each tabs as t (t.id)}
@@ -116,6 +120,7 @@
   <header class="top" class:onair>
     {@render bandButton()}
     {#if practice}<span class="practice">Practice</span>{/if}
+    {#if sdr}<span class="sdr">Web SDR</span>{/if}
     <span class="grow"></span>
     {@render clock()}
     <nav class="icons" aria-label="Screens">
@@ -202,7 +207,8 @@
   }
 
   /* A status badge: the warning tint, so practice never passes for the air. */
-  .practice {
+  .practice,
+  .sdr {
     flex: none;
     height: 21px;
     margin-left: var(--rr-space-1);
@@ -214,6 +220,12 @@
     font-weight: var(--rr-weight-bold);
     line-height: 21px;
     white-space: nowrap;
+  }
+
+  /* The web SDR in the accent tint: its signals are on the air. */
+  .sdr {
+    background: var(--rr-sel-tint);
+    color: var(--rr-accent);
   }
 
   .clk {

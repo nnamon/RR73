@@ -8,6 +8,7 @@ import { loadPractice, practice } from './lib/state/practice.svelte';
 import { initPractice } from './lib/practice/runtime.svelte';
 import { installNetworkGuard } from './lib/practice/guard';
 import { linkSpotFeed } from './lib/state/spots.svelte';
+import { initRelay, loadRelay } from './lib/state/relay.svelte';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
@@ -35,10 +36,12 @@ window.addEventListener(
 // of RR73 holds the database, the app opens and says so. The log loads after the first render.
 // With practice on, the practice log loads in place of the log.
 const practiceLoaded = loadPractice();
-void Promise.race([Promise.all([loadSettings(), practiceLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
+const relayLoaded = loadRelay();
+void Promise.race([Promise.all([loadSettings(), practiceLoaded, relayLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
   mount(App, { target: document.getElementById('app')! });
-  void practiceLoaded
+  void Promise.all([practiceLoaded, relayLoaded])
     .then(() => initPractice())
+    .then(() => initRelay())
     .catch(() => undefined)
     .finally(() => void loadLog());
 });

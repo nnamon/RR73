@@ -133,8 +133,9 @@ export default defineConfig({
     { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
-    // The practice band: synthesised in the page, decoded in real time, no microphone. It loads
-    // the machine as the transmit tests do, so it runs after them, with 2 retries.
-    { name: 'practice', testMatch: /practice\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
+    // The practice band and the web SDR: audio made or streamed in the page, decoded in real time,
+    // no microphone. They load the machine as the transmit tests do, so they run after them, with
+    // 2 retries.
+    { name: 'practice', testMatch: /(practice|web-sdr)\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
   ],
 });

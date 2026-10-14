@@ -299,6 +299,31 @@ mod tests {
         assert!(err / sig < 0.01, "error {:.4} of the signal's power", err / sig);
     }
 
+    /// The frames in fixtures/qsp, which the app's decoder reads too (web/src/lib/relay/frame.test.ts):
+    /// 512 samples of a 1000 Hz tone at 8000, one frame per encoding. QSP_WRITE_FIXTURES=1 writes them.
+    #[test]
+    fn writes_the_frames_in_fixtures_qsp() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/qsp");
+        let s = tone(512, 1000.0, 8000.0);
+        let head = FrameHead {
+            seq: 3,
+            utc_us: 1_792_000_000_123_456,
+            flags: FLAG_GAP,
+        };
+        for (name, enc) in [
+            ("frame-pcm16.bin", Encoding::Pcm16),
+            ("frame-adpcm.bin", Encoding::ImaAdpcm),
+        ] {
+            let bytes = encode(head, enc, &s, &mut AdpcmState::default());
+            let path = dir.join(name);
+            if std::env::var_os("QSP_WRITE_FIXTURES").is_some() {
+                std::fs::create_dir_all(&dir).expect("fixture directory");
+                std::fs::write(&path, &bytes).expect("fixture written");
+            }
+            assert_eq!(std::fs::read(&path).expect("fixture present"), bytes, "{name}");
+        }
+    }
+
     #[test]
     fn short_or_foreign_frames_are_refused() {
         assert!(decode(&[1, 0, 0]).is_none());
