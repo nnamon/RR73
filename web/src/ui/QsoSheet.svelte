@@ -86,6 +86,8 @@
   const bands = $derived([...new Set([...BAND_IDS, ...(original && !isBand(original.band) && original.band ? [original.band] : [])])]);
   const modes = $derived([...new Set(['FT8', 'FT4', 'RTTY', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
   const keyboardRows = $derived(mode === 'RTTY' || !!(name || qth || stx || srx));
+  // Contest numbers: with the Contest set in use, or when the QSO has them.
+  const numberRows = $derived(!!(stx || srx) || (mode === 'RTTY' && settings.keyboard.set === 'contest'));
   const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : running);
   const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : draft ? 'Log QSO' : 'Add QSO');
   const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
@@ -297,6 +299,8 @@
           <span class="row-title">QTH</span>
           <input class="row-field mono up" bind:value={qth} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="30" placeholder="Optional" />
         </label>
+      {/if}
+      {#if numberRows}
         <label class="row">
           <span class="row-title">Number sent</span>
           <input class="row-field mono" bind:value={stx} inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="6" placeholder="Optional" />

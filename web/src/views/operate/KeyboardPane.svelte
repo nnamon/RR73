@@ -85,7 +85,8 @@
     if (reading) items.push(fillItem(fieldOfReading(reading.text), reading.text, true));
     if (how === 'hold') items.push({ id: 'call', label: 'Call', onclick: () => s.setCall(w) });
     const fields: FillField[] = contest ? ['srx', 'rstRcvd', 'name', 'qth', 'notes'] : ['name', 'qth', 'rstRcvd', 'srx', 'notes'];
-    for (const f of fields) items.push(fillItem(f, w));
+    // The reading's field is offered once, with the reading.
+    for (const f of fields) if (!reading || f !== fieldOfReading(reading.text)) items.push(fillItem(f, w));
     const header = reading ? `${w} reads ${reading.text} in ${reading.to}` : null;
     menu = { word: w, anchor: box, header, items };
   }

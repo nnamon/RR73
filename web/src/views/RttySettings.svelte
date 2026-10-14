@@ -402,4 +402,8 @@
     margin-left: auto;
     text-align: right;
   }
+
+  .link {
+    color: var(--rr-label);
+  }
 </style>

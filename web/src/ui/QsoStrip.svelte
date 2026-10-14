@@ -47,10 +47,9 @@
 </script>
 
 <div class="qs" role="group" aria-label="QSO">
-  <label class="f call">
+  <label class="f call" class:filled={!!f.call}>
     {#if f.call}<small aria-hidden="true">Call</small>{/if}
     <input
-      class="mono"
       value={f.call}
       placeholder="Call"
       aria-label="Callsign"
@@ -61,31 +60,29 @@
       data-testid="strip-call"
     />
   </label>
-  <label class="f sent">
+  <label class="f sent filled" class:wide-sent={contest}>
     <small aria-hidden="true">Sent</small>
-    <span class="pair">
-      <input class="mono rst" value={f.rstSent} aria-label="RST sent" inputmode="numeric" {...keyOff} maxlength="3" oninput={(e) => onedit('rstSent', e.currentTarget.value)} />
-      {#if contest}<span class="mono nr">{serial}</span>{/if}
-    </span>
+    <input value={f.rstSent} aria-label="RST sent" inputmode="numeric" {...keyOff} maxlength="3" oninput={(e) => onedit('rstSent', e.currentTarget.value)} />
+    {#if contest}<span class="nr" aria-label="Serial sent {serial}">{serial}</span>{/if}
   </label>
   {#if contest}
-    <label class="f rcvd wide">
+    <label class="f rcvd wide" class:filled={!!received}>
       {#if received}<small aria-hidden="true">Rcvd</small>{/if}
-      <input class="mono" value={received} placeholder="Rcvd" aria-label="Received" {...keyOff} maxlength="9" onchange={(e) => editReceived(e.currentTarget.value)} data-testid="strip-rcvd" />
+      <input value={received} placeholder="Rcvd" aria-label="Received" {...keyOff} maxlength="9" onchange={(e) => editReceived(e.currentTarget.value)} data-testid="strip-rcvd" />
     </label>
     {#if worked}<span class="wk">Worked</span>{/if}
   {:else}
-    <label class="f rcvd">
+    <label class="f rcvd" class:filled={!!f.rstRcvd}>
       {#if f.rstRcvd}<small aria-hidden="true">Rcvd</small>{/if}
-      <input class="mono rst" value={f.rstRcvd} placeholder="Rcvd" aria-label="RST received" inputmode="numeric" {...keyOff} maxlength="3" oninput={(e) => onedit('rstRcvd', e.currentTarget.value)} data-testid="strip-rcvd" />
+      <input value={f.rstRcvd} placeholder="Rcvd" aria-label="RST received" inputmode="numeric" {...keyOff} maxlength="3" oninput={(e) => onedit('rstRcvd', e.currentTarget.value)} data-testid="strip-rcvd" />
     </label>
-    <label class="f name">
+    <label class="f name" class:filled={!!f.name}>
       {#if f.name}<small aria-hidden="true">Name</small>{/if}
-      <input class="mono" value={f.name} placeholder="Name" aria-label="Name" {...keyOff} maxlength="20" oninput={(e) => onedit('name', e.currentTarget.value)} data-testid="strip-name" />
+      <input value={f.name} placeholder="Name" aria-label="Name" {...keyOff} maxlength="20" oninput={(e) => onedit('name', e.currentTarget.value)} data-testid="strip-name" />
     </label>
-    <label class="f qth">
+    <label class="f qth" class:filled={!!f.qth}>
       {#if f.qth}<small aria-hidden="true">QTH</small>{/if}
-      <input class="mono" value={f.qth} placeholder="QTH" aria-label="QTH" {...keyOff} maxlength="30" oninput={(e) => onedit('qth', e.currentTarget.value)} data-testid="strip-qth" />
+      <input value={f.qth} placeholder="QTH" aria-label="QTH" {...keyOff} maxlength="30" oninput={(e) => onedit('qth', e.currentTarget.value)} data-testid="strip-qth" />
     </label>
     {#if worked}<span class="wk">Worked</span>{/if}
   {/if}
@@ -101,16 +98,16 @@
     overflow: hidden;
     border-radius: var(--rr-radius-l);
     background: var(--rr-fill3);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-sub);
   }
 
+  /* Each field is a 44 pt target: the input fills its cell, the caption sits over its top. */
   .f {
     position: relative;
-    display: flex;
     flex: none;
-    flex-direction: column;
-    justify-content: center;
+    width: calc(3ch + 2 * var(--rr-space-1-5));
     min-width: var(--rr-tap);
-    padding: 0 var(--rr-space-2);
     cursor: text;
   }
 
@@ -119,40 +116,50 @@
   }
 
   .f.call {
-    width: 9.2ch;
+    width: calc(7ch + 2 * var(--rr-space-1-5));
   }
 
-  .f.rcvd {
-    min-width: 5.4ch;
+  .f.sent.wide-sent {
+    width: calc(7ch + 2 * var(--rr-space-1-5));
   }
 
   .f.name {
-    width: 7.2ch;
+    width: calc(6ch + 2 * var(--rr-space-1-5));
   }
 
   .f.qth,
   .f.wide {
     flex: 1;
-    min-width: 0;
+    min-width: var(--rr-tap);
   }
 
   small {
+    position: absolute;
+    top: var(--rr-space-1);
+    left: var(--rr-space-1-5);
+    font-family: var(--rr-sans);
     font-size: var(--rr-text-tag);
     line-height: var(--rr-leading-tag);
     color: var(--rr-label2);
+    pointer-events: none;
   }
 
   input {
+    position: absolute;
+    inset: 0;
     width: 100%;
-    min-width: 0;
-    height: var(--rr-leading-row);
-    padding: 0;
+    height: 100%;
+    padding: 0 var(--rr-space-1-5);
     border: 0;
     background: transparent;
     color: var(--rr-label);
-    font-size: var(--rr-text-sub);
+    font: inherit;
     font-weight: var(--rr-weight-semibold);
     text-transform: uppercase;
+  }
+
+  .filled input {
+    padding-top: var(--rr-space-3);
   }
 
   input::placeholder {
@@ -174,19 +181,16 @@
     font-size: var(--rr-text-decode);
   }
 
-  .pair {
-    display: flex;
-    gap: var(--rr-space-1);
-    align-items: baseline;
-  }
-
-  input.rst {
-    width: 3.2ch;
-  }
-
   .nr {
-    font-size: var(--rr-text-sub);
+    position: absolute;
+    right: var(--rr-space-1-5);
+    bottom: calc(var(--rr-space-1-5) + var(--rr-space-half));
     font-weight: var(--rr-weight-semibold);
+    pointer-events: none;
+  }
+
+  .wide-sent input {
+    padding-right: calc(4ch + var(--rr-space-1-5));
   }
 
   .wk {
@@ -195,10 +199,11 @@
     align-items: center;
     align-self: center;
     height: var(--rr-space-5);
-    margin-left: auto;
+    margin: 0 var(--rr-space-1);
     padding: 0 var(--rr-space-1-5);
     border-radius: var(--rr-radius-pill);
     background: var(--rr-fill);
+    font-family: var(--rr-sans);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-semibold);
   }

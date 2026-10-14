@@ -46,8 +46,8 @@ const reviewProjects = REVIEW
   ? [
       { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...desktop, ...holeMic } },
       // layout.spec also matches colours-layout.spec. Screenshots go to test-results/screens.
-      { name: 'review-375x667', testMatch: /(layout|states|operate|hound|wspr)\.spec/, use: iphone(375, 667, 2) },
-      { name: 'review-393x852', testMatch: /(layout|states|operate|hound|wspr)\.spec/, use: iphone(393, 852, 3) },
+      { name: 'review-375x667', testMatch: /(layout|states|operate|hound|wspr|rtty)\.spec/, use: iphone(375, 667, 2) },
+      { name: 'review-393x852', testMatch: /(layout|states|operate|hound|wspr|rtty)\.spec/, use: iphone(393, 852, 3) },
     ]
   : [];
 
@@ -88,8 +88,8 @@ export default defineConfig({
     // (tokens.css). Checks that do not depend on the screen size run at 375 x 667 only, tagged
     // @ci-375; those that do also run at 393 x 852, tagged @ci-393. layout.spec also matches
     // colours-layout.spec.
-    { name: 'webkit-375x667', testMatch: /(layout|operate|hound|wspr)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /(layout|operate|hound|wspr)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
+    { name: 'webkit-375x667', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
+    { name: 'webkit-393x852', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
     ...reviewProjects,
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine

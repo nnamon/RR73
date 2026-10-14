@@ -42,6 +42,12 @@ export interface E2eHooks {
   wsprState(): { onAir: { text: string; slotStartMs: number; startMs: number } | null; next: number | null; on: boolean; slots: { startUtcMs: number; spots: number; ms: number }[] };
   /** Received RTTY text, as if from the receiver; characters in `uncertain` print as uncertain. */
   rttyReceived(text: string, uncertain?: string): void;
+  /** Text added to the RTTY pane as it is, one kind per character: r received, u uncertain, t sent. */
+  rttyText(text: string, kinds: string): void;
+  /** Shows Operate as with the keyboard up (the review build cannot open the iOS keyboard). */
+  rttyKeyboardUp(up: boolean | null): void;
+  /** Stops capture reaching the RTTY receiver, so only the text added through rttyText prints. */
+  rttyDeaf(): void;
   /** The RTTY receiver's signal report, dB in 3000 Hz. */
   rttySignal(snrDb: number, squelchOpen: boolean): void;
   /** Moves the RTTY pair to a mark tone, Hz. */
@@ -87,6 +93,14 @@ export function installE2eHooks() {
     rttyReceived: (text, uncertain = '') => {
       const events: ModemEvent[] = [...text].map((ch) => ({ type: 'char', ch, snrDb: -6, quality: uncertain.includes(ch) ? 0.2 : 0.95, framingError: false }));
       session.receive(events);
+    },
+    rttyText: (text, kinds) => session.addText(text, kinds),
+    rttyKeyboardUp: (up) => {
+      keyboard.forceKeyboard = up;
+      keyboard.keyboardUp = up ?? false;
+    },
+    rttyDeaf: () => {
+      keyboard.listening = false;
     },
     rttySignal: (snrDb, squelchOpen) => session.receive([{ type: 'signal', snrDb, squelchOpen }]),
     rttyTune: (markHz) => tuneMark(markHz),
