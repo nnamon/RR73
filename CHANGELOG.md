@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.12.1 · 2026-10-14
 
 - WSPR spot rows show the reported power in dBm after the distance: "8558 km 23 dBm −23 dB 0 Hz". The audio frequency moves to the spot's details, and a tap still marks the trace on the waterfall.
 
