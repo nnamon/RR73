@@ -36,12 +36,18 @@ describe('bottom bar view', () => {
     expect(barText(s.st)).toBe('Tx6 · CQ 9V1NE OJ11 · 1st · :00');
   });
 
-  it('marks the steps of the exchange as they happen', () => {
+  it('marks the steps of the exchange as they happen, the first with the grid our Tx1 sends', () => {
     const s = new Sim();
     s.call(1, 'CQ JA1KXM PM95');
-    expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['Grid:now', 'Report:todo', 'R-report:todo', 'RR73:todo', '73:todo']);
+    expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['OJ11:now', 'Report:todo', 'R-report:todo', 'RR73:todo', '73:todo']);
     s.run(2, 4, { 3: ['9V1NE JA1KXM -09'] });
-    expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['Grid:done', `${M}09:done`, `R${M}10:done`, 'RR73:now', '73:todo']);
+    expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['OJ11:done', `${M}09:done`, `R${M}10:done`, 'RR73:now', '73:todo']);
+  });
+
+  it('names the first step Call when our Tx1 carries no grid', () => {
+    const s = new Sim({ myGrid: '' });
+    s.call(1, 'CQ JA1KXM PM95');
+    expect(steps(s.st)[0].label).toBe('Call');
   });
 
   it('shows the calling side of the exchange', () => {

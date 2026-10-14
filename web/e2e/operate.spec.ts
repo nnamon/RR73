@@ -70,7 +70,7 @@ test('Operate keeps one bar height, its row targets, messages to you first and t
   // Calling a station: the rest of the band dims; his CQ, the message to you, our rows and the
   // slot bars stay clear. Halt turns Tx off, and the dimming ends.
   await doubleTap('CQ VJ6X OF78');
-  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/Grid.*Report.*R-report.*RR73.*73/);
+  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/OJ11.*Report.*R-report.*RR73.*73/);
   await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveClass(/\bdim\b/);
   await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
   await expect(rowOf(page, 'CQ VJ6X OF78')).toHaveCSS('opacity', '1');

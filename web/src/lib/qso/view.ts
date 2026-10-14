@@ -20,6 +20,12 @@ const signed = (r: string) => r.replace('-', MINUS);
 const ordinal = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
 
 /** The 5 steps of the exchange, from our side. */
+/** The grid our Tx1 carries ("OJ11"), or "Call" when it carries none, as with a compound callsign. */
+function sentGrid(st: SeqState): string {
+  const last = messages(st)[1]?.trim().split(/\s+/).at(-1) ?? '';
+  return /^[A-R]{2}\d{2}$/i.test(last) ? last.toUpperCase() : 'Call';
+}
+
 export function steps(st: SeqState): Step[] {
   const p = st.partner;
   if (!p) return [];
@@ -38,7 +44,7 @@ export function steps(st: SeqState): Step[] {
         ['Logged', p.logged],
       ]
     : [
-        ['Grid', p.startMs !== null || p.rcvdRpt],
+        [sentGrid(st), p.startMs !== null || p.rcvdRpt],
         [rcvd ?? 'Report', p.rcvdRpt],
         [sent ? `R${sent}` : 'R-report', p.sentRRpt],
         [st.config.ack, p.rcvdAck],
