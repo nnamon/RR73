@@ -376,6 +376,7 @@ dependencies = [
  "rr73-corpus",
  "rr73-decode",
  "rr73-ft8",
+ "rr73-rtty",
  "serde",
  "serde_json",
  "toml",
