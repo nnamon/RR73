@@ -43,7 +43,8 @@ pub(crate) fn encode(m: &Message) -> Result<Payload, PackError> {
             report,
         } => {
             let db = report.db();
-            if db > 32 || db % 2 != 0 {
+            // r5 carries even reports from -30 to +32; below -30 it would wrap to a high one.
+            if !(-30..=32).contains(&db) || db % 2 != 0 {
                 return Err(PackError::DxpeditionReport(db));
             }
             w.put(c28_station(rr73_to)?.into(), 28);

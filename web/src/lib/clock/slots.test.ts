@@ -4,11 +4,16 @@ import { SLOT_MS, SLOT_SAMPLES, nextSlotStart, parity, slotIndex, slotProgress, 
 const T = Date.UTC(2026, 9, 13, 13, 14, 52, 250); // 13:14:52.250
 
 describe('slot arithmetic', () => {
-  it('has 15 s FT8 slots and 7.5 s FT4 slots of 180000 and 90000 samples', () => {
-    expect(SLOT_MS).toEqual({ FT8: 15000, FT4: 7500 });
-    expect(SLOT_SAMPLES).toEqual({ FT8: 180000, FT4: 90000 });
-    expect(SLOT_SAMPLES.FT8).toBe((SLOT_MS.FT8 / 1000) * 12000);
-    expect(SLOT_SAMPLES.FT4).toBe((SLOT_MS.FT4 / 1000) * 12000);
+  it('has 15 s FT8, 7.5 s FT4 and 120 s WSPR slots of 180000, 90000 and 1440000 samples', () => {
+    expect(SLOT_MS).toEqual({ FT8: 15000, FT4: 7500, WSPR: 120000 });
+    expect(SLOT_SAMPLES).toEqual({ FT8: 180000, FT4: 90000, WSPR: 1440000 });
+    for (const m of ['FT8', 'FT4', 'WSPR'] as const) expect(SLOT_SAMPLES[m]).toBe((SLOT_MS[m] / 1000) * 12000);
+  });
+
+  it('starts WSPR slots on even UTC minutes', () => {
+    expect(slotStart(T, 'WSPR')).toBe(Date.UTC(2026, 9, 13, 13, 14, 0));
+    expect(nextSlotStart(T, 'WSPR')).toBe(Date.UTC(2026, 9, 13, 13, 16, 0));
+    expect(slotStart(Date.UTC(2026, 9, 13, 13, 15, 59, 999), 'WSPR')).toBe(Date.UTC(2026, 9, 13, 13, 14, 0));
   });
 
   it('finds the FT8 slot start and the next one', () => {

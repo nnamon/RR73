@@ -125,3 +125,25 @@ fn sessions_return_each_stage_once_and_stop_anywhere() {
     assert!(DecoderSession::create(&audio, "FT8", "baseline passes=x").is_err());
     assert!(DecoderSession::create(&audio, "JT65", "baseline").is_err());
 }
+
+#[test]
+fn decodes_a_rendered_wspr_slot_to_json() {
+    use rr73_chansim::{WsprScene, WsprSignal, render_wspr};
+    let scene = WsprScene {
+        signals: vec![WsprSignal::new("K1ABC FN42 37", 1488.2, 0.3, -24.0)],
+        noise: Noise::Awgn,
+    };
+    let (audio, _) = render_wspr(&scene, 5).expect("render");
+    let json = rr73_wasm::decode_wspr_json(&audio, "wspr").expect("decode");
+    let decodes: serde_json::Value = serde_json::from_str(&json).expect("json");
+    let list = decodes.as_array().expect("array");
+    assert_eq!(list.len(), 1, "{json}");
+    let d = &list[0];
+    assert_eq!(d["text"], "K1ABC FN42 37");
+    assert!(
+        (d["freq_hz"].as_f64().unwrap_or(0.0) - 1488.2).abs() < 0.3,
+        "{json}"
+    );
+    assert!((d["dt_s"].as_f64().unwrap_or(9.0) - 0.3).abs() < 0.05, "{json}");
+    assert!(d["drift_hz_per_s"].as_f64().is_some() && d["snr_db"].as_f64().is_some());
+}

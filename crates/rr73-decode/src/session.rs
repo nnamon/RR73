@@ -179,6 +179,9 @@ impl DecodeSession {
         graph: &'static ParityGraph,
     ) -> Self {
         ctx.ws.seen.clear();
+        // Silence is found once, in the input: subtraction writes small non-zero values into
+        // silent samples that a subtracted signal spans, so later passes cannot find it.
+        crate::silence::silent_runs(audio.samples, &mut ctx.ws.silent);
         // The context's audio buffer becomes the residual, so a reused context allocates
         // nothing here.
         let mut residual = std::mem::take(&mut ctx.ws.audio);
@@ -416,8 +419,10 @@ impl DecodeSession {
         } else {
             self.audio.len().div_ceil(hop)
         };
+        let frames = (available as i64).min(last_needed + 1).max(0) as usize;
+        crate::silence::live_frames_from_runs(&ws.silent, &spec_config, frames, &mut ws.live);
         self.geometry = Some(StageGeometry {
-            frames: (available as i64).min(last_needed + 1).max(0) as usize,
+            frames,
             first_frame: *range.start(),
             last_frame: *range.end(),
             snr: *snr,
@@ -570,7 +575,7 @@ impl DecodeSession {
                 continue;
             }
             let tones = rr73_ft8::tones::from_payload(self.layout.mode, &valid.payload);
-            let snr_db = g.snr.estimate(&view, &cand, &tones, &mut ws.noise);
+            let snr_db = g.snr.estimate(&view, &cand, &tones, &ws.live, &mut ws.noise);
             // An OSD codeword claiming an SNR below what decoding reaches is noise.
             if outcome.osd && snr_db < config.validate.osd_min_snr_db {
                 stats.implausible += 1;

@@ -2,12 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 import { clearCacheAndReload, reloadApp, type ReloadDeps } from './update.svelte';
 
 class FakeWorker extends EventTarget {
+  messages: unknown[] = [];
   constructor(public state: ServiceWorkerState) {
     super();
   }
-  activate() {
-    this.state = 'activated';
+  postMessage(m: unknown) {
+    this.messages.push(m);
+  }
+  to(state: ServiceWorkerState) {
+    this.state = state;
     this.dispatchEvent(new Event('statechange'));
+  }
+  activate() {
+    this.to('activated');
   }
 }
 
@@ -32,19 +39,35 @@ describe('reloadApp', () => {
     expect(d.reload).toHaveBeenCalledOnce();
   });
 
-  it('asks for an update and reloads only after the new version takes over', async () => {
+  it('asks for an update, lets the waiting version take over and reloads only after it has', async () => {
     const worker = new FakeWorker('installed');
     const reg = { installing: null, waiting: worker, update: vi.fn(async () => undefined) };
     const { d, order } = deps({ registration: async () => reg as unknown as ServiceWorkerRegistration });
     const done = reloadApp(d);
-    await Promise.resolve();
-    await Promise.resolve();
+    await vi.waitFor(() => expect(worker.messages).toEqual([{ type: 'SKIP_WAITING' }]));
     expect(reg.update).toHaveBeenCalledOnce();
     expect(d.reload).not.toHaveBeenCalled();
     order.push('activated');
     worker.activate();
     await done;
     expect(order).toEqual(['activated', 'reload']);
+  });
+
+  it('waits for a version still installing, then lets it take over', async () => {
+    const worker = new FakeWorker('installing');
+    const reg = { installing: worker as FakeWorker | null, waiting: null as FakeWorker | null, update: vi.fn(async () => undefined) };
+    const { d } = deps({ registration: async () => reg as unknown as ServiceWorkerRegistration });
+    const done = reloadApp(d);
+    await vi.waitFor(() => expect(reg.update).toHaveBeenCalledOnce());
+    expect(worker.messages).toEqual([]);
+    reg.installing = null;
+    reg.waiting = worker;
+    worker.to('installed');
+    await vi.waitFor(() => expect(worker.messages).toEqual([{ type: 'SKIP_WAITING' }]));
+    expect(d.reload).not.toHaveBeenCalled();
+    worker.activate();
+    await done;
+    expect(d.reload).toHaveBeenCalledOnce();
   });
 
   it('reloads the build on the phone when the update check fails offline', async () => {

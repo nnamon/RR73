@@ -3,6 +3,7 @@
 mod compare;
 mod gate;
 mod import;
+mod loop_fixture;
 mod results;
 mod run;
 mod synth;
@@ -12,7 +13,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use rr73_decode::{DecoderConfig, PRESETS};
+use rr73_decode::PRESETS;
+use rr73_decode::wspr::WSPR_PRESETS;
 
 #[derive(Parser)]
 #[command(
@@ -27,7 +29,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded) into the corpus.
+    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded, wspr-smoke,
+    /// wspr-noise, wspr-snr-sweep, wspr-band) into the corpus.
     Synth {
         /// Set to write; repeat for several.
         #[arg(long = "set", required = true, value_name = "NAME")]
@@ -75,8 +78,21 @@ enum Command {
         /// more stages.
         #[arg(long, value_name = "STAGE")]
         then: Vec<String>,
+        /// Synthetic set to render in memory and decode, as `synth` would write it; repeat
+        /// for several.
+        #[arg(long = "synth", value_name = "SET")]
+        synth: Vec<String>,
+        /// Slots in noise sets rendered with --synth.
+        #[arg(long, default_value_t = 1000)]
+        noise_count: usize,
+        /// Slots per SNR step and channel in sweeps rendered with --synth.
+        #[arg(long, default_value_t = 40)]
+        per_step: usize,
+        /// Slots per subset in crowded sets rendered with --synth.
+        #[arg(long, default_value_t = 20)]
+        crowded_count: usize,
         /// Corpus files or directories.
-        #[arg(required = true)]
+        #[arg(required_unless_present = "synth")]
         paths: Vec<PathBuf>,
     },
     /// Show decodes gained and lost, false decodes, SNR50 and time per slot between two runs.
@@ -129,6 +145,22 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Write the end-to-end decode fixture (a 15 s FT8 loop holding 4 messages 4 times each),
+    /// then decode it from start offsets across the loop and check every message comes out.
+    LoopFixture {
+        /// Fixture path without extension: writes `<out>.wav` and `<out>.json`.
+        #[arg(long, default_value = "web/e2e/fixtures/ft8-loop")]
+        out: PathBuf,
+        /// Check the existing files without writing them.
+        #[arg(long)]
+        check_only: bool,
+        /// Preset to decode with; repeat for several.
+        #[arg(long = "preset", default_value = "subtract-3-osd2", value_name = "NAME")]
+        presets: Vec<String>,
+        /// Time between the start offsets checked, in seconds.
+        #[arg(long, default_value_t = 0.05)]
+        step_s: f64,
+    },
     /// Print a preset's configuration as JSON, or list the presets.
     Presets {
         /// Preset to print.
@@ -180,12 +212,22 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             audio_s,
             audio_fill,
             then,
+            synth,
+            noise_count,
+            per_step,
+            crowded_count,
             paths,
         } => {
             let opts = run::RunOptions {
                 preset,
                 overrides,
                 paths,
+                synth,
+                synth_options: synth::SynthOptions {
+                    noise_count,
+                    per_step,
+                    crowded_count,
+                },
                 out,
                 threads,
                 reference,
@@ -265,14 +307,32 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::LoopFixture {
+            out,
+            check_only,
+            presets,
+            step_s,
+        } => {
+            if !check_only {
+                let files = loop_fixture::write(&out)?;
+                println!("Wrote {} and {}", files.wav.display(), files.json.display());
+            }
+            let (report, pass) = loop_fixture::check(&out, &presets, step_s)?;
+            print!("{report}");
+            Ok(if pass {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
+        }
         Command::Presets { name } => {
             match name {
                 Some(n) => {
-                    let c = DecoderConfig::preset(&n).map_err(|e| e.to_string())?;
+                    let c = run::Decoder::new(&n, &[])?.config_json()?;
                     println!("{}", serde_json::to_string_pretty(&c).map_err(|e| e.to_string())?);
                 }
                 None => {
-                    for p in PRESETS {
+                    for p in PRESETS.iter().chain(WSPR_PRESETS) {
                         println!("{p}");
                     }
                 }

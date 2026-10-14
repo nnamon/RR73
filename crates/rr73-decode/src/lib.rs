@@ -1,5 +1,6 @@
-//! FT8 and FT4 decoder pipeline. Each stage is a trait with named implementations, chosen
-//! by [`DecoderConfig`]. See `docs/architecture.md`.
+//! FT8 and FT4 decoder pipeline, and the WSPR decoder in [`wspr`]. Each stage is a trait with
+//! named implementations, chosen by [`DecoderConfig`] (or [`wspr::WsprConfig`]). See
+//! `docs/architecture.md`.
 //!
 //! ```text
 //! SlotAudio -> Spectrogram (rr73-dsp)
@@ -26,11 +27,13 @@ pub mod pipeline;
 pub mod report;
 pub mod search;
 pub mod session;
+pub mod silence;
 pub mod snr;
 pub mod stages;
 pub mod subtract;
 pub mod validate;
 pub mod view;
+pub mod wspr;
 
 #[cfg(test)]
 mod testsig;

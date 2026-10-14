@@ -12,7 +12,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from rr73_kiwi import IDENT
-from rr73_kiwi.bands import FT8_DIAL_HZ
+from rr73_kiwi.bands import ALL_DIAL_HZ
 from rr73_kiwi.config import ConfigError, Receiver, load_receivers
 from rr73_kiwi.politeness import (
     CLUB_FREE_CHANNELS,
@@ -63,7 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--band",
         action="append",
         default=[],
-        choices=list(FT8_DIAL_HZ),
+        choices=list(ALL_DIAL_HZ),
         help="band to record; repeat to rotate (default: the receiver's plan for the UTC time)",
     )
     parser.add_argument(

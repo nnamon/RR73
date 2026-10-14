@@ -13,6 +13,11 @@
 //! signals from raising the estimate. The excess of signal over noise is converted from
 //! one cell to 2500 Hz with the window's equivalent noise bandwidth and the fraction of a
 //! symbol's energy one frame captures.
+//!
+//! Both averages leave out frames that overlap digital silence (`crate::silence`), so a
+//! slot that audio joined partway through, or that holds a zero-filled hole, gives the SNR
+//! of the audio it holds. Silent cells read -120 dB: counted as noise they pull the 20th
+//! percentile down by tens of dB once about 3 s of an FT8 slot is silent.
 
 use rr73_dsp::window;
 
@@ -62,19 +67,26 @@ impl SnrScale {
     }
 
     /// SNR estimate for a decoded candidate whose channel symbols are `tones`.
-    /// `scratch` holds the noise cells between calls.
+    /// `live` marks the spectrogram frames to use (see [`crate::silence::live_frames`]);
+    /// frames past its end count as live, so an empty slice uses every frame. `scratch`
+    /// holds the noise cells between calls.
     pub fn estimate(
         &self,
         view: &SymbolView<'_>,
         cand: &Candidate,
         tones: &[u8],
+        live: &[bool],
         scratch: &mut Vec<f32>,
     ) -> f32 {
-        let noise = noise_power(view, cand, scratch);
+        let noise = noise_power(view, cand, live, scratch);
         let layout = view.layout;
         let (mut sum, mut count) = (0.0f64, 0usize);
         for (k, &tone) in tones.iter().enumerate().take(layout.symbols) {
-            let Some(row) = view.row(view.symbol_frame(cand.frame, k)) else {
+            let frame = view.symbol_frame(cand.frame, k);
+            if !is_live(live, frame) {
+                continue;
+            }
+            let Some(row) = view.row(frame) else {
                 continue;
             };
             if let Some(&v) = usize::try_from(view.tone_bin(cand.bin, tone as usize))
@@ -107,8 +119,22 @@ const REFERENCE_TONES: isize = 16;
 /// Percentile of the reference cells used for the noise level.
 const NOISE_PERCENTILE: f32 = 0.2;
 
-/// Mean noise power per cell near a candidate, or `None` with no usable cells.
-fn noise_power(view: &SymbolView<'_>, cand: &Candidate, scratch: &mut Vec<f32>) -> Option<f32> {
+/// Whether frame `frame` is marked live in `live`; frames past its end are.
+fn is_live(live: &[bool], frame: isize) -> bool {
+    usize::try_from(frame)
+        .ok()
+        .and_then(|f| live.get(f))
+        .is_none_or(|&l| l)
+}
+
+/// Mean noise power per cell near a candidate over the live frames, or `None` with no
+/// usable cells.
+fn noise_power(
+    view: &SymbolView<'_>,
+    cand: &Candidate,
+    live: &[bool],
+    scratch: &mut Vec<f32>,
+) -> Option<f32> {
     let layout = view.layout;
     let fosr = view.freq_osr as isize;
     let tosr = view.time_osr as isize;
@@ -124,6 +150,10 @@ fn noise_power(view: &SymbolView<'_>, cand: &Candidate, scratch: &mut Vec<f32>) 
     // Every time_osr-th frame: neighbouring frames overlap and add little information.
     let mut frame = 0isize;
     while let Some(row) = view.row(frame) {
+        if !is_live(live, frame) {
+            frame += tosr.max(1);
+            continue;
+        }
         let inside = frame >= first && frame <= last;
         let bins = row.len() as isize;
         for b in ref_lo.max(0)..(ref_hi + 1).min(bins) {
@@ -152,7 +182,7 @@ mod tests {
     use crate::layout::test_layouts;
     use crate::search::{CandidateSearch, CostasSearch};
     use crate::testsig;
-    use rr73_dsp::WindowKind;
+    use rr73_dsp::{SpectrogramConfig, WindowKind};
 
     /// Mean estimate over several noise draws for a CPFSK signal at `snr_db`.
     fn mean_estimate(snr_db: f64, trials: u64) -> f32 {
@@ -179,7 +209,7 @@ mod tests {
             }
             .search(&view, view.frame_range(-1.0, 1.0), &mut cands);
             let best = cands.first().expect("candidate");
-            let est = scale.estimate(&view, best, &tones, &mut scratch);
+            let est = scale.estimate(&view, best, &tones, &[], &mut scratch);
             total += est;
         }
         total / trials as f32
@@ -209,6 +239,67 @@ mod tests {
     }
 
     #[test]
+    fn silent_frames_leave_the_estimate_unchanged() {
+        // The app zero-fills the part of a slot before audio arrived and holes after an
+        // interruption. With the same candidate, the estimate over what remains stays within
+        // 1.5 dB of the full slot's. Counting silent cells as noise read 5 dB high with 2 s
+        // silent and gave the 60 dB ceiling from 4 s.
+        let layout = test_layouts::ft8();
+        let config = SpectrogramConfig::oversampled(1920, 2, 2, 200.0, 3000.0, 12_000).expect("config");
+        let scale = SnrScale::new(&layout, 3840, &WindowKind::Hann.build(3840));
+        let mut scratch = Vec::new();
+        let mut live = Vec::new();
+        for (seed, snr) in [(1u64, -16.0), (2, -8.0), (3, 0.0), (4, 10.0)] {
+            let tones = testsig::random_tones(&layout, seed);
+            let audio = testsig::render(&layout, &tones, 1234.5, 0.3, snr, Some(500 + seed));
+            let estimate =
+                |audio: &[f32], live: &mut Vec<bool>, scratch: &mut Vec<f32>, cand: Option<Candidate>| {
+                    let spec = testsig::spectrogram(&layout, audio);
+                    let view = SymbolView {
+                        spec: &spec,
+                        layout: &layout,
+                        time_osr: 2,
+                        freq_osr: 2,
+                    };
+                    let cand = cand.unwrap_or_else(|| {
+                        let mut cands = Vec::new();
+                        CostasSearch {
+                            max_candidates: 3,
+                            min_score_db: 0.0,
+                        }
+                        .search(&view, view.frame_range(-1.0, 1.0), &mut cands);
+                        *cands.first().expect("candidate")
+                    });
+                    crate::silence::live_frames(audio, &config, spec.frames(), live);
+                    (scale.estimate(&view, &cand, &tones, live, scratch), cand)
+                };
+            let (full, cand) = estimate(&audio, &mut live, &mut scratch, None);
+            assert!(live.iter().all(|&l| l));
+            let mut cases: Vec<(String, Vec<f32>)> = [2usize, 4, 7, 9]
+                .iter()
+                .map(|&s| {
+                    let mut a = audio.clone();
+                    a[..s * 12_000].fill(0.0);
+                    (format!("first {s} s silent"), a)
+                })
+                .collect();
+            let mut hole = audio.clone();
+            hole[72_000..78_000].fill(0.0);
+            cases.push(("0.5 s hole at 6 s".into(), hole));
+            let mut tail = audio.clone();
+            tail[150_000..].fill(0.0);
+            cases.push(("last 2.5 s silent".into(), tail));
+            for (name, a) in cases {
+                let (est, _) = estimate(&a, &mut live, &mut scratch, Some(cand));
+                assert!(
+                    (est - full).abs() <= 1.5,
+                    "{snr} dB, {name}: full slot {full:.2} dB, estimate {est:.2} dB"
+                );
+            }
+        }
+    }
+
+    #[test]
     #[ignore = "prints the calibration curve"]
     fn print_curve() {
         for snr in [-24.0, -20.0, -17.0, -14.0, -11.0, -8.0, -4.0, 0.0, 5.0, 10.0] {
@@ -227,7 +318,7 @@ mod tests {
             freq_osr: 2,
         };
         let scale = SnrScale::new(&layout, 3840, &WindowKind::Hann.build(3840));
-        let snr = scale.estimate(&view, &Candidate::new(0, 0, 0.0), &[0; 79], &mut Vec::new());
+        let snr = scale.estimate(&view, &Candidate::new(0, 0, 0.0), &[0; 79], &[], &mut Vec::new());
         assert_eq!(snr, FLOOR_DB);
     }
 }

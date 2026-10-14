@@ -6,8 +6,9 @@
 
 import type { WaterfallPalette } from './colormap';
 import type { FromWaterfall, ToWaterfall } from './protocol';
-import { WaterfallRenderer, type Context2D, type FrameInfo } from './renderer';
+import { WaterfallRenderer, type Context2D, type FrameInfo, type TxWave } from './renderer';
 import type { Mode } from '../clock/slots';
+import type { Contrast } from './levels';
 
 export class WaterfallClient {
   /** True when the worker draws; false on the main-thread fallback. */
@@ -15,6 +16,8 @@ export class WaterfallClient {
   private worker: Worker | null = null;
   private local: WaterfallRenderer | null = null;
   private readonly onFrame: (info: FrameInfo) => void;
+  private readonly asks = new Map<number, (hz: number | null) => void>();
+  private nextAsk = 1;
 
   constructor(canvas: HTMLCanvasElement, palette: WaterfallPalette, mode: Mode, width: number, height: number, onFrame: (info: FrameInfo) => void) {
     this.onFrame = onFrame;
@@ -24,6 +27,10 @@ export class WaterfallClient {
       this.worker = new Worker(new URL('./waterfall.worker.ts', import.meta.url), { type: 'module' });
       this.worker.onmessage = (e: MessageEvent<FromWaterfall>) => {
         if (e.data.type === 'frame') this.onFrame(e.data.info);
+        else if (e.data.type === 'quietest') {
+          this.asks.get(e.data.id)?.(e.data.hz);
+          this.asks.delete(e.data.id);
+        }
       };
       this.send({ type: 'init', canvas: offscreen, palette, mode, width, height }, [offscreen]);
       this.offscreen = true;
@@ -63,6 +70,31 @@ export class WaterfallClient {
     }
   }
 
+  setContrast(contrast: Contrast) {
+    if (this.worker) this.send({ type: 'contrast', contrast });
+    else this.local?.setContrast(contrast);
+  }
+
+  /** Slots RR73 transmitted in, UTC ms: drawn from their transmitted audio, or blank. */
+  setTxSlots(starts: readonly number[]) {
+    if (this.worker) this.send({ type: 'txSlots', starts: [...starts] });
+    else if (this.local) {
+      this.local.setTxSlots(starts);
+      this.onFrame(this.local.info());
+    }
+  }
+
+  /** A transmission's audio to draw in its slot. The samples are copied, so the caller keeps them. */
+  setTxWave(wave: TxWave) {
+    if (this.worker) {
+      const samples = wave.samples.slice();
+      this.send({ type: 'txWave', wave: { ...wave, samples } }, [samples.buffer]);
+    } else if (this.local) {
+      this.local.setTxWave(wave);
+      this.onFrame(this.local.info());
+    }
+  }
+
   clear() {
     if (this.worker) this.send({ type: 'clear' });
     else if (this.local) {
@@ -71,7 +103,20 @@ export class WaterfallClient {
     }
   }
 
+  /** The quietest Tx frequency in the last 2 to 4 slots, Hz, or null with less audio. */
+  quietest(nowMs: number, nearHz: number): Promise<number | null> {
+    if (this.local) return Promise.resolve(this.local.quietest(nowMs, nearHz));
+    if (!this.worker) return Promise.resolve(null);
+    const id = this.nextAsk++;
+    return new Promise((resolve) => {
+      this.asks.set(id, resolve);
+      this.send({ type: 'quietest', id, nowMs, nearHz });
+    });
+  }
+
   destroy() {
+    for (const done of this.asks.values()) done(null);
+    this.asks.clear();
     this.worker?.terminate();
     this.worker = null;
     this.local = null;

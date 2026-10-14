@@ -57,3 +57,18 @@ describe('slotFiles', () => {
     });
   });
 });
+
+describe('SlotRecorder with WSPR slots', () => {
+  it('keeps 2 WSPR slots beside the FT8 ones', () => {
+    const r = new SlotRecorder(8, { WSPR: 2 });
+    const wspr = (start: number): AssembledSlot => ({ mode: 'WSPR', startUtcMs: start, samples: new Float32Array(10), filled: 10, lateStart: false, gap: false });
+    r.add(slot(T));
+    for (let i = 0; i < 4; i++) r.add(wspr(T + 120_000 * (i + 1)));
+    expect(r.list().map((s) => [s.mode, (s.startUtcMs - T) / 1000])).toEqual([
+      ['WSPR', 480],
+      ['WSPR', 360],
+      ['FT8', 0],
+    ]);
+  });
+});
+

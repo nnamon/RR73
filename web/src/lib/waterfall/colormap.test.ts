@@ -9,14 +9,14 @@ const token = (name: string) => {
   return m[1];
 };
 
-/** The mockup's colormap (mockups.js STOPS), for comparison with the tokens. */
+/** The colormap agreed in October 2026: navy noise, cyan from 3 dB over it, mint, yellow, warm white. */
 const MOCKUP: Rgb[] = [
   [4, 6, 10],
-  [10, 21, 48],
-  [18, 62, 110],
-  [26, 127, 154],
-  [76, 195, 163],
-  [240, 210, 90],
+  [11, 29, 69],
+  [24, 152, 216],
+  [79, 210, 255],
+  [138, 240, 200],
+  [255, 240, 96],
   [255, 248, 230],
 ];
 
@@ -44,7 +44,7 @@ describe('parseColor', () => {
 describe('waterfall colormap', () => {
   const palette = paletteFrom(token);
 
-  it('takes its stops from tokens.css, matching the mockups', () => {
+  it('takes its stops from tokens.css', () => {
     expect(STOP_TOKENS).toHaveLength(STOP_POSITIONS.length);
     expect(palette.stops).toEqual(MOCKUP);
     expect(palette.background).toEqual([4, 6, 10]);

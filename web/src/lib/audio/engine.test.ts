@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CaptureEngine, type EngineDeps } from './engine';
+import { CaptureEngine, type EngineDeps, type InputSource } from './engine';
+import { practiceReport } from '../practice/source';
 import type { CaptureMessage } from './messages';
+import recorded from '../../../../fixtures/clock/output-timestamps.json';
 
 vi.mock('./capture.worklet.ts?worker&url', () => ({ default: 'capture.js' }));
 
@@ -87,8 +89,46 @@ function setup(over: Partial<EngineDeps> = {}) {
   return { engine, ctx, nodes, streams, deps, clock };
 }
 
+/** One chunk, s. */
+const CHUNK_S = 512 / 12000;
+
 function chunk(index: number, contextTime: number): CaptureMessage {
   return { type: 'chunk', samples: new Float32Array(512), index, contextTime, peakDb: -20, rmsDb: -30 };
+}
+
+/**
+ * Replays recorded clock readings (fixtures/clock/output-timestamps.json), one chunk each, and
+ * returns how far the UTC stamped on each chunk's end is from Date.now(), ms. The chunk ends at
+ * currentTime, which pairs with Date.now(), so a correct mapping gives the output latency.
+ */
+async function replay(rows: number[][]): Promise<number[]> {
+  const { engine, ctx, nodes, clock } = setup();
+  await engine.start();
+  const errors: number[] = [];
+  // Chunks wait while the mapping settles, so each is compared with the Date.now() of its own reading.
+  engine.onChunk((c) => errors.push(c.utcMs + (c.samples.length / 12000) * 1000 - rows[c.index / 512][3]));
+  rows.forEach(([contextTime, performanceTime, perfNow, dateNow, currentTime], i) => {
+    ctx.getOutputTimestamp = () => ({ contextTime, performanceTime });
+    ctx.currentTime = currentTime;
+    clock.perf = perfNow;
+    clock.date = dateNow;
+    nodes[0].post(chunk(i * 512, currentTime - 512 / 12000));
+  });
+  return errors;
+}
+
+/**
+ * Stamp errors from Chromium's output timestamps: its output latency, 28 to 43 ms, where currentTime
+ * paired with now would give 0. Date.now() read late on a busy thread moves single errors by 15 ms.
+ */
+function expectOutputLatency(errors: number[]) {
+  for (const e of errors) {
+    expect(e).toBeGreaterThan(0);
+    expect(e).toBeLessThan(60);
+  }
+  const sorted = [...errors].sort((a, b) => a - b);
+  expect(sorted[sorted.length >> 1]).toBeGreaterThan(25);
+  expect(sorted[sorted.length >> 1]).toBeLessThan(50);
 }
 
 function setVisibility(v: 'visible' | 'hidden') {
@@ -119,8 +159,13 @@ describe('CaptureEngine', () => {
     ctx.perf = 5000;
     clock.perf = 5000;
     clock.date = T0;
-    nodes[0].post(chunk(0, 1.5));
-    expect(got).toEqual([T0 - 500]);
+    // Chunks wait until 5 readings agree, then go out stamped with the settled mapping.
+    for (let i = 0; i < 4; i++) nodes[0].post(chunk(i * 512, 1.5 + i * CHUNK_S));
+    expect(got).toEqual([]);
+    nodes[0].post(chunk(4 * 512, 1.5 + 4 * CHUNK_S));
+    expect(got).toHaveLength(5);
+    expect(got[0]).toBe(T0 - 500);
+    expect(got[4]).toBeCloseTo(T0 - 500 + 4 * CHUNK_S * 1000, 6);
   });
 
   it('maps from currentTime until output timestamps arrive, then starts over on them', async () => {
@@ -133,12 +178,15 @@ describe('CaptureEngine', () => {
     ctx.currentTime = 2;
     clock.perf = 5000;
     clock.date = T0;
-    nodes[0].post(chunk(0, 1.5));
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5));
     expect(got[0]).toBe(T0 - 500);
+    expect(engine.clockSource).toBe('current-time');
     // Output starts: context time 2 s is heard 40 ms after now. Only these observations count.
     ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
-    nodes[0].post(chunk(512, 1.5 + 512 / 12000));
-    expect(got[1]).toBeCloseTo(T0 + 40 - 500 + (512 / 12000) * 1000, 6);
+    for (let i = 5; i < 10; i++) nodes[0].post(chunk(i * 512, 1.5 + CHUNK_S));
+    expect(got).toHaveLength(10);
+    expect(got[5]).toBeCloseTo(T0 + 40 - 500 + CHUNK_S * 1000, 6);
+    expect(engine.clockSource).toBe('output');
   });
 
   it('updates the report with the channels that arrive', async () => {
@@ -152,7 +200,7 @@ describe('CaptureEngine', () => {
     const { engine, ctx, nodes } = setup();
     await engine.start();
     ctx.currentTime = 2;
-    nodes[0].post(chunk(0, 1.5));
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5 - (4 - i) * CHUNK_S));
     ctx.setState('interrupted');
     expect(engine.state).toMatchObject({ status: 'stopped', reason: 'interrupted' });
     // The last chunk started 0.5 s before T0 and lasted 512 samples.
@@ -221,5 +269,87 @@ describe('CaptureEngine', () => {
     expect(streams[0].track.stopped).toBe(true);
     expect(deps.getUserMedia).toHaveBeenLastCalledWith(expect.objectContaining({ audio: expect.objectContaining({ deviceId: { exact: 'd2' } }) }));
     expect(engine.state.status).toBe('running');
+  });
+
+  it('stamps chunks on UTC with the output timestamps Chromium gives', async () => {
+    const errors = await replay(recorded.chromium);
+    expect(errors).toHaveLength(recorded.chromium.length);
+    expectOutputLatency(errors);
+  });
+
+  it('stamps chunks on UTC when the output timestamps run at twice the real rate (Playwright\'s WebKit)', async () => {
+    const errors = await replay(recorded.webkit);
+    // The first readings look plausible and count until a run of bad ones; then currentTime takes over.
+    expect(Math.max(...errors.map(Math.abs))).toBeLessThan(500);
+    for (const e of errors.slice(8)) expect(Math.abs(e)).toBeLessThan(5);
+  });
+
+  it('rides out a few implausible output timestamps', async () => {
+    const good = recorded.chromium.slice(0, 40);
+    const bad = good.slice(10, 13).map(([c, p, n, d, t]) => [c, p + 5000, n, d, t]);
+    expectOutputLatency(await replay([...good.slice(0, 10), ...bad, ...good.slice(13)]));
+  });
+
+  it('trusts output timestamps again after a resume', async () => {
+    const { engine, ctx, nodes, clock } = setup();
+    await engine.start();
+    const got: number[] = [];
+    engine.onChunk((c) => got.push(c.utcMs));
+    clock.perf = 5000;
+    clock.date = T0;
+    ctx.currentTime = 2;
+    // Heard 3 s after now: wrong. After 5 of these, currentTime pairs with now.
+    ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 8000 });
+    for (let i = 0; i < 9; i++) nodes[0].post(chunk(i * 512, 1.5));
+    expect(got[0]).toBe(T0 - 500);
+    expect(engine.clockSource).toBe('current-time');
+    ctx.setState('suspended');
+    await engine.resume();
+    const n = got.length;
+    ctx.getOutputTimestamp = () => ({ contextTime: 2, performanceTime: 5040 });
+    for (let i = 0; i < 5; i++) nodes[0].post(chunk(i * 512, 1.5));
+    expect(got[n]).toBe(T0 + 40 - 500);
+    expect(engine.clockSource).toBe('output');
+  });
+});
+
+describe('input sources', () => {
+  function fakeSource() {
+    const node = { connect: vi.fn(), disconnect: vi.fn() };
+    const close = vi.fn();
+    const source: InputSource = {
+      unavailable: () => null,
+      open: vi.fn(async () => ({ node: node as unknown as AudioNode, report: practiceReport(48000, null), usable: () => true, close })),
+    };
+    return { source, node, close };
+  }
+
+  it('captures from another source without asking for the microphone', async () => {
+    const { engine, deps, nodes } = setup({ secure: () => false });
+    const f = fakeSource();
+    engine.useSource(f.source);
+    expect((await engine.start()).status).toBe('running');
+    expect(deps.getUserMedia).not.toHaveBeenCalled();
+    expect(f.node.connect).toHaveBeenCalledWith(nodes[0]);
+    expect(engine.captureReport?.inputLabel).toBe('Practice band');
+  });
+
+  it('closes the old input on a switch and stays off until the next start', async () => {
+    const { engine, streams } = setup();
+    await engine.start();
+    const f = fakeSource();
+    const states: string[] = [];
+    engine.onState((s) => states.push(s.status));
+    engine.useSource(f.source);
+    expect(engine.state.status).toBe('off');
+    expect(streams[0].track.stopped).toBe(true);
+    await engine.start();
+    expect(engine.state.status).toBe('running');
+    engine.useSource(null);
+    expect(f.close).toHaveBeenCalledTimes(1);
+    expect(states).toEqual(['off', 'starting', 'running', 'off']);
+    // The microphone again: insecure pages cannot open it.
+    expect((await engine.start()).status).toBe('running');
+    expect(streams).toHaveLength(2);
   });
 });

@@ -16,7 +16,9 @@ pub const PRESETS: &[&str] = &["baseline", "subtract-3", "subtract-3-osd1", "sub
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ConfigError {
     /// No preset has this name.
-    #[error("unknown preset {0:?}; known presets: baseline, subtract-3, subtract-3-osd1, subtract-3-osd2")]
+    #[error(
+        "unknown preset {0:?}; known presets: baseline, subtract-3, subtract-3-osd1, subtract-3-osd2, wspr, wspr-deep"
+    )]
     UnknownPreset(String),
     /// An override is not `key=value`.
     #[error("override {0:?} is not key=value")]
@@ -336,27 +338,8 @@ impl DecoderConfig {
     /// the configuration. Values parse as JSON when they can (numbers, booleans) and as
     /// strings otherwise (`ldpc.kind=min-sum`).
     pub fn with_overrides<S: AsRef<str>>(&self, overrides: &[S]) -> Result<Self, ConfigError> {
-        let mut value = serde_json::to_value(self).map_err(|e| ConfigError::Invalid(e.to_string()))?;
-        for item in overrides {
-            let item = item.as_ref();
-            let (key, raw) = item
-                .split_once('=')
-                .ok_or_else(|| ConfigError::BadOverride(item.to_string()))?;
-            let key = key.trim();
-            let raw = raw.trim();
-            let parsed = serde_json::from_str::<serde_json::Value>(raw)
-                .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()));
-            let slot = key
-                .split('.')
-                .try_fold(&mut value, |v, part| v.get_mut(part))
-                .ok_or_else(|| ConfigError::UnknownKey(key.to_string()))?;
-            if slot.is_object() {
-                return Err(ConfigError::UnknownKey(format!(
-                    "{key} (a section, set one of its fields)"
-                )));
-            }
-            *slot = parsed;
-        }
+        let value = serde_json::to_value(self).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+        let value = apply_overrides(value, overrides)?;
         let config: Self = serde_json::from_value(value).map_err(|e| ConfigError::Invalid(e.to_string()))?;
         config.check()?;
         Ok(config)
@@ -406,6 +389,35 @@ impl DecoderConfig {
         }
         Ok(())
     }
+}
+
+/// Applies `key=value` overrides to the JSON form of a configuration. Keys are dotted paths;
+/// values parse as JSON when they can and as strings otherwise.
+pub(crate) fn apply_overrides<S: AsRef<str>>(
+    mut value: serde_json::Value,
+    overrides: &[S],
+) -> Result<serde_json::Value, ConfigError> {
+    for item in overrides {
+        let item = item.as_ref();
+        let (key, raw) = item
+            .split_once('=')
+            .ok_or_else(|| ConfigError::BadOverride(item.to_string()))?;
+        let key = key.trim();
+        let raw = raw.trim();
+        let parsed = serde_json::from_str::<serde_json::Value>(raw)
+            .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()));
+        let slot = key
+            .split('.')
+            .try_fold(&mut value, |v, part| v.get_mut(part))
+            .ok_or_else(|| ConfigError::UnknownKey(key.to_string()))?;
+        if slot.is_object() {
+            return Err(ConfigError::UnknownKey(format!(
+                "{key} (a section, set one of its fields)"
+            )));
+        }
+        *slot = parsed;
+    }
+    Ok(value)
 }
 
 impl Default for DecoderConfig {

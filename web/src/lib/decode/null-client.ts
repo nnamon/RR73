@@ -1,4 +1,6 @@
 import type { Decode, DecoderClient, DecoderStatus } from './types';
+import type { Packed } from './protocol';
+import type { WsprDecode } from '../wspr/spots';
 
 /**
  * Decoder that finds nothing, for tests and for builds or phones where the WebAssembly decoder
@@ -20,6 +22,18 @@ export class NullDecoder implements DecoderClient {
 
   async decodeSlot(): Promise<Decode[]> {
     return [];
+  }
+
+  async decodeWspr(): Promise<{ decodes: WsprDecode[]; ms: number }> {
+    return { decodes: [], ms: 0 };
+  }
+
+  async pack(text: string): Promise<Packed> {
+    return { ok: false, text, i3n3: '', error: 'The encoder is not available.' };
+  }
+
+  async synthesize(): Promise<Float32Array> {
+    throw new Error('The encoder is not available.');
   }
 
   dispose() {}

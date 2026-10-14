@@ -1,14 +1,66 @@
 <script lang="ts">
   import Icon from '../ui/Icon.svelte';
+  import BackLink from '../ui/BackLink.svelte';
+  import LocateButton from '../ui/LocateButton.svelte';
+  import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
-  import { normaliseCallsign, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
-  import { audio, band, busy } from '../lib/state/station.svelte';
+  import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { isGrid } from '../lib/qso/messages';
+  import { audio, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
+  import { log } from '../lib/log/log.svelte';
+  import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
+  import { practice } from '../lib/state/practice.svelte';
+  import { presetLabel, presetOf } from '../lib/decode/highlight';
+
+  /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
+  let { section = null }: { section?: string | null } = $props();
+
+  let featuresHead = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (section === 'features') featuresHead?.scrollIntoView({ block: 'start' });
+  });
+
+  const optional: { id: FeatureId; title: string; sub?: string }[] = [
+    { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
+    { id: 'potaSpots', title: 'POTA spots' },
+    { id: 'clusterSpots', title: 'Cluster spots' },
+    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW' },
+  ];
 
   let callsign = $state(settings.callsign);
   $effect(() => {
     callsign = settings.callsign;
   });
+
+  let grid = $state(settings.grid);
+  let gridError = $state('');
+  let gridNote = $state('');
+  $effect(() => {
+    grid = settings.grid;
+  });
+
+  function saveGrid() {
+    const g = grid.trim();
+    if (g && !isGrid(g)) {
+      gridError = 'A grid square is 4 or 6 characters, such as OJ11 or OJ11ab.';
+      return;
+    }
+    gridError = '';
+    grid = g ? normaliseGrid(g) : '';
+    if (grid !== settings.grid) void updateSettings({ grid });
+  }
+
+  function useGps(r: LocateResult) {
+    if (!r.ok) {
+      gridError = r.message;
+      gridNote = '';
+      return;
+    }
+    grid = r.grid;
+    saveGrid();
+    gridNote = r.note;
+  }
 
   function saveCallsign() {
     const v = normaliseCallsign(callsign);
@@ -23,20 +75,17 @@
     return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
   });
 
-  const decoderText = $derived.by(() => {
-    const d = band.decoder;
-    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
-    if (d.state === 'loading') return 'Loading';
-    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
-    return 'Loads when audio starts';
+  const loggingSummary = $derived.by(() => {
+    // Activation files count only while Activations is on.
+    const on = log.facts.filter((f) => f.active && (features.activations || f.transport !== 'file')).map((f) => f.name);
+    if (!on.length) return 'Only on this phone';
+    return on.length > 2 ? `${on.length} destinations` : on.join(' and ');
   });
 
   type ReloadKind = 'reload' | 'clear';
-  /** A reload stops audio, so with audio running the first tap asks and a second tap within 5 s reloads. */
-  let confirming = $state<ReloadKind | null>(null);
+  /** A reload stops audio; it starts on the first tap. */
   let reloading = $state<ReloadKind | null>(null);
   let online = $state(typeof navigator === 'undefined' ? true : navigator.onLine);
-  let confirmTimer: ReturnType<typeof setTimeout> | undefined;
 
   $effect(() => {
     const set = () => (online = navigator.onLine);
@@ -45,39 +94,23 @@
     return () => {
       window.removeEventListener('online', set);
       window.removeEventListener('offline', set);
-      clearTimeout(confirmTimer);
     };
   });
 
   function tapReload(kind: ReloadKind) {
     if (reloading) return;
-    if (busy() && confirming !== kind) {
-      confirming = kind;
-      clearTimeout(confirmTimer);
-      confirmTimer = setTimeout(() => (confirming = null), 5000);
-      return;
-    }
-    confirming = null;
     reloading = kind;
     void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
   }
 
-  const reloadSub = $derived(
-    reloading === 'reload'
-      ? 'Checking for a newer version.'
-      : confirming === 'reload'
-        ? 'Audio is running. Tap again to stop it and reload.'
-        : 'Checks for a newer version, installs it and reloads.',
-  );
+  const reloadSub = $derived(reloading === 'reload' ? 'Checking for updates' : 'Installs any update. Audio stops.');
 
   const clearSub = $derived(
     !online
-      ? 'Needs a connection: the app loads fresh from the network.'
+      ? 'Needs a connection'
       : reloading === 'clear'
-        ? 'Removing the stored copy.'
-        : confirming === 'clear'
-          ? 'Audio is running. Tap again to stop it and reload.'
-          : 'Removes the stored copy and loads the app fresh. Settings and saved data stay on this phone.',
+        ? 'Removing the cached copy'
+        : 'Keeps settings and QSOs. Audio stops.',
   );
 
   const themes: { id: Theme; label: string }[] = [
@@ -88,7 +121,7 @@
 </script>
 
 <section class="screen" aria-labelledby="settings-title">
-  <h1 id="settings-title" class="large-title">Settings</h1>
+  <BackLink to={href('operate')} label="Operate" title="Settings" id="settings-title" />
 
   <div class="section">
     <h2 class="section-head">Station</h2>
@@ -101,15 +134,49 @@
           bind:value={callsign}
           onblur={saveCallsign}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          placeholder="Not set"
+          placeholder="Required"
           autocapitalize="characters"
           autocomplete="off"
           spellcheck="false"
           maxlength="13"
         />
       </label>
+      <div class="row">
+        <label class="row-title" for="settings-grid">Grid</label>
+        <input
+          id="settings-grid"
+          class="field mono"
+          type="text"
+          bind:value={grid}
+          oninput={() => (gridNote = '')}
+          onblur={saveGrid}
+          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+          placeholder="Required"
+          autocapitalize="characters"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="6"
+        />
+        <LocateButton chars={6} onresult={useGps} />
+      </div>
     </div>
-    <p class="section-foot">Decodes to this callsign are marked in red. Stored on this phone.</p>
+    {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
+    <p class="section-foot">Needed to transmit.</p>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head">Modes</h2>
+    <div class="group">
+      <a class="row link" href={href('settings', 'ft8')}>
+        <span class="row-main"><span class="row-title">FT8 and FT4</span></span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'wspr')}>
+        <span class="row-main"><span class="row-title">WSPR</span></span>
+        <span class="row-value">{settings.wspr.txPct}% · {settings.wspr.powerDbm} dBm</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
   </div>
 
   <div class="section">
@@ -124,6 +191,43 @@
   </div>
 
   <div class="section">
+    <h2 class="section-head">Log</h2>
+    <div class="group">
+      <a class="row link" href={href('settings', 'logging')}>
+        <span class="row-main"><span class="row-title">Logging</span></span>
+        <span class="row-value">{loggingSummary}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head">Practice</h2>
+    <div class="group">
+      <a class="row link" href={href('settings', 'practice')}>
+        <span class="row-main"><span class="row-title">Practice band</span></span>
+        <span class="row-value">{practice.on ? 'On' : 'Off'}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head" id="features" bind:this={featuresHead}>Optional features</h2>
+    <div class="group">
+      {#each optional as f (f.id)}
+        <label class="row">
+          <span class="row-main">
+            <span class="row-title">{f.title}</span>
+            {#if f.sub}<span class="row-sub">{f.sub}</span>{/if}
+          </span>
+          <input type="checkbox" role="switch" class="switch" checked={features[f.id]} onchange={(e) => void setFeature(f.id, e.currentTarget.checked)} />
+        </label>
+      {/each}
+    </div>
+  </div>
+
+  <div class="section">
     <h2 class="section-head" id="appearance">Appearance</h2>
     <div class="seg" role="radiogroup" aria-labelledby="appearance">
       {#each themes as t (t.id)}
@@ -133,20 +237,23 @@
         </label>
       {/each}
     </div>
+    <div class="group colours">
+      <a class="row link" href={href('settings', 'colours')}>
+        <span class="row-main"><span class="row-title">Decode colours</span></span>
+        <span class="row-value">{presetLabel(presetOf(settings.highlights))}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+    </div>
   </div>
 
   <div class="section">
     <h2 class="section-head">About</h2>
     <div class="group">
       <a class="row link" href={href('settings', 'versions')}>
-        <span class="row-main"><span class="row-title">Version {__APP_VERSION__} ({__APP_BUILD__})</span></span>
-        <span class="row-value">Version history</span>
+        <span class="row-main"><span class="row-title">Version history</span></span>
+        <span class="row-value">{__APP_VERSION__}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
-      <div class="row">
-        <span class="row-main"><span class="row-title">Decoder</span></span>
-        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
-      </div>
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>
@@ -154,13 +261,20 @@
         <span class="row-main"><span class="row-title acc">Clear cached copy and reload</span><span class="row-sub" aria-live="polite">{clearSub}</span></span>
       </button>
     </div>
-    <p class="section-foot">RR73 is free software under the MIT or Apache 2.0 licence.</p>
   </div>
 </section>
 
 <style>
   .link {
     color: var(--rr-label);
+  }
+
+  .err {
+    color: var(--rr-tx-text);
+  }
+
+  .colours {
+    margin-top: var(--rr-space-4);
   }
 
   .reload {
@@ -172,12 +286,13 @@
   }
 
   .reload:disabled .acc {
-    color: var(--rr-label3);
+    opacity: 0.4;
   }
 
   .link :global(.row-chevron) {
     color: var(--rr-chev);
   }
+
 
   .field {
     flex: 1;

@@ -23,6 +23,10 @@ scope.onmessage = (e) => {
     scope.postMessage({ type: 'frame', info: renderer.info() });
     return;
   }
+  if (m.type === 'quietest') {
+    scope.postMessage({ type: 'quietest', id: m.id, hz: renderer?.quietest(m.nowMs, m.nearHz) ?? null });
+    return;
+  }
   if (!renderer) return;
   if (m.type === 'samples') {
     const info = renderer.push(m.samples, m.utcMs, m.index);
@@ -32,5 +36,8 @@ scope.onmessage = (e) => {
   if (m.type === 'resize') renderer.resize(m.width, m.height);
   else if (m.type === 'mode') renderer.setMode(m.mode);
   else if (m.type === 'clear') renderer.clear();
+  else if (m.type === 'contrast') renderer.setContrast(m.contrast);
+  else if (m.type === 'txSlots') renderer.setTxSlots(m.starts);
+  else if (m.type === 'txWave') renderer.setTxWave(m.wave);
   scope.postMessage({ type: 'frame', info: renderer.info() });
 };

@@ -155,6 +155,9 @@ pub struct DecodeRecord {
     /// Index of the stage that found it (0 is the preset, 1 the first `--then` stage).
     #[serde(default, skip_serializing_if = "is_zero_u32")]
     pub stage: u32,
+    /// WSPR decodes: frequency drift, in Hz per second.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub drift_hz_per_s: Option<f64>,
 }
 
 fn is_zero_u32(x: &u32) -> bool {

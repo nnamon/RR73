@@ -15,7 +15,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
         +----------------+-----------------+
         |                                  |
   waterfall worker                  slot assembler
-  (display FFT, OffscreenCanvas)    (UTC-aligned 15 s / 7.5 s slots)
+  (display FFT, OffscreenCanvas)    (UTC-aligned 15 s / 7.5 s / 120 s slots)
                                            |
                                   decoder workers (rr73-wasm)
                                            |
@@ -31,6 +31,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | Path | Contents |
 | --- | --- |
 | `crates/rr73-ft8` | FT8 and FT4 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis. No decoding logic. |
+| `crates/rr73-wspr` | WSPR protocol: message types 1 to 3, 50-bit packing, the 15-bit callsign hash, the K = 32 rate 1/2 convolutional code, bit-reversal interleaving, the sync vector, 4-FSK synthesis. No decoding logic. |
 | `crates/rr73-dsp` | Shared DSP: FFT plans, windows, spectrogram with configurable bin and time resolution, resampling. |
 | `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. |
 | `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes. |
@@ -39,9 +40,10 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app. |
 | `web/` | The app. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |
-| `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`) in a container, used as the decoder reference. Never linked or copied. |
+| `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`, `wsprd`, `wsprsim`, `wsprcode`) in a container, used as the decoder and codec reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
+| `tools/refdata` | Build-time download and conversion of the country file, LoTW, POTA and SOTA lists into `web/public/data/`. See `docs/reference-data.md`. |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
 | `docs/decisions/` | Architecture decision records. |
@@ -61,6 +63,15 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 
 Every function is checked bit for bit against ft8_lib (`tools/ft8lib`) using vectors in `fixtures/ft8/`.
 
+### rr73-wspr
+
+- `Message { Standard, Compound, Hashed }`: types 1, 2 and 3. `Message::parse(&str)` reads operator text (`K1ABC FN42 37`, `PJ4/K1ABC 33`, `K1ABC/P 33`, `<K1ABC> FN42AB 37`) and refuses what cannot be sent; `Display` writes the text WSJT-X shows.
+- `pack(&Message) -> Result<Packed, PackError>` and `unpack(&Packed, &CallsignHashes) -> Result<Message, UnpackError>`. `Packed` holds the 28-bit callsign field and the 22-bit locator and power field.
+- `code::convolve`, `code::interleave`, `code::deinterleave`, `code::SYNC`, `code::symbols(&Packed) -> [u8; 162]`, and the polynomials and branch function that decoders use.
+- `synth::fsk(&symbols, centre_hz, drift_hz_per_s, sample_rate, amplitude)`: phase-continuous 4-FSK, 1.4648 Hz tone spacing, 8192 samples per symbol at 12 kHz, 110.6 s. The frequency is the signal's centre, midway between tones 1 and 2.
+
+Every message in `fixtures/wspr/wsjtx.json` packs to the bytes and symbols WSJT-X's `wsprsim` prints (`tools/wsjtx`).
+
 ### rr73-decode
 
 ```text
@@ -74,6 +85,22 @@ SlotAudio (12 kHz f32, start time, mode)
   -> Subtractor           later: rebuild and subtract, next pass
   -> Vec<Decode>
 ```
+
+WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same pattern:
+
+```text
+120 s of 12 kHz audio
+  -> Downconverter       one FFT, 375 Hz complex baseband around 1500 Hz
+  -> SymbolSpectrogram   one-symbol window, quarter-symbol hop
+  -> WsprSearch          sync correlation over frequency, start and drift -> candidates
+  -> WsprRefine          start, frequency and drift from block phase coherence
+  -> WsprDemod           multi-symbol noncoherent detection             -> [f32; 162]
+  -> SequentialDecoder   Fano algorithm over the K = 32 code            -> 81 bits
+  -> WsprValidator       unpack, callsign layout, re-encoding, SNR
+  -> WsprReport
+```
+
+`decode_wspr(&samples, &WsprConfig, &mut WsprContext) -> WsprReport`. `WsprContext` carries the type 3 callsign hash table. `WsprDecode` carries the text, the signal centre (Hz), DT from 1 s into the slot (s), drift (Hz/s), SNR (dB, 2500 Hz), sync score, Fano steps and hard errors.
 
 - `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, later `osd-depth-3` and so on), so a bench run is reproducible from its name and overrides.
 - `decode(&SlotAudio, &DecoderConfig, &mut DecodeContext) -> DecodeReport`. `DecodeContext` carries callsign hashes and, later, a priori information.
@@ -104,24 +131,32 @@ SlotAudio (12 kHz f32, start time, mode)
 
 | Module | Responsibility |
 | --- | --- |
-| `lib/audio` | AudioContext lifecycle, iOS audio session, microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
+| `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
 | `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
-| `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ and Run mode. See `docs/design/sequencer.md`. |
+| `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ, Run and Hunt. See `docs/design/sequencer.md`. |
+| `lib/wspr` | WSPR's pure parts: the beacon schedule, its messages, spots (distance, sorting, drift) and the rows of Operate's spot list. The runtime that drives them is `lib/state/wspr.svelte.ts`. See `docs/design/wspr.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
+| `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
-| `lib/state` | Settings and persistent stores in IndexedDB. |
-| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
+| `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
+| `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
+| `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
+| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`). |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
 
 ## Timing
 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
-- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`. Input latency is unknown on iOS, so the residual offset is measured from the median DT of decodes and corrected.
-- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s, as in WSJT-X.
+- The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it.
+- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X.
+
+## Updates
+
+The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A new version installs and waits; the running build keeps its own files, including the decoder worker and the WebAssembly it may still load. At the next change of screen with audio off, or on Reload app, the app sends SKIP_WAITING and reloads. Workers up to 0.5.0 do not answer the handover check in `public/sw-handover.js`, so a new worker takes over from them at once, as those builds expect. When a file of the running build fails to load and the server's index.html names another build, the app says a new version is ready and reloads at the next safe moment.
 
 ## Platform constraints
 

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AudioClockMapper } from './mapping';
+import { AudioClockMapper, outputLatencyMs, plausibleTimestamp } from './mapping';
+import recorded from '../../../../fixtures/clock/output-timestamps.json';
 import { prng } from '../testing/signal';
 
 // A simulated pair of clocks: performance.now() starts at 0 at `origin` (UTC ms), and the audio
@@ -59,14 +60,28 @@ describe('AudioClockMapper', () => {
     expect(() => m.toUtcMs(1)).toThrow();
   });
 
-  it('applies the offset correction to both directions', () => {
+  it('applies the input offset to captured audio and never to transmit times', () => {
     const c = clocks(origin, 0);
     const m = new AudioClockMapper();
     m.observe({ contextTime: 1, performanceTime: c.perfAt(1) }, c.perfAt(1), c.utcAt(c.perfAt(1)));
-    const before = m.toUtcMs(5);
-    m.offsetS = -0.3;
-    expect(m.toUtcMs(5)).toBeCloseTo(before - 300, 9);
-    expect(m.toContextTime(before - 300)).toBeCloseTo(5, 9);
+    const heard = m.toUtcMs(5);
+    m.inputOffsetS = -0.3;
+    expect(m.captureUtcMs(5)).toBeCloseTo(heard - 300, 9);
+    expect(m.toUtcMs(5)).toBe(heard);
+    expect(m.toContextTime(heard)).toBeCloseTo(5, 9);
+  });
+
+  it('estimates the drift of an audio clock that runs 1000 ppm slow', () => {
+    const c = clocks(origin, 250, 1 - 1000e-6);
+    const m = new AudioClockMapper();
+    for (let t = 1; t < 200; t += 0.0427) {
+      const perf = c.perfAt(t);
+      m.observe({ contextTime: t, performanceTime: perf }, perf + 10, c.utcAt(perf + 10));
+      if (t < 50) expect(m.driftPpm).toBeNull();
+    }
+    expect(m.driftPpm).toBeCloseTo(1000, -1);
+    m.reset();
+    expect(m.driftPpm).toBeNull();
   });
 
   it('starts over after reset', () => {
@@ -76,5 +91,24 @@ describe('AudioClockMapper', () => {
     expect(m.ready).toBe(false);
     m.observe({ contextTime: 1, performanceTime: 9000 }, 9000, origin + 9000);
     expect(m.toUtcMs(1)).toBe(origin + 9000);
+  });
+
+  it('accepts the output timestamps Chromium gives and rejects those of Playwright\'s WebKit', () => {
+    const check = (rows: number[][]) =>
+      rows.map(([contextTime, performanceTime, perfNow, , currentTime]) => ({
+        latency: outputLatencyMs({ contextTime, performanceTime }, currentTime, perfNow),
+        ok: plausibleTimestamp({ contextTime, performanceTime }, currentTime, perfNow),
+      }));
+    // Chromium: 28 to 43 ms of output latency throughout.
+    for (const r of check(recorded.chromium)) {
+      expect(r.latency).toBeGreaterThan(25);
+      expect(r.latency).toBeLessThan(50);
+      expect(r.ok).toBe(true);
+    }
+    // WebKit: performanceTime advances 2 s per second, so the latency grows with the time audio has run.
+    const webkit = check(recorded.webkit);
+    expect(webkit.at(-1)!.latency).toBeGreaterThan(29_000);
+    expect(webkit.filter((r) => r.latency > 500).every((r) => !r.ok)).toBe(true);
+    expect(webkit.slice(8).every((r) => !r.ok)).toBe(true);
   });
 });

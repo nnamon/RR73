@@ -5,6 +5,7 @@
  * - sent: a message I transmitted (amber), the other station in bold.
  */
 
+import type { HighlightId } from './highlight';
 import type { Decode } from './types';
 
 export type Mark = 'cq' | 'me' | 'sent' | null;
@@ -24,10 +25,14 @@ export interface DecodeRowData {
   /** Shown in place of SNR and DT for sent rows: "13:14:30". */
   time?: string;
   badge?: Badge;
-  /** Right-hand note, such as a country or "You sent". */
+  /** Note before the numbers, such as a country or a Run caller's place in the queue. */
   meta?: string;
   /** Already worked: the message is dimmed. */
   worked?: boolean;
+  /** The background decode colour that matched first (highlight.ts), if any. */
+  hl?: HighlightId | null;
+  /** The text layer over it, such as worked before, if any. */
+  ink?: HighlightId | null;
 }
 
 /** Text with one bold span, for rendering without HTML. */

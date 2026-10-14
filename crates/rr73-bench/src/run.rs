@@ -1,27 +1,34 @@
-//! `rr73-bench run`: decode every slot under the given paths and score it.
+//! `rr73-bench run`: decode every slot under the given paths, or of synthetic sets rendered in
+//! memory, and score it.
 
 use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use rayon::prelude::*;
-use rr73_corpus::{Entry, SlotFiles, SlotMode, Tolerance, discover, match_entries, read_slot};
-use rr73_decode::{DecodeContext, DecodeSession, DecoderConfig, SlotAudio, Stage};
+use rr73_corpus::{Entry, SlotFiles, SlotMeta, SlotMode, Tolerance, discover, match_entries, read_slot, wav};
+use rr73_decode::wspr::{WsprConfig, WsprContext, decode_wspr, is_wspr_preset};
+use rr73_decode::{DecodeContext, DecodeSession, DecodeStats, DecoderConfig, SlotAudio, Stage, StageTimings};
 use rr73_ft8::{CallsignHashes, Mode};
 
 use crate::results::{
     self, DecodeRecord, EntryRecord, RESULTS_FORMAT, Results, SlotKind, SlotResult, set_name, summarise,
 };
+use crate::synth::{self, Job, SynthOptions};
 use crate::util;
 
 /// Options of one run.
 #[derive(Clone, Debug)]
 pub struct RunOptions {
-    /// Preset name.
+    /// Preset name: an FT8 preset or a WSPR preset (`wspr`, `wspr-deep`).
     pub preset: String,
     /// `key=value` overrides.
     pub overrides: Vec<String>,
     /// Corpus files or directories.
     pub paths: Vec<PathBuf>,
+    /// Synthetic sets rendered in memory instead of read from the corpus.
+    pub synth: Vec<String>,
+    /// Sizes of the synthetic sets rendered in memory.
+    pub synth_options: SynthOptions,
     /// Output file; default `results/<git-sha>-<preset>.json`.
     pub out: Option<PathBuf>,
     /// Decoder threads; default all CPUs.
@@ -33,7 +40,7 @@ pub struct RunOptions {
     /// What stands in for the rest of the slot when `audio_s` is set.
     pub audio_fill: AudioFill,
     /// Later stages, each `"<preset> [key=value ...]"`, run after the preset on the same
-    /// slot (see [`rr73_decode::DecodeSession`]).
+    /// slot (see [`rr73_decode::DecodeSession`]). FT8 and FT4 presets only.
     pub then: Vec<String>,
 }
 
@@ -50,17 +57,94 @@ pub enum AudioFill {
     Zero,
 }
 
+/// How each slot is decoded: the decoder, the FT8 stages after its preset, and how much of
+/// the slot it sees.
+struct Plan<'a> {
+    decoder: &'a Decoder,
+    /// Every FT8 stage, the preset first; empty for WSPR.
+    stages: Vec<(String, DecoderConfig)>,
+    audio_s: Option<f64>,
+    fill: AudioFill,
+}
+
+/// The decoder a preset names.
+#[derive(Clone, Debug)]
+pub enum Decoder {
+    /// FT8 and FT4.
+    Ft(DecoderConfig),
+    /// WSPR.
+    Wspr(WsprConfig),
+}
+
+impl Decoder {
+    /// The decoder for `preset` with `overrides`.
+    pub fn new(preset: &str, overrides: &[String]) -> Result<Self, String> {
+        if is_wspr_preset(preset) {
+            WsprConfig::preset(preset)
+                .and_then(|c| c.with_overrides(overrides))
+                .map(Decoder::Wspr)
+                .map_err(|e| e.to_string())
+        } else {
+            DecoderConfig::preset(preset)
+                .and_then(|c| c.with_overrides(overrides))
+                .map(Decoder::Ft)
+                .map_err(|e| e.to_string())
+        }
+    }
+
+    /// The configuration as JSON. Going through text keeps `f32` values short (`-2.3`,
+    /// where a direct conversion to a JSON value would widen them to `-2.299999952316284`).
+    pub fn config_json(&self) -> Result<serde_json::Value, String> {
+        let text = match self {
+            Decoder::Ft(c) => serde_json::to_string(c),
+            Decoder::Wspr(c) => serde_json::to_string(c),
+        }
+        .map_err(|e| e.to_string())?;
+        serde_json::from_str(&text).map_err(|e| e.to_string())
+    }
+}
+
+/// One decoder context per thread for each decoder family.
+#[derive(Default)]
+struct Contexts {
+    ft: DecodeContext,
+    wspr: WsprContext,
+}
+
 /// Runs the decoder over the corpus, writes the results file and returns it with its path.
 pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
-    let config = DecoderConfig::preset(&opts.preset)
-        .and_then(|c| c.with_overrides(&opts.overrides))
-        .map_err(|e| e.to_string())?;
-    let mut stages = vec![(opts.preset.clone(), config.clone())];
-    for spec in &opts.then {
-        stages.push(stage_spec(spec)?);
+    let decoder = Decoder::new(&opts.preset, &opts.overrides)?;
+    let mut stages = Vec::new();
+    match &decoder {
+        Decoder::Ft(config) => {
+            stages.push((opts.preset.clone(), config.clone()));
+            for spec in &opts.then {
+                stages.push(stage_spec(spec)?);
+            }
+        }
+        Decoder::Wspr(_) => {
+            if !opts.then.is_empty() || opts.audio_s.is_some() {
+                return Err("--then and --audio-s apply to FT8 and FT4 presets only".into());
+            }
+        }
     }
-    let files = discover(&opts.paths).map_err(|e| e.to_string())?;
-    if files.is_empty() {
+    let plan = Plan {
+        decoder: &decoder,
+        stages,
+        audio_s: opts.audio_s,
+        fill: opts.audio_fill,
+    };
+    let files = if opts.paths.is_empty() {
+        Vec::new()
+    } else {
+        discover(&opts.paths).map_err(|e| e.to_string())?
+    };
+    let mut jobs: Vec<Job> = Vec::new();
+    for name in &opts.synth {
+        let base = Path::new("corpus/synthetic").join(name);
+        jobs.extend(synth::jobs_for(name, &base, &opts.synth_options)?);
+    }
+    if files.is_empty() && jobs.is_empty() {
         return Err("no slots found under the given paths".into());
     }
     let threads = opts
@@ -74,12 +158,16 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let start = Instant::now();
     let reference = opts.reference.as_deref();
     let mut slots: Vec<SlotResult> = pool.install(|| {
-        files
+        let mut read: Vec<SlotResult> = files
             .par_iter()
-            .map_init(DecodeContext::new, |ctx, f| {
-                process(f, &stages, ctx, reference, opts.audio_s, opts.audio_fill)
-            })
-            .collect()
+            .map_init(Contexts::default, |ctx, f| process_file(f, &plan, ctx, reference))
+            .collect();
+        let rendered: Vec<SlotResult> = jobs
+            .par_iter()
+            .map_init(Contexts::default, |ctx, j| process_job(j, &plan, ctx))
+            .collect();
+        read.extend(rendered);
+        read
     });
     let wall_s = start.elapsed().as_secs_f64();
     slots.sort_by(|a, b| a.path.cmp(&b.path));
@@ -91,7 +179,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         git_sha: git_sha.clone(),
         preset: opts.preset.clone(),
         overrides: opts.overrides.clone(),
-        config: config_json(&config)?,
+        config: decoder.config_json()?,
         reference_key: opts.reference.clone(),
         audio_s: opts.audio_s,
         audio_fill: opts.audio_s.map(|_| opts.audio_fill),
@@ -118,13 +206,6 @@ pub fn stage_spec(spec: &str) -> Result<(String, DecoderConfig), String> {
     Ok((name, config))
 }
 
-/// The configuration as JSON. Going through text keeps `f32` values short (`-2.3`, where a
-/// direct conversion to a JSON value would widen them to `-2.299999952316284`).
-fn config_json(config: &DecoderConfig) -> Result<serde_json::Value, String> {
-    let text = serde_json::to_string(config).map_err(|e| e.to_string())?;
-    serde_json::from_str(&text).map_err(|e| e.to_string())
-}
-
 /// `results/<git-sha>-<preset>.json`, with `-<hash>` of the overrides when there are any.
 pub fn default_path(sha: &str, preset: &str, overrides: &[String]) -> PathBuf {
     let mut name = format!("{sha}-{preset}");
@@ -137,127 +218,260 @@ pub fn default_path(sha: &str, preset: &str, overrides: &[String]) -> PathBuf {
     Path::new("results").join(format!("{name}.json"))
 }
 
-fn process(
+fn error_slot(path: String, set: String, mode: String, error: String) -> SlotResult {
+    SlotResult {
+        path,
+        set,
+        mode,
+        kind: SlotKind::Real,
+        expected: 0,
+        decoded: 0,
+        matched: 0,
+        unique: 0,
+        time_s: 0.0,
+        stages: Default::default(),
+        stats: Default::default(),
+        stage_s: Vec::new(),
+        step_max_s: 0.0,
+        step_max_by_kind: Default::default(),
+        decodes: Vec::new(),
+        entries: Vec::new(),
+        error: Some(error),
+    }
+}
+
+fn process_file(
     files: &SlotFiles,
-    stages: &[(String, DecoderConfig)],
-    ctx: &mut DecodeContext,
+    plan: &Plan<'_>,
+    ctx: &mut Contexts,
     reference: Option<&str>,
-    audio_s: Option<f64>,
-    fill: AudioFill,
 ) -> SlotResult {
     let path = files.wav.display().to_string();
     let set = set_name(&files.wav);
-    let slot = match read_slot(files) {
-        Ok(s) => s,
+    match read_slot(files) {
+        Ok(slot) => process_slot(path, set, &slot.meta, &slot.samples, plan, ctx, reference),
+        Err(e) => error_slot(path, set, String::new(), e.to_string()),
+    }
+}
+
+/// Renders a synthetic slot in memory and decodes it as if read from its WAV file: samples
+/// pass through the same 16-bit rounding.
+fn process_job(job: &Job, plan: &Plan<'_>, ctx: &mut Contexts) -> SlotResult {
+    let (samples, meta, stem) = match synth::render_job(job) {
+        Ok(r) => r,
         Err(e) => {
-            return SlotResult {
-                path,
-                set,
-                mode: String::new(),
-                kind: SlotKind::Real,
-                expected: 0,
-                decoded: 0,
-                matched: 0,
-                unique: 0,
-                time_s: 0.0,
-                stages: Default::default(),
-                stats: Default::default(),
+            let path = job.dir.join(format!("{}.wav", job.index)).display().to_string();
+            return error_slot(path, job.set.clone(), String::new(), e);
+        }
+    };
+    let wav_path = job.dir.join(format!("{stem}.wav"));
+    let samples: Vec<f32> = samples
+        .iter()
+        .map(|&x| f32::from(wav::to_i16(x)) / 32_768.0)
+        .collect();
+    process_slot(
+        wav_path.display().to_string(),
+        set_name(&wav_path),
+        &meta,
+        &samples,
+        plan,
+        ctx,
+        None,
+    )
+}
+
+/// What a decoder returned for one slot, in the bench's terms.
+struct Decoded {
+    entries: Vec<Entry>,
+    records: Vec<DecodeRecord>,
+    stages: StageTimings,
+    stats: DecodeStats,
+    /// Wall time of each stage, when there is more than one.
+    stage_s: Vec<f64>,
+    /// Longest single session step, overall and by kind.
+    step_max_s: f64,
+    step_max_by_kind: std::collections::BTreeMap<String, f64>,
+}
+
+fn run_decoder(
+    meta: &SlotMeta,
+    samples: &[f32],
+    plan: &Plan<'_>,
+    ctx: &mut Contexts,
+) -> Result<Decoded, String> {
+    match (plan.decoder, meta.mode) {
+        (Decoder::Ft(_), SlotMode::Ft8 | SlotMode::Ft4) => {
+            let mode = if meta.mode == SlotMode::Ft8 {
+                Mode::Ft8
+            } else {
+                Mode::Ft4
+            };
+            // Each slot starts from an empty hash table so results do not depend on thread
+            // order.
+            ctx.ft.hashes = CallsignHashes::new();
+            let mut cut = samples.to_vec();
+            let mut partial = false;
+            if let Some(seconds) = plan.audio_s {
+                let keep = ((seconds.max(0.0) * 12_000.0).round() as usize).min(cut.len());
+                match plan.fill {
+                    AudioFill::Absent => {
+                        cut.truncate(keep);
+                        partial = true;
+                    }
+                    AudioFill::Zero => cut[keep..].fill(0.0),
+                }
+            }
+            let audio = if partial {
+                SlotAudio::partial(&cut, mode)
+            } else {
+                SlotAudio::new(&cut, mode)
+            };
+            let stages = plan
+                .stages
+                .iter()
+                .map(|(name, config)| Stage::new(name.clone(), config.clone()))
+                .collect();
+            let mut session = DecodeSession::with_context(&audio, stages, std::mem::take(&mut ctx.ft));
+            let mut step_max_s = 0.0f64;
+            let mut step_max_by_kind = std::collections::BTreeMap::<String, f64>::new();
+            while !session.is_done() {
+                let kind = session.next_step_kind();
+                let step = Instant::now();
+                session.step();
+                let t = step.elapsed().as_secs_f64();
+                step_max_s = step_max_s.max(t);
+                let max = step_max_by_kind.entry(kind.to_string()).or_default();
+                *max = max.max(t);
+            }
+            let report = session.report();
+            let decode_stages = session.decode_stages().to_vec();
+            let stage_s = if session.stage_count() > 1 {
+                session.stage_seconds().to_vec()
+            } else {
+                Vec::new()
+            };
+            ctx.ft = session.into_context();
+            Ok(Decoded {
+                entries: report
+                    .decodes
+                    .iter()
+                    .map(|d| Entry {
+                        text: d.text.clone(),
+                        freq_hz: f64::from(d.freq_hz),
+                        dt_s: f64::from(d.dt_s),
+                        snr_db: f64::from(d.snr_db),
+                    })
+                    .collect(),
+                records: report
+                    .decodes
+                    .iter()
+                    .zip(&decode_stages)
+                    .map(|(d, &stage)| DecodeRecord {
+                        text: d.text.clone(),
+                        freq_hz: round(f64::from(d.freq_hz), 3),
+                        dt_s: round(f64::from(d.dt_s), 3),
+                        snr_db: round(f64::from(d.snr_db), 2),
+                        pass: d.pass,
+                        ldpc_iterations: d.ldpc_iterations,
+                        hard_errors: d.hard_errors,
+                        score: round(f64::from(d.score), 3),
+                        matched: false,
+                        osd: d.osd,
+                        osd_distance: round(f64::from(d.osd_distance), 4),
+                        stage: stage as u32,
+                        drift_hz_per_s: None,
+                    })
+                    .collect(),
+                stages: report.timings,
+                stats: report.stats,
+                stage_s,
+                step_max_s,
+                step_max_by_kind,
+            })
+        }
+        (Decoder::Wspr(config), SlotMode::Wspr) => {
+            ctx.wspr.hashes.clear();
+            let report = decode_wspr(samples, config, &mut ctx.wspr);
+            Ok(Decoded {
+                entries: report
+                    .decodes
+                    .iter()
+                    .map(|d| Entry {
+                        text: d.text.clone(),
+                        freq_hz: f64::from(d.freq_hz),
+                        dt_s: f64::from(d.dt_s),
+                        snr_db: f64::from(d.snr_db),
+                    })
+                    .collect(),
+                records: report
+                    .decodes
+                    .iter()
+                    .map(|d| DecodeRecord {
+                        text: d.text.clone(),
+                        freq_hz: round(f64::from(d.freq_hz), 3),
+                        dt_s: round(f64::from(d.dt_s), 3),
+                        snr_db: round(f64::from(d.snr_db), 2),
+                        pass: d.pass,
+                        ldpc_iterations: d.cycles,
+                        hard_errors: d.hard_errors,
+                        score: round(f64::from(d.score), 3),
+                        matched: false,
+                        osd: false,
+                        osd_distance: 0.0,
+                        stage: 0,
+                        drift_hz_per_s: Some(round(f64::from(d.drift_hz_per_s), 5)),
+                    })
+                    .collect(),
+                stages: report.timings,
+                stats: report.stats,
                 stage_s: Vec::new(),
                 step_max_s: 0.0,
                 step_max_by_kind: Default::default(),
-                decodes: Vec::new(),
-                entries: Vec::new(),
-                error: Some(e.to_string()),
-            };
+            })
         }
-    };
-    let mode = match slot.meta.mode {
-        SlotMode::Ft8 => Mode::Ft8,
-        SlotMode::Ft4 => Mode::Ft4,
-    };
-    // Each slot starts from an empty hash table so results do not depend on thread order.
-    ctx.hashes = CallsignHashes::new();
-    let mut samples = slot.samples.clone();
-    let mut partial = false;
-    if let Some(seconds) = audio_s {
-        let keep = ((seconds.max(0.0) * 12_000.0).round() as usize).min(samples.len());
-        match fill {
-            AudioFill::Absent => {
-                samples.truncate(keep);
-                partial = true;
+        (d, mode) => Err(format!(
+            "{} slot cannot be decoded with a {} preset",
+            mode.name(),
+            if matches!(d, Decoder::Wspr(_)) {
+                "WSPR"
+            } else {
+                "FT8 or FT4"
             }
-            AudioFill::Zero => samples[keep..].fill(0.0),
-        }
+        )),
     }
-    let audio = if partial {
-        SlotAudio::partial(&samples, mode)
-    } else {
-        SlotAudio::new(&samples, mode)
-    };
-    let stages = stages
-        .iter()
-        .map(|(name, config)| Stage::new(name.clone(), config.clone()))
-        .collect();
-    let started = Instant::now();
-    let mut session = DecodeSession::with_context(&audio, stages, std::mem::take(ctx));
-    let mut step_max_s = 0.0f64;
-    let mut step_max_by_kind = std::collections::BTreeMap::<String, f64>::new();
-    while !session.is_done() {
-        let kind = session.next_step_kind();
-        let step = Instant::now();
-        session.step();
-        let t = step.elapsed().as_secs_f64();
-        step_max_s = step_max_s.max(t);
-        let max = step_max_by_kind.entry(kind.to_string()).or_default();
-        *max = max.max(t);
-    }
-    let time_s = started.elapsed().as_secs_f64();
-    let report = session.report();
-    let decode_stages = session.decode_stages().to_vec();
-    let stage_s = if session.stage_count() > 1 {
-        session.stage_seconds().to_vec()
-    } else {
-        Vec::new()
-    };
-    *ctx = session.into_context();
+}
 
-    let decoded: Vec<Entry> = report
-        .decodes
-        .iter()
-        .map(|d| Entry {
-            text: d.text.clone(),
-            freq_hz: f64::from(d.freq_hz),
-            dt_s: f64::from(d.dt_s),
-            snr_db: f64::from(d.snr_db),
-        })
-        .collect();
-    let expected = slot.meta.expected(reference);
-    let score = match_entries(&decoded, expected, Tolerance::default());
-    let kind = if slot.meta.noise_only {
+fn process_slot(
+    path: String,
+    set: String,
+    meta: &SlotMeta,
+    samples: &[f32],
+    plan: &Plan<'_>,
+    ctx: &mut Contexts,
+    reference: Option<&str>,
+) -> SlotResult {
+    let started = Instant::now();
+    let decoded = match run_decoder(meta, samples, plan, ctx) {
+        Ok(d) => d,
+        Err(e) => return error_slot(path, set, meta.mode.name().into(), e),
+    };
+    let time_s = started.elapsed().as_secs_f64();
+    let expected = meta.expected(reference);
+    let score = match_entries(&decoded.entries, expected, Tolerance::default());
+    let kind = if meta.noise_only {
         SlotKind::Noise
-    } else if slot.meta.truth.is_some() {
+    } else if meta.truth.is_some() {
         SlotKind::Synthetic
     } else {
         SlotKind::Real
     };
-    let decodes = report
-        .decodes
-        .iter()
+    let decodes = decoded
+        .records
+        .into_iter()
         .zip(&score.decode_match)
-        .zip(&decode_stages)
-        .map(|((d, m), &stage)| DecodeRecord {
-            text: d.text.clone(),
-            freq_hz: round(f64::from(d.freq_hz), 3),
-            dt_s: round(f64::from(d.dt_s), 3),
-            snr_db: round(f64::from(d.snr_db), 2),
-            pass: d.pass,
-            ldpc_iterations: d.ldpc_iterations,
-            hard_errors: d.hard_errors,
-            score: round(f64::from(d.score), 3),
-            matched: m.is_some(),
-            osd: d.osd,
-            osd_distance: round(f64::from(d.osd_distance), 4),
-            stage: stage as u32,
+        .map(|(mut d, m)| {
+            d.matched = m.is_some();
+            d
         })
         .collect();
     let entries = expected
@@ -274,18 +488,18 @@ fn process(
     SlotResult {
         path,
         set,
-        mode: slot.meta.mode.name().into(),
+        mode: meta.mode.name().into(),
         kind,
         expected: score.expected,
         decoded: score.decodes,
         matched: score.matched,
         unique: score.unique,
         time_s,
-        stages: report.timings,
-        stats: report.stats,
-        stage_s,
-        step_max_s,
-        step_max_by_kind,
+        stages: decoded.stages,
+        stats: decoded.stats,
+        stage_s: decoded.stage_s,
+        step_max_s: decoded.step_max_s,
+        step_max_by_kind: decoded.step_max_by_kind,
         decodes,
         entries,
         error: None,
@@ -381,6 +595,31 @@ mod tests {
     use super::*;
 
     #[test]
+    fn subtraction_residue_gives_no_false_decode() {
+        // Slot 526 of wspr-snr-sweep/awgn at 40 slots per step: before the guard around
+        // subtracted signals, the second pass decoded the residue of its -21 dB signal as
+        // `IVH/9J7TAD 57` (1.6 Hz off, 66 hard errors).
+        let opts = SynthOptions {
+            per_step: 40,
+            ..SynthOptions::default()
+        };
+        let jobs = synth::jobs_for("wspr-snr-sweep", Path::new("x"), &opts).expect("jobs");
+        let job = jobs
+            .iter()
+            .find(|j| j.set == "wspr-snr-sweep/awgn" && j.index == 526)
+            .expect("job");
+        let decoder = Decoder::new("wspr", &[]).expect("wspr");
+        let plan = Plan {
+            decoder: &decoder,
+            stages: Vec::new(),
+            audio_s: None,
+            fill: AudioFill::Absent,
+        };
+        let r = process_job(job, &plan, &mut Contexts::default());
+        assert_eq!((r.expected, r.matched, r.unique), (1, 1, 0), "{:?}", r.decodes);
+    }
+
+    #[test]
     fn stage_specs_name_a_preset_and_overrides() {
         let (name, c) = stage_spec("  subtract-3-osd2 search.max_candidates=300 passes=2 ").expect("spec");
         assert_eq!(name, "subtract-3-osd2 search.max_candidates=300 passes=2");
@@ -393,8 +632,15 @@ mod tests {
 
     #[test]
     fn config_floats_stay_short() {
-        let v = config_json(&DecoderConfig::baseline()).expect("json");
+        let v = Decoder::Ft(DecoderConfig::baseline())
+            .config_json()
+            .expect("json");
         assert_eq!(v["search"]["ft8_dt_min_s"].to_string(), "-2.3");
+        let w = Decoder::new("wspr", &[])
+            .expect("wspr")
+            .config_json()
+            .expect("json");
+        assert_eq!(w["search"]["dt_min_s"].to_string(), "-2.0");
     }
 
     #[test]

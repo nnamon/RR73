@@ -1,4 +1,4 @@
-"""FT8 dial frequencies and the receive passband."""
+"""FT8 and WSPR dial frequencies, slot lengths and the receive passband."""
 
 from collections.abc import Mapping
 from types import MappingProxyType
@@ -14,14 +14,39 @@ FT8_DIAL_HZ: Mapping[str, int] = MappingProxyType(
     }
 )
 
+# WSPR dial frequencies (USB); signals sit 1400 to 1600 Hz above them. Band names carry a
+# -wspr suffix so a plan or --band can mix both modes.
+WSPR_DIAL_HZ: Mapping[str, int] = MappingProxyType(
+    {
+        "40m-wspr": 7_038_600,
+        "30m-wspr": 10_138_700,
+        "20m-wspr": 14_095_600,
+        "17m-wspr": 18_104_600,
+        "15m-wspr": 21_094_600,
+        "10m-wspr": 28_124_600,
+    }
+)
+
+ALL_DIAL_HZ: Mapping[str, int] = MappingProxyType({**FT8_DIAL_HZ, **WSPR_DIAL_HZ})
+
 # USB audio passband in Hz relative to the dial frequency.
 PASSBAND_HZ = (100, 3000)
 
 
 def dial_hz(band: str) -> int:
-    """FT8 dial frequency in Hz for a band name such as "20m"."""
+    """Dial frequency in Hz for a band name such as "20m" (FT8) or "20m-wspr"."""
     try:
-        return FT8_DIAL_HZ[band]
+        return ALL_DIAL_HZ[band]
     except KeyError:
-        known = ", ".join(FT8_DIAL_HZ)
+        known = ", ".join(ALL_DIAL_HZ)
         raise ValueError(f"unknown band {band!r}; expected one of {known}") from None
+
+
+def mode_of(band: str) -> str:
+    """Corpus mode of a band name: "WSPR" for the -wspr bands, otherwise "FT8"."""
+    return "WSPR" if band in WSPR_DIAL_HZ else "FT8"
+
+
+def slot_seconds(mode: str) -> int:
+    """Slot length in seconds: 120 for WSPR (even UTC minutes), 15 for FT8."""
+    return 120 if mode == "WSPR" else 15

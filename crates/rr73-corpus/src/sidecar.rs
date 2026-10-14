@@ -21,15 +21,24 @@ pub enum SlotMode {
     /// FT4, 7.5 s slots.
     #[serde(rename = "FT4")]
     Ft4,
+    /// WSPR, 120 s slots starting in even UTC minutes.
+    #[serde(rename = "WSPR")]
+    Wspr,
 }
 
 impl SlotMode {
-    /// Samples in one slot at 12 kHz: 180000 for FT8, 90000 for FT4.
+    /// Samples in one slot at 12 kHz: 180000 for FT8, 90000 for FT4, 1440000 for WSPR.
     pub fn slot_samples(self) -> usize {
         match self {
             SlotMode::Ft8 => 180_000,
             SlotMode::Ft4 => 90_000,
+            SlotMode::Wspr => 1_440_000,
         }
+    }
+
+    /// Slot length, in seconds: 15, 7.5 or 120.
+    pub fn slot_s(self) -> f64 {
+        self.slot_samples() as f64 / f64::from(crate::SAMPLE_RATE)
     }
 
     /// The name used in sidecars and on screen.
@@ -37,6 +46,7 @@ impl SlotMode {
         match self {
             SlotMode::Ft8 => "FT8",
             SlotMode::Ft4 => "FT4",
+            SlotMode::Wspr => "WSPR",
         }
     }
 }

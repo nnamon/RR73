@@ -12,9 +12,11 @@
   let status = $state('');
 
   function describe(s: SlotSummary): string {
-    const p = parity(s.startUtcMs, s.mode) === 'even' ? 'Even' : 'Odd';
     const share = Math.round((s.filled / SLOT_SAMPLES[s.mode]) * 100);
     const state = s.gap ? `audio gap, ${share} % recorded` : s.lateStart ? `started late, ${share} % recorded` : 'complete';
+    // WSPR slots have no parity.
+    if (s.mode === 'WSPR') return `${s.mode} · ${state}`;
+    const p = parity(s.startUtcMs, s.mode) === 'even' ? 'Even' : 'Odd';
     return `${s.mode} · ${p} · ${state}`;
   }
 
@@ -45,7 +47,7 @@
 
 <Sheet bind:open title="Save a slot" onclose={closed}>
   {#if recent.slots.length === 0}
-    <p class="note">No slots yet. The first slot is kept at the next slot boundary after audio starts.</p>
+    <p class="note">No slots yet. Slots appear here as each one ends while audio runs.</p>
   {:else}
     <ul class="group slots" aria-label="Recent slots">
       {#each recent.slots as s (s.startUtcMs)}
@@ -101,7 +103,9 @@
     margin-top: var(--rr-space-2);
   }
 
+  /* A vertical stack: rounded rectangles (HIG Buttons). */
   .links .btn {
+    border-radius: var(--rr-radius-button);
     white-space: normal;
     text-align: center;
   }

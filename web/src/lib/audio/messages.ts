@@ -9,9 +9,9 @@ export const CHUNK_SAMPLES = 512;
 /** 12 kHz audio for the decoders and the waterfall, with the level of the raw input it came from. */
 export interface CaptureChunkMessage {
   type: 'chunk';
-  /** Mono samples at 12000 Hz. */
+  /** Mono samples at 12000 Hz: CHUNK_SAMPLES, or fewer in the last chunk before a restart. */
   samples: Float32Array;
-  /** Running index of samples[0] since the worklet started, samples at 12 kHz. */
+  /** Running index of samples[0] since the worklet started, samples at 12 kHz. It skips ahead where the stream restarts after a gap. */
   index: number;
   /** Audio-clock (AudioContext) time of samples[0], s. */
   contextTime: number;
@@ -19,6 +19,10 @@ export interface CaptureChunkMessage {
   peakDb: number;
   /** RMS of the raw input channel in use since the previous chunk, dBFS. */
   rmsDb: number;
+  /** Gaps in the render quanta the worklet saw since it started. */
+  gaps?: number;
+  /** Frames in those gaps, at the context rate. */
+  gapFrames?: number;
 }
 
 /** What arrives at the worklet. Posted at start and whenever it changes. */

@@ -1,10 +1,18 @@
 <script lang="ts">
-  /** Change band. RR73 cannot read the radio's dial, so the operator sets it and confirms here. */
+  /**
+   * Change band. RR73 cannot read the radio's dial, so the operator chooses the band here and
+   * sets the radio to the frequency shown. A tap on a band applies it and closes the sheet; a tap
+   * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
+   * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
+   * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
+   */
   import Sheet from './Sheet.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
-  import type { Mode } from '../lib/clock/slots';
+  import { MODES, type Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
+  import { setHound, setHoundDial } from '../lib/state/qso.svelte';
+  import { operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -18,16 +26,46 @@
     }
   });
 
-  // FT4 has no usual frequency on 160m and 60m.
+  const hound = $derived(settings.houndBands.includes(band));
+  const dial = $derived(operatingDialHz(band, mode, hound, settings.houndDialHz));
+
+  // The DXpedition's dial frequency, as typed; it starts at the stored value or the band's FT8 frequency.
+  let dialText = $state('');
+  let dialError = $state<string | null>(null);
   $effect(() => {
-    if (dialHz(band, mode) === null) mode = 'FT8';
+    if (!hound || mode !== 'FT8') return;
+    dialText = ((settings.houndDialHz[band] ?? dialHz(band, 'FT8') ?? 0) / 1e6).toFixed(3);
+    dialError = null;
   });
 
-  const dial = $derived(dialHz(band, mode));
+  function saveDial() {
+    const r = parseDialMhz(dialText, band);
+    if ('error' in r) {
+      dialError = r.error;
+      return;
+    }
+    dialError = null;
+    setHoundDial(band, r.hz);
+  }
 
-  function confirm() {
+  /** The mode after choosing band `b`: the same, or FT8 where FT4 has no usual frequency (160m, 60m); null where the mode has none. */
+  function modeOn(b: BandId, m: Mode): Mode | null {
+    if (dialHz(b, m) !== null) return m;
+    return m === 'FT4' && dialHz(b, 'FT8') !== null ? 'FT8' : null;
+  }
+
+  function chooseBand(b: BandId) {
+    const m = modeOn(b, mode);
+    if (!m) return;
+    band = b;
+    mode = m;
     void updateSettings({ band, mode });
     open = false;
+  }
+
+  function chooseMode(m: Mode) {
+    mode = m;
+    void updateSettings({ band, mode });
   }
 </script>
 
@@ -35,29 +73,53 @@
   <fieldset class="bands">
     <legend class="visually-hidden">Band</legend>
     {#each BAND_IDS as b (b)}
-      <label class="tile" class:on={band === b}>
-        <input class="visually-hidden" type="radio" name="band" value={b} bind:group={band} />
+      <label class="tile" class:on={band === b} class:off={!modeOn(b, mode)}>
+        <input class="visually-hidden" type="radio" name="band" value={b} checked={band === b} disabled={!modeOn(b, mode)} onclick={() => chooseBand(b)} />
         {b}
       </label>
     {/each}
   </fieldset>
   <fieldset class="seg">
     <legend class="visually-hidden">Mode</legend>
-    {#each ['FT8', 'FT4'] as const as m (m)}
+    {#each MODES as m (m)}
       <label class="seg-i" class:on={mode === m} class:off={dialHz(band, m) === null}>
-        <input class="visually-hidden" type="radio" name="mode" value={m} bind:group={mode} disabled={dialHz(band, m) === null} />
+        <input class="visually-hidden" type="radio" name="mode" value={m} checked={mode === m} disabled={dialHz(band, m) === null} onchange={() => chooseMode(m)} />
         {m}
       </label>
     {/each}
   </fieldset>
+  {#if mode === 'FT8'}
+    <div class="group hound">
+      <label class="row">
+        <span class="row-main"><span class="row-title">Hound</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={hound} onchange={(e) => setHound(e.currentTarget.checked)} />
+      </label>
+      {#if hound}
+        <label class="row">
+          <span class="row-title">Dial frequency</span>
+          <input
+            class="field"
+            type="text"
+            inputmode="decimal"
+            bind:value={dialText}
+            onblur={saveDial}
+            onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            autocomplete="off"
+            aria-label="Dial frequency, MHz"
+            aria-invalid={dialError !== null}
+          />
+          <span class="unit">MHz</span>
+        </label>
+      {/if}
+    </div>
+    {#if dialError}<p class="err" role="alert">{dialError}</p>{/if}
+  {/if}
   <div class="setblock">
     <p class="k">Set the radio to</p>
     <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
     <p class="m">USB</p>
   </div>
-  <p class="note">RR73 can’t read the radio’s dial. Saved slots record the band you confirm here.</p>
-  <button class="btn primary confirm" onclick={confirm}>Use {band} {mode}</button>
-  <button class="btn cancel" onclick={() => (open = false)}>Cancel</button>
+  <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.</p>
 </Sheet>
 
 <style>
@@ -79,7 +141,7 @@
     align-items: center;
     justify-content: center;
     height: var(--rr-tap);
-    border-radius: var(--rr-radius-l);
+    border-radius: var(--rr-radius-button);
     background: var(--rr-sheet-card);
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-semibold);
@@ -92,18 +154,62 @@
     color: var(--rr-on-fill);
   }
 
+  .tile.off {
+    opacity: 0.35;
+    cursor: default;
+  }
+
   .tile:has(:focus-visible) {
     outline: 2px solid var(--rr-accent);
     outline-offset: 2px;
   }
 
+  /* The fieldset rule above clears padding; the track keeps its 2 pt inset around the thumb. */
   .seg {
     margin-top: var(--rr-space-3);
+    padding: var(--rr-space-half);
   }
 
   .seg-i.off {
     color: var(--rr-label3);
     cursor: default;
+  }
+
+  .hound {
+    margin-top: var(--rr-space-3);
+    background: var(--rr-sheet-card);
+  }
+
+  .field {
+    flex: 1;
+    min-width: 0;
+    height: var(--rr-tap);
+    border: 0;
+    background: transparent;
+    font-size: var(--rr-text-body);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .field:focus {
+    outline: none;
+  }
+
+  .row:has(.field:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  .unit {
+    flex: none;
+    margin-left: var(--rr-space-1);
+    color: var(--rr-label2);
+  }
+
+  .err {
+    margin: var(--rr-space-2) var(--rr-space-4) 0;
+    font-size: var(--rr-text-foot);
+    line-height: var(--rr-leading-row);
+    color: var(--rr-tx-text);
   }
 
   .setblock {
@@ -131,7 +237,7 @@
   .m {
     font-size: var(--rr-text-sideband);
     font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-title);
+    line-height: var(--rr-leading-sideband);
   }
 
   .note {
@@ -139,17 +245,5 @@
     font-size: var(--rr-text-foot);
     line-height: var(--rr-leading-row);
     color: var(--rr-label2);
-  }
-
-  .confirm,
-  .cancel {
-    width: 100%;
-    margin-top: var(--rr-space-3);
-  }
-
-  .cancel {
-    margin-top: var(--rr-space-2);
-    background: transparent;
-    color: var(--rr-accent);
   }
 </style>

@@ -9,19 +9,20 @@
  */
 
 import workletUrl from './capture.worklet.ts?worker&url';
-import { AudioClockMapper } from '../clock/mapping';
+import { AudioClockMapper, plausibleTimestamp } from '../clock/mapping';
+import { TimingLog, type ClockSource } from '../clock/timing';
 import { FLOOR_DB } from './level';
-import { CAPTURE_PROCESSOR, type CaptureMessage } from './messages';
-import { RateMeter, captureConstraints, readReport, type CaptureReport } from './report';
+import { CAPTURE_PROCESSOR, type CaptureChunkMessage, type CaptureMessage } from './messages';
+import { RateMeter, type CaptureReport } from './report';
 import { setAudioSession } from './session';
+import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
+
+export type { InputSource, StartError } from './input';
 
 export type AudioStatus = 'off' | 'starting' | 'running' | 'stopped' | 'failed';
 
 /** Why capture stopped. */
 export type StopReason = 'interrupted' | 'suspended' | 'input-ended' | 'input-muted' | 'hidden';
-
-/** Why capture could not start. */
-export type StartError = 'insecure' | 'unsupported' | 'denied' | 'no-device' | 'busy' | 'worklet' | 'unknown';
 
 export interface EngineState {
   status: AudioStatus;
@@ -58,6 +59,17 @@ export interface EngineDeps {
 
 const loaded = new WeakSet<BaseAudioContext>();
 
+/** Implausible output timestamps in a row, about 0.2 s of chunks, before the engine stops using them. */
+const IMPLAUSIBLE_RUN = 5;
+
+/**
+ * Observations the mapping needs after a start or resume before chunks are stamped, about 0.2 s.
+ * Chunks wait and are stamped once it settles, so one skewed first reading never reaches a slot.
+ */
+const SETTLE = 5;
+/** Chunks held while the mapping settles: 1.4 s. */
+const HOLD_MAX = 32;
+
 export function browserDeps(): EngineDeps {
   return {
     createContext: () => new AudioContext({ latencyHint: 'interactive' }),
@@ -89,8 +101,9 @@ export class CaptureEngine {
   readonly mapper = new AudioClockMapper();
   private readonly deps: EngineDeps;
   private ctx: AudioContext | null = null;
-  private stream: MediaStream | null = null;
-  private source: MediaStreamAudioSourceNode | null = null;
+  /** Where audio comes from: the microphone unless the practice band replaces it. */
+  private input: InputSource;
+  private opened: OpenedInput | null = null;
   private node: AudioWorkletNode | null = null;
   private deviceId: string | null = null;
   private lastUtcMs: number | null = null;
@@ -100,12 +113,22 @@ export class CaptureEngine {
   private readonly chunkListeners = new Set<(c: Chunk) => void>();
   private readonly stateListeners = new Set<(s: EngineState) => void>();
   private readonly reportListeners = new Set<(r: CaptureReport) => void>();
-  private trackCleanup: (() => void) | null = null;
   /** The mapper holds observations from currentTime, without output timestamps. */
   private fallbackClock = false;
+  /** Output timestamps in a row that disagree with currentTime. */
+  private implausible = 0;
+  /** The browser's output timestamps are wrong: the mapper uses currentTime until the next start or resume. */
+  private distrustTimestamps = false;
+  /** Chunks waiting for the mapping to settle. */
+  private held: CaptureChunkMessage[] = [];
+  /** The mapping settled since the last start or resume. */
+  private settled = false;
+  /** Clock readings, capture lags and the mapping around stops and resumes. */
+  readonly timing = new TimingLog();
 
-  constructor(deps: EngineDeps = browserDeps()) {
+  constructor(deps: EngineDeps = browserDeps(), input: InputSource | null = null) {
     this.deps = deps;
+    this.input = input ?? microphoneInput(deps);
     deps.doc.addEventListener('visibilitychange', () => {
       if (deps.doc.visibilityState === 'hidden') this.interrupt('hidden');
     });
@@ -121,6 +144,17 @@ export class CaptureEngine {
 
   get captureReport(): CaptureReport | null {
     return this.report;
+  }
+
+  /** What the mapping is built from now; null without a mapping. */
+  get clockSource(): ClockSource | null {
+    return this.mapper.ready ? (this.fallbackClock ? 'current-time' : 'output') : null;
+  }
+
+  /** UTC the mapping gives the audio clock now minus Date.now(), ms; null without a mapping. */
+  mappingOffsetMs(): number | null {
+    if (!this.ctx || !this.mapper.ready) return null;
+    return this.mapper.toUtcMs(this.ctx.currentTime) - this.deps.dateNow();
   }
 
   onChunk(fn: (c: Chunk) => void): () => void {
@@ -159,7 +193,8 @@ export class CaptureEngine {
   }
 
   private async begin(deviceId: string | null): Promise<EngineState> {
-    if (!this.deps.secure()) return this.fail('insecure');
+    const unavailable = this.input.unavailable();
+    if (unavailable) return this.fail(unavailable);
     this.deviceId = deviceId;
     this.closeInput();
     // Context first, inside the tap: Safari allows resume() only during a user gesture.
@@ -176,8 +211,7 @@ export class CaptureEngine {
     } catch {
       // A context that will not run shows as a stop below.
     }
-    this.mapper.reset();
-    this.fallbackClock = false;
+    this.resetClock();
     this.rate.reset();
     this.lastUtcMs = null;
     if (ctx.state !== 'running') {
@@ -190,7 +224,7 @@ export class CaptureEngine {
 
   /** Resumes after an interruption. Call from a tap. Opens the input again if it ended. */
   async resume(): Promise<EngineState> {
-    const usable = this.stream?.getAudioTracks().some((t) => t.readyState === 'live' && !t.muted) ?? false;
+    const usable = this.opened?.usable() ?? false;
     if (!usable) return this.begin(this.deviceId);
     const ctx = this.ensureContext();
     this.set({ status: 'starting', reason: null, stoppedAtUtcMs: null, error: null });
@@ -199,7 +233,7 @@ export class CaptureEngine {
     } catch {
       // Checked below.
     }
-    this.mapper.reset();
+    this.resetClock();
     this.rate.reset();
     if (ctx.state !== 'running') {
       this.set({ status: 'stopped', reason: 'suspended', stoppedAtUtcMs: this.deps.dateNow(), error: null });
@@ -207,6 +241,21 @@ export class CaptureEngine {
     }
     this.set({ status: 'running', reason: null, stoppedAtUtcMs: null, error: null });
     return this.stateValue;
+  }
+
+  /**
+   * Switches the input source: null for the microphone. Capture from the old source ends at once
+   * and the status goes to off; start() opens the new one.
+   */
+  useSource(input: InputSource | null) {
+    this.input = input ?? microphoneInput(this.deps);
+    const was = this.stateValue.status;
+    this.closeInput();
+    if (was === 'running' || was === 'starting' || was === 'stopped') {
+      this.resetClock();
+      this.rate.reset();
+      this.set({ status: 'off', reason: null, stoppedAtUtcMs: null, error: null });
+    }
   }
 
   /** Switches to another input. Call from a tap. */
@@ -220,6 +269,7 @@ export class CaptureEngine {
   interrupt(reason: StopReason) {
     if (this.stateValue.status !== 'running' && this.stateValue.status !== 'starting') return;
     const at = this.lastUtcMs ?? this.deps.dateNow();
+    this.timing.stopped(at, this.mappingOffsetMs());
     this.mapper.reset();
     this.rate.reset();
     if (this.ctx && this.ctx.state === 'running') void this.ctx.suspend().catch(() => undefined);
@@ -227,8 +277,7 @@ export class CaptureEngine {
   }
 
   private async openInput(ctx: AudioContext) {
-    const stream = await this.deps.getUserMedia(captureConstraints(this.deviceId));
-    this.stream = stream;
+    this.opened = await this.input.open(ctx, this.deviceId, { ended: () => this.interrupt('input-ended'), muted: () => this.interrupt('input-muted') });
     let node: AudioWorkletNode;
     try {
       node = await this.deps.createNode(ctx);
@@ -237,32 +286,17 @@ export class CaptureEngine {
     }
     this.node = node;
     node.port.onmessage = (e: MessageEvent<CaptureMessage>) => this.onMessage(e.data);
-    this.source = ctx.createMediaStreamSource(stream);
-    this.source.connect(node);
-    const track = stream.getAudioTracks()[0];
-    if (!track) throw new DOMException('No audio track.', 'NotFoundError');
-    const ended = () => this.interrupt('input-ended');
-    const muted = () => this.interrupt('input-muted');
-    track.addEventListener('ended', ended);
-    track.addEventListener('mute', muted);
-    this.trackCleanup = () => {
-      track.removeEventListener('ended', ended);
-      track.removeEventListener('mute', muted);
-    };
-    this.report = readReport(track, ctx.sampleRate, this.deps.setSession());
+    this.opened.node.connect(node);
+    this.report = this.opened.report;
     this.emitReport();
   }
 
   private closeInput() {
-    this.trackCleanup?.();
-    this.trackCleanup = null;
-    this.source?.disconnect();
+    this.opened?.close();
+    this.opened = null;
     this.node?.port.close();
     this.node?.disconnect();
-    this.stream?.getTracks().forEach((t) => t.stop());
-    this.source = null;
     this.node = null;
-    this.stream = null;
   }
 
   private onContextState() {
@@ -281,12 +315,31 @@ export class CaptureEngine {
       return;
     }
     if (this.stateValue.status !== 'running' || !this.ctx) return;
-    this.observeClock(this.ctx);
-    if (!this.mapper.ready) return;
-    const utcMs = this.mapper.toUtcMs(m.contextTime);
+    const ctx = this.ctx;
+    this.observeClock(ctx);
+    this.timing.lag(ctx.currentTime - (m.contextTime + m.samples.length / 12000));
+    this.timing.gaps = m.gaps ?? 0;
+    this.timing.gapS = (m.gapFrames ?? 0) / ctx.sampleRate;
+    // A mapping that started over (start, resume, a change of clock source) holds chunks until it settles.
+    if (this.mapper.count < SETTLE) {
+      this.held.push(m);
+      if (this.held.length > HOLD_MAX) this.held.shift();
+      return;
+    }
+    if (!this.settled) {
+      this.settled = true;
+      this.timing.settled(this.deps.dateNow(), this.mappingOffsetMs()!);
+    }
+    const ready = this.held.length ? [...this.held, m] : [m];
+    this.held = [];
+    for (const c of ready) this.emitChunk(ctx, c);
+  }
+
+  private emitChunk(ctx: AudioContext, m: CaptureChunkMessage) {
+    const utcMs = this.mapper.captureUtcMs(m.contextTime);
     this.lastUtcMs = utcMs + (m.samples.length / 12000) * 1000;
     this.rate.add(this.deps.perfNow(), m.contextTime);
-    const measured = this.rate.rate(this.ctx.sampleRate);
+    const measured = this.rate.rate(ctx.sampleRate);
     if (this.report && measured !== null && (this.report.measuredRate === null || Math.abs(measured - this.report.measuredRate) >= 1)) {
       this.report = { ...this.report, measuredRate: measured };
       this.emitReport();
@@ -295,23 +348,46 @@ export class CaptureEngine {
     for (const l of this.chunkListeners) l(chunk);
   }
 
+  private resetClock() {
+    this.mapper.reset();
+    this.fallbackClock = false;
+    this.implausible = 0;
+    this.distrustTimestamps = false;
+    this.held = [];
+    this.settled = false;
+    this.timing.restart();
+  }
+
   private observeClock(ctx: AudioContext) {
     const perfNow = this.deps.perfNow();
     const dateNow = this.deps.dateNow();
-    const ts = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
-    const valid = !!ts && (ts.performanceTime ?? 0) > 0 && (ts.contextTime ?? 0) > 0;
-    if (ts && valid) {
-      // Output timestamps differ from the fallback by the output latency: start over on them.
-      if (this.fallbackClock) this.mapper.reset();
-      this.fallbackClock = false;
-      this.mapper.observe({ contextTime: ts.contextTime!, performanceTime: ts.performanceTime! }, perfNow, dateNow);
-      return;
+    const raw = typeof ctx.getOutputTimestamp === 'function' ? ctx.getOutputTimestamp() : null;
+    const currentTime = ctx.currentTime;
+    this.timing.reading({ contextTime: raw?.contextTime ?? 0, performanceTime: raw?.performanceTime ?? 0, perfNow, dateNow, currentTime });
+    const ts = raw && (raw.performanceTime ?? 0) > 0 && (raw.contextTime ?? 0) > 0 ? { contextTime: raw.contextTime!, performanceTime: raw.performanceTime! } : null;
+    if (!this.distrustTimestamps) {
+      if (ts && plausibleTimestamp(ts, currentTime, perfNow)) {
+        // Output timestamps differ from the fallback by the output latency: start over on them.
+        if (this.fallbackClock) this.mapper.reset();
+        this.fallbackClock = false;
+        this.implausible = 0;
+        this.mapper.observe(ts, perfNow, dateNow);
+        return;
+      }
+      // A few bad timestamps are skipped. A run of them means the browser's are wrong (Playwright's
+      // WebKit on Linux): drop the observations made from them and use currentTime. Timestamps that
+      // stop coming count too: a mapping left on old ones drifts with the audio clock.
+      if (ts || (this.mapper.ready && !this.fallbackClock)) {
+        if (++this.implausible < IMPLAUSIBLE_RUN) return;
+        if (ts) this.distrustTimestamps = true;
+        else this.implausible = 0;
+        if (!this.fallbackClock) this.mapper.reset();
+      }
     }
-    // Until output timestamps arrive, or where the browser has none, pair currentTime with now:
-    // off by the output latency, which the DT-based correction removes later.
-    if (this.mapper.ready && !this.fallbackClock) return;
+    // Until output timestamps arrive, or where the browser has none or wrong ones, pair currentTime
+    // with now: off by the output latency.
     this.fallbackClock = true;
-    this.mapper.observe({ contextTime: ctx.currentTime, performanceTime: perfNow }, perfNow, dateNow);
+    this.mapper.observe({ contextTime: currentTime, performanceTime: perfNow }, perfNow, dateNow);
   }
 
   private fail(error: StartError): EngineState {

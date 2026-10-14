@@ -7,16 +7,25 @@
 //! [`decode_partial`] decodes the start of a slot still being received (early decoding).
 //! [`DecoderSession`] decodes a slot stage by stage in small steps, so a worker can run
 //! deeper stages after the slot ends and stop between steps when the next slot needs it.
+//!
+//! For transmitting, [`pack_message`] checks operator text and gives its canonical form, and
+//! [`synthesize`] renders a message as GFSK audio at the audio output's sample rate.
+//!
+//! WSPR has its own entry points: [`decode_wspr`] for a 120 s slot, [`pack_wspr`] and
+//! [`synthesize_wspr`]. The WSPR decoder keeps its own context per worker, so callsigns from
+//! type 1 and type 2 messages resolve the hashed callsigns of type 3 messages in later slots.
 
 use std::cell::RefCell;
 
+use rr73_decode::wspr::{WsprConfig, WsprContext, decode_wspr as run_wspr};
 use rr73_decode::{Decode, DecodeContext, DecodeSession, DecoderConfig, SlotAudio, Stage, decode};
-use rr73_ft8::Mode;
+use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 thread_local! {
     static CONTEXT: RefCell<DecodeContext> = RefCell::new(DecodeContext::new());
+    static WSPR_CONTEXT: RefCell<WsprContext> = RefCell::new(WsprContext::new());
 }
 
 /// One decode as the app receives it.
@@ -241,6 +250,199 @@ impl Drop for DecoderSession {
     }
 }
 
+/// The result of checking operator text for transmission.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct Packed {
+    /// True when the text packs into a 77-bit message.
+    pub ok: bool,
+    /// The message as it will be decoded at the other end, or the input when `ok` is false.
+    pub text: String,
+    /// Message type as `i3.n3`, such as `1.0` for a standard message; empty when `ok` is false.
+    pub i3n3: String,
+    /// Why the text cannot be sent; `None` when `ok` is true.
+    pub error: Option<String>,
+}
+
+/// [`pack_message`] as a struct, for native callers and tests.
+pub fn pack(text: &str, mode: &str) -> Packed {
+    let checked = parse_mode(mode).and_then(|_| {
+        let msg = Message::parse(text).map_err(|e| e.to_string())?;
+        message::pack(&msg, &mut CallsignHashes::new()).map_err(|e| e.to_string())?;
+        Ok(msg)
+    });
+    match checked {
+        Ok(msg) => {
+            let (i3, n3) = msg.i3_n3();
+            Packed {
+                ok: true,
+                text: msg.to_string(),
+                i3n3: format!("{i3}.{n3}"),
+                error: None,
+            }
+        }
+        Err(e) => Packed {
+            ok: false,
+            text: text.to_string(),
+            i3n3: String::new(),
+            error: Some(e),
+        },
+    }
+}
+
+/// Checks operator text for transmission in `mode` (`FT8` or `FT4`). Returns JSON
+/// `{ "ok", "text", "i3n3", "error" }`: the canonical text and message type when it packs,
+/// otherwise the reason it cannot be sent.
+#[wasm_bindgen]
+pub fn pack_message(text: &str, mode: &str) -> String {
+    serde_json::to_string(&pack(text, mode)).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// [`synthesize`] without the JavaScript error type, for native callers and tests.
+pub fn synthesize_samples(text: &str, mode: &str, f0_hz: f32, sample_rate: u32) -> Result<Vec<f32>, String> {
+    let mode = parse_mode(mode)?;
+    if !(f0_hz.is_finite() && (100.0..=3000.0).contains(&f0_hz)) {
+        return Err(format!("base tone {f0_hz} Hz is outside 100 to 3000 Hz"));
+    }
+    if !(8_000..=192_000).contains(&sample_rate) {
+        return Err(format!(
+            "sample rate {sample_rate} Hz is outside 8000 to 192000 Hz"
+        ));
+    }
+    let msg = Message::parse(text).map_err(|e| e.to_string())?;
+    let payload = message::pack(&msg, &mut CallsignHashes::new()).map_err(|e| e.to_string())?;
+    let symbols = tones::from_payload(mode, &payload);
+    Ok(synth::gfsk(mode, &symbols, f0_hz, sample_rate, 1.0))
+}
+
+/// Renders `text` as a transmission in `mode`: phase-continuous GFSK with the base tone at
+/// `f0_hz` (100 to 3000 Hz), at `sample_rate` Hz (the AudioContext rate, so no resampling
+/// is needed), peak amplitude 1. FT8 lasts 12.64 s, FT4 5.04 s, with the protocol's ramps.
+/// Throws for text that does not pack or parameters out of range.
+#[wasm_bindgen]
+pub fn synthesize(text: &str, mode: &str, f0_hz: f32, sample_rate: u32) -> Result<Vec<f32>, JsError> {
+    synthesize_samples(text, mode, f0_hz, sample_rate).map_err(|e| JsError::new(&e))
+}
+
+/// One WSPR decode as the app receives it.
+#[derive(Debug, Serialize)]
+struct WsprAppDecode<'a> {
+    /// Message text as WSJT-X shows it.
+    text: &'a str,
+    /// Signal centre (midway between tones 1 and 2), in Hz of audio, to 0.1 Hz.
+    freq_hz: f64,
+    /// DT from the nominal start (1 s into the slot), in seconds, to 0.01 s.
+    dt_s: f64,
+    /// Drift, in Hz per second, to 0.001 Hz/s.
+    drift_hz_per_s: f64,
+    /// SNR in 2500 Hz, in dB, to 0.1 dB.
+    snr_db: f64,
+}
+
+/// [`decode_wspr`] without the JavaScript error type, for native callers and tests.
+pub fn decode_wspr_json(samples: &[f32], preset: &str) -> Result<String, String> {
+    let config = WsprConfig::preset(preset).map_err(|e| e.to_string())?;
+    let report = WSPR_CONTEXT.with(|ctx| run_wspr(samples, &config, &mut ctx.borrow_mut()));
+    let out: Vec<WsprAppDecode<'_>> = report
+        .decodes
+        .iter()
+        .map(|d| WsprAppDecode {
+            text: &d.text,
+            freq_hz: round(d.freq_hz, 1),
+            dt_s: round(d.dt_s, 2),
+            drift_hz_per_s: round(d.drift_hz_per_s, 3),
+            snr_db: round(d.snr_db, 1),
+        })
+        .collect();
+    serde_json::to_string(&out).map_err(|e| e.to_string())
+}
+
+/// Decodes one WSPR slot: 120 s of mono audio at 12 kHz (1 440 000 samples), sample 0 at the
+/// start of an even UTC minute, with a WSPR preset (`wspr` or `wspr-deep`). Shorter audio is
+/// padded with silence. Returns a JSON array of `{ "text", "freq_hz", "dt_s",
+/// "drift_hz_per_s", "snr_db" }` objects in decode order; `freq_hz` is the signal centre.
+/// Throws for an unknown preset; never throws for sample values.
+#[wasm_bindgen]
+pub fn decode_wspr(samples: &[f32], preset: &str) -> Result<String, JsError> {
+    decode_wspr_json(samples, preset).map_err(|e| JsError::new(&e))
+}
+
+/// The result of checking WSPR text for transmission.
+#[derive(Debug, Serialize, PartialEq)]
+pub struct WsprPacked {
+    /// True when the text packs into a WSPR message.
+    pub ok: bool,
+    /// The message as it will be decoded at the other end, or the input when `ok` is false.
+    pub text: String,
+    /// Message type: 1 (callsign, 4-character locator, power), 2 (compound callsign and
+    /// power) or 3 (hashed callsign, 6-character locator, power); 0 when `ok` is false.
+    pub message_type: u8,
+    /// Why the text cannot be sent; `None` when `ok` is true.
+    pub error: Option<String>,
+}
+
+/// [`pack_wspr`] as a struct, for native callers and tests.
+pub fn wspr_pack(text: &str) -> WsprPacked {
+    match rr73_wspr::Message::parse(text) {
+        Ok(msg) => WsprPacked {
+            ok: true,
+            text: msg.to_string(),
+            message_type: msg.message_type(),
+            error: None,
+        },
+        Err(e) => WsprPacked {
+            ok: false,
+            text: text.to_string(),
+            message_type: 0,
+            error: Some(e.to_string()),
+        },
+    }
+}
+
+/// Checks WSPR text for transmission: `K1ABC FN42 37`, `PJ4/K1ABC 33`, `K1ABC/P 33` or
+/// `<K1ABC> FN42AB 37` (power in dBm: 0 to 60 ending in 0, 3 or 7). Returns JSON
+/// `{ "ok", "text", "message_type", "error" }`.
+#[wasm_bindgen]
+pub fn pack_wspr(text: &str) -> String {
+    serde_json::to_string(&wspr_pack(text)).unwrap_or_else(|_| "{}".to_string())
+}
+
+/// Lowest and highest signal centre [`synthesize_wspr`] accepts, in Hz: the 200 Hz WSPR
+/// window around 1500 Hz of audio.
+pub const WSPR_TX_RANGE_HZ: (f32, f32) = (1400.0, 1600.0);
+
+/// [`synthesize_wspr`] without the JavaScript error type, for native callers and tests.
+pub fn synthesize_wspr_samples(text: &str, freq_hz: f32, sample_rate: u32) -> Result<Vec<f32>, String> {
+    if !(freq_hz.is_finite() && (WSPR_TX_RANGE_HZ.0..=WSPR_TX_RANGE_HZ.1).contains(&freq_hz)) {
+        return Err(format!(
+            "signal centre {freq_hz} Hz is outside the WSPR window, 1400 to 1600 Hz"
+        ));
+    }
+    if !(8_000..=192_000).contains(&sample_rate) {
+        return Err(format!(
+            "sample rate {sample_rate} Hz is outside 8000 to 192000 Hz"
+        ));
+    }
+    let msg = rr73_wspr::Message::parse(text).map_err(|e| e.to_string())?;
+    let symbols = rr73_wspr::channel_symbols(&msg).map_err(|e| e.to_string())?;
+    Ok(rr73_wspr::synth::fsk(
+        &symbols,
+        f64::from(freq_hz),
+        0.0,
+        sample_rate,
+        1.0,
+    ))
+}
+
+/// Renders WSPR `text` as one transmission: phase-continuous 4-FSK, 1.4648 Hz tone spacing,
+/// 162 symbols, 110.6 s, with the signal centre at `freq_hz` (1400 to 1600 Hz), at
+/// `sample_rate` Hz (the AudioContext rate), peak amplitude 1 and 20 ms ramps. Transmission
+/// starts 1 s into an even UTC minute. Throws for text that does not pack or parameters out
+/// of range.
+#[wasm_bindgen]
+pub fn synthesize_wspr(text: &str, freq_hz: f32, sample_rate: u32) -> Result<Vec<f32>, JsError> {
+    synthesize_wspr_samples(text, freq_hz, sample_rate).map_err(|e| JsError::new(&e))
+}
+
 /// The decoder version, from the crate version (`0.1.0`).
 #[wasm_bindgen]
 pub fn version() -> String {
@@ -259,6 +461,67 @@ mod tests {
         assert!(decode_slot_json(&[], "FT8", "no-such-preset").is_err());
         assert!(decode_slot_json(&[], "WSPR", "baseline").is_err());
         assert_eq!(version(), env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn packs_operator_text() {
+        assert_eq!(
+            pack("cq 9v1ne oj11", "FT8"),
+            Packed {
+                ok: true,
+                text: "CQ 9V1NE OJ11".into(),
+                i3n3: "1.0".into(),
+                error: None
+            }
+        );
+        assert_eq!(pack("JA1KXM 9V1NE R-14", "FT4").text, "JA1KXM 9V1NE R-14");
+        let bad = pack("", "FT8");
+        assert!(!bad.ok);
+        assert!(bad.error.is_some());
+        assert!(!pack("CQ 9V1NE OJ11", "JT65").ok);
+        let json: serde_json::Value =
+            serde_json::from_str(&pack_message("JA1KXM 9V1NE RR73", "FT8")).expect("json");
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["error"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn synthesis_checks_its_inputs() {
+        let ft8 = synthesize_samples("CQ 9V1NE OJ11", "FT8", 1500.0, 48_000).expect("ft8");
+        assert_eq!(ft8.len(), 79 * 7680);
+        let ft4 = synthesize_samples("CQ 9V1NE OJ11", "FT4", 1500.0, 48_000).expect("ft4");
+        assert_eq!(ft4.len(), 105 * 2304);
+        assert!(ft8.iter().all(|x| x.abs() <= 1.0));
+        assert!(synthesize_samples("CQ 9V1NE OJ11", "FT8", 50.0, 48_000).is_err());
+        assert!(synthesize_samples("CQ 9V1NE OJ11", "FT8", 1500.0, 1_000).is_err());
+        assert!(synthesize_samples("", "FT8", 1500.0, 48_000).is_err());
+    }
+
+    #[test]
+    fn wspr_pack_and_synthesis_check_their_inputs() {
+        assert_eq!(
+            wspr_pack("k1abc fn42 37"),
+            WsprPacked {
+                ok: true,
+                text: "K1ABC FN42 37".into(),
+                message_type: 1,
+                error: None
+            }
+        );
+        assert_eq!(wspr_pack("PJ4/K1ABC 33").message_type, 2);
+        assert_eq!(wspr_pack("<K1ABC> FN42AB 37").message_type, 3);
+        let bad = wspr_pack("K1ABC FN42 31");
+        assert!(!bad.ok && bad.error.is_some());
+        let json: serde_json::Value = serde_json::from_str(&pack_wspr("K1ABC FN42 37")).expect("json");
+        assert_eq!(json["ok"], true);
+        let audio = synthesize_wspr_samples("K1ABC FN42 37", 1500.0, 48_000).expect("audio");
+        assert_eq!(audio.len(), 4 * 1_327_104);
+        assert!(audio.iter().all(|x| x.abs() <= 1.0));
+        assert!(synthesize_wspr_samples("K1ABC FN42 37", 1700.0, 48_000).is_err());
+        assert!(synthesize_wspr_samples("K1ABC FN42 37", 1500.0, 1_000).is_err());
+        assert!(synthesize_wspr_samples("K1ABC FN42 31", 1500.0, 48_000).is_err());
+        assert!(decode_wspr_json(&[], "baseline").is_err());
+        assert_eq!(decode_wspr_json(&[], "wspr").as_deref(), Ok("[]"));
     }
 
     #[test]

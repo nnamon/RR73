@@ -239,6 +239,7 @@ mod tests {
             osd: false,
             osd_distance: 0.0,
             stage: 0,
+            drift_hz_per_s: None,
         }
     }
 

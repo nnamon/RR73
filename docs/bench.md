@@ -1,6 +1,6 @@
 # Decoder bench
 
-`rr73-bench` measures decoder configurations against the corpus (`docs/corpus.md`): it writes synthetic slots with exact truth, decodes every slot with a named preset, scores the decodes, compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
+`rr73-bench` measures decoder presets against the corpus (`docs/corpus.md`). It writes synthetic slots with exact truth, decodes every slot with a named preset and scores the decodes. It also compares two runs and gates CI on regressions. All commands run in the `rust` container from the repository root.
 
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh             # public test files
@@ -37,8 +37,12 @@ The decode lists record neither the WSJT-X version nor the decode depth. Some en
 | `noise` | `noise` | `--noise-count`, default 1000 | Noise only. |
 | `snr-sweep` | `snr-sweep/awgn`, `snr-sweep/fading` | 21 x `--per-step` each, default 40 | One signal per slot at -28 to -8 dB in 1 dB steps; `fading` adds Watterson fading at 0.5 Hz spread and 1 ms delay (ITU-R F.1487 moderate). |
 | `crowded` | `crowded/n10`, `n20`, `n40`, `n20-overlap` | `--crowded-count` each, default 20 | 10, 20 or 40 signals per slot, SNR uniform in -18 to 0 dB, base tones at least 60 Hz apart; `n20-overlap` places 20 signals at uniform random frequencies. |
+| `wspr-smoke` | `wspr-smoke` | 25 | WSPR: 12 steady type 1 signals from -26 to -15 dB, types 2 and 3 at -20 dB, 4 drifting at ±0.01 and ±0.03 Hz/s, 2 with slow fading (0.1 Hz spread, 1 ms), 2 windows of 15 signals (-26 to -10 dB, 10 Hz apart), 2 noise-only. |
+| `wspr-noise` | `wspr-noise` | `--noise-count`, default 1000 | WSPR noise only (120 s slots). |
+| `wspr-snr-sweep` | `wspr-snr-sweep/awgn`, `wspr-snr-sweep/fading` | 15 x `--per-step` each, default 40 | One type 1 WSPR signal per slot at -34 to -20 dB in 1 dB steps; `fading` adds Watterson fading at 0.1 Hz spread and 1 ms delay. |
+| `wspr-band` | `wspr-band` | `--crowded-count`, default 20 | 20 WSPR signals per slot, SNR uniform in -28 to -10 dB, centres at least 8 Hz apart, drift uniform in ±0.01 Hz/s. |
 
-Signals are random standard QSO messages (CQ with a grid, call pairs with a grid, report, R-report, RRR, RR73, 73) at a base tone uniform in 300 to 2700 Hz and DT uniform in -0.5 to 0.5 s. SNR is the WSJT-X convention: signal power over the noise power in 2500 Hz. Noise is white Gaussian with 0.02 RMS per sample; a slot whose peak would pass 0.98 is scaled down as a whole. Fading SNR is the average over the fading process.
+Signals are random standard QSO messages (CQ with a grid, call pairs with a grid, report, R-report, RRR, RR73, 73) at a base tone uniform in 300 to 2700 Hz and DT uniform in -0.5 to 0.5 s. WSPR signals are random type 1 messages (standard callsign, 4-character locator, one of the 19 power levels) with the centre uniform in 1405 to 1595 Hz and DT uniform in -1 to 2 s; their truth gives the centre frequency and DT from 1 s into the slot. SNR is the WSJT-X convention: signal power over the noise power in 2500 Hz. Noise is white Gaussian with 0.02 RMS per sample; a slot whose peak would pass 0.98 is scaled down as a whole. Fading SNR is the average over the fading process.
 
 ## Running
 
@@ -49,6 +53,8 @@ Signals are random standard QSO messages (CQ with a grid, call pairs with a grid
 - `--threads 1` gives single-thread timing. The default uses every CPU.
 - `--then "<preset> key=value ..."` adds a later stage that runs on the residual after the preset (and after earlier `--then` stages) and keeps only new decodes; repeat it for more stages. Each decode records its `stage` (0 for the preset), each slot its `stage_s` times, and the run prints decodes, matches and time per stage. Every slot records `step_max_s` and `step_max_by_kind`, the longest single step of the session.
 - `--audio-s 11.8` decodes only the first 11.8 s of each slot (early decoding). With `--audio-fill absent` (the default) the audio ends there and the decoder treats the slot as partial: cut symbols become erasures. `--audio-fill zero` pads the slot with zeros instead.
+- `--synth <set>` renders a synthetic set in memory and decodes it as `synth` would write it, with the same seeds and 16-bit rounding, so the results match a run over the written files. It saves disk for WSPR sets: a 120 s slot is 2.9 MB, so 1000 noise slots would take 2.9 GB. `--noise-count`, `--per-step` and `--crowded-count` size the sets as for `synth`.
+- A WSPR preset (`wspr`, `wspr-deep`) decodes WSPR slots; an FT8 preset decodes FT8 and FT4 slots. A slot of the other family counts as an error.
 - Writes `results/<git-sha>-<preset>.json`; with overrides the name gains `-<hash>` of the override list. `--out` names the file instead.
 - The commit comes from `RR73_GIT_SHA` when set, else from `git` (with `-dirty` for uncommitted changes to tracked files), else `unknown`. Inside the container a worktree's git metadata is outside the mount, so pass the variable.
 
@@ -89,7 +95,7 @@ Slot record:
 | `time_s` | Wall time of the decode call (excluding file reading and scoring), in seconds. |
 | `stages` | Decoder time per stage, in seconds: `spectrogram_s`, `search_s`, `refine_s`, `demod_s`, `ldpc_s`, `validate_s` (CRC, unpack, duplicates, SNR), `subtract_s`, `total_s`. |
 | `stats` | Decoder counters: `candidates`, `ldpc_attempts`, `ldpc_converged`, `crc_failures`, `zero_payloads`, `unpack_failures`, `duplicates`. |
-| `decodes` | Each decode: `text`, `freq_hz`, `dt_s`, `snr_db`, `pass`, `ldpc_iterations`, `hard_errors`, `score` (sync score, dB), `matched`. Left out in slim files. |
+| `decodes` | Each decode: `text`, `freq_hz`, `dt_s`, `snr_db`, `pass`, `ldpc_iterations`, `hard_errors`, `score` (sync score, dB), `matched`. Left out in slim files. WSPR decodes give the signal centre as `freq_hz`, Fano decoder steps as `ldpc_iterations`, data bits that disagree with the re-encoded message as `hard_errors`, the sync score in standard deviations above noise as `score`, and add `drift_hz_per_s`. |
 | `entries` | Each expected entry: `text`, `freq_hz`, `dt_s`, `snr_db`, `matched`. Left out in slim files. |
 | `error` | Present when the slot could not be read; such a slot counts in `errors` and nowhere else. |
 
@@ -115,6 +121,31 @@ Set summary:
 
 `rr73-bench import --decodes out.txt --label NAME [--dt-offset S] --out results/NAME.json <paths>` scores another decoder's text output on the same slots and writes a results file for `compare`. The output file holds a line `== <name>` per slot followed by decode lines in the WSJT-X layout (`HHMMSS SNR DT FREQ ~ MESSAGE`), as `jt9` and ft8_lib's `decode_ft8` print them. The name is the slot's path below `corpus/` without extension, a trailing part of it, or the bare stem when no other slot shares it. `--dt-offset` is subtracted from every DT: `decode_ft8` prints the start of symbol 0 plus 0.16 s, which is DT + 0.66 s. Timing fields are zero.
 
+## End-to-end fixture
+
+`rr73-bench loop-fixture [--out web/e2e/fixtures/ft8-loop] [--check-only] [--preset NAME ...] [--step-s 0.05]` writes the audio that the Playwright `decode` project plays as Chromium's fake microphone, then checks it. Chromium loops the file from the moment capture starts, so the offset between the loop and the UTC slots is arbitrary, and on a loaded host it moves by seconds between runs and drifts during a run.
+
+The file is one 15 s FT8 slot at 12 kHz (`<out>.wav`, 360 KB) that loops without a break: `rr73_chansim::render_loop` carries a transmission that runs past the end of the file over to its start. It holds 4 messages, each sent 4 times, consecutive copies 3.75 s and 90 Hz apart, in white noise at the reference level (seed 2026):
+
+| Message | SNR | Copies: base tone and DT from the start of the file |
+| --- | --- | --- |
+| `CQ 9M2TRX OJ02` | -10 dB | 1022 Hz at 0.1 s, 1112 Hz at 3.85 s, 1202 Hz at 7.6 s, 1292 Hz at 11.35 s |
+| `9V1NE JA1KXM PM95` | -12 dB | 1418 Hz at 0.2 s, 1508 Hz at 3.95 s, 1598 Hz at 7.7 s, 1688 Hz at 11.45 s |
+| `CQ VK3QRP QF22` | -14 dB | 1846 Hz at 0 s, 1936 Hz at 3.75 s, 2026 Hz at 7.5 s, 2116 Hz at 11.25 s |
+| `JH1RRT YB0AZK RR73` | -16 dB | 2210 Hz at 0.1 s, 2300 Hz at 3.85 s, 2390 Hz at 7.6 s, 2480 Hz at 11.35 s |
+
+Copies of a message start every 3.75 s, so whatever the offset, one of them has a DT between -1.62 and 2.5 s in every slot: its 58 data symbols lie inside the slot (only the first or last Costas array, 1.12 s, may be cut) and every preset searches that DT. No two copies share spectrum. The sidecar (`<out>.json`) is an `rr73-slot/1` file whose truth lists all 16 copies with DT measured from the start of the file.
+
+The check decodes the file as a slot starting at every offset `--step-s` apart, with each `--preset` (default `subtract-3-osd2`, the preset the app ships), and exits with status 1 unless every offset gives each message from at least one copy, with frequency within 3 Hz and SNR within 4 dB of that copy (the limits the end-to-end test applies), and no false decodes. The decoder drops repeats of a message within a slot, so each offset gives each message once. `--check-only` checks the committed files without writing them, for use after a decoder change.
+
+On 2026-10-13 (aarch64 container, release 0.6.0), all 1500 offsets 10 ms apart pass for all four presets: worst frequency error 1.88 Hz, worst SNR error 2.16 dB, no false decodes. Regenerating the file on the same machine gives identical bytes. `rr73-bench run` scores the file as one slot that starts at sample 0: it decodes the 4 copies at DT 0 to 0.2 s (matched 4 of 16 expected, recall 0.25) and nothing false; the other 12 copies lie outside the DT search at that offset.
+
+To rebuild the fixture after changing the messages or the layout:
+
+```sh
+docker compose run --rm rust rr73-bench loop-fixture
+```
+
 ## Gate
 
 `rr73-bench gate results.json --baseline bench/baseline.json [--thresholds bench/gate.toml]` exits with status 1 when any check fails, 2 on a usage or file error, and 0 otherwise. For each set present in both files:
@@ -138,6 +169,14 @@ The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesi
 | `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, belief propagation, validator) and the bench itself. |
 | `subtract-3-osd2` | `bench/subtract-3-osd2.json` | The preset the app ships from 0.4.0. Its numbers are what operators get. |
 
+A third gate covers WSPR: the `wspr` preset on `wspr-smoke` (25 slots, 51 signals) and 50 `wspr-noise` slots, rendered in memory with `--synth`, against `bench/wspr.json` with the thresholds in `bench/gate-wspr.toml`. To record it again:
+
+```sh
+docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+  --preset wspr --synth wspr-smoke --synth wspr-noise --noise-count 50 --out results/ci-wspr.json
+docker compose run --rm rust rr73-bench slim results/ci-wspr.json --out bench/wspr.json
+```
+
 `subtract-3`, shipped in 0.3.0, is no longer gated: `subtract-3-osd2` runs all of its code (subtraction, refinement, passes) and only adds OSD, so a regression in `subtract-3` shows in the shipped preset's gate, and a third run would add CI time without a check of its own.
 
 The shipped preset's steps run even when the `baseline` gate fails, so one CI run reports both. On the CI sets (290 slots) the decodes take 0.7 s (`baseline`) and 3.2 s (`subtract-3-osd2`) on 4 threads of the dev machine (Apple M4); the x86_64 runner took 1.3 s and 3.0 s for `baseline` and `subtract-3` in the last CI run, and `subtract-3-osd2` is expected near 5 s there. The release build dominates the job.
@@ -160,7 +199,9 @@ docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --o
 
 `subtract-3-osd1` and `subtract-3-osd2` are `subtract-3` with ordered-statistics decoding (OSD) when belief propagation fails: order 1 over all 91 information positions, or order 2 over the 40 least reliable ones, with reliabilities from the channel LLRs. An OSD codeword is accepted only with at most 30 hard errors, a reliability-weighted distance of at most 0.07 of the total, an estimated SNR of at least -24 dB, and a standard message whose callsigns are sent in full and could have been issued (not starting with Q or 0, and starting with 1 only as 1A or 1S). `docs/experiments/0002-osd.md` has the measurements. In a partial slot every erased bit counts as a hard error (`docs/experiments/0003-anytime.md`). Overrides: `ldpc.kind=bp-osd`, `ldpc.osd_order`, `ldpc.osd_window`, `ldpc.osd_source` (`channel` or `bp`), `ldpc.osd_max_hard_errors`, `ldpc.osd_max_distance`, `ldpc.osd_erasures_as_errors`, `validate.osd_messages` (`any`, `standard`, `standard-known`), `validate.osd_min_snr_db`.
 
-The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth.
+`wspr` is the WSPR decoder (`rr73_decode::wspr`, `WsprConfig::wspr`): one FFT of the 120 s slot cut to a 375 Hz complex baseband around 1500 Hz; a one-symbol spectrogram (0.73 Hz bins, quarter-symbol hop); sync-vector correlation over signal centres 1400 to 1600 Hz, DT -2 to 6 s and drift up to ±4 Hz over the transmission, ranked by the sync sum as a fraction of the power read, keeping up to 60 local maxima at 4 standard deviations or more; refinement of start, frequency and drift from the phase coherence of 5-symbol blocks; soft bits from 7-symbol noncoherent block detection, then from single symbols when that gives no message; the Fano decoder (10000 steps per bit, threshold step 1, bias 0.4); unpack, callsign layout and re-encoding checks; a second pass after subtracting the first pass's decodes from the baseband, with candidates within 4.5 Hz of a decode skipped in its own pass and within 2 Hz and 1 s of a subtracted one. `wspr-deep` allows 120 candidates and 50000 steps per bit. `docs/experiments/0004-wspr.md` has the measurements. Overrides: `search.*` (`search.guard_hz` for the skip distance), `refine.kind` (`none`, `grid`, `coherent`), `refine.block`, `demod.kind` (`noncoherent`, `block`), `demod.blocks` (a JSON list such as `[7,1]`), `demod.llr_scale`, `fano.max_cycles_per_bit`, `fano.delta`, `fano.bias`, `validate.max_hard_errors`, `validate.min_snr_db`, `passes`.
+
+The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth. Both leave out spectrogram frames whose window overlaps digital silence: a run of at least 32 zero samples, as the app writes where no audio arrived (`crates/rr73-decode/src/silence.rs`). A slot that audio joined partway through then reports the SNR of the audio it holds.
 
 ## Baseline, 2026-10-13
 
