@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.2 · 2026-10-14
 
 - The Decode colours preset with every category on is now called Full.
 
