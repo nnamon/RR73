@@ -60,49 +60,96 @@ jobs:
           done
           exit $status
 
+  # A tag points at a release commit whose branch run passed: tools/release/release.sh publish
+  # checks it before tagging. The tag's run then skips Rust, the decoder gate and the end-to-end
+  # tests, and builds and deploys. Every other run, and a tag whose lookup fails, runs them all.
+  verified:
+    name: Earlier run on this commit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      passed: ${{ steps.look.outputs.passed }}
+    steps:
+      - id: look
+        if: github.ref_type == 'tag'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?head_sha=${{ github.sha }}&status=success" --jq .total_count) || n=0
+          echo "Passed CI runs on ${{ github.sha }}: $n"
+          if [ "${n:-0}" -gt 0 ]; then echo "passed=true" >> "$GITHUB_OUTPUT"; fi
+
+  # The Rust jobs cache the registry and target/ under a key that changes with the dependencies
+  # and the toolchain only (tools/ci/deps-key.sh). Main saves a key it does not find; branches and
+  # pull requests read main's caches and save none. zstd compresses them: with gzip, saving
+  # 2.9 GB took 10 min.
   rust:
     name: Rust
+    needs: verified
+    if: needs.verified.outputs.passed != 'true'
     runs-on: ubuntu-latest
     container: rust:1.98.1-slim-bookworm
+    env:
+      # Backtraces keep their files and lines, and target/ stays small enough to cache.
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
     steps:
       - name: Install build tools
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl make gcc libc6-dev pkg-config
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl make gcc libc6-dev pkg-config zstd
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - name: Dependency key
+        id: deps
+        run: echo "key=$(sh tools/ci/deps-key.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: cache
         with:
           path: |
             /usr/local/cargo/registry
             target
-          key: rust-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: rust-
+          key: rust-deps-${{ steps.deps.outputs.key }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'rust-deps-' || '' }}
       - name: Format
         run: cargo fmt --all --check
       - name: Clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Tests
         run: cargo test --workspace
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            /usr/local/cargo/registry
+            target
+          key: rust-deps-${{ steps.deps.outputs.key }}
 
   bench:
     name: Decoder gate
+    needs: verified
+    if: needs.verified.outputs.passed != 'true'
     runs-on: ubuntu-latest
-    needs: rust
     container: rust:1.98.1-slim-bookworm
     steps:
       - name: Install build tools
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl make gcc libc6-dev pkg-config
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl make gcc libc6-dev pkg-config zstd
       - uses: actions/checkout@v4
       - name: Check for a recorded baseline
         id: ready
         run: |
           if [ -f bench/baseline.json ]; then echo "ready=true" >> "$GITHUB_OUTPUT"; else echo "No bench/baseline.json yet; the gate starts with the first recorded baseline."; fi
-      - uses: actions/cache@v4
+      - name: Dependency key
         if: steps.ready.outputs.ready == 'true'
+        id: deps
+        run: echo "key=$(sh tools/ci/deps-key.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        if: steps.ready.outputs.ready == 'true'
+        id: cache
         with:
           path: |
             /usr/local/cargo/registry
             target
-          key: bench-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: bench-
+          key: bench-deps-${{ steps.deps.outputs.key }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'bench-deps-' || '' }}
       - name: Fetch public test files
         if: steps.ready.outputs.ready == 'true'
         run: sh tools/corpus/fetch-ft8lib.sh
@@ -154,6 +201,13 @@ jobs:
             results/ci-subtract-3-osd2.json
             results/ci-subtract-3-osd2-deep.json
             results/ci-wspr.json
+      - uses: actions/cache/save@v4
+        if: steps.ready.outputs.ready == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            /usr/local/cargo/registry
+            target
+          key: bench-deps-${{ steps.deps.outputs.key }}
 
   wasm:
     name: WebAssembly
@@ -162,19 +216,30 @@ jobs:
     steps:
       - name: Install build tools and wasm-pack
         run: |
-          apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
+          apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl zstd
           curl -fsSL https://github.com/rustwasm/wasm-pack/releases/download/v0.15.0/wasm-pack-v0.15.0-x86_64-unknown-linux-musl.tar.gz \
             | tar -xz -C /usr/local/bin --strip-components=1 wasm-pack-v0.15.0-x86_64-unknown-linux-musl/wasm-pack
       - uses: actions/checkout@v4
-      - uses: actions/cache@v4
+      - name: Dependency key
+        id: deps
+        run: echo "key=$(sh tools/ci/deps-key.sh)" >> "$GITHUB_OUTPUT"
+      - uses: actions/cache/restore@v4
+        id: cache
         with:
           path: |
             /usr/local/cargo/registry
             target
-          key: wasm-${{ hashFiles('Cargo.lock', 'rust-toolchain.toml') }}
-          restore-keys: wasm-
+          key: wasm-deps-${{ steps.deps.outputs.key }}
+          restore-keys: ${{ github.ref != 'refs/heads/main' && 'wasm-deps-' || '' }}
       - name: Build
         run: wasm-pack build crates/rr73-wasm --release --target web --out-dir ../../web/src/wasm/pkg
+      - uses: actions/cache/save@v4
+        if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
+        with:
+          path: |
+            /usr/local/cargo/registry
+            target
+          key: wasm-deps-${{ steps.deps.outputs.key }}
       - uses: actions/upload-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
 
@@ -257,10 +322,18 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         with: { path: web/dist }
 
+  # Two machines: the transmit and practice projects, which need a machine with no other test
+  # running, on one and the rest of the suite on the other (RR73_E2E_PART in
+  # web/playwright.config.ts).
   e2e:
-    name: End-to-end
+    name: End-to-end, ${{ matrix.part }}
+    needs: [verified, wasm, refdata]
+    if: needs.verified.outputs.passed != 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [quiet, transmit]
     runs-on: ubuntu-latest
-    needs: [wasm, refdata]
     container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
@@ -281,13 +354,15 @@ jobs:
         run: npx --prefix web playwright test
         env:
           HOME: /root
+          RR73_E2E_PART: ${{ matrix.part }}
       - uses: actions/upload-artifact@v4
         if: failure()
-        with: { name: playwright-report, path: web/playwright-report }
+        with: { name: 'playwright-report-${{ matrix.part }}', path: web/playwright-report }
 
   deploy:
     name: Deploy to GitHub Pages
-    if: startsWith(github.ref, 'refs/tags/v')
+    # Rust, the decoder gate and the end-to-end tests are skipped on a tag whose commit passed.
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && !failure()
     needs: [copy, rust, bench, web, e2e]
     runs-on: ubuntu-latest
     permissions:

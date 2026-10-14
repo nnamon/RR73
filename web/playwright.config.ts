@@ -78,8 +78,51 @@ const reviewProjects = REVIEW
     ]
   : [];
 
-/** Projects that finish before the transmit timing tests start. */
-const QUIET = ['mic', 'decode', 'chromium', 'webkit', 'webkit-375x667', 'webkit-393x852', 'webkit-1180x820', 'webkit-852x393', 'chromium-1440x900', ...reviewProjects.map((p) => p.name)];
+/** Projects that finish before the transmit projects start. */
+const quietProjects = [
+  { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...desktop, ...fakeMic } },
+  // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
+  // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
+  { name: 'decode', testMatch: /decode\.spec/, use: { ...desktop, ...ft8Mic } },
+  { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list|country|spots|pskreporter|heard-you|wsprnet|upload-defaults)\.spec/, use: desktop },
+  // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
+  { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
+  // Layout in the light theme: geometry is the same in dark, where only colours change
+  // (tokens.css). Checks that do not depend on the screen size run at 375 x 667 only, tagged
+  // @ci-375; those that do also run at 393 x 852, tagged @ci-393. layout.spec also matches
+  // colours-layout.spec.
+  { name: 'webkit-375x667', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
+  { name: 'webkit-393x852', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
+  // Large screens, light theme: one geometry test per size class (regular width on an iPad, in
+  // both orientations; compact height on a phone on its side) and the keyboard shortcuts.
+  { name: 'webkit-1180x820', testMatch: LARGE, grep: /@ci-regular/, use: ipad(1180, 820) },
+  { name: 'webkit-852x393', testMatch: LARGE, grep: /@ci-compact-height/, use: iphone(852, 393, 3) },
+  { name: 'chromium-1440x900', testMatch: LARGE, grep: /@ci-keys/, use: desk('chromium') },
+  ...reviewProjects,
+];
+
+/**
+ * Projects that need a machine with no other test running. CI runs them on a machine of their own
+ * with RR73_E2E_PART=transmit and the rest of the suite with RR73_E2E_PART=quiet; unset, one run
+ * holds both, these after the rest.
+ */
+const PART = process.env.RR73_E2E_PART;
+const QUIET = PART === 'transmit' ? [] : quietProjects.map((p) => p.name);
+const transmitProjects = [
+  // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
+  // need the looped fake microphone to start near a slot boundary. On a loaded machine
+  // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
+  // after the other projects, so the rest of the suite does not load the machine meanwhile, with
+  // 2 retries. The QSO comes first: it is the longest of the three.
+  { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
+  { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
+  // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
+  { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
+  // The practice band and the web SDR: audio made or streamed in the page, decoded in real time,
+  // no microphone. They load the machine as the transmit tests do, so they run after them, with
+  // 2 retries.
+  { name: 'practice', testMatch: /(practice|web-sdr)\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
+];
 
 export default defineConfig({
   testDir: here('./e2e'),
@@ -103,39 +146,5 @@ export default defineConfig({
         timeout: 180_000,
         reuseExistingServer: true,
       },
-  projects: [
-    { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...desktop, ...fakeMic } },
-    // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
-    // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
-    { name: 'decode', testMatch: /decode\.spec/, use: { ...desktop, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list|country|spots|pskreporter|heard-you|wsprnet|upload-defaults)\.spec/, use: desktop },
-    // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
-    { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
-    // Layout in the light theme: geometry is the same in dark, where only colours change
-    // (tokens.css). Checks that do not depend on the screen size run at 375 x 667 only, tagged
-    // @ci-375; those that do also run at 393 x 852, tagged @ci-393. layout.spec also matches
-    // colours-layout.spec.
-    { name: 'webkit-375x667', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-375/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /(layout|operate|hound|wspr|rtty)\.spec/, grep: /@ci-393/, use: iphone(393, 852, 3) },
-    // Large screens, light theme: one geometry test per size class (regular width on an iPad, in
-    // both orientations; compact height on a phone on its side) and the keyboard shortcuts.
-    { name: 'webkit-1180x820', testMatch: LARGE, grep: /@ci-regular/, use: ipad(1180, 820) },
-    { name: 'webkit-852x393', testMatch: LARGE, grep: /@ci-compact-height/, use: iphone(852, 393, 3) },
-    { name: 'chromium-1440x900', testMatch: LARGE, grep: /@ci-keys/, use: desk('chromium') },
-    ...reviewProjects,
-    // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
-    // need the looped fake microphone to start near a slot boundary. On a loaded machine
-    // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
-    // after the other projects, so the rest of the suite does not load the machine meanwhile
-    // (locally: --no-deps to run them alone), with 2 retries. The QSO comes first: it is the
-    // longest of the three.
-    { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
-    { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
-    // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
-    { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
-    // The practice band and the web SDR: audio made or streamed in the page, decoded in real time,
-    // no microphone. They load the machine as the transmit tests do, so they run after them, with
-    // 2 retries.
-    { name: 'practice', testMatch: /(practice|web-sdr)\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
-  ],
+  projects: [...(PART === 'transmit' ? [] : quietProjects), ...(PART === 'quiet' ? [] : transmitProjects)],
 });

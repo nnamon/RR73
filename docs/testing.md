@@ -22,6 +22,8 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 | `transmit`, `tx-cq`, `webkit-tx` | Chromium, WebKit | Transmit timing, Halt and a QSO through the decoder, after the projects above |
 | `practice` | Chromium | The practice band in real time, after the transmit projects |
 
+CI runs the suite on two machines: `RR73_E2E_PART=transmit` runs the transmit and practice projects, which need a machine with no other test running, and `RR73_E2E_PART=quiet` runs the rest. Unset, one run holds both, the transmit projects last.
+
 `RR73_REVIEW=1` adds the projects that CI leaves out:
 
 - `review-375x667` and `review-393x852` run every layout test in both themes and `states.spec.ts`, which walks Operate through receiving, CQ, calling, a QSO and Repeat CQ with real transmissions. They save the screens to `web/test-results/screens` (Operate states in `screens/states`, decode colours in `screens/colours`), named by size, theme and screen, such as `webkit-375x667-dark-log.png`. A run took 4.9 min with 5 workers on a 10-core machine (186 tests, 204 screens), most of it the 4 runs of `states.spec.ts`, 2.3 to 2.6 min each, which wait for real slots.
