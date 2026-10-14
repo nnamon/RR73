@@ -142,7 +142,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -169,6 +169,16 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await page.keyboard.press('Escape');
   await expect(menu).toBeHidden();
   await expect(more).toBeFocused();
+
+  // Clear decodes empties the list and its selection at once.
+  await decoded(page, [['CQ VK2LAW QF56', 1200]]);
+  await row(page, 'CQ VK2LAW QF56').click();
+  await more.click();
+  await menu.getByRole('menuitem', { name: 'Clear decodes' }).click();
+  await expect(menu).toBeHidden();
+  await expect(page.getByTestId('decode-list').locator('button.dr')).toHaveCount(0);
+  await expect(page.getByRole('radio', { name: /^All/ })).toHaveText('All 0');
+  await expect(bar.getByRole('status')).toHaveText('Decodes cleared');
 
   // Edit messages opens the Messages sheet.
   await more.click();

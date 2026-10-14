@@ -46,7 +46,8 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/minimodem` | minimodem in a container, the reference RTTY decoder for `rr73-bench rtty`. Never linked or copied. |
 | `tools/wasm-cost` | Cost of the WebAssembly exports per second of audio in headless Chromium and WebKit. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
-| `tools/refdata` | Build-time download and conversion of the country file, LoTW, POTA and SOTA lists into `web/public/data/`. See `docs/reference-data.md`. |
+| `tools/refdata` | Build-time conversion of the country file and download and conversion of the LoTW, POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
+| `refdata/bigcty` | The Big CTY release the app ships as its country file (MIT licence). |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
 | `docs/decisions/` | Architecture decision records. |

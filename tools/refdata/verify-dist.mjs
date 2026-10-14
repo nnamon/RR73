@@ -24,6 +24,8 @@ export function verifyDist(dist) {
   } catch (e) {
     return [`data/manifest.json does not read: ${e.message}`];
   }
+  // The country file is core: every CQ row reads it, and 0.11.1 to 0.12.2 shipped without it.
+  if (!manifest.sources.cty?.entry) problems.push('cty: the country file is missing; build.mjs builds it from refdata/bigcty');
   for (const [id, s] of Object.entries(manifest.sources)) {
     if (!s.entry) {
       if (s.status !== 'missing') problems.push(`${id}: status ${s.status} without an entry file`);
@@ -53,8 +55,7 @@ export function verifyDist(dist) {
   else {
     const precached = new Set([...readFileSync(swPath, 'utf8').matchAll(/url:\s*"(data\/[^"]+)"/g)].map((m) => m[1]));
     for (const core of CORE) {
-      const needed = core === 'data/cty.json' ? !!manifest.sources.cty?.entry : true;
-      if (needed && !precached.has(core)) problems.push(`sw.js does not precache ${core}`);
+      if (!precached.has(core)) problems.push(`sw.js does not precache ${core}`);
     }
     for (const url of precached) if (!CORE.has(url)) problems.push(`sw.js precaches ${url}, which loads only when its feature is on`);
   }

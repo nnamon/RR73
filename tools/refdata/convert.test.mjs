@@ -1,13 +1,14 @@
 // Converters against fixtures in fixtures/reference: trimmed copies of the real files (category
-// page, Big CTY zip excerpt, LoTW, POTA and SOTA lines) and a hand-written SOTA sample. The output
-// goes through the app's own readers (web/src/lib/reference/format.ts).
+// page, Big CTY zip excerpt, LoTW, POTA and SOTA lines) and a hand-written SOTA sample, and against
+// the Big CTY release committed in refdata/bigcty. The output goes through the app's own readers
+// (web/src/lib/reference/format.ts).
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readCtyJson, readLotwJson, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
-import { convertBigCty, latestBigCty } from './cty.mjs';
+import { bigCtyPosts, bigCtyZipFiles, convertBigCty, convertBigCtyFiles, convertCommittedBigCty, ctyCsvColumns, latestBigCty, readBigCtyRelease } from './cty.mjs';
 import { convertLotw } from './lotw.mjs';
 import { convertPota } from './pota.mjs';
 import { convertSota, dmyNumber } from './sota.mjs';
@@ -165,4 +166,44 @@ test('SOTA: day-month-year dates', () => {
   assert.equal(dmyNumber('31/12/2099'), 20991231);
   assert.equal(dmyNumber('1/8/2026'), 20260801);
   assert.equal(dmyNumber('2026-08-01'), null);
+});
+
+test('bigCtyPosts: release posts newest first, a WordPress "-3" slug and a #more link counted once', () => {
+  const page = ['14-july-2026', '06-september-2026-3', '15-september-2026', '15-september-2026/#more-2815', '1-august-2026'].map((s) => `<a href="https://www.country-files.com/big-cty-${s.split('/')[0]}/${s.includes('#') ? s.slice(s.indexOf('#')) : ''}">x</a>`).join('\n');
+  assert.deepEqual(bigCtyPosts(page), [
+    { url: 'https://www.country-files.com/big-cty-15-september-2026/', date: '2026-09-15' },
+    { url: 'https://www.country-files.com/big-cty-06-september-2026-3/', date: '2026-09-06' },
+    { url: 'https://www.country-files.com/big-cty-1-august-2026/', date: '2026-08-01' },
+    { url: 'https://www.country-files.com/big-cty-14-july-2026/', date: '2026-07-14' },
+  ]);
+  assert.deepEqual(bigCtyPosts('<a href="https://www.country-files.com/big-cty-31-smarch-2026/">x</a>'), []);
+});
+
+test('convertCommittedBigCty: the release in refdata/bigcty converts as its zip would', () => {
+  const release = readBigCtyRelease();
+  assert.match(release.url, /^https:\/\/www\.country-files\.com\/bigcty\/download\/\d{4}\/bigcty-\d{8}\.zip$/);
+  assert.equal(release.url.slice(-12, -4), release.date.replaceAll('-', ''));
+  const r = convertCommittedBigCty();
+  assert.deepEqual(r.warnings, []);
+  assert.equal(r.entry, 'cty.json');
+  assert.equal(r.dataDate, release.date);
+  assert.equal(r.url, release.url);
+  assert.ok(r.records >= 340, `${r.records} entities`);
+  const cty = readCtyJson(JSON.parse(r.files['cty.json']));
+  assert.equal(cty.source, release.url);
+  assert.match(cty.notice, /^Big CTY by Jim Reisert AD1C/);
+  assert.match(cty.notice, /Permission is hereby granted/);
+  assert.ok(cty.entities.some((e) => e.prefix === 'VK'));
+});
+
+test('ctyCsvColumns: cty.csv without its alias column, as refdata/bigcty keeps it', () => {
+  const csv = bigCtyZipFiles(fixture('bigcty-excerpt.zip')).csv.toString('latin1');
+  const columns = ctyCsvColumns(csv);
+  assert.match(columns, /^1A,Sov Mil Order of Malta,246,EU,15,28,41\.90,-12\.43,-1\.0;\r\n3D2,Fiji,176,/);
+  assert.ok(columns.endsWith(';\r\n'));
+  assert.equal(columns.split('\r\n').filter(Boolean).length, 7);
+  // The columns give the same cty.json as the whole cty.csv.
+  const files = bigCtyZipFiles(fixture('bigcty-excerpt.zip'));
+  const meta = { url: ZIP_URL, date: '2026-09-15' };
+  assert.deepEqual(convertBigCtyFiles({ ...files, csv: Buffer.from(columns, 'latin1') }, meta).files, convertBigCtyFiles(files, meta).files);
 });

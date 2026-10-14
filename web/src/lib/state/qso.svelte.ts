@@ -9,7 +9,7 @@ import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
-import { isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
+import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
 import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
 import type { BandId } from '../radio/bands';
@@ -23,7 +23,7 @@ import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
-import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
+import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
 
 export interface SentRow {
   slotStartMs: number;
@@ -285,6 +285,19 @@ export function editMessage(tx: TxNum, text: string) {
 /** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
 export function endQso() {
   dispatch({ type: 'endQso', nowMs: Date.now() });
+}
+
+/**
+ * Clear decodes from the ••• menu: empties the decode list and its selection, and drops the Sent
+ * rows of slots that have ended. The sequencer is untouched: a QSO under way, its Next row, a
+ * transmission on air and Hunt's candidates stay.
+ */
+export function clearDecodeList(nowMs = Date.now()) {
+  clearDecodes();
+  const slotMs = SLOT_MS[qso.st.config.mode];
+  qso.sent = qso.sent.filter((s) => s.slotStartMs + slotMs > nowMs);
+  qso.selected = null;
+  qso.notice = { kind: 'info', text: STATUS.decodesCleared, atMs: nowMs };
 }
 
 /** A notice in the status line, such as the result of Find clear Tx. */

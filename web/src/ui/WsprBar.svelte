@@ -7,8 +7,8 @@
    * Beacon reads "Beacon" with a grey dot when off, "Tx at :06" in the accent tint while a
    * transmission waits for its slot (as Tx on does in FT8), and "On air" in solid red with a
    * blinking dot. The percentage opens a menu of percentages; a choice applies at once. ••• holds
-   * Transmit next slot, Tune for 10 s, Save slot, Sort by and Stop beacon after. Halt ends a
-   * transmission and turns the beacon off in one tap.
+   * Transmit next slot, Tune for 10 s, Save slot, Clear spots, Sort by and Stop beacon after. Halt
+   * ends a transmission and turns the beacon off in one tap.
    */
   import BarButtons, { type BarButton } from './BarButtons.svelte';
   import BarMenu, { type BarMenuItem } from './BarMenu.svelte';
@@ -18,7 +18,7 @@
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
-  import { beaconTexts, nextText, setBeacon, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
+  import { beaconTexts, clearSpots, nextText, setBeacon, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
 
   let { onsave }: { onsave: () => void } = $props();
 
@@ -77,7 +77,8 @@
   const moreItems: BarMenuItem[] = $derived([
     { id: 'once', label: 'Transmit next slot', onclick: () => transmitNextSlot() },
     { id: 'tune', label: 'Tune for 10 s', onclick: () => startTune(w.txHz) },
-    { id: 'save', label: 'Save slot', gap: true, onclick: onsave },
+    { id: 'save', label: 'Save slot', onclick: onsave },
+    { id: 'clear', label: 'Clear spots', gap: true, onclick: () => clearSpots() },
     { id: 'sort', label: 'Sort by', value: SORT_LABELS[w.sort], stay: true, onclick: () => stepSort() },
     { id: 'stop', label: 'Stop beacon after', value: durationText(w.stopAfterMin), stay: true, onclick: () => stepStopAfter() },
   ]);

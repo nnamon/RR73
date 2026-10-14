@@ -1,12 +1,13 @@
-// The build's fetch policy, with a fake network: one request per source per UTC day, one attempt,
-// conditional requests on later days, and a cached or missing copy when a download fails.
+// The build's fetch policy, with a fake network: one request per downloaded source per UTC day,
+// one attempt, conditional requests on later days, and a cached or missing copy when a download
+// fails. The country file comes from the release committed in refdata/bigcty, with no request.
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { readManifest } from '../../web/src/lib/reference/format.ts';
 import { buildAll } from './build.mjs';
-import { BIGCTY_LIST } from './cty.mjs';
+import { BIGCTY_LIST, convertCommittedBigCty, readBigCtyRelease } from './cty.mjs';
 import { LOTW_URL } from './lotw.mjs';
 import { POTA_URL } from './pota.mjs';
 import { SOTA_URL } from './sota.mjs';
@@ -15,7 +16,16 @@ import { FIXTURES, fakeFetch, join, tempDir } from './testing.mjs';
 const ZIP_URL = 'https://www.country-files.com/bigcty/download/2026/bigcty-20260915.zip';
 const fixture = (name) => readFileSync(`${FIXTURES}${name}`);
 
-/** Routes answering every source; validated ones answer 304 to a matching If-None-Match. */
+const RELEASE = readBigCtyRelease();
+const CTY_RECORDS = convertCommittedBigCty().records;
+
+/** True when no request went to country-files.com. */
+const noCty = (fetch) => fetch.calls.every((c) => !c.url.includes('country-files.com'));
+
+/**
+ * Routes answering every source; validated ones answer 304 to a matching If-None-Match. Big CTY
+ * answers too, so a request for it would succeed and show in the calls.
+ */
 function network() {
   const validated = (body, etag) => (headers) => (headers['if-none-match'] === etag ? { status: 304 } : { body, headers: { etag, 'last-modified': 'Mon, 12 Oct 2026 07:13:31 GMT' } });
   return {
@@ -36,25 +46,23 @@ function dirs() {
   return { outDir: join(root, 'out'), cacheDir: join(root, 'cache') };
 }
 
-test('first build: every source fetched once, files and manifest written', async () => {
+test('first build: every downloaded source fetched once, files and manifest written', async () => {
   const d = dirs();
   const fetch = fakeFetch(network());
   const manifest = readManifest(await buildAll({ ...d, now: DAY1, fetch }));
   assert.deepEqual(
     fetch.calls.map((c) => c.url),
-    [BIGCTY_LIST, ZIP_URL, LOTW_URL, POTA_URL, SOTA_URL],
+    [LOTW_URL, POTA_URL, SOTA_URL],
   );
+  assert.ok(noCty(fetch), 'a request went to country-files.com');
   assert.ok(fetch.calls.every((c) => /^RR73-refdata\/1 /.test(c.headers['user-agent'])));
   for (const id of ['cty', 'lotw', 'pota', 'sota']) {
     const s = manifest.sources[id];
     assert.equal(s.status, 'ok', id);
-    assert.equal(s.fetchedAt, DAY1.toISOString());
+    assert.equal(s.fetchedAt, id === 'cty' ? null : DAY1.toISOString());
     assert.ok(s.entry && existsSync(join(d.outDir, s.entry)), `${id} entry ${s.entry}`);
     assert.ok(s.files >= 1 && s.bytes > 0 && s.gzipBytes > 0);
   }
-  assert.equal(manifest.sources.cty.url, ZIP_URL);
-  assert.equal(manifest.sources.cty.dataDate, '2026-09-15');
-  assert.equal(manifest.sources.cty.records, 7);
   assert.equal(manifest.sources.lotw.records, 9);
   assert.equal(manifest.sources.pota.records, 13);
   assert.equal(manifest.sources.pota.files, 9);
@@ -65,15 +73,41 @@ test('first build: every source fetched once, files and manifest written', async
   assert.ok(existsSync(join(d.outDir, 'manifest.json')));
 });
 
+test('the country file: the committed release, with no request and no cache entry', async () => {
+  const d = dirs();
+  // Builds up to 0.12.3 downloaded Big CTY into the cache; the entry goes.
+  mkdirSync(join(d.cacheDir, 'cty'), { recursive: true });
+  writeFileSync(join(d.cacheDir, 'cty', 'meta.json'), '{"fetchedAt":"2026-10-13T00:08:00.000Z"}');
+  const lines = [];
+  // Asked, and with the site answering, the build still makes no request for it.
+  const fetch = fakeFetch(network());
+  const manifest = readManifest(await buildAll({ ...d, now: DAY1, fetch, only: ['cty'], ask: ['cty'], log: (l) => lines.push(l) }));
+  assert.ok(noCty(fetch), 'a request went to country-files.com');
+  assert.deepEqual(fetch.calls, []);
+  assert.equal(existsSync(join(d.cacheDir, 'cty')), false);
+  const cty = manifest.sources.cty;
+  assert.deepEqual(
+    { status: cty.status, url: cty.url, dataDate: cty.dataDate, fetchedAt: cty.fetchedAt, checkedAt: cty.checkedAt, entry: cty.entry, files: cty.files, records: cty.records },
+    { status: 'ok', url: RELEASE.url, dataDate: RELEASE.date, fetchedAt: null, checkedAt: null, entry: 'cty.json', files: 1, records: CTY_RECORDS },
+  );
+  assert.ok(CTY_RECORDS >= 340);
+  assert.equal(cty.note, `The release of ${RELEASE.date} committed in the repository (refdata/bigcty).`);
+  assert.match(cty.terms, /^MIT licence/);
+  const json = JSON.parse(readFileSync(join(d.outDir, 'cty.json'), 'utf8'));
+  assert.equal(json.version, RELEASE.date);
+  assert.match(json.notice, /^Big CTY by Jim Reisert AD1C/);
+  assert.ok(lines.includes(`cty: built from the release of ${RELEASE.date} committed in the repository: ${CTY_RECORDS} records`));
+});
+
 test('the same UTC day: no requests, the cached copy ships', async () => {
   const d = dirs();
   await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()) });
   const again = fakeFetch(network());
   const manifest = readManifest(await buildAll({ ...d, now: DAY1_LATER, fetch: again }));
   assert.deepEqual(again.calls, []);
-  for (const s of Object.values(manifest.sources)) {
+  for (const [id, s] of Object.entries(manifest.sources)) {
     assert.equal(s.status, 'ok');
-    assert.equal(s.fetchedAt, DAY1.toISOString());
+    assert.equal(s.fetchedAt, id === 'cty' ? null : DAY1.toISOString());
     assert.ok(existsSync(join(d.outDir, s.entry)));
   }
 });
@@ -83,14 +117,14 @@ test('the next day: conditional requests, unchanged data keeps its fetch date', 
   await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()) });
   const next = fakeFetch(network());
   const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: next }));
-  // The category page still links the same zip, so the zip is not downloaded again.
   assert.deepEqual(
     next.calls.map((c) => c.url),
-    [BIGCTY_LIST, LOTW_URL, POTA_URL, SOTA_URL],
+    [LOTW_URL, POTA_URL, SOTA_URL],
   );
-  assert.equal(next.calls[1].headers['if-none-match'], '"lotw-1"');
-  assert.equal(next.calls[3].headers['if-modified-since'], 'Mon, 12 Oct 2026 07:13:31 GMT');
-  for (const s of Object.values(manifest.sources)) {
+  assert.equal(next.calls[0].headers['if-none-match'], '"lotw-1"');
+  assert.equal(next.calls[2].headers['if-modified-since'], 'Mon, 12 Oct 2026 07:13:31 GMT');
+  for (const id of ['lotw', 'pota', 'sota']) {
+    const s = manifest.sources[id];
     assert.equal(s.status, 'ok');
     assert.equal(s.fetchedAt, DAY1.toISOString());
     assert.equal(s.checkedAt, DAY2.toISOString());
@@ -194,14 +228,15 @@ test('a converter change converts the cached download again without a request', 
   const manifest = readManifest(await buildAll({ ...d, now: DAY1_LATER, fetch: none, converter: 'new', log: (l) => lines.push(l) }));
   assert.deepEqual(none.calls, []);
   assert.ok(lines.includes('pota: converted: 13 records'));
-  for (const s of Object.values(manifest.sources)) {
-    assert.equal(s.status, 'ok');
-    assert.equal(s.fetchedAt, DAY1.toISOString());
+  for (const id of ['lotw', 'pota', 'sota']) {
+    assert.equal(manifest.sources[id].status, 'ok');
+    assert.equal(manifest.sources[id].fetchedAt, DAY1.toISOString());
   }
   assert.equal(JSON.parse(readFileSync(join(d.cacheDir, 'pota', 'meta.json'), 'utf8')).converter, 'new');
-  // The same holds offline, and the Big CTY release date survives the conversion.
+  // The same holds offline.
   const offline = readManifest(await buildAll({ ...d, now: DAY2, fetch: none, converter: 'newer', offline: true }));
-  assert.equal(offline.sources.cty.dataDate, '2026-09-15');
+  assert.equal(offline.sources.pota.records, 13);
+  assert.equal(offline.sources.cty.dataDate, RELEASE.date);
   assert.deepEqual(none.calls, []);
 });
 
@@ -241,4 +276,15 @@ test('verify-dist: a consistent build passes; missing shards and wrong precache 
   assert.deepEqual(verifyDist(dist), [`pota: data/pota/${index.shards[0].file} is missing`]);
   rmSync(join(dist, 'data', 'manifest.json'));
   assert.match(verifyDist(dist)[0], /manifest.json is missing/);
+});
+
+test('verify-dist: a build without the country file fails', async () => {
+  const { verifyDist } = await import('./verify-dist.mjs');
+  const { cpSync } = await import('node:fs');
+  const d = dirs();
+  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['lotw'] });
+  const dist = join(tempDir('dist'), 'dist');
+  cpSync(d.outDir, join(dist, 'data'), { recursive: true });
+  writeFileSync(join(dist, 'sw.js'), 'precacheAndRoute([{url:"data/manifest.json",revision:"1"},{url:"data/cty.json",revision:"1"}])');
+  assert.ok(verifyDist(dist).includes('cty: the country file is missing; build.mjs builds it from refdata/bigcty'));
 });

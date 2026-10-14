@@ -2,11 +2,12 @@
 // Chooses the sources the CI "Reference data" job may ask, for build.mjs --ask. Run in the job
 // after the cache restore; writes ask=<ids> and sota=true|false to $GITHUB_OUTPUT.
 //
-// - The main branch may ask every source. Within one cache, build.mjs asks each at most once per
-//   UTC day.
+// - The country file is committed in refdata/bigcty and never asked.
+// - The main branch may ask LoTW, POTA and SOTA. Within one cache, build.mjs asks each at most
+//   once per UTC day.
 // - Other branches, tags and pull requests build from the cache they restored, main's included,
 //   and ask nothing. A run that restored no cache at all asks, so a build before main has a cache
-//   still gets the country file.
+//   still gets the LoTW and parks lists.
 // - SOTA: one request per UTC day across the whole repository. A run records its request as the
 //   cache entry sota-asked-<day> before it asks, and a run asks only when no branch holds that
 //   entry. Caches are per branch, so the job lists them through the GitHub API (actions: read).
@@ -44,7 +45,7 @@ export async function plan({ ref, restored, ...api }) {
   const why = [ref === MAIN ? 'main asks each source once a day' : `${ref} restored no cache`];
   const sota = await sotaAskedToday(api);
   why.push(`SOTA: ${sota.why}`);
-  return { ask: ['cty', 'lotw', 'pota', ...(sota.asked ? [] : ['sota'])], sota: !sota.asked, why };
+  return { ask: ['lotw', 'pota', ...(sota.asked ? [] : ['sota'])], sota: !sota.asked, why };
 }
 
 async function main() {
