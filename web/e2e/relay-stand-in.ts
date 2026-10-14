@@ -13,14 +13,6 @@ export const RECEIVERS = [
 /** The relay as stored after Settings › Relay adds it and Settings › Web SDR chooses a receiver. */
 export const RELAY_SET_UP = { base: RELAY_BASE, relays: [{ base: RELAY_BASE, key: RELAY_KEY }], sdrOn: true, receiver: RECEIVERS[0].id, receiverName: RECEIVERS[0].name };
 
-/** As RELAY_SET_UP on a relay that takes receivers by address, with a KiwiSDR the operator added in use. */
-export const RELAY_OWN = {
-  ...RELAY_SET_UP,
-  relays: [{ base: RELAY_BASE, key: RELAY_KEY, receivers: [{ host: 'kiwi.example.org', port: 8074 }] }],
-  receiver: 'kiwisdr://kiwi.example.org:8074',
-  receiverName: 'kiwi.example.org:8074',
-};
-
 export interface RelayCall {
   method: string;
   path: string;
@@ -28,11 +20,8 @@ export interface RelayCall {
   body: unknown;
 }
 
-/**
- * Answers the relay's API; returns the calls it saw, oldest first. With userReceivers, it takes
- * receivers by address and refuses private ones with QSP's answer.
- */
-export async function routeRelay(page: Page, opts: { userReceivers?: boolean } = {}): Promise<RelayCall[]> {
+/** Answers the relay's API; returns the calls it saw, oldest first. */
+export async function routeRelay(page: Page): Promise<RelayCall[]> {
   const calls: RelayCall[] = [];
   const cors = { 'access-control-allow-origin': '*', 'access-control-allow-headers': 'authorization, content-type', 'access-control-allow-methods': 'GET, POST, PATCH, DELETE' };
   await page.route(`${RELAY_BASE}/**`, async (route) => {
@@ -42,17 +31,11 @@ export async function routeRelay(page: Page, opts: { userReceivers?: boolean } =
     const body = r.postData() ? (r.postDataJSON() as Record<string, unknown>) : null;
     calls.push({ method: r.method(), path, auth: (await r.headerValue('authorization')) ?? null, body });
     const json = (status: number, b: unknown) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(b) });
-    if (path === '/about') return json(200, { name: 'QSP', version: '0.16.0', api: ['v1'], auth: true, services: ['sdr', 'pskreporter'], userReceivers: opts.userReceivers ?? false });
+    if (path === '/about') return json(200, { name: 'QSP', version: '0.16.0', api: ['v1'], auth: true, services: ['sdr', 'pskreporter'] });
     if (path === '/v1/sdr/receivers') return json(200, { receivers: RECEIVERS });
     if (path === '/v1/sdr/sessions' && r.method() === 'POST') {
       const id = `s${calls.filter((c) => c.method === 'POST').length}`;
-      const custom = body?.custom as { host: string; port: number } | undefined;
-      if (custom && !opts.userReceivers) return json(403, { error: { code: 'forbidden', message: 'This relay accepts only the receivers it lists.' } });
-      if (custom && /^(10|127|192\.168)\./.test(custom.host)) {
-        return json(403, { error: { code: 'not-allowed', message: `${custom.host} is not on the public internet. This relay connects only to public receivers.` } });
-      }
-      const receiver = custom ? `${custom.host}:${custom.port}` : body?.receiver;
-      return json(201, { id, receiver, dialHz: body?.dialHz, encoding: 'ima-adpcm', state: 'waiting', stream: `/v1/sdr/sessions/${id}/stream?ticket=t-${id}` });
+      return json(201, { id, receiver: body?.receiver, dialHz: body?.dialHz, encoding: 'ima-adpcm', state: 'waiting', stream: `/v1/sdr/sessions/${id}/stream?ticket=t-${id}` });
     }
     if (path === '/v1/pskreporter/receptions' && r.method() === 'POST') {
       const n = Array.isArray(body?.spots) ? body.spots.length : 0;

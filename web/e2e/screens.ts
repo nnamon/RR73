@@ -3,7 +3,7 @@
 import type { Page } from '@playwright/test';
 import type { Features } from '../src/lib/state/settings.svelte';
 import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
-import { RELAY_OWN, RELAY_SET_UP, routeRelay } from './relay-stand-in';
+import { RELAY_SET_UP, routeRelay } from './relay-stand-in';
 import { feedSpot, publish, routeFeed } from './feed-stand-in';
 import { FIXED_TIME } from './time';
 
@@ -20,8 +20,8 @@ export interface Screen {
   features?: Partial<Features>;
   /** Practice band on (Settings › Practice band), stored before the screen opens. */
   practice?: boolean;
-  /** A relay added with Web SDR on (relay-stand-in.ts), stored before the screen opens; 'own' with a KiwiSDR the operator added in use. */
-  relay?: boolean | 'own';
+  /** A relay added with Web SDR on (relay-stand-in.ts), stored before the screen opens. */
+  relay?: boolean;
   /** PSK Reporter reports on, with an antenna, stored before the screen opens. */
   psk?: boolean;
   /** Heard you on, with the stand-in feed publishing 4 reports (feed-stand-in.ts). */
@@ -59,7 +59,6 @@ export const SCREENS: readonly Screen[] = [
   { name: 'relay-set-up', path: '#/settings/relay', heading: 'Relay', relay: true },
   { name: 'web-sdr', path: '#/settings/sdr', heading: 'Web SDR' },
   { name: 'web-sdr-set-up', path: '#/settings/sdr', heading: 'Web SDR', relay: true },
-  { name: 'web-sdr-own', path: '#/settings/sdr', heading: 'Web SDR', relay: 'own' },
   { name: 'operate-web-sdr', path: '#/operate', heading: 'Operate', relay: true },
   { name: 'psk-reporter', path: '#/settings/pskreporter', heading: 'PSK Reporter' },
   { name: 'psk-reporter-on', path: '#/settings/pskreporter', heading: 'PSK Reporter', relay: true, psk: true },
@@ -70,10 +69,10 @@ export const SCREENS: readonly Screen[] = [
  * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay: boolean | 'own' = false, psk = false, heard = false) {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false, psk = false, heard = false) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
-  if (relay) await routeRelay(page, { userReceivers: relay === 'own' });
+  if (relay) await routeRelay(page);
   if (heard) {
     const nowS = Math.floor(FIXED_TIME / 1000);
     await routeFeed(page, (ws, topic) => {
@@ -91,7 +90,7 @@ export async function open(page: Page, path: string, theme: 'light' | 'dark', wi
     await page.goto('./');
     const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
     const all = features ? withFeatures(data, features) : data;
-    const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: relay === 'own' ? RELAY_OWN : RELAY_SET_UP }] : []), ...(psk ? [{ key: 'pskreporter', value: { on: true, antenna: 'Vertical, 10 m up' } }] : []), ...(heard ? [{ key: 'heardyou', value: { on: true } }] : []), ...(heard && !all.kv.some((k) => k.key === 'settings') ? [{ key: 'settings', value: { callsign: '9V1NE', grid: 'OJ11' } }] : [])];
+    const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: RELAY_SET_UP }] : []), ...(psk ? [{ key: 'pskreporter', value: { on: true, antenna: 'Vertical, 10 m up' } }] : []), ...(heard ? [{ key: 'heardyou', value: { on: true } }] : []), ...(heard && !all.kv.some((k) => k.key === 'settings') ? [{ key: 'settings', value: { callsign: '9V1NE', grid: 'OJ11' } }] : [])];
     await seed(page, { ...all, kv });
   }
   await page.goto(`./${path}`);

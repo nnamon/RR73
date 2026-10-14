@@ -1,7 +1,6 @@
 //! QSP's HTTP API (docs/design/qsp.md, The API). The OpenAPI document behind `/docs` is built
 //! from the same handlers and types, so the page cannot drift from them.
 
-use crate::address::{self, Refusal};
 use crate::config::{Config, ReceiverConfig, ReceiverKind};
 use crate::frame::{self, AdpcmState, Encoding, FrameHead};
 use crate::kiwi::{self, Control, Event, Target};
@@ -144,8 +143,6 @@ pub struct About {
     pub auth: bool,
     /// Services offered: "sdr", "pskreporter".
     pub services: Vec<String>,
-    /// Whether users may name receivers of their own.
-    pub user_receivers: bool,
     /// Seconds since the instance started.
     pub uptime_s: u64,
 }
@@ -173,25 +170,12 @@ pub struct ReceiverList {
     pub receivers: Vec<Receiver>,
 }
 
-/// A receiver the user names, where the instance allows it.
-#[derive(Debug, Deserialize, ToSchema)]
-pub struct CustomReceiver {
-    /// Its protocol.
-    pub kind: ReceiverKind,
-    /// Host name or address.
-    pub host: String,
-    /// Port.
-    pub port: u16,
-}
-
 /// A request to start listening.
 #[derive(Debug, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct NewSession {
-    /// The id of a receiver the instance offers. Give this or `custom`.
-    pub receiver: Option<String>,
-    /// A receiver of the user's own.
-    pub custom: Option<CustomReceiver>,
+    /// The id of a receiver the instance offers.
+    pub receiver: String,
     /// Dial frequency, Hz: the USB carrier, 14074000 for 20m FT8.
     pub dial_hz: u64,
     /// How the stream carries samples; ima-adpcm unless set.
@@ -207,7 +191,7 @@ pub struct NewSession {
 pub struct SessionView {
     /// The session's id.
     pub id: String,
-    /// The receiver: its id, or host:port for the user's own.
+    /// The receiver's id.
     pub receiver: String,
     /// Dial frequency, Hz.
     pub dial_hz: u64,
@@ -304,7 +288,6 @@ async fn about(State(s): State<AppState>) -> Json<About> {
         } else {
             vec!["sdr".into()]
         },
-        user_receivers: s.config.sdr.user_receivers,
         uptime_s: s.started.elapsed().as_secs(),
     })
 }
@@ -345,67 +328,21 @@ async fn create_session(
         ));
     }
     let listener = listener_name(req.listener.as_deref());
-    let (receiver, target, max) = match (&req.receiver, &req.custom) {
-        (Some(id), None) => {
-            let r: &ReceiverConfig = s.config.receiver(id).ok_or_else(|| {
-                ApiError(
-                    StatusCode::NOT_FOUND,
-                    "not-found",
-                    format!("This relay has no receiver {id}."),
-                )
-            })?;
-            let t = Target {
-                host: r.host.clone(),
-                port: r.port,
-                dial_hz: req.dial_hz,
-                listener,
-                latency_s: r.latency_s,
-                free_channels: r.free_channels,
-                public_only: false,
-            };
-            (r.id.clone(), t, r.max_sessions)
-        }
-        (None, Some(c)) => {
-            if !s.config.sdr.user_receivers {
-                return Err(ApiError(
-                    StatusCode::FORBIDDEN,
-                    "forbidden",
-                    "This relay accepts only the receivers it lists.".into(),
-                ));
-            }
-            if c.host.is_empty() || c.host.contains(['/', ' ', '@']) {
-                return Err(ApiError(
-                    StatusCode::BAD_REQUEST,
-                    "invalid",
-                    "host must be a host name or an address".into(),
-                ));
-            }
-            // Checked here for a clear answer, and again when the stream connects.
-            if let Err(r) = address::resolve(&c.host, c.port, true).await {
-                let (status, code) = match r {
-                    Refusal::NotFound(_) => (StatusCode::BAD_REQUEST, "invalid"),
-                    _ => (StatusCode::FORBIDDEN, "not-allowed"),
-                };
-                return Err(ApiError(status, code, r.message()));
-            }
-            let t = Target {
-                host: c.host.clone(),
-                port: c.port,
-                dial_hz: req.dial_hz,
-                listener,
-                latency_s: 0.0,
-                free_channels: 1,
-                public_only: true,
-            };
-            (format!("{}:{}", address::url_host(&c.host), c.port), t, 1)
-        }
-        _ => {
-            return Err(ApiError(
-                StatusCode::BAD_REQUEST,
-                "invalid",
-                "Send exactly one of receiver and custom.".into(),
-            ));
-        }
+    let r: &ReceiverConfig = s.config.receiver(&req.receiver).ok_or_else(|| {
+        ApiError(
+            StatusCode::NOT_FOUND,
+            "not-found",
+            format!("This relay has no receiver {}.", req.receiver),
+        )
+    })?;
+    let (receiver, max) = (r.id.clone(), r.max_sessions);
+    let target = Target {
+        host: r.host.clone(),
+        port: r.port,
+        dial_hz: req.dial_hz,
+        listener,
+        latency_s: r.latency_s,
+        free_channels: r.free_channels,
     };
     let mut sessions = lock(&s.sessions);
     let open = sessions
@@ -892,7 +829,7 @@ async fn report_status(
 #[openapi(
     info(title = "QSP", description = "The relay RR73 uses for the services a web page cannot reach directly. Every path joins onto the relay's API base, such as https://relay.example.org/qsp."),
     paths(health, about, receivers, create_session, get_session, tune_session, delete_session, stream, report_receptions, report_status),
-    components(schemas(About, Receiver, ReceiverList, NewSession, CustomReceiver, SessionView, Tune, ErrorBody, ErrorDetail, Encoding, ReceiverKind, ReceivingStation, Heard, Receptions, ReceptionsTaken, ReportStatus)),
+    components(schemas(About, Receiver, ReceiverList, NewSession, SessionView, Tune, ErrorBody, ErrorDetail, Encoding, ReceiverKind, ReceivingStation, Heard, Receptions, ReceptionsTaken, ReportStatus)),
     modifiers(&KeyScheme),
     tags((name = "instance", description = "The relay itself. No access key needed."), (name = "sdr", description = "Web SDR receive."), (name = "pskreporter", description = "Reports to PSK Reporter."))
 )]

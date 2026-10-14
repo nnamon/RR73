@@ -78,12 +78,13 @@ fn default_psk_interval() -> u64 {
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SdrConfig {
-    /// Whether users may name receivers of their own, by kind and address.
-    #[serde(default)]
-    pub user_receivers: bool,
-    /// The receivers the instance offers.
+    /// The receivers the instance offers. QSP connects to these and no others.
     #[serde(default)]
     pub receivers: Vec<ReceiverConfig>,
+    /// `user_receivers`, which 0.16.0 to 0.19.4 read. Kept so their settings files load; QSP
+    /// warns that it is not used.
+    #[serde(default, rename = "user_receivers")]
+    pub old_user_receivers: Option<bool>,
 }
 
 /// The protocols QSP speaks to receivers.
@@ -290,5 +291,17 @@ mod tests {
             parse(r#"listne = "1.2.3.4:5""#),
             Err(ConfigError::Parse { .. })
         ));
+    }
+
+    #[test]
+    fn loads_settings_that_name_user_receivers() {
+        for v in ["false", "true"] {
+            let c = parse(&format!("[sdr]\nuser_receivers = {v}\n")).expect("older settings load");
+            assert!(c.sdr.old_user_receivers.is_some());
+        }
+        assert_eq!(
+            parse("").expect("empty settings load").sdr.old_user_receivers,
+            None
+        );
     }
 }

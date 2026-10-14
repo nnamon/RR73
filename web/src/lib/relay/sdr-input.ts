@@ -31,7 +31,7 @@ export interface WebSdrConfig {
 
 export interface WebSdrStatus {
   state: 'connecting' | 'streaming' | 'ended';
-  /** For ended: busy, refused, closed, error, not-allowed, stopped, relay, relay-refused. */
+  /** For ended: busy, refused, closed, error, stopped, relay, relay-refused. */
   reason?: string;
   /** For ended: what happened, in words. */
   message?: string;

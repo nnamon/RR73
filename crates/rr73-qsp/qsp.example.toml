@@ -28,11 +28,8 @@ test = false
 interval_s = 300
 
 [sdr]
-# Whether users may name receivers of their own, by kind and address. QSP connects to those only
-# on public addresses, never to this machine.
-user_receivers = false
-
-# The receivers this instance offers. kind: kiwisdr (KiwiSDR and Web-888).
+# The receivers this instance offers, and the only ones it connects to.
+# kind: kiwisdr (KiwiSDR and Web-888).
 # free_channels: QSP does not connect when fewer channels than this would remain for others.
 # max_sessions: sessions this instance may hold on the receiver at once.
 # latency_s: how late the receiver's audio arrives, s; the app's calibration corrects the rest.

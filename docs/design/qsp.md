@@ -37,10 +37,10 @@ Versioned under `/v1`; `/docs`, `/openapi.json`, `/about` and `/health` are not.
 | --- | --- |
 | `GET /docs` | The API on one page, rendered from the OpenAPI document the endpoints are built with. No key. |
 | `GET /openapi.json` | That document. No key. |
-| `GET /about` | Name, version, services offered, whether a key is needed, whether users may add receivers. No key. |
+| `GET /about` | Name, version, services offered, whether a key is needed. No key. |
 | `GET /health` | `ok`. No key. |
 | `GET /v1/sdr/receivers` | The receivers the instance offers. |
-| `POST /v1/sdr/sessions` | Start listening: a receiver id, or a kind and address where the instance allows user receivers; the dial frequency in Hz; the encoding. Returns the session and a one-time ticket for its stream. |
+| `POST /v1/sdr/sessions` | Start listening: the id of a receiver the instance lists, the dial frequency in Hz, the encoding. Returns the session and a one-time ticket for its stream. |
 | `GET /v1/sdr/sessions/{id}` | The session's state. |
 | `PATCH /v1/sdr/sessions/{id}` | Retune: a new dial frequency. |
 | `DELETE /v1/sdr/sessions/{id}` | Stop listening. |
@@ -74,7 +74,6 @@ Each part is built against the real service and tested against a small stand-in.
 1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app. Shipped in 0.16.0.
 2. PSK Reporter: reports through QSP, and who heard you from the MQTT feed. Built.
 3. WSPRnet uploads, straight from the phone. Built.
-4. KiwiSDRs users add by address, on a relay that allows them, with the address checks under Security. Built.
 
 ## PSK Reporter
 
@@ -121,22 +120,20 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 
 ## Web SDRs
 
-- The settings list the receivers an instance offers: id, kind, name, address, location, grid. Users may add their own (kind and address) only where the settings allow it.
-- In the app, Settings › Web SDR shows Add KiwiSDR where the relay's `/about` says `userReceivers`. The address takes a host, host:port, [IPv6]:port or a pasted receiver URL, port 8073 when none is given. Each relay keeps its own list, stored on the phone; a session names the receiver by kind and address (`custom`). A relay's refusal shows its own message in Settings.
+- The settings list the receivers an instance offers: id, kind, name, address, location, grid. QSP connects to those and no others, and the app offers only those.
 - One upstream connection per receiver and dial; two sessions on the same receiver and dial share it. Audio only, no waterfall.
 - Reconnects wait longer each time and stop at the receiver's own time limit. The politeness rules of `tools/kiwi` apply.
 - The KiwiSDR client is written from scratch for QSP. The kiwiclient package the corpus recorder fetches carries no licence for its core files and is not read or copied.
 
 ## Security
 
-- Access keys, compared in constant time; none means open. An open instance still reaches only the services its settings list and the receivers below, and speaks only their protocols, so it cannot be used as an open proxy.
-- Receivers users name, where `user_receivers` allows them: QSP resolves the name and connects only to a public address. Loopback, private, shared (100.64/10), link-local (cloud metadata at 169.254.169.254), documentation, benchmarking, multicast and reserved ranges are refused, IPv4 and IPv6 (`src/address.rs`). A connection that reaches the relay's own machine is dropped before anything is sent: a connection to its own public address goes over the loopback interface, past a firewall that guards that address. The status page and the stream connect to the address checked, so a name that changes its answer gains nothing. The session request is checked too, for a clear answer.
+- Access keys, compared in constant time; none means open. An open instance still reaches only the services and receivers its settings list, so it cannot be used as an open proxy.
 - A limit on requests per key.
 - Logs carry no request bodies.
 
 ## Testing
 
-- Unit: the KiwiSDR client's handling of the receiver's messages; ADPCM round trip; frame encoding; each refused address range, and a connection to the relay's own machine dropped. With PSK Reporter: the IPFIX encoder reproduces the developer page's example datagram byte for byte, and the batching rules.
+- Unit: the KiwiSDR client's handling of the receiver's messages; ADPCM round trip; frame encoding. With PSK Reporter: the IPFIX encoder reproduces the developer page's example datagram byte for byte, and the batching rules.
 - API: every endpoint through the router; the stream over a real WebSocket from a stand-in KiwiSDR.
 - No test reaches a real service.
 
@@ -147,6 +144,7 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 - The NAS at home behind a tunnel: down whenever the house is offline.
 - Who heard you through QSP's polling of PSK Reporter's query API: limited to once per 5 min and unreadable from the page; the MQTT feed pushes to the page directly.
 - QSP passing the KiwiSDR protocol through to the app: every new SDR kind would need an app release.
+- Receivers users add by address, built in 0.19.4 and removed in 0.19.5: the owner's call. A relay reaches only the receivers its operator lists, so it needs no checks on addresses users send.
 
 ## Open risks
 
@@ -154,4 +152,3 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 - PSK Reporter's MQTT feed: its topic names and terms of use, checked before building who heard you.
 - WSPRnet's upload interface is undocumented, and its answers cannot be read from the page: a change on its side would go unnoticed.
 - A server needs looking after: updates, renewals and a check that it is up. A self-hosted instance puts that on its operator.
-- With `user_receivers` on, a user can point QSP at any public host and port. QSP sends it `GET /status` and, when that answers as a KiwiSDR, the KiwiSDR handshake, from the relay's address.

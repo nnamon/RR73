@@ -9,7 +9,6 @@ export interface QspAbout {
   api: string[];
   auth: boolean;
   services: string[];
-  userReceivers: boolean;
 }
 
 export interface QspReceiver {
@@ -18,55 +17,6 @@ export interface QspReceiver {
   name: string;
   location: string;
   grid: string;
-}
-
-/** A KiwiSDR the operator adds by address, on a relay that allows receivers of the user's own. */
-export interface UserReceiver {
-  /** Host name or address; an IPv6 address without brackets. */
-  host: string;
-  port: number;
-}
-
-/** KiwiSDR's port, for an address that gives none. */
-export const KIWI_PORT = 8073;
-
-const HOST_NAME = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)*$/;
-
-/** Reads a receiver's address as typed or pasted: host, host:port, [IPv6]:port, or a URL holding them. Null when it is none. */
-export function parseReceiverAddress(text: string): UserReceiver | null {
-  const t = text
-    .trim()
-    .toLowerCase()
-    .replace(/^[a-z][a-z0-9+.-]*:\/\//, '')
-    .replace(/[/?#].*$/, '');
-  let host: string;
-  let port: string | undefined;
-  const v6 = /^\[([0-9a-f:.]+)\](?::(\d+))?$/.exec(t);
-  const named = /^([^:]+)(?::(\d+))?$/.exec(t);
-  if (v6) [, host, port] = v6;
-  else if (named && HOST_NAME.test(named[1])) [, host, port] = named;
-  // IPv6 without brackets takes no port.
-  else if (/^[0-9a-f.]*:[0-9a-f.:]*:[0-9a-f.]*$/.test(t)) host = t;
-  else return null;
-  const n = port === undefined ? KIWI_PORT : Number(port);
-  if (!Number.isInteger(n) || n < 1 || n > 65535) return null;
-  return { host, port: n };
-}
-
-/** The id Settings keeps for a receiver the operator added: kiwisdr://host:port. */
-export function userReceiverId(r: UserReceiver): string {
-  return `kiwisdr://${r.host.includes(':') ? `[${r.host}]` : r.host}:${r.port}`;
-}
-
-/** The receiver an id from userReceiverId stands for; null for a relay's own receiver. */
-export function userReceiverOf(id: string): UserReceiver | null {
-  return id.startsWith('kiwisdr://') ? parseReceiverAddress(id) : null;
-}
-
-/** A receiver's address as Settings shows it: the host, with the port when it is not 8073. */
-export function receiverAddress(r: UserReceiver): string {
-  const host = r.host.includes(':') ? `[${r.host}]` : r.host;
-  return r.port === KIWI_PORT ? host : `${host}:${r.port}`;
 }
 
 export interface QspSession {
@@ -87,7 +37,7 @@ export type QspErrorKind = 'network' | 'timeout' | 'unauthorised' | 'refused' | 
 export class QspError extends Error {
   constructor(
     readonly kind: QspErrorKind,
-    /** QSP's error code for kind refused: not-found, not-offered, forbidden, not-allowed, receiver-busy, rate-limited, invalid. */
+    /** QSP's error code for kind refused: not-found, not-offered, forbidden, receiver-busy, rate-limited, invalid. */
     readonly code: string | null = null,
     message = `Relay request failed: ${kind}`,
   ) {
@@ -186,11 +136,8 @@ export async function qspReceivers(base: string, key: string, fetchFn: FetchFn =
   return r.receivers;
 }
 
-/** Starts listening on a relay's receiver, by its id, or on one the operator added, by userReceiverId. */
 export function qspStartSession(base: string, key: string, receiver: string, dialHz: number, listener: string, fetchFn: FetchFn = pageFetch): Promise<QspSession> {
-  const own = userReceiverOf(receiver);
-  const which = own ? { custom: { kind: 'kiwisdr', host: own.host, port: own.port } } : { receiver };
-  return call(base, key, 'POST', '/v1/sdr/sessions', { ...which, dialHz, listener, encoding: 'ima-adpcm' }, fetchFn);
+  return call(base, key, 'POST', '/v1/sdr/sessions', { receiver, dialHz, listener, encoding: 'ima-adpcm' }, fetchFn);
 }
 
 export function qspTune(base: string, key: string, id: string, dialHz: number, fetchFn: FetchFn = pageFetch): Promise<QspSession> {

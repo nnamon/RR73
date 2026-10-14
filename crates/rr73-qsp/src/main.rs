@@ -29,6 +29,12 @@ async fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    if config.sdr.old_user_receivers.is_some() {
+        tracing::warn!(
+            "user_receivers in {} is not used: QSP connects only to the receivers its settings list. Remove the line.",
+            args.config.display()
+        );
+    }
     let listen = config.listen;
     let psk = config.pskreporter.clone();
     let state = AppState::new(config);

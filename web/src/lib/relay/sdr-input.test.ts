@@ -168,9 +168,10 @@ describe('the web SDR input', () => {
       await settle();
       return s.statuses.at(-1);
     };
-    const notPublic = '192.168.1.50 is not on the public internet. This relay connects only to public receivers.';
-    expect(await ended(403, { error: { code: 'not-allowed', message: notPublic } })).toEqual({ state: 'ended', reason: 'relay-refused', message: notPublic });
-    expect(await ended(404, { error: { code: 'not-found', message: 'This relay has no receiver r.' } })).toMatchObject({ reason: 'relay-refused' });
+    const gone = 'This relay has no receiver r.';
+    expect(await ended(404, { error: { code: 'not-found', message: gone } })).toEqual({ state: 'ended', reason: 'relay-refused', message: gone });
+    expect(await ended(401, { error: { code: 'unauthorised', message: 'x' } })).toMatchObject({ reason: 'relay-refused' });
+    expect(await ended(429, { error: { code: 'rate-limited', message: 'Too many requests. Try again in a minute.' } })).toMatchObject({ reason: 'relay-refused' });
     expect(await ended(409, { error: { code: 'receiver-busy', message: 'All of this relay’s sessions on r are in use. Try again later.' } })).toMatchObject({ reason: 'busy' });
     expect(await ended(502, null)).toMatchObject({ reason: 'relay' });
   });

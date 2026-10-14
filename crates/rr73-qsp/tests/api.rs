@@ -130,6 +130,7 @@ async fn about_docs_and_the_key() {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(about["name"], "QSP");
     assert_eq!(about["auth"], true);
+    assert!(about.get("userReceivers").is_none());
     let (s, err) = call(&app, "GET", "/v1/sdr/receivers", None, false).await;
     assert_eq!(s, StatusCode::UNAUTHORIZED);
     assert_eq!(err["error"]["code"], "unauthorised");
@@ -139,6 +140,7 @@ async fn about_docs_and_the_key() {
     let (s, doc) = call(&app, "GET", "/openapi.json", None, false).await;
     assert_eq!(s, StatusCode::OK);
     assert!(doc["paths"]["/v1/sdr/sessions/{id}/stream"].is_object());
+    assert!(doc["components"]["schemas"]["NewSession"]["properties"]["custom"].is_null());
     let res = app
         .clone()
         .oneshot(Request::get("/docs").body(Body::empty()).unwrap())
@@ -215,9 +217,10 @@ async fn sessions_refuse_what_the_instance_does_not_offer() {
         (s, e["error"]["code"].as_str()),
         (StatusCode::NOT_FOUND, Some("not-found"))
     );
+    // Only the receivers the relay lists: a receiver named by address is not a request it reads.
     let custom = serde_json::json!({"custom": {"kind": "kiwisdr", "host": "example.org", "port": 8073}, "dialHz": 14074000});
     let (s, _) = call(&app, "POST", "/v1/sdr/sessions", Some(custom), true).await;
-    assert_eq!(s, StatusCode::FORBIDDEN);
+    assert_eq!(s, StatusCode::UNPROCESSABLE_ENTITY);
     let (s, _) = call(
         &app,
         "POST",
@@ -240,53 +243,6 @@ async fn sessions_refuse_what_the_instance_does_not_offer() {
         (s, e["error"]["code"].as_str()),
         (StatusCode::CONFLICT, Some("receiver-busy"))
     );
-}
-
-#[tokio::test]
-async fn user_receivers_must_be_on_the_public_internet() {
-    let (port, heard) = stand_in(0).await;
-    let mut c = config(port);
-    c.sdr.user_receivers = true;
-    let app = router(AppState::new(c));
-    // Addresses and localhost only: no name here goes to a DNS server.
-    for (host, p) in [
-        ("127.0.0.1", port),
-        ("localhost", port),
-        ("::1", port),
-        ("192.168.1.50", 8073),
-        ("10.0.0.7", 8073),
-        ("169.254.169.254", 80),
-        ("100.64.0.1", 8073),
-    ] {
-        let body =
-            serde_json::json!({"custom": {"kind": "kiwisdr", "host": host, "port": p}, "dialHz": 14074000});
-        let (s, e) = call(&app, "POST", "/v1/sdr/sessions", Some(body), true).await;
-        assert_eq!(
-            (s, e["error"]["code"].as_str()),
-            (StatusCode::FORBIDDEN, Some("not-allowed")),
-            "{host}"
-        );
-        assert_eq!(
-            e["error"]["message"].as_str(),
-            Some(
-                format!(
-                    "{host} is not on the public internet. This relay connects only to public receivers."
-                )
-                .as_str()
-            )
-        );
-    }
-    assert!(heard.lock().unwrap().is_empty());
-    // A public address gets a session; nothing connects until its stream opens. An IPv6 address
-    // goes in brackets in the session's receiver.
-    for (host, receiver) in [
-        ("8.8.8.8", "8.8.8.8:8073"),
-        ("2001:4860:4860::8888", "[2001:4860:4860::8888]:8073"),
-    ] {
-        let public = serde_json::json!({"custom": {"kind": "kiwisdr", "host": host, "port": 8073}, "dialHz": 14074000});
-        let (s, v) = call(&app, "POST", "/v1/sdr/sessions", Some(public), true).await;
-        assert_eq!((s, v["receiver"].as_str()), (StatusCode::CREATED, Some(receiver)));
-    }
 }
 
 #[tokio::test]

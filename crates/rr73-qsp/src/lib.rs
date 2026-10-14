@@ -2,7 +2,6 @@
 //! SDR receive and reports to PSK Reporter (docs/design/qsp.md). It
 //! carries no credentials for other services and reaches only the receivers its settings list.
 
-pub mod address;
 pub mod api;
 pub mod config;
 pub mod docs;

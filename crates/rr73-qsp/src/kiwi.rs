@@ -16,9 +16,7 @@
 //!
 //! Checked by decoding a captured slot with jt9: 19 FT8 stations at DT about +0.3 s.
 
-use crate::address;
 use futures_util::{SinkExt, StreamExt};
-use std::net::SocketAddr;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -102,7 +100,7 @@ pub fn parse(bytes: &[u8]) -> Option<Upstream> {
 
 /// The WebSocket address for one listening session.
 pub fn url(host: &str, port: u16, now_s: u64) -> String {
-    format!("ws://{}:{port}/{now_s}/SND", address::url_host(host))
+    format!("ws://{}:{port}/{now_s}/SND", bracketed(host))
 }
 
 /// The command that tunes USB to `dial_hz`.
@@ -175,33 +173,39 @@ pub fn parse_status(text: &str) -> Option<Status> {
     })
 }
 
-/// Reads the receiver's `/status` page over plain HTTP, from the first of `addrs` that answers.
-/// Returns that address, for the stream to use.
-pub async fn fetch_status(
-    host: &str,
-    addrs: &[SocketAddr],
-    public_only: bool,
-) -> Result<(Status, SocketAddr), End> {
+/// A host as it goes in a URL or a Host header: an IPv6 address in brackets.
+fn bracketed(host: &str) -> String {
+    if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        format!("[{host}]")
+    } else {
+        host.to_string()
+    }
+}
+
+/// Reads the receiver's `/status` page over plain HTTP.
+pub async fn fetch_status(host: &str, port: u16) -> Result<Status, String> {
     let work = async {
-        let (mut s, addr) = address::connect(addrs, public_only).await.map_err(End::from)?;
+        let mut s = tokio::net::TcpStream::connect((host, port))
+            .await
+            .map_err(|e| e.to_string())?;
         let req = format!(
             "GET /status HTTP/1.0\r\nHost: {}\r\nUser-Agent: RR73-QSP/{}\r\n\r\n",
-            address::url_host(host),
+            bracketed(host),
             env!("CARGO_PKG_VERSION")
         );
-        let fail = |e: std::io::Error| End::Error(e.to_string());
-        s.write_all(req.as_bytes()).await.map_err(fail)?;
+        s.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
         let mut buf = Vec::new();
-        s.take(64 * 1024).read_to_end(&mut buf).await.map_err(fail)?;
+        s.take(64 * 1024)
+            .read_to_end(&mut buf)
+            .await
+            .map_err(|e| e.to_string())?;
         let text = String::from_utf8_lossy(&buf);
         let body = text.split_once("\r\n\r\n").map_or(text.as_ref(), |(_, b)| b);
-        let status =
-            parse_status(body).ok_or_else(|| End::Error("the status page has no users count".into()))?;
-        Ok((status, addr))
+        parse_status(body).ok_or_else(|| "the status page has no users count".to_string())
     };
     tokio::time::timeout(TIMEOUT, work)
         .await
-        .map_err(|_| End::Error("the status page did not answer within 10 s".into()))?
+        .map_err(|_| "the status page did not answer within 10 s".to_string())?
 }
 
 /// Where and how to listen.
@@ -219,8 +223,6 @@ pub struct Target {
     pub latency_s: f64,
     /// Channels to leave free for others.
     pub free_channels: u32,
-    /// A receiver a user named: public addresses only, never this machine (`address`).
-    pub public_only: bool,
 }
 
 /// What a session tells its stream.
@@ -254,21 +256,18 @@ pub enum End {
     Closed(Option<String>),
     /// Network or protocol failure.
     Error(String),
-    /// QSP does not connect to the receiver's address (`address`): what it said.
-    NotAllowed(String),
     /// The app or QSP stopped it.
     Stopped,
 }
 
 impl End {
-    /// A short code for the app: busy, refused, closed, error, not-allowed, stopped.
+    /// A short code for the app: busy, refused, closed, error, stopped.
     pub fn code(&self) -> &'static str {
         match self {
             End::Busy => "busy",
             End::Refused(_) => "refused",
             End::Closed(_) => "closed",
             End::Error(_) => "error",
-            End::NotAllowed(_) => "not-allowed",
             End::Stopped => "stopped",
         }
     }
@@ -281,17 +280,7 @@ impl End {
             End::Closed(Some(n)) => format!("The receiver closed the connection. Its last message: {n}."),
             End::Closed(None) => "The receiver closed the connection.".into(),
             End::Error(why) => format!("The connection failed: {why}."),
-            End::NotAllowed(why) => why.clone(),
             End::Stopped => "Stopped.".into(),
-        }
-    }
-}
-
-impl From<address::Refusal> for End {
-    fn from(r: address::Refusal) -> Self {
-        match r {
-            address::Refusal::Unreachable(e) => End::Error(e),
-            other => End::NotAllowed(other.message()),
         }
     }
 }
@@ -430,30 +419,18 @@ pub async fn run(target: Target, events: mpsc::Sender<Event>, mut control: mpsc:
 }
 
 async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mpsc::Receiver<Control>) -> End {
-    // Resolved once: the status page and the stream go to the same checked address.
-    let addrs = match address::resolve(&target.host, target.port, target.public_only).await {
-        Ok(a) => a,
-        Err(r) => return r.into(),
-    };
-    let addr = match fetch_status(&target.host, &addrs, target.public_only).await {
-        Ok((s, _)) if s.too_full(target.free_channels) => return End::Busy,
-        Ok((_, addr)) => addr,
-        Err(e) => return e,
-    };
+    match fetch_status(&target.host, target.port).await {
+        Ok(s) if s.too_full(target.free_channels) => return End::Busy,
+        Ok(_) => {}
+        Err(e) => return End::Error(e),
+    }
     let now_s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let connect = async {
-        let (stream, _) = address::connect(&[addr], target.public_only)
-            .await
-            .map_err(End::from)?;
-        tokio_tungstenite::client_async(url(&target.host, target.port, now_s), stream)
-            .await
-            .map_err(|e| End::Error(e.to_string()))
-    };
+    let connect = tokio_tungstenite::connect_async(url(&target.host, target.port, now_s));
     let mut ws = match tokio::time::timeout(TIMEOUT, connect).await {
         Ok(Ok((ws, _))) => ws,
-        Ok(Err(e)) => return e,
+        Ok(Err(e)) => return End::Error(e.to_string()),
         Err(_) => return End::Error("no answer within 10 s".into()),
     };
     if ws.send(Message::Text("SET auth t=kiwi p=".into())).await.is_err() {
@@ -595,6 +572,8 @@ mod tests {
             url("167.172.88.10", 80, 1_791_994_254),
             "ws://167.172.88.10:80/1791994254/SND"
         );
+        assert_eq!(url("2001:db8::1", 8073, 1), "ws://[2001:db8::1]:8073/1/SND");
+        assert_eq!(bracketed("kiwi.example.org"), "kiwi.example.org");
     }
 
     #[test]

@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Web SDR offers only the receivers the relay lists. Receivers added by address are gone.
+
 ## 0.19.4 · 2026-10-14
 
 - Settings › Web SDR adds a KiwiSDR or Web-888 by its address, on a relay that allows it. Each relay keeps its own list.
