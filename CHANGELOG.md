@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## 0.11.1 · 2026-10-14
+## Unreleased
 
 - The dB and Hz numbers on decode rows start at one position on every row. A 4-digit frequency pushed them 2 pt left.
 - CQ rows name the calling station's country before the numbers, in the short form operators use: "Australia", "Germany", "South Korea". When the row is short of room, the country ends in "…" or drops out, and the message stays whole.
