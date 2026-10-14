@@ -143,12 +143,14 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ, Run and Hunt. See `docs/design/sequencer.md`. |
 | `lib/wspr` | WSPR's pure parts: the beacon schedule, its messages, spots (distance, sorting, drift) and the rows of Operate's spot list. The runtime that drives them is `lib/state/wspr.svelte.ts`. See `docs/design/wspr.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
-| `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
+| `lib/keyboard` | The keyboard modes' engine, mode-agnostic (RTTY first, then PSK31, Olivia and the rest): the modem interface, the keyboard worker that holds the modem, the stream worklet and the pump that feeds it 0.3 s ahead, the send queue, macros and their fields, the received text, words and the other-case reading, the QSO strip's draft and its log record, and the session that ties them together (`session.svelte.ts`). The runtime that drives them is `lib/state/keyboard.svelte.ts`. See `docs/design/rtty.md`. |
+| `lib/rtty` | RTTY's modem over `rr73-wasm`'s `RttyReceiver` and `RttyTransmitter`, its settings and their mapping to the crate's configs, and its dial per band. |
+| `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, RTTY stations whose transmissions play as they fall due, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
 | `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
-| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`). |
+| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`): FT8 and FT4, WSPR, and the keyboard modes (`KeyboardPane`, with RTTY's tuning row). |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
 
@@ -157,6 +159,7 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
 - The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it.
 - Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X.
+- RTTY has no slots: a transmission starts at once and streams. The keyboard worker renders 0.1 s blocks to the stream worklet over a MessageChannel, 0.3 s ahead of the audio thread; the app hands the transmitter at most 0.4 s of text. Capture skips the slot assembler and goes to the keyboard worker, except while on air.
 
 ## Updates
 

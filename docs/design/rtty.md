@@ -1,6 +1,6 @@
 # RTTY
 
-Status: proposed, 2026-10-14. Waiting for the owner's approval of the mockup reviewed with this doc.
+Status: approved 2026-10-14, with every recommendation below accepted. Built on `feat/rtty-app`; "As built" at the end lists where the build departs from this doc.
 
 RTTY is the third mode family and the first keyboard mode (ADR 0006). This doc covers Operate in RTTY, the keyboard engine that PSK31, Olivia, MFSK, DominoEX, THOR, Contestia, Hellschreiber, MT63 and JS8Call will share, logging a keyboard QSO, Settings › RTTY and Settings › Macros, RTTY dial frequencies, and what the app takes from the RTTY receiver and transmitter in `rr73-rtty` (experiment 0005, branch `feat/rtty-core`). It builds on WSPR's Operate frame: one frame, a pane per mode family (`docs/design/wspr.md` on `feat/wspr-app`, 0.12.0).
 
@@ -348,7 +348,6 @@ Additions asked of the crate:
 
 - Split: a Tx pair apart from the Rx pair. Tx follows the Rx pair.
 - FSK keying: no serial port or CAT from Safari on iOS.
-- RTTY stations in the practice band.
 - RTTY in POTA and cluster spots, and spotting.
 - Contest scoring, multipliers, rate and Cabrillo export. The log and its ADIF carry what Cabrillo needs.
 - Callbook lookups of name and QTH (QRZ.com, HamQTH).
@@ -380,7 +379,7 @@ Additions asked of the crate:
 
 ## Questions for the owner
 
-Each has a recommendation; the mockup shows the visual ones side by side.
+Answered 14 October 2026: every recommendation accepted.
 
 1. Received text: newest at the bottom, as RTTY programs show it, or newest at the top, as RR73's FT8 and WSPR lists? Recommended: bottom.
 2. Logging: an always-visible QSO strip that fills from tapped words, or a Log QSO button that opens the full sheet? Recommended: the strip, with the sheet behind its chevron.
@@ -391,3 +390,15 @@ Each has a recommendation; the mockup shows the visual ones side by side.
 7. Repeat CQ and the Contest set with serial numbers in the first RTTY release, or a later one? Recommended: first release.
 8. Keyboard up: keep a 48 pt waterfall strip, or hide the waterfall for 2 more lines of text? Recommended: keep the strip.
 9. The dials in the table, with 20m at 14.0830 to clear FT4 at 14.080. Recommended: as listed; 17m, 12m and 6m are Unverified.
+
+## As built
+
+- The practice band has RTTY stations after all: JA1XYZ calls CQ and works the operator with name and QTH, DL5ABC answers the operator's CQ, and OH2BAX calls CQ TEST and gives an exchange. They answer 2 s after the operator's transmission ends. Their audio comes from `rtty_encode` in the keyboard worker.
+- `rtty_other_case` exists in the crate and the app; the keyboard worker turns it and `rtty_unsendable` into tables once per setting, so the send field and the word menu read them without a round trip to the worker.
+- The whole band and mode button in the top bar opens the band sheet, which focuses the RTTY dial field whenever it opens in RTTY. The top bar has one button for band, mode and dial.
+- The QSO sheet shows Name and QTH for RTTY QSOs, and Number sent and Number received with the Contest set in use or when a QSO has them. STX and SRX go to ADIF as integers ("042" as 42); a received exchange that is not a number goes to SRX_STRING.
+- Settings › Macros deletes a macro by a swipe to the left, with Undo, and also by Delete macro on the macro's screen. Rows reorder by the handle or by Move up and Move down, which show while focused.
+- The word menu is titled "Use QWU as" for screen readers and offers the reading's field once, with the reading.
+- Keyboard up follows `visualViewport` while the focus is in the keyboard pane; App sizes itself to the visual viewport through `--rr-app-h`. Not tested on a device.
+- The received text's pill reads "3 new lines" with a down chevron.
+- Measured in Chromium (e2e/rtty-tx.spec.ts): a 12.6 s transmission typed partly on air came back whole through `rr73-rtty`'s receiver with no gap and no underrun; Halt silenced the output 42 ms after the tap.

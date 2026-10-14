@@ -2,6 +2,21 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- RTTY is a fourth mode in the band sheet. Set the radio to 14.0830 MHz USB on 20m: the pair sits at 1585 and 1415 Hz, and QSOs log the mark frequency.
+- In RTTY the band sheet takes the radio's dial, in MHz or kHz, and keeps it per band.
+- Operate in RTTY shows the received text with the newest at the bottom, the QSO strip, the text to send and a row of macros, with Tx, Log QSO, ••• and Halt below.
+- Tap a signal on the waterfall to tune to it, or drag the mark and space lines. The row under the waterfall holds AFC, the squelch, Rev, and speed and shift.
+- Tap a callsign in the text to start a QSO: the strip fills name, QTH and report from that station's text. Tap another word to use it as name, QTH, report or number. A word that lost its FIGS offers its figures: "QWU reads 127".
+- Return sends the line typed, and typing alone never transmits. On air, text goes out as it is typed, and Backspace reaches what has not gone yet.
+- Macros in a QSO set and a Contest set add their text at once, with callsigns, name, QTH, report and serial number filled in. Edit them in Settings › Macros.
+- Repeat CQ in ••• sends CQ again after 3 s of quiet until a station answers.
+- A transmission that only idles goes off after 1 min, and the watchdog stops Tx after 10 min without a key press. Settings › RTTY sets both, or turns them off.
+- RTTY QSOs log as MODE RTTY with name and QTH, and in the Contest set with serial numbers and CONTEST_ID. They go to Wavelog and ADIF as every QSO does.
+- Settings › Station has Name and QTH, for macros.
+- The practice band has RTTY stations: one calls CQ, one answers yours and one gives a contest exchange.
+
 ## 0.12.4 · 2026-10-14
 
 - Clear decodes in ••• empties the FT8 and FT4 decode list, and Clear spots the WSPR spot list. A QSO under way, its next transmission and Hunt carry on, and new decodes list as usual.
