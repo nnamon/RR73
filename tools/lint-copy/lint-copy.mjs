@@ -61,6 +61,11 @@ const SCREEN_RULES = [
   },
   { id: 'semicolon', re: /(?<!&#?\w+);/g, message: 'semicolon; one idea per sentence, so split it' },
   {
+    id: 'other-program',
+    re: /\b(?:WSJT-X|WSJTX|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/gi,
+    message: 'another program named on screen; state what RR73 does',
+  },
+  {
     id: 'number-word',
     re: /\b(two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) [a-z]+s\b/gi,
     message: 'number in words; write digits',
@@ -78,11 +83,6 @@ const SOURCE_RULES = [
     id: 'reassurance',
     re: /\b(stays on this phone|never (?:receives|stores|sees|keeps|shares) (?:your )?passwords?)\b/gi,
     message: 'reassurance nobody asked for; state the effect or drop it',
-  },
-  {
-    id: 'other-program',
-    re: /\bas (?:WSJT-X|JTDX|MSHV|iFTx|JS8Call|fldigi)(?: [\d.]+)? does\b/gi,
-    message: 'comparison to another program; state what happens',
   },
   { id: 'planned', re: /\bplanned\b/gi, message: 'unbuilt feature on screen; show only what is built' },
 ];
@@ -363,6 +363,27 @@ export function lengthFindings(text, ext, file = 'x') {
   return findings;
 }
 
+/** Another program named on screen: the rule the prose scan applies, here for every string literal. */
+const PROGRAM = /\b(?:WSJT-X|WSJTX|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/i;
+
+/**
+ * Another program's name in a string literal of an interface source, such as a label 'WSJT-X'.
+ * Prose literals are left to the screen rules; comments and identifiers do not reach the screen.
+ */
+export function programFindings(text, ext, file = 'x') {
+  const code = sourceCode(stripDisabled(text), ext);
+  const at = lineOf(code);
+  const findings = [];
+  const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
+  let m;
+  while ((m = literal.exec(code))) {
+    if (isProse(m[2])) continue;
+    const hit = PROGRAM.exec(m[2]);
+    if (hit) findings.push({ file, line: at(m.index) + 1, level: 'error', rule: 'other-program', match: m[2].slice(0, 80), message: 'another program named on screen; state what RR73 does' });
+  }
+  return findings;
+}
+
 /** Sentences that open with "RR73", in screen sources under web/src/views: narration with the app as its subject. */
 export function subjectFindings(text, ext, file = 'x') {
   const findings = [];
@@ -463,6 +484,7 @@ export function lintFile(root, rel) {
   return [
     ...lintText(sourceProse(text, ext), rel, { screen, source: true }),
     ...lengthFindings(text, ext, rel),
+    ...programFindings(text, ext, rel),
     ...(isViewFile(rel) ? subjectFindings(text, ext, rel) : []),
     ...(rel === STATUS_FILE ? statusFindings(text, rel) : []),
   ];

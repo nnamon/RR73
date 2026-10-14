@@ -1,5 +1,5 @@
 // Settings › Decode colours: a colour change shows in Operate at once, the order decides which
-// colour a decode takes, and a preset (WSJT-X or Quiet) acts on the first tap with Undo. Decodes come
+// colour a decode takes, and a preset (Full or Quiet) acts on the first tap with Undo. Decodes come
 // through the screen-review hooks (src/lib/testing/e2e-hooks.ts).
 import { expect, test, type Locator, type Page } from '@playwright/test';
 
@@ -178,13 +178,13 @@ test('the order decides which colour a decode takes', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Move CQ in the message up' })).toBeDisabled();
 });
 
-test('the WSJT-X preset acts on the first tap and offers Undo', async ({ page }) => {
+test('the Full preset acts on the first tap and offers Undo', async ({ page }) => {
   await page.goto('./#/settings');
   const link = page.getByRole('link', { name: /^Decode colours/ });
-  await expect(link).toContainText('WSJT-X');
+  await expect(link).toContainText('Full');
   await link.click();
   await expect(page.getByRole('link', { name: 'Settings' })).toHaveAttribute('href', '#/settings');
-  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await expect(preset(page, 'Full')).toBeChecked();
   await expect(preset(page, 'Custom')).toBeDisabled();
   const defaults = await order(page);
 
@@ -198,17 +198,17 @@ test('the WSJT-X preset acts on the first tap and offers Undo', async ({ page })
   expect(changed).not.toEqual(defaults);
   await expect(preset(page, 'Custom')).toBeChecked();
 
-  await choose(page, 'WSJT-X');
+  await choose(page, 'Full');
   // No confirmation: the defaults are back at once, with Undo in a notice.
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(await order(page)).toEqual(defaults);
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).toBeChecked();
   expect(await hlOf(page.getByRole('button', { name: 'Change colour: CQ in the message' }))).toBe('#66FF66');
-  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await expect(preset(page, 'Full')).toBeChecked();
   const notice = page.getByTestId('colours-notice');
-  await expect(notice).toContainText('WSJT-X preset applied.');
+  await expect(notice).toContainText('Full preset applied.');
 
-  await notice.getByRole('button', { name: 'Undo the WSJT-X preset' }).click();
+  await notice.getByRole('button', { name: 'Undo the Full preset' }).click();
   await expect(notice).toBeHidden();
   expect(await order(page)).toEqual(changed);
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).not.toBeChecked();
@@ -245,7 +245,7 @@ test('the Quiet preset keeps CQ green and turns the new-station colours off, wit
   await expect(notice).toContainText('Quiet preset applied.');
   await notice.getByRole('button', { name: 'Undo the Quiet preset' }).click();
   await expect(notice).toBeHidden();
-  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await expect(preset(page, 'Full')).toBeChecked();
   await expect(example.locator(fresh)).toHaveCount(4);
   await expect(example.locator('[data-hl="cq"]')).toHaveCount(1);
 

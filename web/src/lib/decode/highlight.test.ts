@@ -199,7 +199,7 @@ describe('buildLogIndex', () => {
 
 describe('presets', () => {
   it('WSJT-X turns every category on, in the WSJT-X order and colours', () => {
-    expect(presetHighlights('wsjtx')).toEqual(defaultHighlights());
+    expect(presetHighlights('full')).toEqual(defaultHighlights());
   });
 
   it('Quiet keeps My call, Sent, CQ and Ending a QSO on, in the WSJT-X order and colours', () => {
@@ -210,7 +210,7 @@ describe('presets', () => {
   });
 
   it('names the preset the settings match, and Custom for anything else', () => {
-    expect(presetOf(defaultHighlights())).toBe('wsjtx');
+    expect(presetOf(defaultHighlights())).toBe('full');
     expect(presetOf(presetHighlights('quiet'))).toBe('quiet');
     // One switch, one colour or one move away from a preset is Custom.
     expect(presetOf(presetHighlights('quiet').map((e) => (e.id === 'newCall' ? { ...e, on: true } : e)))).toBe('custom');
@@ -219,7 +219,7 @@ describe('presets', () => {
     expect(presetOf(moveBackground(defaultHighlights(), 6, 5))).toBe('custom');
     expect(presetOf(moveBackground(presetHighlights('quiet'), 6, 5))).toBe('custom');
     expect(presetOf([])).toBe('custom');
-    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['WSJT-X', 'Quiet']);
+    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['Full', 'Quiet']);
     expect(presetLabel('custom')).toBe('Custom');
   });
 

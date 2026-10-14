@@ -138,10 +138,10 @@ export function isDefault(entries: readonly HighlightEntry[]): boolean {
 
 /** `entries` with the one at `from` moved to `to`. */
 /** A preset in Settings › Decode colours. Each keeps WSJT-X's order and colours and sets which categories are on. */
-export type PresetId = 'wsjtx' | 'quiet';
+export type PresetId = 'full' | 'quiet';
 
 export const PRESETS: readonly { id: PresetId; label: string; off: readonly HighlightId[] }[] = [
-  { id: 'wsjtx', label: 'WSJT-X', off: [] },
+  { id: 'full', label: 'Full', off: [] },
   // My call, Sent, CQ and Ending a QSO only.
   { id: 'quiet', label: 'Quiet', off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
 ];

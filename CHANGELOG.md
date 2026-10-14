@@ -7,6 +7,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - With no relay chosen, the web SDR's error points to Settings › Relay. It pointed to Settings › Web SDR, which has no relay field.
 - Settings › Relay, PSK Reporter, Web SDR and WSPR, Spots and the activation form have shorter text.
 - The spot list's footer reads "Updated 13:14 UTC".
+- The Decode colours preset with every category on is now called Full.
 
 ## 0.19.0 · 2026-10-14
 
@@ -106,8 +107,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Slots are named Even and Odd everywhere, as on the decode list's slot bars. ••• says Transmit in 1st (Even) or 2nd (Odd), and the status line "Tx6 · CQ 9V1NE OJ11 · Even · :30".
 - Hunt calls, in Settings › FT8 and FT4, sets how many times Hunt calls a station that does not answer before moving on to the next CQ: 4 by default, 1 for working through CQs fastest. A station that answers gets the usual repeats.
 - Calling a station in the first 2 s of a slot your CQ is on air in (1 s in FT4) replaces the CQ with the call. It waited 30 s before. Later in the slot the CQ plays out and the call goes a cycle later, because the part of the CQ already sent would weaken the call. RR73, RRR and 73 always play out.
-- A reply can start up to 4.5 s into an FT8 slot and 1.75 s into an FT4 slot, where it waited a full cycle after 2 s and 1.5 s. Later than 1.5 s (FT8) or 0.5 s (FT4) past the usual start, it leaves out its first part and ends on time: WSJT-X still decodes it at −16 dB in FT8 and −12 dB in FT4.
-- An FT4 transmission that started about 1 s late, the old limit, went out where WSJT-X could not decode it at any level. It now leaves out its first part.
+- A reply can start up to 4.5 s into an FT8 slot and 1.75 s into an FT4 slot, where it waited a full cycle after 2 s and 1.5 s. Later than 1.5 s (FT8) or 0.5 s (FT4) past the usual start, it leaves out its first part and ends on time. It still decodes at −16 dB in FT8 and −12 dB in FT4.
+- An FT4 transmission that started about 1 s late, the old limit, could not be decoded at any level. It now leaves out its first part.
 
 ## 0.12.5 · 2026-10-14
 
@@ -127,7 +128,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.12.2 · 2026-10-14
 
-- FT8 decoding goes on after each slot's first decodes with two finer searches of what is left, and adds what they find to the slot in the list within 2 s. Of the messages WSJT-X decodes, RR73 now finds 95 % on the ft8_lib test files, up from 89 %, and 84 % on 40m recordings, up from 74 %. It decodes signals 0.9 dB weaker in steady noise and 1.6 dB weaker with fading. The sequencer, Hunt and Repeat CQ act on these decodes too.
+- FT8 decoding goes on after each slot's first decodes with two finer searches of what is left, and adds what they find to the slot in the list within 2 s. It now decodes 95 % of the known messages in the ft8_lib test files, up from 89 %, and 84 % on 40m recordings, up from 74 %. It decodes signals 0.9 dB weaker in steady noise and 1.6 dB weaker with fading. The sequencer, Hunt and Repeat CQ act on these decodes too.
 
 ## 0.12.1 · 2026-10-14
 
@@ -229,7 +230,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Hunt skips stations in a QSO, stations worked today on this band and mode, and for 10 min stations that did not answer it. It answers plain CQs only: CQ DX, CQ NA and other directed CQs wait for reference data.
 - Hunt order in ••• picks by Not worked (on this band and mode, strongest first), Strongest, Newest, Farthest or New call. The status line reads "Hunt · calling VJ6X (−12 dB) · 2 QSOs".
 - Hunt and CQ stop each other. Halt, End QSO and the watchdog stop Hunt.
-- Run is a switch in Operate's •••, stored and off by default. On, CQ answers the next caller or calls CQ again after each QSO. Off, Tx turns off once the QSO ends, as WSJT-X does with Disable Tx after sending 73.
+- Run is a switch in Operate's •••, stored and off by default. On, CQ answers the next caller or calls CQ again after each QSO. Off, Tx turns off once the QSO ends.
 - Double-tapping a station while calling CQ ends CQ until that QSO is done, and the CQ button turns off. An unanswered call from CQ used to go back to CQ after the repeats.
 - When the station you call sends a report, R-report, RR73 or 73 to another station, calling stops and the bar says who it answered: "VK2LAW answered DV5CEL".
 - Tail-end, in Settings › FT8 and FT4 and on by default, calls that station once more in the slot after its RR73 or 73 to the other station. One unanswered call ends it. It never calls during their QSO.
@@ -245,7 +246,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## 0.9.1 · 2026-10-13
 
 - Settings and its screens use shorter text, with the licence as a row in About. The Relay placeholder in Settings › Logging is removed.
-- Decode colours has presets with Undo: WSJT-X, with every category on, and Quiet, which colours only My call, Sent, CQ and Ending a QSO. The WSJT-X preset replaces Restore WSJT-X colours. What I sent is now Sent.
+- Decode colours has presets with Undo: one with every category on, and Quiet, which colours only My call, Sent, CQ and Ending a QSO. They replace the restore button. What I sent is now Sent.
 
 ## 0.9.0 · 2026-10-13
 
@@ -266,10 +267,10 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.8.0 · 2026-10-13
 
-- Decodes take WSJT-X's colours, in its order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and Sent. The first category from the top that matches colours the decode.
+- Decodes take a colour by category, in this order: my call, new grid, new grid on this band, new call, new call on this band, ending a QSO, CQ and Sent. The first category from the top that matches colours the decode.
 - Ending a QSO marks a station sending RR73 or 73 to another station, as it is about to be free.
 - Decodes from stations in the log on this band and mode show grey text over any colour.
-- Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore WSJT-X colours puts the defaults back, with Undo.
+- Settings › Appearance › Decode colours changes the order, turns each category on or off and sets its colour from 13 swatches or any colour. Restore defaults puts them back, with Undo.
 - Decode text keeps 4.5:1 contrast on every colour in light and dark.
 
 ## 0.7.2 · 2026-10-13
@@ -337,7 +338,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - RR73 transmits FT8 and FT4. Each message starts 0.5 s into its slot. Not tested with a radio.
 - To answer a station, tap a decode and then Call, or double-tap the decode. Call CQ calls CQ.
 - In loopback tests in desktop Chromium, CQ started 20 to 40 ms after the slot start plus 0.5 s. Halt silenced the output 35 to 42 ms after the tap. Not timed on an iPhone.
-- RR73 sends Tx1 to Tx6 in the WSJT-X sequence and logs the QSO when it completes. Operate shows the steps, the next message and when it starts.
+- RR73 sends Tx1 to Tx6 in the standard QSO sequence and logs the QSO when it completes. Operate shows the steps, the next message and when it starts.
 - A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot. Operate says which.
 - Run calls CQ and answers callers in the order you choose: first heard, strongest, farthest or new.
 - Run marks stations already in the Log for this UTC day, band and mode as dupes and skips them unless Work dupes is on.
@@ -386,15 +387,15 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.4.0 · 2026-10-13
 
-- The decoder retries weak signals with ordered-statistics decoding when the first attempt fails. On 350 recorded slots it now finds 74% of WSJT-X's decodes, up from 70%, with no false decodes in 5000 noise-only slots.
+- The decoder retries weak signals with ordered-statistics decoding when the first attempt fails. On 350 recorded slots it now decodes 74% of the known messages, up from 70%, with no false decodes in 5000 noise-only slots.
 
 ## 0.3.0 · 2026-10-12
 
-- The decoder now makes up to 3 passes over each slot, removing each decoded signal before the next. On recorded test slots it finds 88% of WSJT-X's decodes, up from 72%, with no false decodes in 200 noise-only slots.
+- The decoder now makes up to 3 passes over each slot, removing each decoded signal before the next. On recorded test slots it decodes 88% of the known messages, up from 72%, with no false decodes in 200 noise-only slots.
 
 ## 0.2.0 · 2026-10-12
 
-- Decodes FT8 in the app: each slot's messages appear in the list about 0.1 s after the slot ends in desktop Chromium, marked as in WSJT-X. Not yet timed on an iPhone.
+- Decodes FT8 in the app: each slot's messages appear in the list about 0.1 s after the slot ends in desktop Chromium. Not yet timed on an iPhone.
 - Messages that contain your callsign are marked red, CQ calls green.
 - The decode list stays still while you touch it and for 0.5 s after. Newer slots go in on top when you let go.
 - Filter chips show all decodes, CQ calls, messages to you or the receive frequency.
@@ -403,7 +404,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.1.1 · 2026-10-12
 
-- Message packing and display now match WSJT-X 2.7 bit for bit on 303 test messages. Fixes reports from −31 to −50 dB, ARRL Field Day sections, 3DA0 and 3X callsigns, and R RR73.
+- Message packing and display are now correct bit for bit on 303 test messages. Fixes reports from −31 to −50 dB, ARRL Field Day sections, 3DA0 and 3X callsigns, and R RR73.
 
 ## 0.1.0 · 2026-10-12
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions, programFindings } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
 const screen = (text) => lintText(text, 'x', { screen: true }).map((f) => `${f.level}:${f.rule}`);
@@ -126,6 +126,13 @@ test('flags a footer over 15 words and passes a short one', () => {
   assert.deepEqual(lengths('<p class="section-foot">Set the level for <b>4 to 5 ALC bars</b> during Tune, no more.</p>'), []);
 });
 
+test('flags another program named in any string literal, and leaves comments and identifiers', () => {
+  const programs = (text, ext = '.ts') => programFindings(text, ext).map((f) => `${f.line}:${f.rule}`);
+  assert.deepEqual(programs("export const PRESETS = [\n  { id: 'full', label: 'WSJT-X', off: [] },\n];"), ['2:other-program']);
+  assert.deepEqual(programs("// Tx1 repeats, as WSJT-X's Hound does.\nconst wsjtx = parse(text);"), []);
+  assert.deepEqual(programs("<script>\n  const p = 'JTDX';\n</script>\n<p>Full</p>", '.svelte'), ['2:other-program']);
+});
+
 test('flags a footer that opens with a verb and no subject', () => {
   assert.deepEqual(lengths('<p class="section-foot">Uploads the spots your radio decodes.</p>'), ['1:footer-fragment']);
   assert.deepEqual(lengths('<p class="section-foot">Brings web SDR audio to RR73. Carries no passwords.</p>'), ['1:footer-fragment']);
@@ -170,7 +177,9 @@ test('interface sources flag reassurance and plans, and the changelog may quote 
   assert.deepEqual(source('Create a key in Wavelog. The key stays on this phone.'), ['error:reassurance']);
   assert.deepEqual(source('The relay never receives passwords for other services.'), ['error:reassurance']);
   assert.deepEqual(source('Uploads the spots your radio decodes, as WSJT-X does.'), ['error:other-program']);
-  assert.deepEqual(source('The WSJT-X preset colours every category.'), []);
+  assert.deepEqual(source('Decodes take WSJT-X’s colours, in its order.'), ['error:other-program']);
+  assert.deepEqual(screen('Off, Tx turns off once the QSO ends, as WSJT-X does with Disable Tx after sending 73.'), ['error:other-program']);
+  assert.deepEqual(lintText('The decoder finds 95 % of the messages WSJT-X decodes.', 'docs/bench.md'), []);
   assert.deepEqual(source('It is planned and not built yet.'), ['error:planned']);
   assert.deepEqual(source('The 7 QSOs stay on this phone.'), []);
   assert.deepEqual(screen('Relay is planned. The key stays on this phone.'), []);
