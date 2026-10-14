@@ -16,7 +16,10 @@
    * bar and a tint. Worked before greys the text over any tint. The colours ride on the row as
    * classes, data-hl and data-ink, so the markup can change without touching the matcher. Rows of
    * slots older than the newest slot with decodes fade: grey text, a lighter tint. Slot bars alternate
-   * slate (even) and blue (odd).
+   * slate (even) and blue (odd); a run of slots with no decodes has one grey bar with its span.
+   *
+   * A message to you has a solid red edge and heavier text, over its decode colour. During a QSO,
+   * rows unrelated to the station being worked dim (lib/decode/focus.ts); a selected row does not.
    *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
    * with a red progress line while on air, then Sent in its slot.
@@ -85,7 +88,18 @@
     const r = item.row;
     const bg = !!r.hl && colours.has(r.hl);
     const ink = !!r.ink && colours.has(r.ink);
-    return ['dr', r.mark ? `k-${r.mark}` : '', r.worked ? 'worked' : '', bg ? 'rr-hl hl-background' : '', ink ? 'rr-ink hl-ink' : '', item.old ? 'old' : '', item.out ? `out ${item.out.stage}` : '', selected ? 'sel' : '']
+    return [
+      'dr',
+      r.mark ? `k-${r.mark}` : '',
+      r.worked ? 'worked' : '',
+      bg ? 'rr-hl hl-background' : '',
+      ink ? 'rr-ink hl-ink' : '',
+      item.old ? 'old' : '',
+      item.out ? `out ${item.out.stage}` : '',
+      item.toYou ? 'to-you' : '',
+      item.dim ? 'dim' : '',
+      selected ? 'sel' : '',
+    ]
       .filter(Boolean)
       .join(' ');
   }
@@ -167,11 +181,17 @@
 <ul class="list" aria-label={label}>
   {#each items as item (item.id)}
     {#if item.kind === 'header'}
-      <li class="slot-bar {item.parity}" data-ms={item.ms}>
-        <span class="visually-hidden">{item.text}, {item.parity} slot</span>
+      <li class="slot-bar {item.parity ?? 'quiet'}" data-ms={item.ms}>
+        <span class="visually-hidden">{item.parity ? `${item.text}, ${item.parity} slot` : item.text}</span>
         <span class="st" aria-hidden="true">{item.time}</span>
+        {#if item.until}
+          <span class="to" aria-hidden="true">to</span>
+          <span class="st" aria-hidden="true">{item.until}</span>
+        {/if}
         <span class="sd" aria-hidden="true">{item.detail}</span>
-        <span class="par" aria-hidden="true">{item.parity === 'even' ? 'Even' : 'Odd'}</span>
+        {#if item.parity}
+          <span class="par" aria-hidden="true">{item.parity === 'even' ? 'Even' : 'Odd'}</span>
+        {/if}
       </li>
     {:else}
       {@const r = item.row}
@@ -278,6 +298,17 @@
     text-transform: uppercase;
   }
 
+  /* A run of slots with no decodes: one grey bar with its span and no parity. */
+  .slot-bar.quiet {
+    border-top-color: var(--rr-slot-quiet-rule);
+    background: var(--rr-slot-quiet);
+    color: var(--rr-slot-quiet-text);
+  }
+
+  .slot-bar.quiet .st {
+    color: var(--rr-slot-quiet-strong);
+  }
+
   .dr-item {
     position: relative;
   }
@@ -297,6 +328,7 @@
     white-space: nowrap;
     user-select: none;
     -webkit-touch-callout: none;
+    transition: opacity var(--rr-transition);
   }
 
   .dr::after {
@@ -413,7 +445,8 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .prog {
+    .prog,
+    .dr {
       transition: none;
     }
   }
@@ -439,6 +472,22 @@
   .dr.old.hl-background .c-meta,
   .dr.old.hl-background .c-tag {
     color: var(--rr-hl-old-ink);
+  }
+
+  /* A message to you: a solid red edge over the decode colour's bar, and heavier text. */
+  .dr.to-you::after,
+  .dr.old.hl-background.to-you::after {
+    background: var(--rr-to-you-edge);
+    opacity: 1;
+  }
+
+  .dr.to-you .c-msg {
+    font-weight: var(--rr-weight-heavy);
+  }
+
+  /* During a QSO, rows unrelated to the station being worked dim. A selected row stays clear. */
+  .dr.dim:not(.sel) {
+    opacity: var(--rr-focus-dim);
   }
 
   /* After the decode colours and the fading, so a selected row shows as selected. */

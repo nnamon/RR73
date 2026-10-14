@@ -133,7 +133,7 @@
     align-items: center;
     justify-content: center;
     height: var(--rr-tap);
-    border-radius: var(--rr-radius-l);
+    border-radius: var(--rr-radius-button);
     background: var(--rr-sheet-card);
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-semibold);
@@ -151,8 +151,10 @@
     outline-offset: 2px;
   }
 
+  /* The fieldset rule above clears padding; the track keeps its 2 pt inset around the thumb. */
   .seg {
     margin-top: var(--rr-space-3);
+    padding: var(--rr-space-half);
   }
 
   .seg-i.off {
@@ -222,7 +224,7 @@
   .m {
     font-size: var(--rr-text-sideband);
     font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-title);
+    line-height: var(--rr-leading-sideband);
   }
 
   .note {

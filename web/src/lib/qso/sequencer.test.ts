@@ -570,6 +570,17 @@ describe('Hunt', () => {
     }
   });
 
+  it('leaves alone for 10 min a station that answers another station twice while it calls', () => {
+    const s = new Sim();
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    const cq = cqs[0];
+    s.run(0, 10, { 1: [cq], 3: ['DV5CEL JA1KXM -05'], 5: [cq], 7: ['W1AW JA1KXM -07'], 9: [cq] });
+    // Called after each CQ in slots 1 and 5; after the second loss its CQ in slot 9 goes unanswered.
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '6:JA1KXM 9V1NE OJ11']);
+    expect(s.st.ignored.map((i) => i.call)).toEqual(['JA1KXM']);
+    expect(s.notices().map((n) => n.text)).toEqual(['JA1KXM answered DV5CEL', 'JA1KXM answered W1AW']);
+  });
+
   it('and CQ stop each other', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });

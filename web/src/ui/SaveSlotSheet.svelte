@@ -101,7 +101,9 @@
     margin-top: var(--rr-space-2);
   }
 
+  /* A vertical stack: rounded rectangles (HIG Buttons). */
   .links .btn {
+    border-radius: var(--rr-radius-button);
     white-space: normal;
     text-align: center;
   }

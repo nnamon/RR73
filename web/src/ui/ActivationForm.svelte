@@ -281,7 +281,7 @@
 
   /* On the sheet's card the tinted fill is too light for its text in dark mode. */
   .soft {
-    background: var(--rr-fill2);
+    background-color: var(--rr-fill2);
     color: var(--rr-accent);
   }
 

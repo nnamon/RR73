@@ -2,13 +2,15 @@
  * Builds the decode list: newest slot first, a bar per slot, rows marked as in WSJT-X, the
  * callers in Run, and the chip filters. Our own transmission sits at the top as soon as it is
  * planned (Next), then while on air (Sending), then stays in its slot (Sent). Rows of slots older
- * than the newest slot with decodes are marked old, so they fade.
+ * than the newest slot with decodes are marked old, so they fade. Messages to you lead their
+ * slot. Consecutive slots with no decodes share one bar that gives the span.
  */
 
 import { utcTime } from '../clock/format';
 import { SLOT_MS, parity, type Mode, type Parity } from '../clock/slots';
 import { bare, formatReport, parseExchange, sameCall } from '../qso/messages';
 import type { Caller } from '../qso/sequencer';
+import { toYou } from './focus';
 import type { DecodeHighlight } from './highlight';
 import { markDecode, type DecodeRowData } from './marking';
 import type { Decode } from './types';
@@ -37,13 +39,19 @@ export interface SlotDecodes {
   skipped?: boolean;
 }
 
-/** A slot bar: "09:50:15", "9 decodes", even or odd; `text` is the whole line for screen readers. */
+/**
+ * A slot bar: "09:50:15", "9 decodes", even or odd; `text` is the whole line for screen readers.
+ * A run of consecutive slots with no decodes has one bar, from `time` (its oldest slot) to
+ * `until` (its newest), with no parity.
+ */
 export interface HeaderItem {
   kind: 'header';
   id: string;
   time: string;
+  /** Start of the newest slot of a run of slots with no decodes. */
+  until?: string;
   detail: string;
-  parity: Parity;
+  parity: Parity | null;
   text: string;
   /** Time the decoder took, ms; on decoded slots only. */
   ms?: number;
@@ -69,6 +77,10 @@ export interface RowItem {
   old?: boolean;
   /** Our own transmission. */
   out?: OutInfo;
+  /** Addressed to the operator's callsign: leads its slot, with a red edge and bold text. */
+  toYou?: boolean;
+  /** Unrelated to the station being worked: drawn dimmed (focus.ts). */
+  dim?: boolean;
 }
 
 export type ListItem = HeaderItem | RowItem;
@@ -119,6 +131,13 @@ export function slotHeader(s: SlotDecodes): HeaderItem {
   return s.skipped ? h : { ...h, ms: s.ms };
 }
 
+/** One bar for a run of slots with no decodes, from the oldest slot's start to the newest's. */
+export function quietHeader(oldestMs: number, newestMs: number): HeaderItem {
+  const time = utcTime(oldestMs);
+  const until = utcTime(newestMs);
+  return { kind: 'header', id: `hq${oldestMs}`, time, until, detail: 'no decodes', parity: null, text: `${time} to ${until} UTC · no decodes` };
+}
+
 function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
   if (filter === 'all') return true;
   if (filter === 'rx') return Math.abs(row.decode.freq_hz - rxHz) <= RX_WINDOW_HZ;
@@ -128,27 +147,42 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
 /**
  * List items for `slots` and our own transmissions, newest first. A transmission sorts by its
  * start (slot + 0.5 s) under a bar that says next, sending or sent, a decoded slot by its end. With a filter, slots
- * with no matching decode are left out; with none, every slot shows its bar. Transmissions show
- * with All and To me; `mode` gives their slot parity.
+ * with no matching decode are left out; with none, every slot shows its bar, and consecutive slots
+ * with no decodes share one. Within a slot, messages to `myCall` come first, the rest in the
+ * decoder's order. Transmissions show with All and To me; `mode` gives their slot parity.
  */
 export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify, outgoing: Outgoing = {}): ListItem[] {
-  type Group = { at: number; items: ListItem[] };
+  /** `quiet`: a decoded slot with no decodes and none of our rows, which can join a run. */
+  type Group = { at: number; items: ListItem[]; quiet?: { startMs: number; mode: Mode } };
   const groups: Group[] = [];
+  const showOut = filter === 'all' || filter === 'me';
+  // A slot holding one of our rows is never empty.
+  const ours = new Set<number>();
+  if (showOut) {
+    for (const t of sent) ours.add(t.slotStartMs);
+    if (outgoing.next) ours.add(outgoing.next.slotStartMs);
+    if (outgoing.onAir) ours.add(outgoing.onAir.slotStartMs);
+  }
   // The newest slot with decodes keeps full contrast; anything older fades. An empty slot after
   // it leaves it as the latest news.
   const newest = slots.reduce((m, s) => (s.decodes.length ? Math.max(m, s.startUtcMs) : m), -Infinity);
   const old = (slotStartMs: number) => slotStartMs < newest;
   for (const s of slots) {
+    // Ids follow the decoder's order, so a row keeps its id when it moves up.
     const rows = s.decodes
-      .map((d) => ({ decode: d, ...markDecode(d, myCall) }))
-      .filter((r) => passes(r, filter, rxHz))
-      .map((r) => ({ ...r, ...colours(classify, r.decode, false) }));
+      .map((d, i) => ({ i, toYou: toYou(d.text, myCall), row: { decode: d, ...markDecode(d, myCall) } }))
+      .filter((r) => passes(r.row, filter, rxHz))
+      .map((r) => ({ ...r, row: { ...r.row, ...colours(classify, r.row.decode, false) } }));
     if (!rows.length && filter !== 'all') continue;
     const items: ListItem[] = [slotHeader(s)];
-    rows.forEach((row, i) => items.push({ kind: 'row', id: `${s.startUtcMs}-${i}`, row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) }));
-    groups.push({ at: s.startUtcMs + SLOT_MS[s.mode], items });
+    for (const r of [...rows.filter((x) => x.toYou), ...rows.filter((x) => !x.toYou)]) {
+      const item: RowItem = { kind: 'row', id: `${s.startUtcMs}-${r.i}`, row: r.row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) };
+      items.push(r.toYou ? { ...item, toYou: true } : item);
+    }
+    const quiet = !s.decodes.length && !s.skipped && !ours.has(s.startUtcMs);
+    groups.push({ at: s.startUtcMs + SLOT_MS[s.mode], items, quiet: quiet ? { startMs: s.startUtcMs, mode: s.mode } : undefined });
   }
-  if (filter === 'all' || filter === 'me') {
+  if (showOut) {
     const air = outgoing.onAir ?? null;
     for (const t of sent) {
       const d = { text: t.text, freq_hz: t.freqHz, dt_s: 0, snr_db: 0 };
@@ -165,7 +199,23 @@ export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, 
       groups.push({ at: n.slotStartMs + 500, items: [header(`hn${n.slotStartMs}`, n.slotStartMs, mode, 'next'), item] });
     }
   }
-  return groups.sort((a, b) => b.at - a.at).flatMap((g) => g.items);
+  groups.sort((a, b) => b.at - a.at);
+  // Consecutive empty slots, next to each other in the list and in time, share one bar. A gap in
+  // time (a slot not decoded) or a change of mode ends the run.
+  const items: ListItem[] = [];
+  for (let i = 0; i < groups.length; ) {
+    let j = i;
+    for (;;) {
+      const a = groups[j].quiet;
+      const b = groups[j + 1]?.quiet;
+      if (!a || !b || a.mode !== b.mode || a.startMs - b.startMs !== SLOT_MS[a.mode]) break;
+      j++;
+    }
+    if (j === i) items.push(...groups[i].items);
+    else items.push(quietHeader(groups[j].quiet!.startMs, groups[i].quiet!.startMs));
+    i = j + 1;
+  }
+  return items;
 }
 
 /** Decodes per filter, for the chips. */
@@ -217,7 +267,8 @@ export function callerItems(slots: SlotDecodes[], myCall: string, mode: Mode, wo
     const d = found?.d ?? fallback;
     const at = found?.slotStartMs ?? heardMs;
     newest = Math.max(newest, at);
-    rows.push({ kind: 'row', id: `c-${bare(call)}`, row: { decode: d, ...markDecode(d, myCall), meta, ...colours(classify, d, false) }, slotStartMs: at });
+    const item: RowItem = { kind: 'row', id: `c-${bare(call)}`, row: { decode: d, ...markDecode(d, myCall), meta, ...colours(classify, d, false) }, slotStartMs: at };
+    rows.push(toYou(d.text, myCall) ? { ...item, toYou: true } : item);
   };
   if (working) add(working.call, 'Working', made(working.call, working.grid, working.snrDb, working.dtS, working.freqHz), 0);
   let n = working ? 1 : 0;

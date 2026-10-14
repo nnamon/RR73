@@ -1,42 +1,56 @@
 /*
  * Design tokens: the only file with colour values, type sizes and spacing. stylelint rejects raw
- * colours everywhere else. Values come from the approved mockups (.t-light and .t-dark).
+ * colours everywhere else.
+ *
+ * Colours are Apple's system colours with the iOS 26 values from the HIG Color page (read on
+ * 14 October 2026). Backgrounds, labels, separators and fills are the UIKit values; the HIG does
+ * not publish them (Unverified). Geometry follows iOS 18: grouped lists with 10 pt corners and
+ * 44 pt rows, a 51 x 31 pt switch, sheets with 10 pt corners (Unverified, not measured).
  *
  * Each colour is light-dark(light, dark). The theme follows the system unless Settings sets
  * data-theme on the root element, which pins color-scheme.
  *
- * Contrast (computed against --rr-bg and --rr-surface): body text 4.5:1 or more, a decode row's
- * text 4.5:1 or more on its decode colour, badge text 4.5:1 or more on its fill.
+ * Text keeps 4.5:1 on what it sits on, in both themes; glyphs such as chevrons 3:1.
+ * tokens-contrast.test.ts checks every pair. Where an Apple colour falls short as text, its token
+ * takes the Increased Contrast value, darkened in light or lightened in dark only as far as 4.5:1
+ * needs (the readableOn() rule in lib/decode/highlight-colour.ts).
  */
 
 :root {
   color-scheme: light dark;
 
-  /* Type */
+  /* Type: the iOS text styles at the default Dynamic Type size. */
   --rr-sans: -apple-system, blinkmacsystemfont, "SF Pro Text", "Helvetica Neue", arial, sans-serif;
-  --rr-mono: "SF Mono", ui-monospace, menlo, "Roboto Mono", monospace;
+  --rr-mono: ui-monospace, "SF Mono", menlo, "Roboto Mono", monospace;
   --rr-text-large-title: 34px;
   --rr-text-title: 22px;
   --rr-text-clock: 20px;
   --rr-text-body: 17px;
   --rr-text-callout: 16px;
   --rr-text-sub: 15px;
+  /* No iOS style: the mono status line and notices, which no longer fit at 15. */
   --rr-text-row: 14px;
   --rr-text-foot: 13px;
   --rr-text-caption: 12px;
-  --rr-text-axis: 10px;
+  /* Caption 2, the smallest iOS style. */
+  --rr-text-axis: 11px;
   --rr-text-tag: 11px;
-  --rr-text-decode: 14.5px;
+  /* The waterfall ruler's labels, under Caption 2 to fit every 500 Hz. */
+  --rr-text-ruler: 10px;
+  --rr-text-decode: 16px;
   --rr-text-dial: 40px;
   --rr-text-countdown: 64px;
-  --rr-text-sideband: 19px;
+  --rr-text-sideband: 20px;
   --rr-leading-large-title: 41px;
-  --rr-leading-title: 24px;
+  --rr-leading-title: 28px;
   --rr-leading-body: 22px;
+  --rr-leading-callout: 21px;
   --rr-leading-sub: 20px;
   --rr-leading-row: 18px;
-  --rr-leading-foot: 17px;
-  --rr-leading-caption: 15px;
+  --rr-leading-foot: 18px;
+  --rr-leading-caption: 16px;
+  --rr-leading-tag: 13px;
+  --rr-leading-sideband: 25px;
   --rr-leading-dial: 48px;
   --rr-leading-countdown: 72px;
   --rr-weight-regular: 400;
@@ -64,8 +78,12 @@
   --rr-radius-s: 5px;
   --rr-radius-m: 8px;
   --rr-radius-l: 10px;
-  --rr-radius-xl: 12px;
-  --rr-radius-sheet: 14px;
+  /* Groups and cards: the iOS 18 inset grouped list. */
+  --rr-radius-xl: 10px;
+  /* Buttons in a grid or a vertical stack, such as the band tiles. Buttons alone or in a row are capsules. */
+  --rr-radius-button: 12px;
+  /* iOS 18 sheets. Unverified. */
+  --rr-radius-sheet: 10px;
   --rr-radius-pill: 999px;
   --rr-hairline: 1px;
 
@@ -101,58 +119,77 @@
 
   --rr-transition: 160ms;
 
-  /* Colour: surfaces */
-  --rr-bg: light-dark(#F2F3F6, #0B0D10);
-  --rr-surface: light-dark(#FFF, #15181D);
-  --rr-plain: light-dark(#FFF, #0B0D10);
-  --rr-dock: light-dark(#F8F9FB, #15181D);
-  --rr-fill: light-dark(#EEF0F4, #232831);
-  --rr-fill-bg: light-dark(#E4E6EB, #232831);
-  --rr-fill2: light-dark(#E1E3E8, #2E3440);
-  --rr-sep: light-dark(#E1E3E8, #2A2F38);
-  --rr-sep-strong: light-dark(#C9CDD4, #3A404B);
-  --rr-bar: light-dark(rgb(249 250 252 / 94%), rgb(19 22 27 / 94%));
-  --rr-sheet: light-dark(#F2F3F6, #15181D);
-  /* Cards and tiles on a sheet: white on the light sheet, a step lighter on the dark one. */
-  --rr-sheet-card: light-dark(#FFF, #232831);
-  --rr-grab: light-dark(#B9BEC6, #4A515D);
-  --rr-dim: light-dark(rgb(14 17 22 / 32%), rgb(0 0 0 / 50%));
+  /* Colour: surfaces. The dark theme's ground is true black, with groups and sheets in grey. */
+  /* systemGroupedBackground */
+  --rr-bg: light-dark(#F2F2F7, #000000);
+  /* secondarySystemGroupedBackground: groups */
+  --rr-surface: light-dark(#FFFFFF, #1C1C1E);
+  /* systemBackground: Operate, the decode list and the filters */
+  --rr-plain: light-dark(#FFFFFF, #000000);
+  /* Bar material: Operate's top and bottom bars, and a sub-screen's bar once content is under it. */
+  --rr-dock: light-dark(rgb(249 249 249 / 80%), rgb(29 29 31 / 80%));
+  --rr-material-blur: blur(20px) saturate(180%);
+  /* systemFill: buttons */
+  --rr-fill: light-dark(rgb(120 120 128 / 20%), rgb(120 120 128 / 36%));
+  /* secondarySystemFill: bar buttons, chips, the switch's off track, rings and steps */
+  --rr-fill-bg: light-dark(rgb(120 120 128 / 16%), rgb(120 120 128 / 32%));
+  --rr-fill2: var(--rr-fill-bg);
+  /* tertiarySystemFill: segmented controls and the search field */
+  --rr-fill3: light-dark(rgb(118 118 128 / 12%), rgb(118 118 128 / 24%));
+  /* separator, and opaqueSeparator where a line crosses a colour */
+  --rr-sep: light-dark(rgb(60 60 67 / 29%), rgb(84 84 88 / 60%));
+  --rr-sep-strong: light-dark(#C6C6C8, #38383A);
+  /* Sheets: grouped background, elevated in dark, with its cards a step lighter. */
+  --rr-sheet: light-dark(#F2F2F7, #1C1C1E);
+  --rr-sheet-card: light-dark(#FFFFFF, #2C2C2E);
+  --rr-grab: light-dark(rgb(60 60 67 / 30%), rgb(235 235 245 / 30%));
+  --rr-dim: light-dark(rgb(0 0 0 / 20%), rgb(0 0 0 / 48%));
 
-  /* Colour: text */
-  --rr-label: light-dark(#0E1116, #ECEEF2);
-  --rr-label2: light-dark(#4F5561, #A7AEBA);
-  --rr-label3: light-dark(#5F6570, #8C93A0);
-  --rr-chev: light-dark(#9CA2AC, #6B7280);
+  /*
+   * Colour: text. label is Apple's, and secondaryLabel (label2) in dark. iOS draws
+   * secondaryLabel at 3.3:1 and tertiaryLabel at 1.7:1 on white, so label2 and label3 are darker
+   * in light, and label3 lighter in dark, as far as 4.5:1 needs.
+   */
+  --rr-label: light-dark(#000000, #FFFFFF);
+  --rr-label2: light-dark(#646468, rgb(235 235 245 / 60%));
+  --rr-label3: light-dark(#6D6D71, rgb(235 235 245 / 55%));
+  /* Chevrons and other glyphs, at 3:1. */
+  --rr-chev: light-dark(#929296, rgb(235 235 245 / 40%));
   --rr-on-fill: #FFF;
-  --rr-on-strong: light-dark(#FFF, #0B0D10);
+  --rr-on-strong: light-dark(#FFF, #000000);
 
-  /* Colour: accent, receive and transmit */
-  --rr-accent: light-dark(#2851D8, #7A9DFF);
-  --rr-accent-fill: light-dark(#2851D8, #3F6BE8);
-  --rr-accent-soft: light-dark(rgb(40 81 216 / 10%), rgb(110 149 255 / 18%));
-  --rr-tx: light-dark(#D23A2F, #FF5A4E);
-  --rr-tx-text: light-dark(#B42C22, #FF7468);
-  --rr-tx-fill: #C8352B;
-  --rr-tx-soft: light-dark(rgb(210 58 47 / 10%), rgb(255 90 78 / 17%));
-  --rr-cq: light-dark(#178A50, #34C77B);
-  --rr-amber: light-dark(#C98A1A, #E0A93B);
-  --rr-mag: light-dark(#9333B8, #D07BEA);
-  --rr-teal: light-dark(#0E7490, #3EC1D3);
-  --rr-ok: light-dark(#12703F, #34C77B);
-  --rr-ok-bar: light-dark(#178A50, #34C77B);
-  --rr-run: light-dark(#12703F, #34C77B);
-  --rr-ok-soft: light-dark(rgb(23 138 80 / 12%), rgb(52 199 123 / 16%));
-  --rr-warn: light-dark(#A84D08, #F0A23B);
-  --rr-warn-soft: light-dark(rgb(217 119 6 / 13%), rgb(240 162 59 / 16%));
+  /*
+   * Colour: accent, receive and transmit. systemBlue, systemRed, systemGreen and systemOrange as
+   * graphics; as text, their Increased Contrast values (IC), adjusted for 4.5:1; as fills that
+   * carry white text, the IC light value in both themes.
+   */
+  --rr-accent: light-dark(#195CCC, #60BAFF);
+  --rr-accent-fill: #1E6EF4;
+  --rr-accent-soft: light-dark(rgb(0 136 255 / 15%), rgb(0 145 255 / 24%));
+  --rr-tx: light-dark(#FF383C, #FF4245);
+  --rr-tx-text: light-dark(#C21226, #FF6E71);
+  --rr-tx-fill: #E9152D;
+  --rr-tx-soft: light-dark(rgb(255 56 60 / 14%), rgb(255 66 69 / 24%));
+  --rr-cq: light-dark(#34C759, #30D158);
+  --rr-amber: light-dark(#FF8D28, #FF9230);
+  /* systemPurple and systemTeal IC, adjusted: decode badges. */
+  --rr-mag: light-dark(#A52CB6, #EA8DFF);
+  --rr-teal: light-dark(#00758A, #3BDDEC);
+  --rr-ok: light-dark(#007C2D, #4AD968);
+  --rr-ok-bar: light-dark(#34C759, #30D158);
+  --rr-run: #008932;
+  --rr-ok-soft: light-dark(rgb(52 199 89 / 18%), rgb(48 209 88 / 26%));
+  --rr-warn: light-dark(#AC4900, #FFA056);
+  --rr-warn-soft: light-dark(rgb(255 141 40 / 20%), rgb(255 146 48 / 26%));
 
   /*
    * Colour: decode colours (Settings › Decode colours). A row's category colour, chosen by the
    * operator, shows as a tint: the colour mixed with a base in sRGB. The limits hold for any
    * colour, so the row's text stays at 4.5:1 or more in both themes (highlight-contrast.test.ts):
-   * - light: at most 45% colour over #FFF, so every channel is 140 or more, and #0E1116 text is
-   *   5.6:1 or more;
-   * - dark: at most 30% colour over #0B0D10, so every channel is 88 or less, and #ECEEF2 text is
-   *   6.1:1 or more. 30% leaves room for worked-before grey text over a tint.
+   * - light: at most 45% colour over #FFF, so every channel is 140 or more, and #000 text is
+   *   6.2:1 or more;
+   * - dark: at most 30% colour over #000, so every channel is 77 or less, and #FFF text is
+   *   8.4:1 or more. 30% leaves room for worked-before grey text over a tint.
    * lib/decode/highlight-colour.ts mirrors these four values for the worked-before text colour.
    */
   --rr-hl-tint-light: 45%;
@@ -162,36 +199,42 @@
   --rr-hl-tint-old-dark: 18%;
   --rr-old-text: light-dark(#6E7684, #8C93A0);
   --rr-hl-base-light: #FFF;
-  --rr-hl-base-dark: #0B0D10;
-  --rr-sel-tint: light-dark(rgb(40 81 216 / 21%), rgb(110 149 255 / 25%));
+  --rr-hl-base-dark: #000000;
+  --rr-sel-tint: light-dark(rgb(0 136 255 / 16%), rgb(0 145 255 / 28%));
 
   /*
-   * Colour: slot bars in the decode list. Even slots (:00, :30) slate, odd slots (:15, :45) blue:
-   * a tint, a 2 pt rule on top a step stronger, the time and tag in the strong text, the rest in
-   * the soft text. Text is 4.5:1 or more on the tint in both themes.
+   * Colour: slot bars in the decode list. Even slots (:00, :30) grey, odd slots (:15, :45) blue:
+   * systemGray6 and systemBlue at 12% (light) or 22% (dark), a 2 pt rule in systemGray or
+   * systemBlue on top, the time and tag in the strong text, the rest in grey text. Text is 4.5:1
+   * or more on the bar in both themes.
    */
-  --rr-slot-even: light-dark(#E4E8EF, #1A1F27);
-  --rr-slot-even-rule: light-dark(#7E899C, #5A6577);
-  --rr-slot-even-strong: light-dark(#1F2633, #E3E8F0);
-  --rr-slot-even-text: light-dark(#4A5363, #A9B2C0);
-  --rr-slot-odd: light-dark(#DCE5F8, #15203A);
-  --rr-slot-odd-rule: light-dark(#4A6FC4, #5679CC);
-  --rr-slot-odd-strong: light-dark(#1C3F8F, #B9CCFF);
-  --rr-slot-odd-text: light-dark(#3B4F7D, #93A7D6);
+  --rr-slot-even: light-dark(#F2F2F7, #1C1C1E);
+  --rr-slot-even-rule: #8E8E93;
+  --rr-slot-even-strong: light-dark(#000000, #FFFFFF);
+  --rr-slot-even-text: light-dark(#6D6D71, #8E8E93);
+  --rr-slot-odd: light-dark(#E0F1FF, #002038);
+  --rr-slot-odd-rule: light-dark(#0088FF, #0091FF);
+  --rr-slot-odd-strong: light-dark(#1B64DF, #5CB8FF);
+  --rr-slot-odd-text: light-dark(#6B6B6E, #8E8E93);
 
   /* Colour: controls */
-  --rr-seg-sel: light-dark(#FFF, #4A515E);
+  /* The selected segment: white in light, systemGray2 in dark. */
+  --rr-seg-sel: light-dark(#FFF, #636366);
   --rr-thumb: #FFF;
-  --rr-toast: light-dark(#1F242C, #E6E9EE);
-  --rr-toast-text: light-dark(#FFF, #0E1116);
-  --rr-toast-link: light-dark(#9DB5FF, #2851D8);
-  --rr-ic-blue: light-dark(#2F6FE4, #3B7BF0);
-  --rr-ic-green: #237F4E;
-  --rr-ic-orange: #C4621B;
-  --rr-ic-grey: #6E7581;
-  --rr-ic-indigo: #5B57D6;
-  --rr-shadow-seg: light-dark(rgb(14 17 22 / 10%), rgb(0 0 0 / 35%));
-  --rr-shadow-thumb: light-dark(rgb(14 17 22 / 15%), rgb(0 0 0 / 35%));
+  /* The switch's on track: systemGreen. */
+  --rr-switch-on: light-dark(#34C759, #30D158);
+  --rr-toast: light-dark(#2C2C2E, #E5E5EA);
+  --rr-toast-text: light-dark(#FFF, #000000);
+  --rr-toast-link: light-dark(#5CB8FF, #1A5FD4);
+  /* Icon tiles in grouped rows carry white glyphs, as iOS Settings draws them. */
+  --rr-ic-blue: light-dark(#0088FF, #0091FF);
+  --rr-ic-green: light-dark(#34C759, #30D158);
+  --rr-ic-orange: light-dark(#FF8D28, #FF9230);
+  --rr-ic-grey: #8E8E93;
+  --rr-ic-indigo: light-dark(#6155F5, #6D7CFF);
+  --rr-ic-teal: light-dark(#00C3D0, #00D2E0);
+  --rr-shadow-seg: light-dark(rgb(0 0 0 / 12%), rgb(0 0 0 / 35%));
+  --rr-shadow-thumb: light-dark(rgb(0 0 0 / 16%), rgb(0 0 0 / 35%));
 
   /*
    * Colour: waterfall. The same in both themes. The colormap stops are read by
@@ -202,10 +245,10 @@
   --rr-wf-text: rgb(255 255 255 / 78%);
   --rr-wf-tag-bg: rgb(4 6 10 / 62%);
   --rr-wf-scrim: rgb(4 6 10 / 75%);
-  --rr-wf-rx: #34C77B;
-  --rr-wf-tx: #FF5A4E;
-  --rr-wf-rx-band: rgb(52 199 123 / 20%);
-  --rr-wf-tx-band: rgb(255 90 78 / 18%);
+  --rr-wf-rx: #30D158;
+  --rr-wf-tx: #FF4245;
+  --rr-wf-rx-band: rgb(48 209 88 / 20%);
+  --rr-wf-tx-band: rgb(255 66 69 / 18%);
   /* The ruler over the bottom of the picture: the waterfall's background, so signals show through dimmed. */
   --rr-wf-ruler-veil: rgb(4 6 10 / 70%);
   --rr-wf-ruler-text: rgb(255 255 255 / 90%);
@@ -218,6 +261,27 @@
   --rr-wf-c4: #8AF0C8;
   --rr-wf-c5: #FFF060;
   --rr-wf-c6: #FFF8E6;
+
+  /*
+   * Decode list: messages to you, the focus during a QSO and runs of empty slots. A message to
+   * you has a solid red edge and heavy text. During a QSO, rows unrelated to the station being
+   * worked show at --rr-focus-dim (label text 2.6:1 on white); with Increase Contrast at 0.6,
+   * which keeps it at 5:1. A run of slots with no decodes has one grey bar, its text 5.3:1 or
+   * more in both themes.
+   */
+  --rr-weight-heavy: 800;
+  --rr-to-you-edge: var(--rr-tx);
+  --rr-focus-dim: 0.4;
+  --rr-slot-quiet: light-dark(#F2F2F7, #1C1C1E);
+  --rr-slot-quiet-rule: var(--rr-sep-strong);
+  --rr-slot-quiet-strong: var(--rr-label2);
+  --rr-slot-quiet-text: var(--rr-label3);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --rr-focus-dim: 0.6;
+  }
 }
 
 /*
