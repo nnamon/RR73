@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.16.0 · 2026-10-14
 
 - Receive from a web SDR through a relay: Settings › Web SDR chooses one of the relay's receivers, which tunes to the band's dial. Tx stays on the radio. Operate shows Web SDR beside the band while it is on.
 - Decodes from a web SDR keep their DT: the relay stamps each frame with the time the receiver heard it, and RR73 takes its 1.5 s of buffering back off.
