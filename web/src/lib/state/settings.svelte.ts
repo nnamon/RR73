@@ -4,7 +4,7 @@ import { getKv, mergeKv, peekKv } from './db';
 import { dialHz, isBand, type BandId } from '../radio/bands';
 import { inBand, type HoundDials } from '../radio/hound-dial';
 import type { Mode } from '../clock/slots';
-import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
+import { defaultHighlights, normaliseHighlights, presetHighlights, type HighlightEntry, type HighlightId } from '../decode/highlight';
 import type { Contrast } from '../waterfall/levels';
 import { clampHz } from '../waterfall/pick';
 import { HUNT_ORDERS, type HuntOrder } from '../qso/sequencer';
@@ -178,8 +178,36 @@ const KEY = 'settings';
  * 8. RTTY's settings, the keyboard modes' macros and contest, and the operator's name and QTH,
  *    at their defaults. Every other value stays where it was.
  * 9. The Report macro as 0.14.0 stored it gets Return to Rx (macros.ts fixShippedReport).
+ * 10. Decode colours left as 0.8.0 to 0.19.2 shipped them, every category on or the Quiet
+ *     preset, take RR73's scheme (highlight.ts) in the same form. Colours the operator changed
+ *     stay.
  */
-export const SETTINGS_SCHEMA = 9;
+export const SETTINGS_SCHEMA = 10;
+
+/** The decode colours 0.8.0 to 0.19.2 shipped, in their order, for schema 10. */
+const SHIPPED_COLOURS: Record<HighlightId, string> = {
+  myCall: '#FF6666',
+  newGrid: '#FF8000',
+  newGridBand: '#FFCC99',
+  newCall: '#3399FF',
+  newCallBand: '#99CCFF',
+  ending: '#FFE2C8',
+  cq: '#66FF66',
+  sent: '#C98A1A',
+  worked: '#8C93A0',
+};
+const SHIPPED_QUIET_OFF: readonly HighlightId[] = ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'];
+
+/** RR73's scheme in place of the shipped colours, when the stored ones are those exactly. */
+function updateShippedColours(raw: unknown): HighlightEntry[] | null {
+  if (!Array.isArray(raw)) return null;
+  const order = defaultHighlights().map((e) => e.id);
+  const stored = raw as { id?: unknown; on?: unknown; colour?: unknown }[];
+  if (stored.length !== order.length || stored.some((e, i) => e?.id !== order[i] || String(e?.colour).toUpperCase() !== SHIPPED_COLOURS[order[i]])) return null;
+  const all = stored.every((e) => e.on === true);
+  const quiet = stored.every((e, i) => e.on === !SHIPPED_QUIET_OFF.includes(order[i]));
+  return all ? presetHighlights('rr73') : quiet ? presetHighlights('quiet') : null;
+}
 
 /** The sequencer settings schema 5 adds. */
 const SEQUENCER_DEFAULTS = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 } as const;
@@ -206,6 +234,10 @@ export function migration(raw: unknown): Record<string, unknown> {
       const kb = k as Record<string, unknown>;
       patch.keyboard = { ...kb, macros: fixShippedReport(normaliseMacros(kb.macros)) };
     }
+  }
+  if (from >= 3 && from < 10) {
+    const h = updateShippedColours((raw as Record<string, unknown>).highlights);
+    if (h) patch.highlights = h;
   }
   return patch;
 }

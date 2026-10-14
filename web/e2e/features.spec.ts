@@ -121,7 +121,7 @@ test('a phone that ran 0.5.0 with an activation running ends up with every featu
   await seed(page, mockupLog({ running: true }));
   await expect.poll(() => screenNames(page)).toEqual(['Log', 'Settings']);
   // Schema 9: the features migration (2), decode colours (3), the sequencer settings (5), waterfall contrast (6), WSPR (7) and RTTY (8 and 9) in one step.
-  await expect.poll(async () => (await stored(page))?.schema).toBe(9);
+  await expect.poll(async () => (await stored(page))?.schema).toBe(10);
   expect((await stored(page))?.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
   // Operate shows no activation line; the log keeps every QSO.
   await expect(page.getByRole('link', { name: /^Activation / })).toHaveCount(0);

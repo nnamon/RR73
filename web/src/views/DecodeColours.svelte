@@ -4,8 +4,10 @@
    * layer, worked before. Each background category has a swatch (opens the colour sheet), a switch
    * and a handle: touch and hold the handle, then drag, as on iOS. Move up and Move down do the
    * same for VoiceOver and keyboards; they show when focused. Every change applies at once.
-   * Choosing a preset (WSJT-X or Quiet) offers Undo for 10 s. Custom shows when the colours match
-   * neither preset, and cannot be chosen.
+   * Presets set a colour scheme and which categories are on: RR73's (the default), Quiet, WSJT-X's
+   * own and 5 editor schemes. Each row shows the scheme's background colours, those it turns off
+   * faded. Choosing one offers Undo for 10 s. Custom shows when the colours match no preset, and
+   * cannot be chosen.
    */
   import { tick } from 'svelte';
   import BackLink from '../ui/BackLink.svelte';
@@ -13,7 +15,7 @@
   import DecodeList, { type DecodeListItem } from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
-  import { PRESETS, category, highlightDecode, isBackground, moveBackground, presetHighlights, presetOf, type HighlightEntry, type HighlightId, type PresetId } from '../lib/decode/highlight';
+  import { PRESETS, category, defaultHighlights, highlightDecode, isBackground, moveBackground, presetHighlights, presetOf, type HighlightEntry, type HighlightId, type PresetId } from '../lib/decode/highlight';
   import { inkFor } from '../lib/decode/highlight-colour';
   import { toYou } from '../lib/decode/focus';
   import { markDecode } from '../lib/decode/marking';
@@ -58,6 +60,8 @@
   });
 
   const entries = $derived(settings.highlights);
+  /** The background categories in the default order, for each preset's chips. */
+  const CHIPS = defaultHighlights().filter(isBackground).map((e) => e.id);
   const backgrounds = $derived(entries.filter(isBackground));
   const layers = $derived(entries.filter((e) => !isBackground(e)));
 
@@ -203,14 +207,17 @@
       {#each PRESETS as p (p.id)}
         <label class="row pick">
           <input class="visually-hidden" type="radio" name="preset" value={p.id} checked={preset === p.id} onchange={() => choose(p.id)} />
-          <span class="row-main"><span class="row-title">{p.label}</span></span>
-          {#if preset === p.id}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
+          <span class="row-main"><span class="row-title">{p.label}</span>{#if p.sub}<span class="row-sub">{p.sub}</span>{/if}</span>
+          <span class="chips" aria-hidden="true">
+            {#each CHIPS as id (id)}<span class="chip-dot" class:off={p.off.includes(id)} style:background={p.colours[id]}></span>{/each}
+          </span>
+          <span class="tick" aria-hidden="true">{#if preset === p.id}<Icon name="check" size={20} />{/if}</span>
         </label>
       {/each}
       <label class="row">
         <input class="visually-hidden" type="radio" name="preset" value="custom" checked={preset === 'custom'} disabled />
         <span class="row-main"><span class="row-title">Custom</span></span>
-        {#if preset === 'custom'}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
+        <span class="tick" aria-hidden="true">{#if preset === 'custom'}<Icon name="check" size={20} />{/if}</span>
       </label>
     </div>
   </div>
@@ -463,7 +470,26 @@
 
   .tick {
     flex: none;
+    width: 20px;
     color: var(--rr-accent);
+  }
+
+  /* A preset's background colours in priority order; those it turns off are faded. */
+  .chips {
+    display: flex;
+    flex: none;
+    gap: var(--rr-space-1);
+  }
+
+  .chip-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    box-shadow: inset 0 0 0 0.5px var(--rr-sep-strong);
+  }
+
+  .chip-dot.off {
+    opacity: 0.2;
   }
 
 

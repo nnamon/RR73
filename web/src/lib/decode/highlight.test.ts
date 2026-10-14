@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CATEGORIES, PALETTE, PRESETS, defaultHighlights, highlightDecode, isBackground, isDefault, moveBackground, moveEntry, normaliseHighlights, presetHighlights, presetLabel, presetOf, type HighlightEntry, type HighlightId } from './highlight';
+import { CATEGORIES, PALETTE, PRESETS, bandColour, defaultHighlights, highlightDecode, isBackground, isDefault, moveBackground, moveEntry, normaliseHighlights, presetHighlights, presetLabel, presetOf, type HighlightEntry, type HighlightId } from './highlight';
 import { buildLogIndex, type IndexedQso } from '../log/worked';
 
 const qso = (call: string, gridsquare: string, band: string, mode = 'FT8', submode = ''): IndexedQso => ({ call, gridsquare, band, mode, submode });
@@ -28,7 +28,7 @@ describe('the default order', () => {
   it('draws every default colour from the palette', () => {
     const colours = new Set(PALETTE.map((p) => p.colour));
     for (const c of CATEGORIES) expect(colours.has(c.colour), c.id).toBe(true);
-    expect(PALETTE.length).toBe(13);
+    expect(PALETTE.length).toBe(19);
   });
 });
 
@@ -157,7 +157,7 @@ describe('normaliseHighlights', () => {
     ]);
     expect(got.slice(0, 2)).toEqual([
       { id: 'cq', on: false, colour: '#00FF00' },
-      { id: 'myCall', on: true, colour: '#FF6666' },
+      { id: 'myCall', on: true, colour: '#D55E00' },
     ]);
     expect(got.map((e) => e.id).sort()).toEqual(defaultHighlights().map((e) => e.id).sort());
   });
@@ -198,20 +198,53 @@ describe('buildLogIndex', () => {
 });
 
 describe('presets', () => {
-  it('WSJT-X turns every category on, in the WSJT-X order and colours', () => {
-    expect(presetHighlights('full')).toEqual(defaultHighlights());
+  it('RR73 is the default: every category on', () => {
+    expect(presetHighlights('rr73')).toEqual(defaultHighlights());
+    expect(presetOf(defaultHighlights())).toBe('rr73');
   });
 
-  it('Quiet keeps My call, Sent, CQ and Ending a QSO on, in the WSJT-X order and colours', () => {
+  it('Quiet keeps My call, Sent, CQ and Ending a QSO on, in RR73’s colours', () => {
     const q = presetHighlights('quiet');
     expect(q.filter((e) => e.on).map((e) => e.id)).toEqual(['myCall', 'ending', 'cq', 'sent']);
     expect(q.filter((e) => !e.on).map((e) => e.id)).toEqual(['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked']);
     expect(q.map(({ id, colour }) => ({ id, colour }))).toEqual(defaultHighlights().map(({ id, colour }) => ({ id, colour })));
   });
 
+  it('WSJT-X has WSJT-X 2.7.0’s own colours and switches, and its 2 missing categories off', () => {
+    // Read from WSJT-X 2.7.0's Settings › Colors tab (docs/design/decode-colours.md).
+    expect(presetHighlights('wsjtx')).toEqual([
+      { id: 'myCall', on: true, colour: '#FF6666' },
+      { id: 'newGrid', on: false, colour: '#FF8000' },
+      { id: 'newGridBand', on: false, colour: '#FFCC99' },
+      { id: 'newCall', on: false, colour: '#00FFFF' },
+      { id: 'newCallBand', on: false, colour: '#99FFFF' },
+      { id: 'ending', on: false, colour: '#FFE2C8' },
+      { id: 'cq', on: true, colour: '#66FF66' },
+      { id: 'sent', on: true, colour: '#FFFF00' },
+      { id: 'worked', on: false, colour: '#8C93A0' },
+    ]);
+  });
+
+  it('makes each “on this band” colour by WSJT-X’s rule: 40% colour, 60% white', () => {
+    expect(bandColour('#FF8000')).toBe('#FFCC99');
+    expect(bandColour('#00FFFF')).toBe('#99FFFF');
+    for (const p of PRESETS.filter((x) => x.id !== 'wsjtx')) {
+      expect(p.colours.newGridBand, p.id).toBe(bandColour(p.colours.newGrid));
+      expect(p.colours.newCallBand, p.id).toBe(bandColour(p.colours.newCall));
+    }
+  });
+
+  it('turns every category on in the editor schemes, each with colours of its own', () => {
+    const editors = PRESETS.filter((p) => ['monokai', 'solarized', 'dracula', 'nord', 'gruvbox'].includes(p.id));
+    expect(editors).toHaveLength(5);
+    for (const p of editors) {
+      expect(presetHighlights(p.id).every((e) => e.on), p.id).toBe(true);
+      expect(new Set(Object.values(p.colours)).size, p.id).toBe(9);
+    }
+  });
+
   it('names the preset the settings match, and Custom for anything else', () => {
-    expect(presetOf(defaultHighlights())).toBe('full');
-    expect(presetOf(presetHighlights('quiet'))).toBe('quiet');
+    for (const p of PRESETS) expect(presetOf(presetHighlights(p.id)), p.id).toBe(p.id);
     // One switch, one colour or one move away from a preset is Custom.
     expect(presetOf(presetHighlights('quiet').map((e) => (e.id === 'newCall' ? { ...e, on: true } : e)))).toBe('custom');
     expect(presetOf(defaultHighlights().map((e) => (e.id === 'worked' ? { ...e, on: false } : e)))).toBe('custom');
@@ -219,7 +252,7 @@ describe('presets', () => {
     expect(presetOf(moveBackground(defaultHighlights(), 6, 5))).toBe('custom');
     expect(presetOf(moveBackground(presetHighlights('quiet'), 6, 5))).toBe('custom');
     expect(presetOf([])).toBe('custom');
-    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['Full', 'Quiet']);
+    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['RR73', 'Quiet', 'WSJT-X', 'Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']);
     expect(presetLabel('custom')).toBe('Custom');
   });
 

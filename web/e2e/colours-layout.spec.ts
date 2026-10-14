@@ -151,7 +151,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
     await page.getByRole('link', { name: /^Decode colours/ }).click();
     await page.getByRole('button', { name: 'Change colour: CQ in the message' }).click();
-    await page.getByRole('dialog', { name: 'CQ in the message' }).getByRole('button', { name: 'Teal' }).click();
+    await page.getByRole('dialog', { name: 'CQ in the message' }).getByRole('button', { name: 'Sky blue' }).click();
     await page.getByRole('link', { name: 'Settings', exact: true }).click();
     await page.getByRole('link', { name: 'Operate' }).click();
     await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));

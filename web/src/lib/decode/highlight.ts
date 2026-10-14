@@ -37,16 +37,42 @@ export interface HighlightCategory {
   spoken: string;
 }
 
+/**
+ * The colour of a category "on this band": its colour mixed 40:60 with white, the rule behind
+ * WSJT-X's own pairs (#FF8000 and #FFCC99, #00FFFF and #99FFFF).
+ */
+export function bandColour(colour: string): string {
+  const c = [1, 3, 5].map((i) => parseInt(colour.slice(i, i + 2), 16));
+  return `#${c.map((v) => Math.round(0.4 * v + 0.6 * 255).toString(16).padStart(2, '0')).join('').toUpperCase()}`;
+}
+
+/**
+ * RR73's colours (docs/design/decode-colours.md, RR73's scheme): the Okabe–Ito palette, assigned
+ * so the closest pair of row tints, and each tint and a plain row, stay furthest apart for
+ * protanopia, deuteranopia and tritanopia, in light and dark.
+ */
+const RR73: Record<HighlightId, string> = {
+  myCall: '#D55E00',
+  newGrid: '#E69F00',
+  newGridBand: bandColour('#E69F00'),
+  newCall: '#0072B2',
+  newCallBand: bandColour('#0072B2'),
+  ending: '#CC79A7',
+  cq: '#009E73',
+  sent: '#56B4E9',
+  worked: '#8C93A0',
+};
+
 export const CATEGORIES: readonly HighlightCategory[] = [
-  { id: 'myCall', rank: 1, label: 'My call in the message', sub: 'Including portable forms', style: 'background', colour: '#FF6666', spoken: 'my call' },
-  { id: 'newGrid', rank: 10, label: 'New grid', style: 'background', colour: '#FF8000', spoken: 'new grid' },
-  { id: 'newGridBand', rank: 11, label: 'New grid on this band', style: 'background', colour: '#FFCC99', spoken: 'new grid on this band' },
-  { id: 'newCall', rank: 12, label: 'New call', style: 'background', colour: '#3399FF', spoken: 'new call' },
-  { id: 'newCallBand', rank: 13, label: 'New call on this band', style: 'background', colour: '#99CCFF', spoken: 'new call on this band' },
-  { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: '#FFE2C8', spoken: 'ending a QSO' },
-  { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: '#66FF66', spoken: 'CQ' },
-  { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: '#C98A1A', spoken: 'sent' },
-  { id: 'worked', rank: 17, label: 'Worked before', sub: 'On this band and mode', style: 'text', colour: '#8C93A0', spoken: 'worked before' },
+  { id: 'myCall', rank: 1, label: 'My call in the message', sub: 'Including portable forms', style: 'background', colour: RR73.myCall, spoken: 'my call' },
+  { id: 'newGrid', rank: 10, label: 'New grid', style: 'background', colour: RR73.newGrid, spoken: 'new grid' },
+  { id: 'newGridBand', rank: 11, label: 'New grid on this band', style: 'background', colour: RR73.newGridBand, spoken: 'new grid on this band' },
+  { id: 'newCall', rank: 12, label: 'New call', style: 'background', colour: RR73.newCall, spoken: 'new call' },
+  { id: 'newCallBand', rank: 13, label: 'New call on this band', style: 'background', colour: RR73.newCallBand, spoken: 'new call on this band' },
+  { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: RR73.ending, spoken: 'ending a QSO' },
+  { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: RR73.cq, spoken: 'CQ' },
+  { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: RR73.sent, spoken: 'sent' },
+  { id: 'worked', rank: 17, label: 'Worked before', sub: 'On this band and mode', style: 'text', colour: RR73.worked, spoken: 'worked before' },
 ];
 
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
@@ -67,24 +93,30 @@ export interface HighlightEntry {
   colour: string;
 }
 
-/** The swatches in the colour sheet. Every default colour is one of them. */
+/** The swatches in the colour sheet: RR73's colours, then WSJT-X's. Every default colour is one of them. */
 export const PALETTE: readonly { name: string; colour: string }[] = [
+  { name: 'Vermillion', colour: '#D55E00' },
+  { name: 'Orange', colour: '#E69F00' },
+  { name: 'Light orange', colour: RR73.newGridBand },
+  { name: 'Yellow', colour: '#F0E442' },
+  { name: 'Bluish green', colour: '#009E73' },
+  { name: 'Sky blue', colour: '#56B4E9' },
+  { name: 'Blue', colour: '#0072B2' },
+  { name: 'Light blue', colour: RR73.newCallBand },
+  { name: 'Reddish purple', colour: '#CC79A7' },
+  { name: 'Black', colour: '#000000' },
+  { name: 'Grey', colour: '#8C93A0' },
   { name: 'Red', colour: '#FF6666' },
-  { name: 'Orange', colour: '#FF8000' },
+  { name: 'Bright orange', colour: '#FF8000' },
   { name: 'Apricot', colour: '#FFCC99' },
   { name: 'Peach', colour: '#FFE2C8' },
-  { name: 'Amber', colour: '#C98A1A' },
-  { name: 'Yellow', colour: '#FFFF66' },
-  { name: 'Lime', colour: '#A6FF00' },
+  { name: 'Bright yellow', colour: '#FFFF00' },
   { name: 'Green', colour: '#66FF66' },
-  { name: 'Teal', colour: '#33CCCC' },
-  { name: 'Blue', colour: '#3399FF' },
-  { name: 'Light blue', colour: '#99CCFF' },
-  { name: 'Magenta', colour: '#FF00FF' },
-  { name: 'Grey', colour: '#8C93A0' },
+  { name: 'Cyan', colour: '#00FFFF' },
+  { name: 'Light cyan', colour: '#99FFFF' },
 ];
 
-/** WSJT-X's order and colours, every category on: background categories by rank, then text layers. */
+/** RR73's colours, every category on, in WSJT-X's order: background categories by rank, then text layers. */
 export function defaultHighlights(): HighlightEntry[] {
   const key = (c: HighlightCategory) => (c.style === 'text' ? 1000 : 0) + c.rank;
   return [...CATEGORIES].sort((a, b) => key(a) - key(b)).map((c) => ({ id: c.id, on: true, colour: c.colour }));
@@ -130,26 +162,58 @@ export function normaliseHighlights(raw: unknown): HighlightEntry[] {
   return out;
 }
 
-/** True when `entries` hold WSJT-X's order and colours with every category on. */
+/** True when `entries` hold the default order and colours with every category on. */
 export function isDefault(entries: readonly HighlightEntry[]): boolean {
   const d = defaultHighlights();
   return entries.length === d.length && entries.every((e, i) => e.id === d[i].id && e.on && e.colour === d[i].colour);
 }
 
 /** `entries` with the one at `from` moved to `to`. */
-/** A preset in Settings › Decode colours. Each keeps WSJT-X's order and colours and sets which categories are on. */
-export type PresetId = 'full' | 'quiet';
+/** A preset in Settings › Decode colours: a colour scheme and which categories are on. Every preset keeps the default order. */
+export type PresetId = 'rr73' | 'quiet' | 'wsjtx' | 'monokai' | 'solarized' | 'dracula' | 'nord' | 'gruvbox';
 
-export const PRESETS: readonly { id: PresetId; label: string; off: readonly HighlightId[] }[] = [
-  { id: 'full', label: 'Full', off: [] },
+export interface Preset {
+  id: PresetId;
+  label: string;
+  /** Only what the label leaves out. */
+  sub?: string;
+  colours: Record<HighlightId, string>;
+  off: readonly HighlightId[];
+}
+
+/** A scheme from 6 colours: each "on this band" category takes its category's colour mixed with white. */
+function scheme(c: { myCall: string; newGrid: string; newCall: string; ending: string; cq: string; sent: string; worked: string }): Record<HighlightId, string> {
+  return { ...c, newGridBand: bandColour(c.newGrid), newCallBand: bandColour(c.newCall) };
+}
+
+/**
+ * The presets. WSJT-X's colours and switches are WSJT-X 2.7.0's defaults, read from its Settings ›
+ * Colors tab; it has no Ending a QSO or Worked before, so those start off. The editor schemes take
+ * each palette's accents, assigned so the closest pair of row tints stays furthest apart.
+ */
+export const PRESETS: readonly Preset[] = [
+  { id: 'rr73', label: 'RR73', sub: 'Distinct with colour blindness', colours: RR73, off: [] },
   // My call, Sent, CQ and Ending a QSO only.
-  { id: 'quiet', label: 'Quiet', off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
+  { id: 'quiet', label: 'Quiet', colours: RR73, off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
+  {
+    id: 'wsjtx',
+    // lint-copy: off
+    label: 'WSJT-X',
+    // lint-copy: on
+    colours: { myCall: '#FF6666', newGrid: '#FF8000', newGridBand: '#FFCC99', newCall: '#00FFFF', newCallBand: '#99FFFF', ending: '#FFE2C8', cq: '#66FF66', sent: '#FFFF00', worked: '#8C93A0' },
+    off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'worked'],
+  },
+  { id: 'monokai', label: 'Monokai', colours: scheme({ myCall: '#F92672', newGrid: '#E6DB74', newCall: '#66D9EF', ending: '#FD971F', cq: '#A6E22E', sent: '#AE81FF', worked: '#75715E' }), off: [] },
+  { id: 'solarized', label: 'Solarized', colours: scheme({ myCall: '#DC322F', newGrid: '#CB4B16', newCall: '#268BD2', ending: '#D33682', cq: '#859900', sent: '#93A1A1', worked: '#586E75' }), off: [] },
+  { id: 'dracula', label: 'Dracula', colours: scheme({ myCall: '#FF5555', newGrid: '#FFB86C', newCall: '#8BE9FD', ending: '#BD93F9', cq: '#50FA7B', sent: '#FF79C6', worked: '#6272A4' }), off: [] },
+  { id: 'nord', label: 'Nord', colours: scheme({ myCall: '#BF616A', newGrid: '#EBCB8B', newCall: '#88C0D0', ending: '#5E81AC', cq: '#A3BE8C', sent: '#4C566A', worked: '#616E88' }), off: [] },
+  { id: 'gruvbox', label: 'Gruvbox', colours: scheme({ myCall: '#FB4934', newGrid: '#FE8019', newCall: '#83A598', ending: '#FABD2F', cq: '#8EC07C', sent: '#928374', worked: '#A89984' }), off: [] },
 ];
 
-/** The entries a preset sets: WSJT-X's order and colours, with the preset's categories off. */
+/** The entries a preset sets: the default order, the preset's colours, its categories off. */
 export function presetHighlights(id: PresetId): HighlightEntry[] {
-  const off = PRESETS.find((p) => p.id === id)?.off ?? [];
-  return defaultHighlights().map((e) => ({ ...e, on: !off.includes(e.id) }));
+  const p = PRESETS.find((x) => x.id === id) ?? PRESETS[0];
+  return defaultHighlights().map((e) => ({ id: e.id, on: !p.off.includes(e.id), colour: p.colours[e.id] }));
 }
 
 /** The preset whose order, colours and switches the entries match, or 'custom'. */

@@ -62,7 +62,7 @@ const SCREEN_RULES = [
   { id: 'semicolon', re: /(?<!&#?\w+);/g, message: 'semicolon; one idea per sentence, so split it' },
   {
     id: 'other-program',
-    re: /\b(?:WSJT-X|WSJTX|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/gi,
+    re: /\b(?:WSJT-X|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/gi,
     message: 'another program named on screen; state what RR73 does',
   },
   {
@@ -364,7 +364,7 @@ export function lengthFindings(text, ext, file = 'x') {
 }
 
 /** Another program named on screen: the rule the prose scan applies, here for every string literal. */
-const PROGRAM = /\b(?:WSJT-X|WSJTX|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/i;
+const PROGRAM = /\b(?:WSJT-X|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/i;
 
 /**
  * Another program's name in a string literal of an interface source, such as a label 'WSJT-X'.

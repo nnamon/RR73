@@ -1,6 +1,6 @@
 # Decode colours
 
-Operate colours each decode as WSJT-X does. Settings › Decode colours sets the categories, their order and their colours. Code: `web/src/lib/decode/highlight.ts` (categories and matcher), `highlight-colour.ts` (text colours), `web/src/lib/log/worked.ts` (log index), `web/src/views/DecodeColours.svelte`.
+Operate colours each decode by category, in WSJT-X's order. Settings › Decode colours sets the categories, their order and their colours, or a preset. Code: `web/src/lib/decode/highlight.ts` (categories and matcher), `highlight-colour.ts` (text colours), `web/src/lib/log/worked.ts` (log index), `web/src/views/DecodeColours.svelte`.
 
 ## Decision
 
@@ -15,27 +15,39 @@ Operate colours each decode as WSJT-X does. Settings › Decode colours sets the
 - The log is indexed once per change of the log, in sets of calls (any band, per band, per band and mode) and grids (any band, per band), so each row costs a fixed number of set lookups.
 - Each category stores one colour, #RRGGBB. The decode rows carry the result as `data-hl` (background), `data-ink` (text layer) and the classes `rr-hl` and `rr-ink`, so a change of row layout does not touch the matcher.
 
-## Categories and defaults
+## Categories and schemes
 
-Sources: WSJT-X User Guide for version 2.7.0 (`wsjtx-main-2.7.0.html`). Section 4.7 Colors shows the Colors tab in a screenshot; the colours below are read from its pixels, as the text gives no values. Section 6.3 FT8 says CQ decodes are highlighted in green and decodes with your call in red, and its screenshot gives the shades.
+The categories keep WSJT-X's order, with Ending a QSO before CQ and Worked before as a text layer. A preset sets a colour scheme and which categories are on; it never changes the order.
 
-| Order | Category | Default | Source |
+| Order | Category | RR73 (default) | WSJT-X 2.7.0 |
 | --- | --- | --- | --- |
-| 1 | My call in the message | #FF6666 | 4.7 screenshot, 6.3 screenshot and text |
-| 2 | New grid | #FF8000 | 4.7 screenshot |
-| 3 | New grid on this band | #FFCC99 | 4.7 screenshot |
-| 4 | New call | #3399FF | Unverified: colour and position |
-| 5 | New call on this band | #99CCFF | Unverified: colour and position |
-| 6 | Ending a QSO | #FFE2C8 | Unverified: an RR73 category with no WSJT-X counterpart |
-| 7 | CQ in the message | #66FF66 | 6.3 screenshot and text; position Unverified |
-| 8 | Sent | #C98A1A | Unverified: the app's amber Sent colour |
-| Text | Worked before | #8C93A0 | Unverified: an RR73 layer with no WSJT-X counterpart |
+| 1 | My call in the message | #D55E00 vermillion | #FF6666, on |
+| 2 | New grid | #E69F00 orange | #FF8000, off |
+| 3 | New grid on this band | #F5D999 | #FFCC99, off |
+| 4 | New call | #0072B2 blue | #00FFFF, off |
+| 5 | New call on this band | #99C7E0 | #99FFFF, off |
+| 6 | Ending a QSO | #CC79A7 reddish purple | none in WSJT-X; off, #FFE2C8 |
+| 7 | CQ in the message | #009E73 bluish green | #66FF66, on |
+| 8 | Sent | #56B4E9 sky blue | Transmitted message, #FFFF00, on |
+| Text | Worked before | #8C93A0 | none in WSJT-X; off, #8C93A0 |
 
-- Order. The 4.7 screenshot shows the top of the list: My Call in message, New Continent, New Continent on Band, New CQ Zone, New CQ Zone on Band, New ITU Zone, New ITU Zone on Band, New DXCC, New DXCC on Band, New Grid, New Grid on Band. The rest of the list is scrolled out of view. Unverified: the order of New Call, New Call on Band, LoTW User, CQ in message and Transmitted message. Section 6.4 recommends "My Call in message, New DXCC, New Call on Band, CQ in message and Transmitted message, reading from top to bottom" for contests, which agrees with the order above.
-- Each category keeps its WSJT-X position as a rank, with gaps for the categories that need reference data: new continent (2, 3), CQ zone (4, 5), ITU zone (6, 7), DXCC (8, 9), each overall and on the band, and LoTW user (14). When they ship, stored settings take each one after the last stored category that ranks above it.
-- Which messages. Section 4.7: "WSJT-X uses colors to highlight decoded CQ messages of particular interest." Its screenshot shows "Highlight also messages with 73 or RR73" ticked; whether that is the default is Unverified.
-- On by default. The 4.7 screenshot shows only My Call in message ticked among the rows in view. RR73 turns every category on.
-- Sent. The guide gives no colour for Transmitted message. Unlabelled yellow rows (#FFFF00) appear in the 9.4 Q65 screenshot. RR73 keeps its amber.
+- WSJT-X's values were read on 15 October 2026 from WSJT-X 2.7.0-rc3 itself (Ubuntu 24.04 package `2.7.0~rc3+repack-1build2`), run on a virtual display: Settings › Colors after a first start, each row's colour sampled from a screenshot. Its list, top to bottom: My Call in message, New Continent, New Continent on Band, New CQ Zone, New CQ Zone on Band, New ITU Zone, New ITU Zone on Band, New DXCC, New DXCC on Band, New Grid, New Grid on Band, New Call, New Call on Band, LoTW User (a text colour), CQ in message, Transmitted message. Ticked by default: My Call, the continent, CQ zone and DXCC categories, CQ in message and Transmitted message. "Highlight also messages with 73 or RR73" is off. An earlier version of this table read colours from the User Guide's screenshots; New call, New call on this band and Sent were wrong.
+- Each "on this band" colour is its category's colour mixed 40:60 with white, the rule behind WSJT-X's pairs: #FF8000 gives #FFCC99 and #00FFFF gives #99FFFF.
+- Presets: RR73 (every category on), Quiet (RR73's colours; My call, Ending a QSO, CQ and Sent on), WSJT-X (its own colours and switches, the 2 categories it lacks off), and Monokai, Solarized, Dracula, Nord and Gruvbox (each palette's accents, every category on). The settings show each preset's 8 background colours, with those it turns off faded.
+
+## RR73's scheme
+
+RR73's colours are the Okabe–Ito palette, designed to stay apart with colour blindness. WSJT-X's red for My call and green for CQ are the pair deuteranopia confuses most.
+
+- Measure. Each colour is tinted as a row shows it, seen through Machado, Oliveira and Fernandes's simulation (2009, severity 1) of protanopia, deuteranopia and tritanopia, and compared in CIELAB (ΔE76) with every other category and with a plain row, in light and dark. A category and its "on this band" form are not compared.
+- Assignment. Every assignment of the palette to the 6 colour slots was scored by its closest pair, with My call in the red family, CQ green, New call blue and New grid orange or yellow. The chosen one has its closest pair 5.9 apart (CQ and Sent, tritanopia, dark) and every category 10.2 or more from a plain row. My call and CQ stay 16.9 apart; WSJT-X's colours fall to 11.3 (deuteranopia, dark).
+- The editor schemes take the same search over their own accents. Their closest pairs come to 2.8 (Dracula) to 4.7 (Solarized, Nord); they make no claim for colour blindness.
+- `highlight-cvd.test.ts` holds RR73's scheme to 5.5 between categories and 10 from a plain row, and above every other scheme's closest pair.
+- Rejected: black for Sent, the search's first pick between categories. Tinted at 30% over the dark theme's background it matched a plain row.
+
+## Earlier defaults
+
+0.8.0 to 0.19.2 shipped WSJT-X's guide colours with every category on: #FF6666, #FF8000, #FFCC99, #3399FF, #99CCFF, #FFE2C8, #66FF66, #C98A1A and #8C93A0. Settings schema 10 gives a phone still on those, every category on or as Quiet, RR73's scheme in the same form. Colours the operator changed, moved or switched stay.
 
 ## Colours in both themes
 
@@ -55,4 +67,4 @@ Sources: WSJT-X User Guide for version 2.7.0 (`wsjtx-main-2.7.0.html`). Section 
 
 - The dark tint at 30% is fainter than the light one. Not tested on a device.
 - Worked-before grey over a bright tint in dark comes out close to the row text, 1.5:1 apart on the CQ tint.
-- New call, New call on this band, Ending a QSO and Sent default colours, and the positions of New call, CQ and Sent, are Unverified against a running WSJT-X.
+- The colour blindness figures come from a simulation. Not tested with operators who have colour blindness.

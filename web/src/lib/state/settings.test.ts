@@ -2,7 +2,7 @@ import { deleteDB, openDB } from 'idb';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULTS, FEATURES_OFF, WSPR_DEFAULTS, loadSettings, migration, normaliseCallsign, resetSettings, settings, settingsStatus, SETTINGS_SCHEMA, updateSettings, validate } from './settings.svelte';
 import { closeDb, DB_NAME, getKv, setKv } from './db';
-import { defaultHighlights } from '../decode/highlight';
+import { defaultHighlights, presetHighlights } from '../decode/highlight';
 import { RTTY_DEFAULTS } from '../rtty/settings';
 import { keyboardDefaults } from '../keyboard/settings';
 
@@ -132,6 +132,40 @@ describe('the decode colours migration', () => {
     expect(settings.highlights.map((h) => h.on)).toEqual(mine.map((h) => h.on));
     expect(settings.highlights[0].colour).toBe('#123ABC');
     expect(migration(await getKv('settings'))).toEqual({});
+  });
+});
+
+describe('the colour scheme migration', () => {
+  /** The decode colours 0.8.0 to 0.19.2 shipped, every category on. */
+  const SHIPPED = [
+    { id: 'myCall', on: true, colour: '#FF6666' },
+    { id: 'newGrid', on: true, colour: '#FF8000' },
+    { id: 'newGridBand', on: true, colour: '#FFCC99' },
+    { id: 'newCall', on: true, colour: '#3399FF' },
+    { id: 'newCallBand', on: true, colour: '#99CCFF' },
+    { id: 'ending', on: true, colour: '#FFE2C8' },
+    { id: 'cq', on: true, colour: '#66FF66' },
+    { id: 'sent', on: true, colour: '#C98A1A' },
+    { id: 'worked', on: true, colour: '#8C93A0' },
+  ];
+  const QUIET_OFF = ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'];
+
+  it('gives the shipped colours RR73’s scheme, and the shipped Quiet the new Quiet, and stores that once', async () => {
+    const stored = { callsign: '9V1NE', highlights: SHIPPED, schema: 9 };
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, highlights: presetHighlights('rr73') });
+    const quiet = SHIPPED.map((e) => ({ ...e, on: !QUIET_OFF.includes(e.id) }));
+    expect(migration({ highlights: quiet, schema: 9 })).toEqual({ schema: SETTINGS_SCHEMA, highlights: presetHighlights('quiet') });
+    await setKv('settings', stored);
+    await loadSettings();
+    expect(settings.highlights).toEqual(presetHighlights('rr73'));
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, highlights: presetHighlights('rr73'), schema: SETTINGS_SCHEMA });
+  });
+
+  it('keeps colours the operator changed, moved or switched', () => {
+    const recoloured = SHIPPED.map((e) => (e.id === 'cq' ? { ...e, colour: '#00AA00' } : e));
+    const moved = [SHIPPED[1], SHIPPED[0], ...SHIPPED.slice(2)];
+    const switched = SHIPPED.map((e) => (e.id === 'worked' ? { ...e, on: false } : e));
+    for (const highlights of [recoloured, moved, switched]) expect(migration({ highlights, schema: 9 })).toEqual({ schema: SETTINGS_SCHEMA });
   });
 });
 

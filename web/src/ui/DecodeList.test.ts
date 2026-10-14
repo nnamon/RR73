@@ -259,7 +259,7 @@ describe('decode colours', () => {
     const [a, b, c] = [...target.querySelectorAll<HTMLElement>('button.dr')];
     expect(a.dataset).toMatchObject({ hl: 'cq', ink: 'worked' });
     expect(a.classList.contains('hl-background') && a.classList.contains('hl-ink')).toBe(true);
-    expect(a.style.getPropertyValue('--rr-hl')).toBe('#66FF66');
+    expect(a.style.getPropertyValue('--rr-hl')).toBe('#009E73');
     expect(a.style.getPropertyValue('--rr-ink-light')).toMatch(/^#[0-9A-F]{6}$/);
     expect(a.getAttribute('aria-label')).toContain('calling CQ, worked before');
     expect(b.dataset.ink).toBeUndefined();
