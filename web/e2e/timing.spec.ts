@@ -26,8 +26,9 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
     window.__rr73!.decoded(slot, [...Array.from({ length: 10 }, (_, i) => d(-0.8 + ((i % 3) - 1) * 0.05, -5, i)), d(1.5, -15, 11), d(1.5, -18, 12)]);
   });
   await expect(page.getByTestId('timing-median')).toHaveText('−0.80 s from 10 decodes');
-  // The first step toward +0.80 s is the largest allowed, 0.08 s.
-  await expect(page.getByTestId('timing-offset')).toHaveText('+0.08 s on receive audio');
+  // Steps toward +0.80 s are the largest allowed, 0.08 s, one per decoded slot: a slot that ends
+  // while the test runs takes a second one.
+  await expect(page.getByTestId('timing-offset')).toHaveText(/^\+0\.(08|16) s on receive audio$/);
 
   // A transmission that did not come back, then one that did.
   const heard = page.getByTestId('timing-heard');
@@ -57,7 +58,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   expect(report).toMatch(/^RR73 \d+\.\d+\.\d+ \(\w+\) timing report, \d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ/);
   expect(report).toContain('Clock source: output timestamps');
   expect(report).toMatch(/\nAudio gaps bridged: \d+, \d+\.\d ms\n/);
-  expect(report).toContain('Input offset: 0.080 s');
+  expect(report).toMatch(/Input offset: 0\.(080|160|240|320) s/);
   expect(report).toContain('Median DT: −0.800 s from 10 decodes at -10 dB or stronger');
   expect(report).toContain('13:35:30 CQ N0CALL EM12: DT −0.70 s, SNR 24 dB');
   expect(report).toMatch(/Clock readings \(contextTime s, performanceTime ms, perfNow ms, dateNow ms, currentTime s\):\n {2}\d+\.\d{6} \d+\.\d{3}/);

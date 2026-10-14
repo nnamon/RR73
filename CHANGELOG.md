@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## 0.14.3 · 2026-10-14
+
+- With Repeat CQ on, a QSO is followed by a station that called in the slot just ended, or by CQ. A caller heard earlier and not since is no longer answered: on the air they have usually moved on, and the report to them repeated into silence for up to 2 min.
+- Switching the practice band to RTTY or WSPR silences its FT8 stations at once. An FT8 slot already under way played on for up to 13 s, and the RTTY receiver chased its tones, garbling JA1XYZ's first CQ. The RTTY stations now start once the receiver is ready.
+
 ## 0.14.2 · 2026-10-14
 
 - Calling CQ with Repeat CQ on, the stations waiting read Next, 2nd and so on, or Dupe, on their latest message to you in the decode list, where a CQ row has its country. The callers panel at the top of the list, which repeated those messages, is gone.

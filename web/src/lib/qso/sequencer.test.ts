@@ -329,13 +329,26 @@ describe('Run mode', () => {
     expect(texts(s).at(-1)).toBe('10:JA1KXM 9V1NE -05');
   });
 
-  it('lets callers go stale after 4 slots', () => {
+  it('keeps only the stations that called in the latest slot', () => {
     const s = new Sim({ run: true });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
     s.run(0, 1, { 1: callers.slice(0, 2) });
     expect(s.st.queue.map((c) => c.call)).toEqual(['JA1KXM']);
-    s.run(2, 7, { 3: ['9V1NE K1ABC -12'] });
+    // JA1KXM does not call in slot 3: it has most likely moved on.
+    s.run(2, 3, { 3: ['9V1NE K1ABC -12'] });
     expect(s.st.queue).toEqual([]);
+  });
+
+  it('after a QSO answers a station still calling, and calls CQ when the one waiting went quiet', () => {
+    const quiet = new Sim({ run: true });
+    quiet.send({ type: 'callCq', nowMs: quiet.at(0, 0.1) });
+    quiet.run(0, 6, { 1: ['9V1NE K1ABC FN42'], 3: ['9V1NE K1ABC R-12', '9V1NE ZL1TQK RF73'], 5: ['9V1NE K1ABC 73'] });
+    expect(texts(quiet).slice(-2)).toEqual(['4:K1ABC 9V1NE RR73', '6:CQ 9V1NE OJ11']);
+
+    const calling = new Sim({ run: true });
+    calling.send({ type: 'callCq', nowMs: calling.at(0, 0.1) });
+    calling.run(0, 6, { 1: ['9V1NE K1ABC FN42'], 3: ['9V1NE K1ABC R-12', '9V1NE ZL1TQK RF73'], 5: ['9V1NE K1ABC 73', '9V1NE ZL1TQK RF73'] });
+    expect(texts(calling).slice(-2)).toEqual(['4:K1ABC 9V1NE RR73', '6:ZL1TQK 9V1NE -10']);
   });
 
   it('adds callers from an early pass and decides only on the final pass', () => {

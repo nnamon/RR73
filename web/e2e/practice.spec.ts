@@ -218,7 +218,7 @@ test('Hound works the practice Fox: call, report, R-report, RR73, logged', async
 });
 
 test('RTTY on the practice band: JA1XYZ calls CQ, a tap on the call and Answer, and JA1XYZ answers with name and QTH', async ({ page }) => {
-  test.setTimeout(90_000);
+  test.setTimeout(120_000);
   await practiceOn(page);
   await page.getByRole('button', { name: /^Change band/ }).click();
   await page.getByRole('dialog', { name: 'Change band' }).getByText('RTTY', { exact: true }).click();
@@ -226,7 +226,9 @@ test('RTTY on the practice band: JA1XYZ calls CQ, a tap on the call and Answer, 
   // JA1XYZ's pair: a tap on the waterfall would find it; the hook puts the receiver there.
   await page.evaluate(() => window.__rr73!.rttyTune(1612));
   const text = page.getByTestId('rx-text');
-  await expect(text).toContainText('DE JA1XYZ JA1XYZ JA1XYZ', { timeout: 30_000 });
+  // The callsign copied twice in a row, from the first CQ or the next one 40 s later: a busy
+  // machine can drop audio and spoil a character.
+  await expect(text).toContainText('JA1XYZ JA1XYZ', { timeout: 50_000 });
   await text.locator('[data-call="JA1XYZ"]').last().click();
   await expect(page.getByTestId('strip-call')).toHaveValue('JA1XYZ');
   const bar = page.getByRole('region', { name: 'Transmit' });

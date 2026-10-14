@@ -34,6 +34,8 @@ export const client = new KeyboardClient();
 /** What the runtime shows besides the session: the worker's state and the pair now. */
 export const keyboard = $state({
   status: { state: 'idle' } as KeyboardStatus,
+  /** The worker holds a modem: it receives and encodes. False until the first configure is done. */
+  modemReady: false,
   /** The receiver's mark now, Hz: AFC and taps move it. */
   markHz: 1585,
   /** The keyboard is up (visualViewport shorter than the window): Operate shrinks the waterfall. */
@@ -132,7 +134,11 @@ export const session = new KeyboardSession({
 });
 
 client.onStatus((s) => (keyboard.status = s));
-client.onTables((t) => (session.tables = t));
+// The character tables come back once the worker has built the modem.
+client.onTables((t) => {
+  session.tables = t;
+  keyboard.modemReady = true;
+});
 client.onTx((r) => session.txReport(r.queuedS));
 client.onEvents((events) => {
   for (const e of events) {

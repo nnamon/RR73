@@ -3,7 +3,7 @@
   import Sheet from './Sheet.svelte';
   import { dt, signed, utcHm, utcTime } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
-  import { pathBetween } from '../lib/qso/grid';
+  import { gridPath } from '../lib/reference/grid';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { callStart, callStation, qso, type Selected } from '../lib/state/qso.svelte';
@@ -22,7 +22,7 @@
     return ex.from ?? ex.to;
   });
   const grid = $derived(ex?.grid ?? null);
-  const path = $derived(grid && settings.grid ? pathBetween(settings.grid, grid) : null);
+  const path = $derived(grid && settings.grid ? gridPath(settings.grid, grid) : null);
   const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
   const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
@@ -38,7 +38,7 @@
 
 <Sheet bind:open title={call ? bare(call) : 'Station'}>
   {#if item && call && start}
-    <p class="sub">{[grid, path ? `${Math.round(path.km).toLocaleString('en-GB')} km` : null, path ? `${Math.round(path.bearing)}°` : null].filter(Boolean).join(' · ') || 'No grid received'}</p>
+    <p class="sub">{[grid, path ? `${Math.round(path.km).toLocaleString('en-GB')} km` : null, path ? `${Math.round(path.bearingDeg)}°` : null].filter(Boolean).join(' · ') || 'No grid received'}</p>
     {#if ex?.kind === 'cq'}<p class="tags"><span class="tag cq">CQ{ex.modifier ? ` ${ex.modifier}` : ''}</span></p>{/if}
     <button class="btn primary big" onclick={doCall} disabled={!!qso.st.partner && bare(qso.st.partner.call) === bare(call)}>
       <b>Call {bare(call)}</b>

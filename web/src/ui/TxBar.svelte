@@ -20,7 +20,7 @@
   import Icon from './Icon.svelte';
   import { signed } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
-  import { pathBetween } from '../lib/qso/grid';
+  import { gridPath } from '../lib/reference/grid';
   import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
   import { barText, houndText, huntText, runTally, watchdogText } from '../lib/qso/view';
   import { TX_NUMS } from '../lib/qso/messages';
@@ -80,7 +80,7 @@
   const selLine = $derived.by(() => {
     if (!sel || !selCall) return null;
     const grid = parseExchange(sel.decode.text).grid;
-    const p = grid && settings.grid ? pathBetween(settings.grid, grid) : null;
+    const p = grid && settings.grid ? gridPath(settings.grid, grid) : null;
     const where = p ? `${grid} · ${Math.round(p.km).toLocaleString('en-GB')} km` : (grid ?? `${signed(Math.round(sel.decode.snr_db))} dB`);
     return `${bare(selCall)} · ${where}`;
   });
