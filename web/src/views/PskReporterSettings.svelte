@@ -79,7 +79,7 @@
         <input type="checkbox" role="switch" class="switch" checked={pskReporter.on} onchange={(e) => void updatePskReporter({ on: e.currentTarget.checked })} />
       </label>
     </div>
-    {#if stateText}<p class="section-foot" role="status">{stateText}</p>{/if}
+    {#if stateText}<p class="section-foot" role="status" data-testid="psk-status">{stateText}</p>{/if}
   </div>
 
   <div class="section">
@@ -117,7 +117,11 @@
         <input type="checkbox" role="switch" class="switch" checked={heardYou.on} onchange={(e) => void setHeardYou(e.currentTarget.checked)} />
       </label>
     </div>
-    <p class="section-foot" role="status">{heardText || 'Your phone connects to PSK Reporter’s feed directly. No relay is needed.'}</p>
+    {#if heardText}
+      <p class="section-foot" role="status" data-testid="heard-status">{heardText}</p>
+    {:else}
+      <p class="section-foot">Your phone connects to PSK Reporter’s feed directly. No relay is needed.</p>
+    {/if}
   </div>
 </section>
 

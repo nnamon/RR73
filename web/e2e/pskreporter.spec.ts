@@ -34,10 +34,9 @@ test('reports the senders of each slot through the relay', async ({ page }) => {
     await field.press('Enter');
   }
   await page.getByRole('link', { name: /^PSK Reporter/ }).click();
-  const region = page.getByRole('region', { name: 'PSK Reporter' });
   const on = page.getByRole('switch', { name: /^Report to PSK Reporter/ });
   await on.check();
-  await expect(region.getByRole('status')).toHaveText('Needs a relay. Add one in Settings › Relay.');
+  await expect(page.getByTestId('psk-status')).toHaveText('Needs a relay. Add one in Settings › Relay.');
 
   await page.getByRole('link', { name: /^Relay/ }).click();
   await page.getByRole('button', { name: 'Add relay' }).click();
@@ -46,7 +45,7 @@ test('reports the senders of each slot through the relay', async ({ page }) => {
   await address.press('Enter');
   await expect(page.getByRole('radio', { name: /^relay\.test/ })).toBeChecked();
   await page.goto('./#/settings/pskreporter');
-  await expect(region.getByRole('status')).toHaveText('Waiting for decodes');
+  await expect(page.getByTestId('psk-status')).toHaveText('Waiting for decodes');
   const antenna = page.getByRole('textbox', { name: 'Antenna' });
   await antenna.fill('Vertical, 10 m up');
   await antenna.press('Enter');
@@ -69,7 +68,7 @@ test('reports the senders of each slot through the relay', async ({ page }) => {
     { callsign: 'JA1KXM', locator: 'PM95', frequencyHz: 14_075_418, snrDb: -12, mode: 'FT8', time },
     { callsign: 'YB0AZK', locator: '', frequencyHz: 14_076_210, snrDb: -16, mode: 'FT8', time },
   ]);
-  await expect(region.getByRole('status')).toHaveText(/^Sent 3 spots, last at \d\d:\d\d UTC$/);
+  await expect(page.getByTestId('psk-status')).toHaveText(/^Sent 3 spots, last at \d\d:\d\d UTC$/);
 
   // The same slot again sends nothing; off, nothing goes.
   await page.evaluate((slot) => window.__rr73!.decoded(slot, [{ text: 'CQ 9M2TRX OJ02', freq_hz: 1022, dt_s: 0.1, snr_db: -10 }]), slot);

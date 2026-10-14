@@ -21,7 +21,7 @@ test('lists the stations that heard you, live from the feed', async ({ page, bas
   }
   await page.getByRole('link', { name: /^PSK Reporter/ }).click();
   await page.getByRole('switch', { name: /^Show who heard you/ }).check();
-  await expect(page.getByRole('region', { name: 'PSK Reporter' }).getByText('Live', { exact: true })).toBeVisible();
+  await expect(page.getByTestId('heard-status')).toHaveText('Live');
   await expect.poll(() => feed.subscribed).toEqual(['pskr/filter/v2/+/+/9V1NE/#']);
 
   await page.goto('./#/spots');
