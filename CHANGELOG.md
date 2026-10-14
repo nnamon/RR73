@@ -17,6 +17,13 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Settings › Station has Name and QTH, for macros.
 - The practice band has RTTY stations: one calls CQ, one answers yours and one gives a contest exchange.
 
+## 0.12.5 · 2026-10-14
+
+- The first step of a QSO you answer shows the grid your call sends, "OJ11", where it said Grid. Every step now shows what went out or came in.
+- When the station you call answers another station, its messages to that station show a small red Lost where a CQ row has its country, for a minute after.
+- A QSO logged on your RR73 ends quietly when its repeats to a caller who keeps sending the R-report run out. It showed "not logged" before.
+- A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
+
 ## 0.12.4 · 2026-10-14
 
 - Clear decodes in ••• empties the FT8 and FT4 decode list, and Clear spots the WSPR spot list. A QSO under way, its next transmission and Hunt carry on, and new decodes list as usual.

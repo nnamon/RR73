@@ -208,3 +208,16 @@ test('Clear cached copy waits for a connection', async ({ page, context }) => {
   await context.setOffline(false);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
 });
+
+test('taps select no text in the app, and fields stay selectable', async ({ page }) => {
+  await page.goto('./#/operate');
+  // A double-click selected the word under it before 0.12.5.
+  await page.getByText('No decodes yet').dblclick();
+  expect(await page.evaluate(() => getSelection()?.toString() ?? '')).toBe('');
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.selectText();
+  expect(await field.evaluate((el: HTMLInputElement) => el.value.slice(el.selectionStart ?? 0, el.selectionEnd ?? 0))).toBe('9V1NE');
+  expect(await field.evaluate((el) => getComputedStyle(el).userSelect)).not.toBe('none');
+});

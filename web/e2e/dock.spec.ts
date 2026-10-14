@@ -132,7 +132,7 @@ test('a double-tap on a decode calls the station with Tx on at once, and ends CQ
   await row(page, 'CQ A41ZZ LL93').dblclick();
   await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'false');
   await expect(bar.getByRole('button', { name: 'Tx on' })).toHaveAttribute('aria-pressed', 'true');
-  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/Grid.*Report.*R-report.*RR73.*73/);
+  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/OJ11.*Report.*R-report.*RR73.*73/);
 });
 
 test('the ••• menu holds the rest, acts on the first tap and closes with Escape', async ({ page }) => {

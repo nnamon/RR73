@@ -261,7 +261,9 @@ export type SeqEffect =
   | { type: 'cancelTx'; stopPlaying: boolean }
   | { type: 'logQso'; record: LogQsoRecord }
   | { type: 'notice'; kind: NoticeKind; text: string }
-  | { type: 'queueChanged'; callers: Caller[] };
+  | { type: 'queueChanged'; callers: Caller[] }
+  /** The station we call answered another station, first seen in the slot at slotStartMs: its rows there read Lost. */
+  | { type: 'lostTo'; call: string; other: string; slotStartMs: number };
 
 export interface SeqResult {
   state: SeqState;
@@ -688,6 +690,11 @@ class Machine {
       this.notice('no-reply', STATUS.noReply(call));
       return;
     }
+    // Repeats of RR73 to a caller who keeps sending the R-report end a QSO that is logged already.
+    if (st.partner?.logged) {
+      this.afterQso(nowMs, true);
+      return;
+    }
     this.notice('dropped', STATUS.noReplyNotLogged(call));
     this.afterQso(nowMs, false);
   }
@@ -845,6 +852,7 @@ class Machine {
       if (!toOther) return false;
       const other = bare(toOther.to!);
       st.lost = { other, state: 'watching', sinceMs: e.slotStartMs };
+      this.fx.push({ type: 'lostTo', call, other, slotStartMs: e.slotStartMs });
       this.unplan();
       // Hunt never waits for a lost station: another CQ is worth more than a tail-end call.
       if (!this.cfg.tailEnd || st.hunt) {

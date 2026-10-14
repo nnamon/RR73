@@ -25,10 +25,10 @@ const FIXTURE: DecodeListItem[] = [
 
 let app: ReturnType<typeof mount> | null = null;
 
-function render(items: DecodeListItem[]) {
+function render(items: DecodeListItem[], extra: Record<string, unknown> = {}) {
   const target = document.createElement('div');
   document.body.append(target);
-  app = mount(DecodeList, { target, props: { items } });
+  app = mount(DecodeList, { target, props: { items, ...extra } });
   flushSync();
   return target;
 }
@@ -109,6 +109,18 @@ describe('DecodeList', () => {
     expect(rows[1].getAttribute('aria-label')).toBe('−09 dB, DT 0.2 s, 1418 Hz, 9V1NE JA1KXM -09, to you, Japan');
     expect(rows[0].getAttribute('aria-label')).toBe('Sent, 13:14:30 UTC, 1180 Hz, JA1KXM 9V1NE R-14');
     expect(rows[3].getAttribute('aria-label')).toContain('calling CQ, New grid');
+  });
+
+  it('marks a lost station’s message to the station it answered with a red Lost, and says so', () => {
+    const items: DecodeListItem[] = [
+      { kind: 'row', id: 'l1', slotStartMs, row: row(d('DV5CEL VK2LAW -05', -12, 0.1, 766)) },
+      { kind: 'row', id: 'l2', slotStartMs, row: row(d('JH1RRT YB0AZK RR73', -6, -0.2, 2210)) },
+    ];
+    const el = render(items, { lost: [{ call: 'VK2LAW', other: 'DV5CEL', slotStartMs }] });
+    const [lost, other] = [...el.querySelectorAll('button.dr')];
+    expect(lost.querySelector('.c-lost')?.textContent).toBe('Lost');
+    expect(lost.getAttribute('aria-label')).toContain('lost, answered another station');
+    expect(other.querySelector('.c-lost')).toBeNull();
   });
 
   it('renders an empty list without rows', () => {

@@ -9,6 +9,7 @@ import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
+import type { LostMark } from '../decode/lost';
 import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
 import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
@@ -51,6 +52,8 @@ class QsoRuntime {
   notice = $state<Notice | null>(null);
   /** On air now: start and end, UTC ms. */
   onAir = $state<{ text: string; tx: TxNum; startMs: number; endMs: number } | null>(null);
+  /** Stations we called that answered another station: their rows read Lost (lib/decode/lost.ts). */
+  lostTo = $state.raw<LostMark[]>([]);
 }
 
 export const qso = new QsoRuntime();
@@ -153,6 +156,9 @@ export function dispatch(e: SeqEvent) {
         qso.notice = { kind: f.kind, text: f.text, atMs: e.nowMs };
         break;
       case 'queueChanged':
+        break;
+      case 'lostTo':
+        qso.lostTo = [...qso.lostTo, { call: f.call, other: f.other, slotStartMs: f.slotStartMs }].slice(-20);
         break;
     }
   }

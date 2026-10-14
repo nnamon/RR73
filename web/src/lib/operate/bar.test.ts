@@ -64,7 +64,7 @@ describe('barSteps', () => {
 
   it('shows the QSO steps while answering a station', () => {
     const st = { ...idle(), phase: 'answering' as const, partner: partner() };
-    expect(barSteps(st).map((s) => s.label)).toEqual(['Grid', 'Report', 'R-report', 'RR73', '73']);
+    expect(barSteps(st).map((s) => s.label)).toEqual(['OJ11', 'Report', 'R-report', 'RR73', '73']);
   });
 });
 

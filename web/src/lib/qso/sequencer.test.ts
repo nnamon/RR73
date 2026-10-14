@@ -278,6 +278,18 @@ describe('Run mode', () => {
     expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false });
   });
 
+  it('stops repeating RR73 after the repeats to a caller who keeps sending the R-report, and keeps the QSO logged', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    const r = '9V1NE K1ABC R-12';
+    s.run(0, 14, { 1: ['9V1NE K1ABC FN42'], 3: [r], 5: [r], 7: [r], 9: [r], 11: [r], 13: [r] });
+    expect(texts(s).filter((t) => t.endsWith('RR73'))).toEqual(['4:K1ABC 9V1NE RR73', '6:K1ABC 9V1NE RR73', '8:K1ABC 9V1NE RR73', '10:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    // The QSO is logged: no "not logged" notice when the repeats run out.
+    expect(s.notices().map((n) => n.text)).toEqual([]);
+    expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false });
+  });
+
   it('turns Tx off after the QSO without Run, as WSJT-X does after 73', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
@@ -403,6 +415,20 @@ describe('a lost station', () => {
       expect(texts(s), msg).toEqual(['2:VK2LAW 9V1NE OJ11']);
       expect(s.notices(), msg).toEqual([{ type: 'notice', kind: 'lost', text: 'VK2LAW answered DV5CEL' }]);
       expect(s.st, msg).toMatchObject({ phase: 'answering', paused: true, txEnabled: true });
+    }
+  });
+
+  it('reports the loss once, with the station, the station it answered and the slot, for the Lost mark on its rows', () => {
+    for (const hunt of [false, true]) {
+      const s = new Sim();
+      if (hunt) {
+        s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+        s.run(0, 6, { 1: ['CQ VK2LAW QF56'], 3: ['DV5CEL VK2LAW -05'], 5: ['DV5CEL VK2LAW RR73'] });
+      } else {
+        s.call(1, 'CQ VK2LAW QF56');
+        s.run(2, 6, { 3: ['DV5CEL VK2LAW -05'], 5: ['DV5CEL VK2LAW RR73'] });
+      }
+      expect(s.effects.filter((f) => f.type === 'lostTo'), `hunt ${hunt}`).toEqual([{ type: 'lostTo', call: 'VK2LAW', other: 'DV5CEL', slotStartMs: s.at(3) }]);
     }
   });
 
