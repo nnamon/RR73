@@ -42,15 +42,23 @@ export function practiceReport(contextRate: number, audioSession: string | null)
   };
 }
 
+/** Transmissions with no slots (the keyboard modes): each starts when it is due. */
+export interface StreamFeed {
+  /** What starts now: 12 kHz audio (peak 1) once rendered, null when it cannot be, and its peak amplitude. */
+  due(nowMs: number): { samples: Promise<Float32Array | null>; amplitude: number }[];
+}
+
 export class PracticeInput implements InputSource {
   private readonly feed: SlotFeed;
   private readonly now: () => number;
   private readonly session: () => string | null;
+  private readonly stream: StreamFeed | null;
 
-  constructor(feed: SlotFeed, now: () => number = () => Date.now(), session: () => string | null = () => null) {
+  constructor(feed: SlotFeed, now: () => number = () => Date.now(), session: () => string | null = () => null, stream: StreamFeed | null = null) {
     this.feed = feed;
     this.now = now;
     this.session = session;
+    this.stream = stream;
   }
 
   unavailable() {
@@ -67,12 +75,15 @@ export class PracticeInput implements InputSource {
     loop.start();
     const runner = new SlotRunner(ctx, out, this.feed, this.now);
     runner.start();
+    const streams = this.stream ? new StreamRunner(ctx, out, this.stream, this.now) : null;
+    streams?.start();
     return {
       node: out,
       report: practiceReport(ctx.sampleRate, this.session()),
       usable: () => true,
       close() {
         runner.stop();
+        streams?.stop();
         try {
           loop.stop();
         } catch {
@@ -170,5 +181,56 @@ export class SlotRunner {
       src.disconnect();
       this.playing.delete(src);
     };
+  }
+}
+
+/** Plays a StreamFeed's transmissions as they fall due, checked every 250 ms. */
+export class StreamRunner {
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private readonly playing = new Set<AudioBufferSourceNode>();
+
+  constructor(
+    private readonly ctx: BaseAudioContext,
+    private readonly out: AudioNode,
+    private readonly feed: StreamFeed,
+    private readonly now: () => number,
+  ) {}
+
+  start() {
+    this.timer = setInterval(() => this.tick(), 250);
+  }
+
+  stop() {
+    if (this.timer) clearInterval(this.timer);
+    this.timer = null;
+    for (const p of this.playing) {
+      try {
+        p.stop();
+      } catch {
+        // Not started.
+      }
+      p.disconnect();
+    }
+    this.playing.clear();
+  }
+
+  tick() {
+    if (this.ctx.state !== 'running') return;
+    for (const t of this.feed.due(this.now())) {
+      void t.samples.then((samples) => {
+        if (!samples || !this.timer || this.ctx.state !== 'running') return;
+        const scaled = new Float32Array(samples.length);
+        for (let i = 0; i < samples.length; i++) scaled[i] = samples[i] * t.amplitude;
+        const src = this.ctx.createBufferSource();
+        src.buffer = bufferOf(this.ctx, scaled);
+        src.connect(this.out);
+        src.start(this.ctx.currentTime + 0.05);
+        this.playing.add(src);
+        src.onended = () => {
+          src.disconnect();
+          this.playing.delete(src);
+        };
+      });
+    }
   }
 }

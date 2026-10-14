@@ -44,6 +44,10 @@ export const keyboard = $state({
   lastRecordingRate: 0,
   /** Underruns and frames of the last transmission. */
   lastTx: null as { underrunFrames: number; playedFrames: number } | null,
+  /** Capture goes to the receiver; the review build turns it off to show only the text it adds. */
+  listening: true,
+  /** The review build's keyboard: up or down whatever the viewport says; null follows the viewport. */
+  forceKeyboard: null as boolean | null,
 });
 
 function station(): { call: string; grid: string } {
@@ -277,7 +281,7 @@ export function startKeyboard() {
     if (!isKeyboard(settings.mode)) return;
     keep(c.samples, c.utcMs + (c.samples.length / 12000) * 1000);
     // The radio's own transmission is no copy: the receiver hears nothing while on air.
-    if (session.tx === 'off') client.push(c.samples);
+    if (session.tx === 'off' && keyboard.listening) client.push(c.samples);
   });
   onHalt(() => session.halt());
   onAudioStatus((s) => {
@@ -293,10 +297,18 @@ export function startKeyboard() {
   $effect.root(() => {
     // The receiver follows the settings that shape it, rebuilt at the pair's mark when one
     // changes. AFC and the pair itself move without a rebuild.
+    let shaped = '';
     $effect(() => {
-      if (!isKeyboard(settings.mode)) return;
+      if (!isKeyboard(settings.mode)) {
+        shaped = '';
+        return;
+      }
       const r = settings.rtty;
-      void [r.baud, r.shiftHz, r.stopBits, r.reverse, r.figures, r.usos, r.squelchDb, r.preambleS, r.tailChars, r.idle];
+      // A write of other RTTY settings (the pair, a dial) replaces the object: only a change in
+      // these values rebuilds the receiver, which loses the character it is reading.
+      const key = JSON.stringify([r.baud, r.shiftHz, r.stopBits, r.reverse, r.figures, r.usos, r.squelchDb, r.preambleS, r.tailChars, r.idle]);
+      if (key === shaped) return;
+      shaped = key;
       untrack(() => {
         const snap = $state.snapshot(settings.rtty) as RttySettings;
         keyboard.markHz = clampMark(snap, keyboard.markHz);
@@ -332,7 +344,7 @@ function watchViewport() {
   if (!vv) return;
   const update = () => {
     const inPane = document.activeElement instanceof HTMLElement && !!document.activeElement.closest('[data-keyboard-pane]');
-    const up = inPane && window.innerHeight - vv.height > 120;
+    const up = keyboard.forceKeyboard ?? (inPane && window.innerHeight - vv.height > 120);
     keyboard.keyboardUp = up;
     if (up) document.documentElement.style.setProperty('--rr-app-h', `${Math.round(vv.height)}px`);
     else document.documentElement.style.removeProperty('--rr-app-h');

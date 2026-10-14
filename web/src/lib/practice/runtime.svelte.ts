@@ -12,7 +12,7 @@
  * in the slot before from qso.sent.
  */
 
-import { SLOT_MS, SLOT_RATE, isFt, type FtMode } from '../clock/slots';
+import { SLOT_MS, SLOT_RATE, isFt, isKeyboard, type FtMode } from '../clock/slots';
 import { log, notify, reloadLog, setFetch, setWavelog, useLog } from '../log/log.svelte';
 import { countPracticeQsos, restorePracticeRecords, takePracticeRecords, type PracticeRecords } from '../log/store';
 import { practice, updatePractice } from '../state/practice.svelte';
@@ -22,7 +22,10 @@ import { codec, setInputSource, startAudio } from '../state/station.svelte';
 import { STATUS } from '../qso/status';
 import { scenarioOf, type ScenarioId } from './scenarios';
 import { PracticeBand, type OperatorTx } from './sim';
-import { PracticeInput, type SlotFeed } from './source';
+import { PracticeInput, type SlotFeed, type StreamFeed } from './source';
+import { RttyStations } from './rtty';
+import { amplitudeFor } from './render';
+import { client as keyboardClient, session as keyboardSession } from '../state/keyboard.svelte';
 import { STAND_IN_URL, standInConfig, wavelogStandIn } from './wavelog-stand-in';
 
 let band: PracticeBand | null = null;
@@ -67,7 +70,24 @@ const feed: SlotFeed = {
   synth: (text, mode, f0Hz) => codec().synthesize(text, mode, f0Hz, SLOT_RATE),
 };
 
-const input = new PracticeInput(feed);
+// RTTY's stations: new ones for each callsign; they hear what the operator hands the transmitter.
+let rtty: RttyStations | null = null;
+let rttyKey = '';
+const stream: StreamFeed = {
+  due(nowMs) {
+    const sent = keyboardSession.takeSent();
+    if (!isKeyboard(settings.mode)) return [];
+    const key = `${seed}|${myStation().callsign}`;
+    if (!rtty || key !== rttyKey) {
+      rtty = new RttyStations(myStation().callsign, nowMs);
+      rttyKey = key;
+    }
+    rtty.sent(sent);
+    return rtty.due(nowMs, keyboardSession.tx !== 'off').map((t) => ({ samples: keyboardClient.encode(t.text, t.markHz), amplitude: amplitudeFor(t.snrDb) }));
+  },
+};
+
+const input = new PracticeInput(feed, undefined, undefined, stream);
 const standIn = wavelogStandIn(myStation);
 
 async function apply(on: boolean): Promise<void> {

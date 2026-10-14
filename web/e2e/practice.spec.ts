@@ -216,3 +216,25 @@ test('Hound works the practice Fox: call, report, R-report, RR73, logged', async
   expect((await sent()).filter((t) => t.endsWith(' 73'))).toEqual([]);
   expect(await callsInLog(page, 'rr73-practice')).toEqual([fox]);
 });
+
+test('RTTY on the practice band: JA1XYZ calls CQ, a tap on his call and Answer, and he answers with name and QTH', async ({ page }) => {
+  test.setTimeout(90_000);
+  await practiceOn(page);
+  await page.getByRole('button', { name: /^Change band/ }).click();
+  await page.getByRole('dialog', { name: 'Change band' }).getByText('RTTY', { exact: true }).click();
+  await page.keyboard.press('Escape');
+  // JA1XYZ's pair: a tap on the waterfall would find it; the hook puts the receiver there.
+  await page.evaluate(() => window.__rr73!.rttyTune(1612));
+  const text = page.getByTestId('rx-text');
+  await expect(text).toContainText('CQ CQ CQ DE JA1XYZ JA1XYZ JA1XYZ', { timeout: 30_000 });
+  await text.locator('[data-call="JA1XYZ"]').last().click();
+  await expect(page.getByTestId('strip-call')).toHaveValue('JA1XYZ');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await page.getByRole('toolbar', { name: 'Macros' }).getByRole('button', { name: 'Answer' }).click();
+  await expect(bar.getByRole('button', { name: /^Rx in/ })).toBeVisible({ timeout: 5000 });
+  await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible({ timeout: 20_000 });
+  await expect(text).toContainText('NAME TARO TARO QTH YOKOHAMA YOKOHAMA', { timeout: 30_000 });
+  await expect(page.getByTestId('strip-name')).toHaveValue('TARO');
+  await expect(page.getByTestId('strip-qth')).toHaveValue('YOKOHAMA');
+  await expect(page.getByTestId('strip-rcvd')).toHaveValue('579');
+});

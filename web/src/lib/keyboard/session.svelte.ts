@@ -19,7 +19,7 @@ import { expand, queued, serialText, utc4, type FieldValues, type Macro, type Ma
 import type { CharTables, ModemEvent } from './modem';
 import { otherCaseReader } from './modem';
 import { SendQueue } from './queue';
-import { Transcript, type Line } from './transcript';
+import { Transcript, type CharKind, type Line } from './transcript';
 import type { TxStream } from './client';
 
 /** Text the transmitter holds at most, s. */
@@ -101,6 +101,8 @@ export class KeyboardSession {
   private startGen = 0;
   /** Characters skipped in this transmission, each once, for the status line. */
   private notSent = '';
+  /** Text handed to the transmitter and not yet read by takeSent, at most 2000 characters. */
+  private sentBuf = '';
 
   constructor(private readonly ports: SessionPorts) {}
 
@@ -300,6 +302,7 @@ export class KeyboardSession {
       }
       if (send) {
         s.text(send);
+        this.sentBuf = (this.sentBuf + send).slice(-2000);
         const now = this.ports.now();
         for (const ch of send) this.transcript.add(ch, 't', now);
         this.lastTextMs = now;
@@ -405,6 +408,20 @@ export class KeyboardSession {
       if (this.repeat.on && this.tx === 'off') this.stopRepeat();
       if (this.draft.fields.call) this.draft = refill(this.draft, this.recentRx(), this.ports.config().set === 'contest');
     }
+    this.sync();
+  }
+
+  /** Text handed to the transmitter since the last call: what the practice band's stations hear. */
+  takeSent(): string {
+    const t = this.sentBuf;
+    this.sentBuf = '';
+    return t;
+  }
+
+  /** Text added as it is, one CharKind per character: the review build's received and sent text. */
+  addText(text: string, kinds: string) {
+    const now = this.ports.now();
+    [...text].forEach((ch, i) => this.transcript.add(ch, (kinds[i] ?? 'r') as CharKind, now));
     this.sync();
   }
 
