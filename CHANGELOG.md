@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.15.2 · 2026-10-14
 
 - At 50% and below, Transmit next slot also leaves a receive slot after the last WSPR transmission, one on air or the beacon's next one. Tapped while the beacon transmitted, it took the slot right after.
 
