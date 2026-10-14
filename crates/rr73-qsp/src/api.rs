@@ -1,6 +1,7 @@
 //! QSP's HTTP API (docs/design/qsp.md, The API). The OpenAPI document behind `/docs` is built
 //! from the same handlers and types, so the page cannot drift from them.
 
+use crate::address::{self, Refusal};
 use crate::config::{Config, ReceiverConfig, ReceiverKind};
 use crate::frame::{self, AdpcmState, Encoding, FrameHead};
 use crate::kiwi::{self, Control, Event, Target};
@@ -360,6 +361,7 @@ async fn create_session(
                 listener,
                 latency_s: r.latency_s,
                 free_channels: r.free_channels,
+                public_only: false,
             };
             (r.id.clone(), t, r.max_sessions)
         }
@@ -378,6 +380,14 @@ async fn create_session(
                     "host must be a host name or an address".into(),
                 ));
             }
+            // Checked here for a clear answer, and again when the stream connects.
+            if let Err(r) = address::resolve(&c.host, c.port, true).await {
+                let (status, code) = match r {
+                    Refusal::NotFound(_) => (StatusCode::BAD_REQUEST, "invalid"),
+                    _ => (StatusCode::FORBIDDEN, "not-allowed"),
+                };
+                return Err(ApiError(status, code, r.message()));
+            }
             let t = Target {
                 host: c.host.clone(),
                 port: c.port,
@@ -385,6 +395,7 @@ async fn create_session(
                 listener,
                 latency_s: 0.0,
                 free_channels: 1,
+                public_only: true,
             };
             (format!("{}:{}", c.host, c.port), t, 1)
         }

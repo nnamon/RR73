@@ -28,7 +28,8 @@ test = false
 interval_s = 300
 
 [sdr]
-# Whether users may name receivers of their own, by kind and address.
+# Whether users may name receivers of their own, by kind and address. QSP connects to those only
+# on public addresses, never to this machine.
 user_receivers = false
 
 # The receivers this instance offers. kind: kiwisdr (KiwiSDR and Web-888).
