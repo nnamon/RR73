@@ -24,9 +24,11 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   const now = Date.now() - (Date.now() % 15_000);
   const [older, newer] = [now - 30_000, now - 15_000];
   const list = page.getByTestId('decode-list');
-  const heads = list.locator('.slot-bar .st');
+  // The top bar's whole line: a run of empty slots keeps its first time as it grows.
+  const heads = list.locator('.slot-bar .visually-hidden');
   await decoded(page, older, ['CQ JA1KXM PM95', 'CQ VK3QRP QF22']);
-  await expect(heads.first()).toHaveText(new RegExp(`^${hhmmss(older)}`));
+  await expect(heads.first()).toHaveText(new RegExp(`^${hhmmss(older)} UTC`));
+  const first = (await heads.first().textContent())!;
 
   // A finger on the list while the next slot's decodes arrive.
   const box = (await list.boundingBox())!;
@@ -34,8 +36,8 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await page.mouse.down();
   await decoded(page, newer, ['CQ 9M2TRX OJ02', 'JH1RRT YB0AZK RR73']);
   await page.waitForTimeout(1500);
-  expect((await heads.first().textContent())!.slice(0, 8)).toBe(hhmmss(older));
+  expect(await heads.first().textContent()).toBe(first);
   await page.mouse.up();
   // Free again 0.5 s after the finger lifts: the newer slot goes in on top.
-  await expect.poll(async () => (await heads.first().textContent())!.slice(0, 8), { timeout: 3000 }).toBe(hhmmss(newer));
+  await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).toMatch(new RegExp(`^${hhmmss(newer)} UTC`));
 });
