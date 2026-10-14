@@ -632,6 +632,24 @@ describe('Hunt', () => {
     expect(t.st).toMatchObject({ hunt: false, txEnabled: false });
   });
 
+  it('moves on after the calls the operator set, and keeps the usual repeats once answered', () => {
+    const calls = (huntCalls?: number) => {
+      const s = new Sim({ huntCalls });
+      s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+      s.run(0, 12, { 1: ['CQ JA1KXM PM95'], 3: ['CQ K1ABC FN42'], 5: ['CQ K1ABC FN42'], 9: ['CQ K1ABC FN42'] });
+      return texts(s);
+    };
+    // 4 calls by default: the first and 3 repeats.
+    expect(calls().slice(0, 5)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE OJ11', '6:JA1KXM 9V1NE OJ11', '8:JA1KXM 9V1NE OJ11', '10:K1ABC 9V1NE OJ11']);
+    expect(calls(1).slice(0, 2)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:K1ABC 9V1NE OJ11']);
+    expect(calls(2).slice(0, 3)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE OJ11', '6:K1ABC 9V1NE OJ11']);
+
+    const s = new Sim({ huntCalls: 1 });
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    s.run(0, 10, { 1: ['CQ JA1KXM PM95'], 3: ['9V1NE JA1KXM -09'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE R-10', '8:JA1KXM 9V1NE R-10', '10:JA1KXM 9V1NE R-10']);
+  });
+
   it('stops with Halt and the watchdog', () => {
     const s = new Sim();
     s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });

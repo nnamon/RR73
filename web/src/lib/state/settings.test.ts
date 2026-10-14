@@ -155,6 +155,13 @@ describe('the sequencer settings migration', () => {
     expect(validate({ huntOrder: 'loudest', run: 'yes' })).toMatchObject({ huntOrder: 'unworked', run: false });
   });
 
+  it('starts Hunt at 4 calls a station and takes any whole number from 1 to 99', () => {
+    expect(validate({}).huntCalls).toBe(4);
+    expect(validate({ huntCalls: 1 }).huntCalls).toBe(1);
+    expect(validate({ huntCalls: 99 }).huntCalls).toBe(99);
+    for (const bad of [0, 100, 2.5, -1, Number.NaN, '3']) expect(validate({ huntCalls: bad }).huntCalls).toBe(4);
+  });
+
   it('starts with Responses refresh watchdog off and keeps what the operator sets', () => {
     expect(validate({}).watchdogRefresh).toBe(false);
     expect(validate({ watchdogRefresh: true }).watchdogRefresh).toBe(true);

@@ -85,6 +85,7 @@ export function configNow() {
     huntOrder: settings.huntOrder,
     watchdogMs: settings.watchdog ? Math.round(settings.watchdogMin * 60_000) : 0,
     watchdogRefresh: settings.watchdogRefresh,
+    huntCalls: settings.huntCalls,
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
@@ -399,6 +400,7 @@ export function startQso() {
         huntOrder: c.huntOrder,
         watchdogMs: c.watchdogMs,
         watchdogRefresh: c.watchdogRefresh,
+        huntCalls: c.huntCalls,
         hound: c.hound,
       };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.

@@ -55,8 +55,9 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 
 ## Retries
 
-- With no reply, the last message repeats in the next slot of our parity, up to 3 times (configurable).
-- Calling CQ, a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does; Hunt moves on to the next CQ.
+- With no reply, the last message repeats in the next slot of our parity, up to 3 times.
+- Calling CQ, a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does.
+- Hunt calls a station that has not answered 4 times by default, then moves on to the next CQ. Hunt calls, in Settings › FT8 and FT4, takes 1 to 99: 1 works through the CQs fastest. Once the station answers, the QSO keeps the usual 3 repeats, so a lost R-report does not end a QSO half done.
 
 ## Logging
 

@@ -66,6 +66,8 @@ export interface SeqConfig {
   ack: 'RR73' | 'RRR';
   /** Repeats of an unanswered message before giving up. */
   maxRetries: number;
+  /** Hunt: calls to a station that has not answered before Hunt moves on. Defaults to 1 + maxRetries. */
+  huntCalls?: number;
   order: QueueOrder;
   workDupes: boolean;
   /** Run: after a QSO from CQ, answer the next caller or call CQ again. Off: Tx goes off after the QSO. */
@@ -682,7 +684,9 @@ class Machine {
     const st = this.st;
     const same = st.lastSent?.tx === tx && st.current === tx;
     st.retries = same ? st.retries + 1 : 0;
-    if (same && st.retries > this.cfg.maxRetries) {
+    // Hunt's own limit covers the calls before an answer; a QSO under way keeps the usual one.
+    const limit = st.hunt && tx === 1 ? (this.cfg.huntCalls ?? this.cfg.maxRetries + 1) - 1 : this.cfg.maxRetries;
+    if (same && st.retries > limit) {
       this.giveUp(nowMs);
       return;
     }
