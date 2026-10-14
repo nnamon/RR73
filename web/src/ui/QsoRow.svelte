@@ -57,6 +57,11 @@
     display: none;
   }
 
+  /* A grey tag keeps its contrast on the selection's tint. */
+  .lr.sel :global(.tg.idle) {
+    background: var(--rr-surface);
+  }
+
   .lr + :global(.lr)::before {
     content: '';
     position: absolute;

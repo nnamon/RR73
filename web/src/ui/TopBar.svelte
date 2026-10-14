@@ -381,6 +381,5 @@
     font-size: var(--rr-text-tag);
     font-weight: var(--rr-weight-medium);
     line-height: var(--rr-leading-tag);
-    opacity: 0.8;
   }
 </style>

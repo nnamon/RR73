@@ -238,7 +238,6 @@
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-medium);
     line-height: var(--rr-leading-tag);
-    opacity: 0.8;
   }
 
   @media (hover: hover) {

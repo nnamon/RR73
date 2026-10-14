@@ -224,7 +224,6 @@
 
   .it.on .v {
     color: inherit;
-    opacity: 0.85;
   }
 
   /* The detail: its own scroll, the content in a column of at most 680 pt. */
