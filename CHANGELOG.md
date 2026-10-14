@@ -16,6 +16,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The bar at the top of Log, Spots, Settings and their screens stays in place as the screen scrolls, and takes the bar material once content passes under it.
 - Sheets have 10 pt corners.
 - Reload app, Clear cached copy and Send to Wavelog show their blue at reduced opacity while they cannot act.
+- Hunt leaves a station alone for 10 min once it has answered other stations twice while Hunt called it. Such a station does not hear you well, and Hunt kept calling it after each new CQ.
 
 ## 0.10.4 · 2026-10-14
 
