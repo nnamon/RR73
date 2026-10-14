@@ -168,7 +168,8 @@ async function checkCall(nowMs: number) {
   if (!b.ok) return;
   for (const text of b.texts) {
     const p = await codec().pack(text, 'WSPR').catch(() => null);
-    if (p && !p.ok) {
+    // Only the codec's own refusal counts: without a decoder, packing fails for every text.
+    if (p && !p.ok && codec().available) {
       stopAll();
       notice(STATUS.noWsprCall, nowMs);
       return;

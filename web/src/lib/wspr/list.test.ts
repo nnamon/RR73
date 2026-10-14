@@ -38,7 +38,10 @@ describe('the WSPR list', () => {
     const sent = [{ slotStartMs: t(14, 6), text: '9V1NE OJ11 37', freqHz: 1500, complete: true }];
     expect(show(buildWsprList(input({ nowMs: t(14, 6, 47), onAir, sent })))).toEqual(['14:06 sending', 'sending 9V1NE OJ11 37']);
     expect(show(buildWsprList(input({ nowMs: t(14, 7, 55), sent })))).toEqual(['14:06 sent', 'sent 9V1NE OJ11 37']);
-    expect(show(buildWsprList(input({ nowMs: t(14, 10, 4), sent, slots: [slot(t(14, 8), ['G4ZFQ IO90 30'])] })))).toEqual([
+    const later = buildWsprList(input({ nowMs: t(14, 10, 4), sent, slots: [slot(t(14, 8), ['G4ZFQ IO90 30'])] }));
+    // Below newer spots, the Sent row fades with them.
+    expect(later.find((i) => i.kind === 'tx')).toMatchObject({ stage: 'sent', old: true });
+    expect(show(later)).toEqual([
       '14:10 receiving, spots at 14:12',
       '14:08 1 spot',
       'G4ZFQ',

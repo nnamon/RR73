@@ -79,7 +79,7 @@
     if (!b.ok) return;
     let current = true;
     void Promise.all(b.texts.map((t) => codec().pack(t, 'WSPR').catch(() => null))).then((r) => {
-      if (current) refused = r.some((p) => p !== null && !p.ok);
+      if (current) refused = codec().available && r.some((p) => p !== null && !p.ok);
     });
     return () => {
       current = false;

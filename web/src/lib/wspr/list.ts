@@ -36,7 +36,7 @@ export type WsprItem =
       tone: 'live' | 'tx' | 'done' | 'quiet';
     }
   | { kind: 'spot'; id: string; spot: Spot; old: boolean }
-  | { kind: 'tx'; id: string; stage: TxStage; slotStartMs: number; text: string; freqHz: number; complete: boolean };
+  | { kind: 'tx'; id: string; stage: TxStage; slotStartMs: number; text: string; freqHz: number; complete: boolean; old?: boolean };
 
 export interface ListInput {
   nowMs: number;
@@ -102,7 +102,7 @@ export function buildWsprList(input: ListInput): WsprItem[] {
     if (tx) {
       flushQuiet();
       out.push({ kind: 'header', id: `h${start}`, time: utcHm(start), detail: 'sent', tone: 'tx' });
-      out.push({ kind: 'tx', id: `t${start}`, stage: 'sent', slotStartMs: start, text: tx.text, freqHz: tx.freqHz, complete: tx.complete });
+      out.push({ kind: 'tx', id: `t${start}`, stage: 'sent', slotStartMs: start, text: tx.text, freqHz: tx.freqHz, complete: tx.complete, old: start < newestWithSpots });
       continue;
     }
     const slot = byStart.get(start);

@@ -15,6 +15,7 @@
   import { TX_OFFSET_S, TX_SECONDS } from '../lib/wspr/schedule';
   import type { WsprItem } from '../lib/wspr/list';
   import type { Spot } from '../lib/wspr/spots';
+  import { oldInkFor } from '../lib/decode/highlight-colour';
 
   let {
     items,
@@ -60,6 +61,8 @@
   }
 
   const TAG = { next: 'Next', sending: 'Sending', sent: 'Sent' } as const;
+  /** Text colours on the faded Sent tint, light and dark, kept at 4.5:1 (highlight-colour.ts). */
+  const oldInk = $derived(sentColour ? oldInkFor(sentColour) : null);
 
   let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
 
@@ -107,7 +110,7 @@
     {:else if item.kind === 'tx'}
       {@const m = txMeta(item)}
       <li class="sr-item">
-        <div class="sr tx {item.stage}" class:rr-hl={!!sentColour && item.stage !== 'next'} style:--rr-hl={item.stage !== 'next' ? sentColour : null} data-testid="wspr-{item.stage}">
+        <div class="sr tx {item.stage}" class:old={item.old} class:rr-hl={!!sentColour && item.stage !== 'next'} style:--rr-hl={item.stage !== 'next' ? sentColour : null} style:--rr-ink-light={item.old ? oldInk?.light : null} style:--rr-ink-dark={item.old ? oldInk?.dark : null} data-testid="wspr-{item.stage}">
           <span class="tag">{TAG[item.stage]}</span>
           <span class="msg">{item.text}</span>
           <span class="meta" class:when={item.stage === 'next'}>{m.text}</span>
@@ -151,7 +154,9 @@
   .list {
     margin: 0;
     padding: 0;
+    container-type: inline-size;
   }
+
 
   .slot-bar {
     display: flex;
@@ -256,8 +261,20 @@
     text-overflow: ellipsis;
   }
 
+  /* With room for it (393 pt and wider), the grid starts at one x on every row with a callsign of
+     up to 7 characters, as in the mockup; at 375 pt it follows the callsign. After .call, so it
+     wins over that rule's min-width. */
+  @container (width >= 390px) {
+    .call {
+      min-width: 5.6em;
+    }
+  }
+
   .grid {
-    flex: 1 0 auto;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
     font-size: var(--rr-text-decode);
     line-height: var(--rr-leading-row);
     color: var(--rr-label2);
@@ -368,6 +385,21 @@
 
   .tx.rr-hl .meta {
     color: var(--rr-label);
+  }
+
+  /* A Sent row below newer spots fades as they do: a lighter tint. */
+  .tx.old.rr-hl {
+    background: var(--rr-hl-bg-old);
+  }
+
+  .tx.old.rr-hl::after {
+    opacity: 0.6;
+  }
+
+  .tx.old.rr-hl .msg,
+  .tx.old.rr-hl .meta,
+  .tx.old.rr-hl .tag {
+    color: var(--rr-hl-old-ink);
   }
 
   .meta.when {

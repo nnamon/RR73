@@ -80,6 +80,7 @@ for (const theme of ['light', 'dark'] as const) {
     await sheet.getByText('WSPR', { exact: true }).click();
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
 
     // Operate in WSPR: the dial to four decimals, a 200 Hz ruler, the WSPR controls.
     await expect(page.getByRole('button', { name: /^Change band/ })).toHaveAccessibleName(/20m WSPR, 14\.0956 MHz USB/);

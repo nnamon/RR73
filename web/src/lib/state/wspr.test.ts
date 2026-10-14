@@ -38,6 +38,14 @@ describe('the beacon', () => {
     expect(wspr.next).toEqual({ slotStartMs: at(14, 8), once: false });
   });
 
+  it('stays on when no decoder could load to check the callsign', async () => {
+    // Under vitest there is no Worker, so the decoder is the null decoder and packing fails for any text.
+    setBeacon(true, at(14, 5, 28));
+    await new Promise((r) => setTimeout(r, 10));
+    expect(wspr.beacon.on).toBe(true);
+    expect(wspr.notice).toBeNull();
+  });
+
   it('stays off without running audio or without a callsign and grid, and says why', async () => {
     audio.status = 'off';
     setBeacon(true, at(14, 5, 28));
