@@ -6,6 +6,22 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - CQ tapped before audio runs shows Audio off and tries once a slot. Before, the refusals planned slot after slot until the browser ran out of stack, which left the CQ about 26 hours ahead, so it never went out.
 
+## 0.10.5 · 2026-10-14
+
+- Colours follow iOS: Apple's system colours, grouped backgrounds, system greys and hairline separators, in light and dark.
+- The dark theme has a true black background, with groups and sheets in dark grey.
+- Secondary text, placeholders, links and errors keep 4.5:1 contrast: where Apple's colour falls short, they use its Increased Contrast value.
+- Grouped lists follow iOS 18, with 10 pt corners, 44 pt rows and separators inset to the text.
+- Switches are green when on and 51 by 31 pt, as in iOS.
+- Halt is a red tint with red text in every state.
+- Buttons alone or in a row are capsules, the buttons at the bottom of Operate included.
+- Operate's top and bottom bars use the iOS bar material. The mode tag is grey, and the clock uses SF Pro.
+- The selected filter in Operate is blue with white text, and the filters use 15 pt type.
+- The bar at the top of Log, Spots, Settings and their screens stays in place as the screen scrolls, and takes the bar material once content passes under it.
+- Sheets have 10 pt corners.
+- Reload app, Clear cached copy and Send to Wavelog show their blue at reduced opacity while they cannot act.
+- Hunt leaves a station alone for 10 min once it has answered other stations twice while Hunt called it. Such a station does not hear you well, and Hunt kept calling it after each new CQ.
+
 ## 0.10.4 · 2026-10-14
 
 - Messages to your callsign lead their slot, with a solid red edge and bold text. 9V1NE matches VK3/9V1NE and 9V1NE/P.

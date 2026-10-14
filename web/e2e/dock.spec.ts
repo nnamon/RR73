@@ -2,7 +2,7 @@
 // or in a QSO, and the ••• menu. Taps that can lead to a transmission play a silent clip through
 // a media element inside the tap, so iOS does not mute output on the silent switch; Halt and the
 // taps that turn things off play nothing. Decodes come through the screen-review hooks.
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 
 async function setUp(page: Page) {
   await page.goto('./#/settings');
@@ -17,6 +17,20 @@ async function setUp(page: Page) {
   await page.getByRole('link', { name: 'Operate' }).click();
   return page.getByRole('region', { name: 'Transmit' });
 }
+
+/** Halt's face: its fill, text colour and edge. */
+function haltLook(bar: Locator) {
+  return bar
+    .getByRole('button', { name: 'Halt' })
+    .locator('.face')
+    .evaluate((el) => {
+      const cs = getComputedStyle(el);
+      return { fill: cs.backgroundColor, text: cs.color, edge: cs.boxShadow };
+    });
+}
+
+/** sRGB channels and alpha of a computed colour. */
+const channels = (c: string) => (c.match(/[\d.]+/g) ?? []).map(Number);
 
 /** A slot of decodes that ended a moment ago. */
 async function decoded(page: Page, texts: [string, number][]) {
@@ -75,6 +89,7 @@ test('CQ, Tx on and Hunt each play the silent clip inside the tap', async ({ pag
 
 test('a double-tap on a decode calls the station with Tx on at once, and ends CQ', async ({ page }) => {
   const bar = await setUp(page);
+  const idle = await haltLook(bar);
   await decoded(page, [
     ['CQ VJ6X OF78', 506],
     ['BH1LKO VK4SHG 73', 1641],
@@ -95,8 +110,14 @@ test('a double-tap on a decode calls the station with Tx on at once, and ends CQ
   // Rx moves to the station; Hold Tx keeps Tx. Audio is off here, so the bar says why nothing goes out.
   await expect(page.getByRole('slider', { name: 'Receive frequency, Hz' })).toHaveValue('505');
   await expect(bar.getByRole('status')).toContainText('Audio off');
-  // Halt stays a red outline: the Tx button carries the state.
-  await expect(bar.getByRole('button', { name: 'Halt' })).toHaveClass(/halt/);
+  // Halt is a red tint with red text, the same as before the call: the Tx button carries the state.
+  expect(await haltLook(bar)).toEqual(idle);
+  expect(idle.edge).toBe('none');
+  const [r, g, b, a] = channels(idle.fill);
+  expect(a).toBeGreaterThan(0);
+  expect(r).toBeGreaterThan(Math.max(g, b) + 100);
+  const [tr, tg, tb] = channels(idle.text);
+  expect(tr).toBeGreaterThan(Math.max(tg, tb) + 100);
 
   // While calling CQ, a double-tap on another station's CQ turns CQ off and takes the answering
   // steps; the sequencer's tests check that CQ does not come back (qso/sequencer.test.ts).

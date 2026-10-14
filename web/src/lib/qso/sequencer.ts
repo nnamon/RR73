@@ -186,6 +186,8 @@ export interface SeqState {
   cqs: HeardCq[];
   /** Stations that did not answer Hunt, with when they were given up, UTC ms. */
   ignored: { call: string; atMs: number }[];
+  /** Stations that answered another station while Hunt called them, with when, UTC ms. */
+  lostTo: { call: string; atMs: number }[];
   watchdogFromMs: number;
   lastTxText: string | null;
   audioOk: boolean;
@@ -264,6 +266,7 @@ export function initialState(config: SeqConfig): SeqState {
     seq: 0,
     cqs: [],
     ignored: [],
+    lostTo: [],
     watchdogFromMs: 0,
     lastTxText: null,
     audioOk: true,
@@ -741,6 +744,7 @@ class Machine {
     }
     st.cqs = cqs.filter((q) => !busy.some((b) => sameCall(b, q.call)));
     if (st.ignored.length) st.ignored = st.ignored.filter((i) => nowMs - i.atMs < IGNORE_MS);
+    if (st.lostTo.length) st.lostTo = st.lostTo.filter((l) => nowMs - l.atMs < IGNORE_MS);
   }
 
   /** Hunt with nobody in a QSO: calls the first CQ heard in the slot just decoded. */
@@ -779,7 +783,11 @@ class Machine {
       // Hunt never waits for a lost station: another CQ is worth more than a tail-end call.
       if (!this.cfg.tailEnd || st.hunt) {
         this.notice('lost', STATUS.answered(call, other));
-        this.drop(PAUSED.answered(other), e.nowMs, false);
+        // Hunt: a station that answers another station twice in 10 min does not hear us well,
+        // so it is left alone for 10 min, as one that does not reply.
+        const twice = st.hunt && st.lostTo.some((l) => sameCall(l.call, call) && e.nowMs - l.atMs < IGNORE_MS);
+        if (st.hunt) st.lostTo = [...st.lostTo.filter((l) => !sameCall(l.call, call) && e.nowMs - l.atMs < IGNORE_MS), { call, atMs: e.nowMs }];
+        this.drop(PAUSED.answered(other), e.nowMs, twice);
         return true;
       }
       this.notice('lost', STATUS.answered(call, other));

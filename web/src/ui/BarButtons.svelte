@@ -7,7 +7,7 @@
     /** The visible text; for an icon button, its accessible name. */
     label: string;
     icon?: IconName;
-    /** plain: grey; soft: a light accent tint (armed); selected: solid accent (active); air: solid red; run: green; halt: red outline. */
+    /** plain: grey; soft: a light accent tint (armed); selected: solid accent (active); air: solid red; run: green; halt: a red tint. */
     tone?: 'plain' | 'soft' | 'selected' | 'air' | 'run' | 'halt';
     /** A toggle's state, for aria-pressed. */
     pressed?: boolean;
@@ -23,7 +23,7 @@
 
 <script lang="ts">
   /**
-   * The bottom bar's row of buttons: 36 pt faces inside 44 pt targets, side by side. A button
+   * The bottom bar's row of buttons: 36 pt capsules inside 44 pt targets, side by side. A button
    * with `grow` takes the rest of the row.
    */
   import Icon from './Icon.svelte';
@@ -83,8 +83,8 @@
     align-items: center;
     justify-content: center;
     height: var(--rr-bar-button);
-    padding: 0 calc(var(--rr-space-2) + var(--rr-space-half));
-    border-radius: var(--rr-radius-m);
+    padding: 0 var(--rr-space-3);
+    border-radius: var(--rr-radius-pill);
     background: var(--rr-fill-bg);
     color: var(--rr-label);
     font-size: var(--rr-text-sub);
@@ -128,13 +128,13 @@
 
   .run .face {
     background: var(--rr-run);
-    color: var(--rr-on-strong);
+    color: var(--rr-on-fill);
     font-weight: var(--rr-weight-bold);
   }
 
+  /* Halt: SwiftUI's tinted style, a red tint with red text, the same in every state. */
   .halt .face {
-    background: transparent;
-    box-shadow: inset 0 0 0 2px var(--rr-tx);
+    background: var(--rr-tx-soft);
     color: var(--rr-tx-text);
     font-size: var(--rr-text-callout);
     font-weight: var(--rr-weight-bold);
