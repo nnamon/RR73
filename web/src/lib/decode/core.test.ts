@@ -8,6 +8,9 @@ function fakeModule(over: Partial<WasmModule> = {}): WasmModule {
     decode_slot: vi.fn(() => '[{"text":"CQ 9M2TRX OJ02","freq_hz":1022,"dt_s":0.1,"snr_db":-10}]'),
     pack_message: () => '{}',
     synthesize: () => new Float32Array(0),
+    decode_wspr: vi.fn(() => '[{"text":"K1ABC FN42 37","freq_hz":1500.2,"dt_s":0.3,"drift_hz_per_s":0.01,"snr_db":-22}]'),
+    pack_wspr: () => '{"ok":true,"text":"K1ABC FN42 37","message_type":1,"error":null}',
+    synthesize_wspr: () => new Float32Array(0),
     version: () => '0.1.0',
     ...over,
   };

@@ -10,7 +10,7 @@
  * operator's CQ, or that the operator calls, treat them.
  */
 
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, type FtMode as Mode } from '../clock/slots';
 import { formatReport, parseExchange, sameCall, type Exchange } from '../qso/messages';
 import { Rng, continentOf, newCallsign, type Continent } from './calls';
 import type { ScenarioId } from './scenarios';

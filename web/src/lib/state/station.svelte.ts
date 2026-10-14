@@ -16,10 +16,11 @@ import type { AudioClockMapper } from '../clock/mapping';
 import { RxCalibration } from '../clock/calibration';
 import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
-import { SLOT_MS, SLOT_SAMPLES, type Mode } from '../clock/slots';
+import { SLOT_MS, SLOT_SAMPLES, type FtMode, type Mode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
 import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
+import type { WsprDecode } from '../wspr/spots';
 import { dialHz } from '../radio/bands';
 import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
@@ -41,7 +42,7 @@ export interface SlotSummary {
 
 export interface DecodedSlot {
   startUtcMs: number;
-  mode: Mode;
+  mode: FtMode;
   decodes: Decode[];
   /** Time from handing the slot to the decoder to its decodes, ms. */
   ms: number;
@@ -89,6 +90,16 @@ export const audio = $state({
 export const recent = $state<{ slots: SlotSummary[] }>({ slots: [] });
 /** Decoded slots, newest first, and the decoder's state. */
 export const band = $state<{ slots: DecodedSlot[]; decoder: DecoderStatus }>({ slots: [], decoder: { state: 'idle' } });
+
+/** A WSPR slot's decodes, or why it has none. */
+export interface WsprSlotResult {
+  startUtcMs: number;
+  decodes: WsprDecode[];
+  /** Time in the decoder, ms. */
+  ms: number;
+  /** The decoder was still busy with earlier slots, and this one was not decoded. */
+  skipped?: boolean;
+}
 
 /** Slots kept in the decode list: 2 minutes of FT8. */
 const KEEP_SLOTS = 8;
@@ -170,7 +181,8 @@ let inputSource: InputSource | null = null;
 const output = new TransmitOutput();
 let wake: WakeLockKeeper | null = null;
 let assembler: SlotAssembler | null = null;
-const recorder = new SlotRecorder(8);
+// 8 FT8 slots are 2 minutes and 5.8 MB; a WSPR slot is 2 minutes and 5.8 MB on its own.
+const recorder = new SlotRecorder(8, { WSPR: 2 });
 let decoder: DecoderClient = createDecoder();
 band.decoder = decoder.status;
 decoder.onStatus((st) => {
@@ -186,6 +198,9 @@ decoder.onStatus((st) => {
 });
 const chunkListeners = new Set<(c: Chunk) => void>();
 const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[]) => void>();
+const wsprListeners = new Set<(r: WsprSlotResult) => void>();
+/** The WSPR slot being decoded, UTC ms, or null. */
+export const wsprDecoding = $state<{ startUtcMs: number | null }>({ startUtcMs: null });
 const statusListeners = new Set<(s: AudioStatus) => void>();
 const haltHooks = new Set<() => void>();
 /** Recent input levels for the keying check: [performance.now() ms, RMS dBFS]. */
@@ -244,20 +259,57 @@ function onChunk(c: Chunk) {
 function onSlot(slot: AssembledSlot) {
   recorder.add(slot);
   recent.slots = recorder.list().map(({ startUtcMs, mode, filled, lateStart, gap }) => ({ startUtcMs, mode, filled, lateStart, gap }));
-  // A slot with less than half its audio cannot hold a whole FT8 or FT4 message.
+  // A slot with less than half its audio cannot hold a whole FT8, FT4 or WSPR message.
   if (slot.filled < SLOT_SAMPLES[slot.mode] / 2 || !decoder.available) return;
+  if (slot.mode === 'WSPR') {
+    // A WSPR slot RR73 transmitted in holds its own signal: nothing to decode.
+    if (!transmitted.has(slot.startUtcMs)) decodeWspr(slot);
+    return;
+  }
+  const mode = slot.mode;
   if (transmitted.has(slot.startUtcMs)) {
     decodeOwn(slot);
     return;
   }
   const t0 = performance.now();
   // The decoder gets a copy: the recorder keeps the slot for Save slot.
-  decoder.decodeSlot({ mode: slot.mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
-    (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes, ms: performance.now() - t0 }),
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }).then(
+    (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0 }),
     (e: unknown) => {
-      if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode: slot.mode, decodes: [], ms: 0, skipped: true });
+      if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode, decodes: [], ms: 0, skipped: true });
     },
   );
+}
+
+/** Decodes a WSPR slot in the worker; its spots go to the WSPR listeners. */
+function decodeWspr(slot: AssembledSlot) {
+  wsprDecoding.startUtcMs = slot.startUtcMs;
+  const done = () => {
+    if (wsprDecoding.startUtcMs === slot.startUtcMs) wsprDecoding.startUtcMs = null;
+  };
+  decoder.decodeWspr(slot.samples.slice()).then(
+    ({ decodes, ms }) => {
+      done();
+      console.info(`RR73 WSPR slot ${new Date(slot.startUtcMs).toISOString().slice(11, 16)} decoded in ${Math.round(ms)} ms: ${decodes.length} spots`);
+      deliverWspr({ startUtcMs: slot.startUtcMs, decodes, ms });
+    },
+    (e: unknown) => {
+      done();
+      if (e instanceof DecoderBusyError) deliverWspr({ startUtcMs: slot.startUtcMs, decodes: [], ms: 0, skipped: true });
+    },
+  );
+}
+
+/** A WSPR slot's decodes, to the listeners (the WSPR runtime). The decoder's path, and the review build's. */
+export function deliverWspr(r: WsprSlotResult) {
+  if (transmitted.has(r.startUtcMs)) return;
+  for (const l of wsprListeners) l(r);
+}
+
+/** Listens to each WSPR slot's decodes as they arrive. */
+export function onWsprDecoded(fn: (r: WsprSlotResult) => void): () => void {
+  wsprListeners.add(fn);
+  return () => wsprListeners.delete(fn);
 }
 
 /** Decodes a slot RR73 transmitted in, for Your Tx, heard back. Its decodes are never shown. */
@@ -447,17 +499,17 @@ function median(xs: number[]): number | null {
   return s[s.length >> 1];
 }
 
-/** Plays the Tune tone at the Tx frequency for 10 s. Call from the tap. */
-export function startTune() {
+/** Plays the Tune tone at the Tx frequency (`hz`; FT8 and FT4's by default) for 10 s. Call from the tap. */
+export function startTune(hz: number = settings.txHz) {
   playClip(silentClipUri());
   const now = Date.now();
   markTransmitted(now, now + TUNE.seconds * 1000);
-  emitTxWave(toneWave(now, settings.txHz, TUNE.seconds));
+  emitTxWave(toneWave(now, hz, TUNE.seconds));
   const e = getEngine();
   const ctx = e.ensureContext();
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
-  const handle = output.tune(ctx, { ...TUNE, hz: settings.txHz, level: txLevel(settings.outputLevel) });
+  const handle = output.tune(ctx, { ...TUNE, hz, level: txLevel(settings.outputLevel) });
   tx.tuning = true;
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);

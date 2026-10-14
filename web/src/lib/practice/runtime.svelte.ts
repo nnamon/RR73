@@ -12,7 +12,7 @@
  * in the slot before from qso.sent.
  */
 
-import { SLOT_MS, SLOT_RATE } from '../clock/slots';
+import { SLOT_MS, SLOT_RATE, isFt, type FtMode } from '../clock/slots';
 import { log, notify, reloadLog, setFetch, setWavelog, useLog } from '../log/log.svelte';
 import { countPracticeQsos, restorePracticeRecords, takePracticeRecords, type PracticeRecords } from '../log/store';
 import { practice, updatePractice } from '../state/practice.svelte';
@@ -43,7 +43,7 @@ function currentBand(): PracticeBand {
   const c = qso.st.config;
   const key = [seed, settings.mode, settings.band, c.myCall, c.myGrid].join('|');
   if (!band || key !== bandKey) {
-    band = new PracticeBand({ seed, scenario: practice.scenario, crowded: practice.crowded, myCall: c.myCall, myGrid: c.myGrid, mode: settings.mode });
+    band = new PracticeBand({ seed, scenario: practice.scenario, crowded: practice.crowded, myCall: c.myCall, myGrid: c.myGrid, mode: ftMode() });
     bandKey = key;
   }
   band.configure({ scenario: practice.scenario, crowded: practice.crowded });
@@ -56,9 +56,14 @@ function operatorTx(slotStartMs: number): OperatorTx | null {
   return row ? { text: row.text, freqHz: row.freqHz } : null;
 }
 
+/** The practice band's stations work FT8 and FT4; in WSPR the band carries its noise only. */
+function ftMode(): FtMode {
+  return isFt(settings.mode) ? settings.mode : 'FT8';
+}
+
 const feed: SlotFeed = {
-  mode: () => settings.mode,
-  signals: (startMs) => currentBand().slot(startMs, operatorTx(startMs - SLOT_MS[settings.mode])),
+  mode: ftMode,
+  signals: (startMs) => (isFt(settings.mode) ? currentBand().slot(startMs, operatorTx(startMs - SLOT_MS[ftMode()])) : []),
   synth: (text, mode, f0Hz) => codec().synthesize(text, mode, f0Hz, SLOT_RATE),
 };
 

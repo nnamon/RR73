@@ -15,7 +15,7 @@
  * the Fox called them on. The operator is answered after 2 to 4 calls at 1000 Hz or above.
  */
 
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, type FtMode as Mode } from '../clock/slots';
 import { formatReport, parseExchange, parseParts, sameCall } from '../qso/messages';
 import { Rng, newCallsign } from './calls';
 import type { OperatorTx, SimSignal } from './sim';

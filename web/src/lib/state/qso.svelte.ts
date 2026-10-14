@@ -9,7 +9,7 @@ import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
-import { parity as parityOf, type Parity } from '../clock/slots';
+import { isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
 import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
 import type { BandId } from '../radio/bands';
@@ -58,15 +58,20 @@ export const qso = new QsoRuntime();
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
 const sessionStart = Date.now();
 
+/** The sequencer's mode: FT8 or FT4. In WSPR the sequencer stays idle (qsoForMode) and keeps FT8. */
+function ftMode(): FtMode {
+  return isFt(settings.mode) ? settings.mode : 'FT8';
+}
+
 /** The call and grid on air: the running activation's (with Activations on), else Settings. Exported for tests. */
 export function configNow() {
   const a = features.activations ? log.current : null;
   return {
     myCall: a?.callsign || settings.callsign,
     myGrid: a?.grid || settings.grid,
-    mode: settings.mode,
+    mode: ftMode(),
     band: settings.band,
-    dialHz: operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz) ?? 0,
+    dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,

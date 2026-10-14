@@ -7,7 +7,7 @@
 
 import type { InputSource, OpenedInput } from '../audio/input';
 import type { CaptureReport } from '../audio/report';
-import { SLOT_MS, SLOT_RATE, nextSlotStart, slotStart, type Mode } from '../clock/slots';
+import { SLOT_MS, SLOT_RATE, nextSlotStart, slotStart, type FtMode as Mode } from '../clock/slots';
 import { NOISE_RMS, mixSlot, noise, type Part } from './render';
 import type { SimSignal } from './sim';
 

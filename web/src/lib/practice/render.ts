@@ -2,7 +2,7 @@
 // SNR, start time and fading. SNR follows the WSJT-X convention used by rr73-chansim: signal
 // power against noise power in 2500 Hz.
 
-import { SLOT_RATE, SLOT_SAMPLES, type Mode } from '../clock/slots';
+import { SLOT_RATE, SLOT_SAMPLES, type FtMode as Mode } from '../clock/slots';
 import { Rng } from './calls';
 import type { Fading, SimSignal } from './sim';
 

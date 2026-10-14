@@ -3,8 +3,8 @@
  * at the output rate as soon as it is decided, then handed to the audio graph 0.5 s before it
  * starts, with the clock mapping of that moment: the audio clock can drift against UTC, and a
  * sound scheduled 15 s ahead would carry that drift into its start. It starts at slot + offset
- * (0.5 s, or later for a late start). A start that would come more than the late-start limit
- * after slot + 0.5 s is reported as missed. Halt stops the sound within one render quantum
+ * (0.5 s in FT8 and FT4, 1 s in WSPR, or later for a late start). A start that would come more
+ * than the late-start limit after the nominal start is reported as missed. Halt stops the sound within one render quantum
  * (128 frames).
  *
  * Transmitting needs running audio, a callsign and a grid; otherwise the request is refused.
@@ -13,6 +13,11 @@
 
 import type { Mode } from '../clock/slots';
 import { LATE_S } from '../qso/sequencer';
+
+/** Where a transmission starts in its slot, s. */
+export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
+/** How late after the nominal start a transmission may still start, s. WSPR decoders take DT up to 2 s and more. */
+const LATE_LIMIT_S: Record<Mode, number> = { ...LATE_S, WSPR: 1 };
 
 /** The audio clock and output, behind an interface so tests can run on a fake clock. */
 export interface TxAudio {
@@ -136,8 +141,8 @@ export class TxScheduler {
     }
     const earliest = now.currentTime + MIN_LEAD_S;
     const when = Math.max(target, earliest);
-    const lateS = req.startOffsetS - 0.5 + (when - target);
-    if (lateS > LATE_S[req.mode] + 1e-3) {
+    const lateS = req.startOffsetS - NOMINAL_S[req.mode] + (when - target);
+    if (lateS > LATE_LIMIT_S[req.mode] + 1e-3) {
       this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'late' });
       return;
     }

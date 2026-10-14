@@ -7,7 +7,7 @@
  */
 
 import { utcTime } from '../clock/format';
-import { SLOT_MS, parity, type Mode, type Parity } from '../clock/slots';
+import { SLOT_MS, parity, type FtMode as Mode, type Parity } from '../clock/slots';
 import { bare, formatReport, parseExchange, sameCall } from '../qso/messages';
 import type { Caller } from '../qso/sequencer';
 import { toYou } from './focus';

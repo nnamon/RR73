@@ -5,7 +5,8 @@
  * a queue.
  */
 
-import type { FromDecoder, ToDecoder, DecoderFailure, Packed } from './protocol';
+import { WSPR_PRESET, type FromDecoder, type ToDecoder, type DecoderFailure, type Packed } from './protocol';
+import type { WsprDecode } from '../wspr/spots';
 import type { Mode } from '../clock/slots';
 import type { Decode, DecoderClient, DecoderStatus, SlotAudio } from './types';
 
@@ -28,6 +29,8 @@ export interface WorkerLike {
 interface Pending {
   resolve: (d: Decode[]) => void;
   reject: (e: Error) => void;
+  /** Set for a WSPR slot. */
+  wspr?: (r: { decodes: WsprDecode[]; ms: number }) => void;
 }
 
 interface Request<T> {
@@ -111,6 +114,18 @@ export class WorkerDecoder implements DecoderClient {
     return done;
   }
 
+  /** Decodes one WSPR slot with the `wspr` preset. The samples are transferred to the worker: pass a copy. */
+  decodeWspr(samples: Float32Array): Promise<{ decodes: WsprDecode[]; ms: number }> {
+    if (this.statusValue.state === 'failed') return Promise.reject(new DecoderUnavailableError(this.statusValue.detail));
+    this.load();
+    if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
+    if (this.pending.size >= this.maxPending) return Promise.reject(new DecoderBusyError(`${this.pending.size} slots waiting`));
+    const id = this.nextId++;
+    const done = new Promise<{ decodes: WsprDecode[]; ms: number }>((resolve, reject) => this.pending.set(id, { resolve: () => undefined, reject, wspr: resolve }));
+    this.worker.postMessage({ type: 'decodeWspr', id, preset: WSPR_PRESET, samples }, [samples.buffer]);
+    return done;
+  }
+
   /** Checks text for transmission: canonical form and type, or why it cannot be sent. */
   pack(text: string, mode: Mode): Promise<Packed> {
     return this.request<Packed>({ type: 'pack', id: 0, text, mode });
@@ -155,6 +170,7 @@ export class WorkerDecoder implements DecoderClient {
       if (!p) return;
       this.pending.delete(m.id);
       if (m.type === 'decoded') p.resolve(m.decodes);
+      else if (m.type === 'decodedWspr') p.wspr?.({ decodes: m.decodes, ms: m.ms });
       else p.reject(new Error(m.detail));
     }
   }

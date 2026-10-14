@@ -2,7 +2,7 @@
 // end on time) and the decoder (decodes for a slot arrive 0.1 s after it ends). Used by
 // sequencer.test.ts; not part of the app.
 
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, type FtMode as Mode } from '../clock/slots';
 import type { Decode } from '../decode/types';
 import { initialState, reduce, type SeqConfig, type SeqEffect, type SeqEvent, type SeqState } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';

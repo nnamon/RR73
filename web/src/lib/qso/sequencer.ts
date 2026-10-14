@@ -9,7 +9,7 @@
  * parity and plans the next transmission for the slot that follows.
  */
 
-import { SLOT_MS, parity as parityOf, slotStart, type Mode, type Parity } from '../clock/slots';
+import { SLOT_MS, parity as parityOf, slotStart, type FtMode as Mode, type Parity } from '../clock/slots';
 import { PAUSED, STATUS } from './status';
 import type { Decode } from '../decode/types';
 import { pathBetween } from './grid';
