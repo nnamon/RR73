@@ -19,13 +19,16 @@
     colourOf,
     onword,
     keyboardUp = false,
+    marked = null,
   }: {
     lines: readonly Line[];
     resolves: ((call: string) => boolean) | null;
     colourOf: (call: string) => CallColour;
     /** A received word was tapped or held: the word, its box, and its callsign or null. */
-    onword: (word: string, box: DOMRect, how: 'tap' | 'hold', call: string | null) => void;
+    onword: (word: string, box: DOMRect, how: 'tap' | 'hold', call: string | null, at: { line: number; at: number }) => void;
     keyboardUp?: boolean;
+    /** The word a menu is open for: its line and its first character, outlined. */
+    marked?: { line: number; at: number } | null;
   } = $props();
 
   let box: HTMLDivElement | undefined = $state();
@@ -77,7 +80,7 @@
   }
 
   function fire(el: HTMLElement, how: 'tap' | 'hold') {
-    onword(el.dataset.w ?? '', el.getBoundingClientRect(), how, el.dataset.call || null);
+    onword(el.dataset.w ?? '', el.getBoundingClientRect(), how, el.dataset.call || null, { line: Number(el.dataset.line), at: Number(el.dataset.at) });
   }
 
   function down(e: PointerEvent) {
@@ -135,7 +138,7 @@
         {#if line.kind === 'divider'}
           <div class="dv" role="separator">{line.text}</div>
         {:else}
-          <div class="ln">{#each tokens(line, resolves) as t (t.at)}{#if t.space}{t.text}{:else if t.rx}{@const c = t.call ? colourOf(t.call) : null}<span class="w" class:call={!!t.call} class:rr-hl={!!c?.bg} class:hl={!!c?.bg} class:worked={!!c?.worked && !c?.bg} style={style(t)} data-w={t.text} data-call={t.call ?? ''}>{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}</span>{:else}{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}{/if}{/each}</div>
+          <div class="ln">{#each tokens(line, resolves) as t (t.at)}{#if t.space}{t.text}{:else if t.rx}{@const c = t.call ? colourOf(t.call) : null}<span class="w" class:call={!!t.call} class:rr-hl={!!c?.bg} class:hl={!!c?.bg} class:worked={!!c?.worked && !c?.bg} class:marked={marked?.line === line.id && marked.at === t.at} style={style(t)} data-w={t.text} data-call={t.call ?? ''} data-line={line.id} data-at={t.at}>{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}</span>{:else}{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}{/if}{/each}</div>
         {/if}
       {/each}
     </div>
@@ -226,6 +229,12 @@
 
   .w.worked {
     color: var(--rr-old-text);
+  }
+
+  .w.marked {
+    border-radius: var(--rr-radius-xs);
+    background: var(--rr-accent-soft);
+    outline: 2px solid var(--rr-accent);
   }
 
   .newl {

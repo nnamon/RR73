@@ -247,6 +247,7 @@ for (const theme of ['light', 'dark'] as const) {
     const menu = page.getByRole('menu', { name: 'Use QWU as' });
     await expect(menu).toContainText('QWU reads 127 in figures');
     await expect(menu.getByRole('menuitem').first()).toHaveText('Number received 127');
+    await expect(word(page, 'QWU').first()).toHaveClass(/marked/);
     await shot(page, info, SHOTS, `${theme}-contest`, 200);
     await menu.getByRole('menuitem', { name: 'Number received 127' }).click();
     await expect(page.getByTestId('strip-rcvd')).toHaveValue('599 127');

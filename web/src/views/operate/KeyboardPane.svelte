@@ -57,7 +57,7 @@
   const worked = $derived(isWorked(log.live, s.draft.fields.call, settings.band, 'RTTY', contest && settings.keyboard.contestId ? settings.keyboard.contestId : null));
 
   // The word menu.
-  let menu = $state<{ word: string; anchor: DOMRect; header: string | null; items: PopMenuItem[] } | null>(null);
+  let menu = $state<{ word: string; anchor: DOMRect; header: string | null; items: PopMenuItem[]; at: { line: number; at: number } } | null>(null);
 
   const FIELD_LABEL: Record<FillField, string> = { name: 'Name', qth: 'QTH', rstRcvd: 'RST received', srx: 'Number received', notes: 'Notes' };
 
@@ -73,7 +73,7 @@
     };
   }
 
-  function onword(word: string, box: DOMRect, how: 'tap' | 'hold', call: string | null) {
+  function onword(word: string, box: DOMRect, how: 'tap' | 'hold', call: string | null, at: { line: number; at: number }) {
     if (how === 'tap' && call) {
       s.setCall(call);
       return;
@@ -88,7 +88,7 @@
     // The reading's field is offered once, with the reading.
     for (const f of fields) if (!reading || f !== fieldOfReading(reading.text)) items.push(fillItem(f, w));
     const header = reading ? `${w} reads ${reading.text} in ${reading.to}` : null;
-    menu = { word: w, anchor: box, header, items };
+    menu = { word: w, anchor: box, header, items, at };
   }
 
   function onsaved(r: SaveResult | null) {
@@ -140,7 +140,7 @@
       <p class="s">The waterfall still works. Reload RR73 to try again.</p>
     </div>
   {/if}
-  <ReceiveText lines={s.lines} {resolves} {colourOf} {onword} keyboardUp={keyboard.keyboardUp} />
+  <ReceiveText lines={s.lines} {resolves} {colourOf} {onword} keyboardUp={keyboard.keyboardUp} marked={menu?.at ?? null} />
   <div class="dock" bind:offsetHeight={dockH}>
     <QsoStrip draft={s.draft} {contest} {serial} {worked} onedit={(k, v) => s.editField(k, v)} onsheet={openSheet} />
     <SendField
