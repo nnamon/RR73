@@ -137,6 +137,7 @@ export function markedTxHz(st: SeqState, operatorHz: number): number {
 export function watchdogText(st: SeqState, nowMs: number): string {
   if (!st.txEnabled) return 'Tx off';
   if (st.config.watchdogMs <= 0) return 'Watchdog off';
+  if (st.watchdogEnding) return 'Last QSO';
   const left = Math.max(0, st.config.watchdogMs - (nowMs - st.watchdogFromMs));
   const m = Math.floor(left / 60000);
   const s = Math.floor((left % 60000) / 1000);

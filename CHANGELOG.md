@@ -8,6 +8,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - When the station you call answers another station, its messages to that station show a small red Lost where a CQ row has its country, for a minute after.
 - A QSO logged on your RR73 ends quietly when its repeats to a caller who keeps sending the R-report run out. It showed "not logged" before.
 - A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
+- The watchdog counts from your last touch, so Hunt and Repeat CQ stop at its limit however many QSOs they make. Responses refresh watchdog, in Settings › FT8 and FT4, restarts it with each new message as before. It starts off.
+- A QSO under way when the watchdog runs out now finishes and logs, then Tx goes off. The watchdog countdown reads Last QSO meanwhile. A call nobody has answered still stops at once.
 
 ## 0.12.4 · 2026-10-14
 

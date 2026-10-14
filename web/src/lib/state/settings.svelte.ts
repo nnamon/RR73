@@ -98,6 +98,8 @@ export interface Settings {
   watchdog: boolean;
   /** Watchdog limit, min: any positive number. */
   watchdogMin: number;
+  /** Each new message in a QSO restarts the watchdog, as well as the operator's actions. */
+  watchdogRefresh: boolean;
   /** Bands where FT8 runs in Hound mode (FT8 DXpedition mode). */
   houndBands: BandId[];
   /** The DXpedition's dial frequency entered for Hound mode, Hz, by band. */
@@ -133,6 +135,7 @@ export const DEFAULTS: Settings = {
   huntOrder: 'unworked',
   watchdog: true,
   watchdogMin: 6,
+  watchdogRefresh: false,
   houndBands: [],
   houndDialHz: {},
   features: { ...FEATURES_OFF },
@@ -237,7 +240,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
   if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
   if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
-  for (const k of ['run', 'tailEnd', 'watchdog'] as const) if (typeof r[k] === 'boolean') s[k] = r[k];
+  for (const k of ['run', 'tailEnd', 'watchdog', 'watchdogRefresh'] as const) if (typeof r[k] === 'boolean') s[k] = r[k];
   if (HUNT_ORDERS.includes(r.huntOrder as HuntOrder)) s.huntOrder = r.huntOrder as HuntOrder;
   if (typeof r.watchdogMin === 'number') {
     const m = normaliseMinutes(r.watchdogMin);

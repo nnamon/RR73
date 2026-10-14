@@ -65,6 +65,14 @@ describe('bottom bar view', () => {
     expect(watchdogText(s.st, s.at(2))).toBe('Tx off');
   });
 
+  it('says Last QSO while the watchdog lets a QSO finish', () => {
+    const s = new Sim({ watchdogMs: 30_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'tick', nowMs: s.at(4, 1) });
+    expect(watchdogText(s.st, s.at(4, 1))).toBe('Last QSO');
+  });
+
   it('says the watchdog is off', () => {
     const s = new Sim({ watchdogMs: 0 });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });

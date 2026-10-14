@@ -60,6 +60,10 @@
           />
           <span class="unit">min</span>
         </label>
+        <label class="row">
+          <span class="row-main"><span class="row-title">Responses refresh watchdog</span><span class="row-sub">Each new message restarts it</span></span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.watchdogRefresh} onchange={(e) => void updateSettings({ watchdogRefresh: (e.currentTarget as HTMLInputElement).checked })} />
+        </label>
       {/if}
       <label class="row">
         <span class="row-main"><span class="row-title">Hold Tx frequency</span></span>

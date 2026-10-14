@@ -154,6 +154,12 @@ describe('the sequencer settings migration', () => {
     for (const bad of [0, -3, Number.NaN, 10_000]) expect(validate({ watchdogMin: bad }).watchdogMin).toBe(6);
     expect(validate({ huntOrder: 'loudest', run: 'yes' })).toMatchObject({ huntOrder: 'unworked', run: false });
   });
+
+  it('starts with Responses refresh watchdog off and keeps what the operator sets', () => {
+    expect(validate({}).watchdogRefresh).toBe(false);
+    expect(validate({ watchdogRefresh: true }).watchdogRefresh).toBe(true);
+    expect(validate({ watchdogRefresh: 'yes' }).watchdogRefresh).toBe(false);
+  });
 });
 
 describe('the waterfall contrast migration', () => {

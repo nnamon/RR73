@@ -808,14 +808,13 @@ describe('records', () => {
 });
 
 describe('watchdog', () => {
-  it('stops Tx after 6 min without a touch while the message stays the same', () => {
+  it('stops Tx 6 min after the last action', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
     s.run(0, 22);
-    // The first CQ is a new message: the count runs from its start, 13:14:00.5.
-    s.send({ type: 'tick', nowMs: s.at(24, 0.45) });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.05) });
     expect(s.st.txEnabled).toBe(true);
-    s.send({ type: 'tick', nowMs: s.at(24, 0.5) });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.1) });
     expect(s.st).toMatchObject({ txEnabled: false, hunt: false });
     expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Watchdog stopped Tx after 6 min' });
     expect(s.effects.at(-2)).toEqual({ type: 'cancelTx', stopPlaying: true });
@@ -831,14 +830,94 @@ describe('watchdog', () => {
     expect(s.st.txEnabled).toBe(false);
   });
 
-  it('resets when the transmitted message changes', () => {
-    const s = new Sim();
+  it('counts from the last action while the QSO moves on, unless Responses refresh watchdog is on', () => {
+    for (const refresh of [false, true]) {
+      const s = new Sim({ watchdogRefresh: refresh });
+      s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+      s.run(0, 20);
+      s.run(21, 22, { 21: ['9V1NE K1ABC FN42'] });
+      expect(s.st.watchdogFromMs, String(refresh)).toBe(refresh ? s.at(22, 0.5) : s.at(0, 0.1));
+    }
+  });
+
+  it('lets a QSO under way finish, logs it, then turns Tx off', () => {
+    const s = new Sim({ watchdogMs: 30_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'tick', nowMs: s.at(4, 1) });
+    expect(s.st).toMatchObject({ txEnabled: true, watchdogEnding: true });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Watchdog ends Tx after this QSO' });
+    s.run(4, 6, { 5: ['9V1NE JA1KXM RR73'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE 73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st).toMatchObject({ txEnabled: false, watchdogEnding: false, phase: 'idle' });
+    expect(s.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 0.5 min');
+  });
+
+  it('starts nothing after the QSO it let finish: no next caller, CQ or Hunt pick', () => {
+    const s = new Sim({ run: true });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    s.run(0, 20);
-    s.run(21, 22, { 21: ['9V1NE K1ABC FN42'] });
-    s.send({ type: 'tick', nowMs: s.at(25) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    expect(s.st.watchdogEnding).toBe(true);
+    s.run(23, 28, { 23: ['9V1NE K1ABC R-05'], 25: ['9V1NE W1AW FN31'] });
+    expect(texts(s).slice(-2)).toEqual(['22:K1ABC 9V1NE -10', '24:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st).toMatchObject({ txEnabled: false, hunt: false });
+
+    const h = new Sim({ watchdogMs: 60_000 });
+    h.send({ type: 'hunt', on: true, nowMs: h.at(0, 5) });
+    h.run(0, 2, { 1: ['CQ JA1KXM PM95'] });
+    h.run(3, 3, { 3: ['9V1NE JA1KXM -09'] });
+    h.send({ type: 'tick', nowMs: h.at(4, 6) });
+    h.run(4, 8, { 5: ['9V1NE JA1KXM RR73'], 7: ['CQ K1ABC FN42'] });
+    expect(texts(h)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE 73']);
+    expect(h.st).toMatchObject({ txEnabled: false, hunt: false, partner: null });
+  });
+
+  it('stops at once with no reply yet, or when the QSO it let finish gives up', () => {
+    const s = new Sim({ watchdogMs: 60_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 5);
+    s.send({ type: 'tick', nowMs: s.at(6, 0.3) });
+    expect(s.st).toMatchObject({ txEnabled: false, watchdogEnding: false });
+    expect(s.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 1 min');
+
+    const g = new Sim({ watchdogMs: 30_000 });
+    g.call(1, 'CQ JA1KXM PM95');
+    g.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    g.send({ type: 'tick', nowMs: g.at(4, 1) });
+    // No reply to the R-report: it repeats to the retry limit, then the call pauses.
+    g.run(4, 12);
+    expect(g.st.paused).toBe(true);
+    g.send({ type: 'tick', nowMs: g.at(13, 1) });
+    expect(g.st).toMatchObject({ txEnabled: false, watchdogEnding: false });
+    expect(g.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 0.5 min');
+  });
+
+  it('a touch while the last QSO finishes restarts the count, and CQ carries on after it', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    s.send({ type: 'touch', nowMs: s.at(24, 0.3) });
+    expect(s.st).toMatchObject({ watchdogEnding: false, watchdogFromMs: s.at(24, 0.3) });
+    s.run(23, 26, { 23: ['9V1NE K1ABC R-05'] });
+    expect(texts(s).slice(-2)).toEqual(['24:K1ABC 9V1NE RR73', '26:CQ 9V1NE OJ11']);
     expect(s.st.txEnabled).toBe(true);
-    expect(s.st.watchdogFromMs).toBe(s.at(22, 0.5));
+  });
+
+  it('keeps Stop after QSO set while the last QSO finishes', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    s.send({ type: 'stopAfterQso', on: true, nowMs: s.at(24, 0.3) });
+    expect(s.st).toMatchObject({ stopAfter: true, watchdogEnding: false });
+    s.run(23, 26, { 23: ['9V1NE K1ABC R-05'] });
+    expect(texts(s).at(-1)).toBe('24:K1ABC 9V1NE RR73');
+    expect(s.st.txEnabled).toBe(false);
+    expect(s.notices().at(-1)?.text).toBe('Watchdog ends Tx after this QSO');
   });
 
   it('takes any limit the operator sets', () => {
