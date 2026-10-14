@@ -6,6 +6,17 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - CQ tapped before audio runs shows Audio off and tries once a slot. Before, the refusals planned slot after slot until the browser ran out of stack, which left the CQ about 26 hours ahead, so it never went out.
 
+## 0.10.4 · 2026-10-14
+
+- Messages to your callsign lead their slot, with a solid red edge and bold text. 9V1NE matches VK3/9V1NE and 9V1NE/P.
+- While calling a station or in a QSO, unrelated decodes dim to 40 % (60 % with Increase Contrast). That station's messages, messages to you, your own rows and the slot bars keep full contrast.
+- Consecutive slots with no decodes share one bar with the span: "22:15:00 to 22:16:15 no decodes".
+
+## 0.10.3 · 2026-10-13
+
+- Hunt moves on to the next CQ as soon as the station it calls answers another station. It used to wait for that QSO to end and call once more, as Tail-end does for a call by hand.
+- The frequency ruler lies over the bottom edge of the waterfall, with its ticks on the edge and the numbers above them, so the picture is 22 pt taller. The Tx and Rx markers pass behind the numbers.
+
 ## 0.10.2 · 2026-10-13
 
 - The Logged notice and the notices about updates float above Operate's buttons. In 0.10.1 they pushed the buttons up.

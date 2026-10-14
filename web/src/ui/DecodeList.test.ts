@@ -232,3 +232,41 @@ describe('decode colours', () => {
     expect(c.className).not.toMatch(/hl-/);
   });
 });
+
+describe('messages to you, focus and runs of empty slots', () => {
+  it('gives a message to you its own class over its decode colour', () => {
+    const target = render([
+      { kind: 'row', id: 'a', slotStartMs, row: row(d('9V1NE JA1KXM -09', -9, 0.2, 1418), { hl: 'myCall' }), toYou: true },
+      { kind: 'row', id: 'b', slotStartMs, row: row(d('JA1KXM 9V1NE R-14', -9, 0.2, 1418)), old: true, toYou: true },
+      { kind: 'row', id: 'c', slotStartMs, row: row(d('CQ A41ZZ LL93', -4, 0.2, 956), { hl: 'cq' }) },
+    ]);
+    const [a, b, c] = [...target.querySelectorAll<HTMLElement>('button.dr')];
+    expect(a.classList.contains('to-you') && a.classList.contains('hl-background')).toBe(true);
+    expect(b.classList.contains('to-you') && b.classList.contains('old')).toBe(true);
+    expect(c.classList.contains('to-you')).toBe(false);
+  });
+
+  it('dims rows marked by the focus, and slot bars never', () => {
+    const target = render([
+      { kind: 'header', id: 'h', time: '13:14:15', detail: '2 decodes', parity: 'odd', text: '13:14:15 UTC · 2 decodes' },
+      { kind: 'row', id: 'a', slotStartMs, row: row(d('CQ A41ZZ LL93', -4, 0.2, 956)), dim: true },
+      { kind: 'row', id: 'b', slotStartMs, row: row(d('CQ VJ6X OF78', -4, 0.2, 506)) },
+    ]);
+    const [a, b] = [...target.querySelectorAll<HTMLElement>('button.dr')];
+    expect(a.classList.contains('dim')).toBe(true);
+    expect(b.classList.contains('dim')).toBe(false);
+    expect(target.querySelector('li.slot-bar')?.className).not.toMatch(/dim/);
+    // The dim level is a token, raised with Increase Contrast.
+    const tokens = readFileSync(join(process.cwd(), 'src/styles/tokens.css'), 'utf8');
+    expect(tokens).toMatch(/--rr-focus-dim:\s*0\.4;/);
+    expect(tokens).toMatch(/@media \(prefers-contrast: more\) \{\s*:root \{\s*--rr-focus-dim:\s*0\.6;/);
+  });
+
+  it('draws a run of empty slots as one bar with its span and no parity', () => {
+    const el = render([{ kind: 'header', id: 'hq1', time: '22:15:00', until: '22:16:15', detail: 'no decodes', parity: null, text: '22:15:00 to 22:16:15 UTC · no decodes' }]);
+    const bar = el.querySelector('li.slot-bar');
+    expect(bar?.classList.contains('quiet')).toBe(true);
+    expect([...(bar?.querySelectorAll('[aria-hidden=true]') ?? [])].map((s) => s.textContent)).toEqual(['22:15:00', 'to', '22:16:15', 'no decodes']);
+    expect(bar?.querySelector('.visually-hidden')?.textContent).toBe('22:15:00 to 22:16:15 UTC · no decodes');
+  });
+});

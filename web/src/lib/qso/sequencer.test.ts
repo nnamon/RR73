@@ -556,20 +556,18 @@ describe('Hunt', () => {
     expect(s.at(50, 0.1) - s.at(10, 0.1)).toBe(IGNORE_MS);
   });
 
-  it('waits for a lost station, calls once more, and moves on when it does not answer', () => {
-    const s = new Sim();
-    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
-    s.run(0, 10, { 1: [cqs[0]], 3: ['DV5CEL JA1KXM -05', cqs[1]], 5: ['DV5CEL JA1KXM RR73', cqs[1]], 7: ['CQ JA1KXM PM95', cqs[1]], 9: [cqs[1]] });
-    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '6:JA1KXM 9V1NE OJ11', '8:K1ABC 9V1NE OJ11', '10:K1ABC 9V1NE OJ11']);
-    expect(s.st.ignored.map((i) => i.call)).toEqual(['JA1KXM']);
-  });
-
-  it('moves on at once from a lost station with tail-ending off', () => {
-    const s = new Sim({ tailEnd: false });
-    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
-    s.run(0, 4, { 1: [cqs[0]], 3: ['DV5CEL JA1KXM -05', cqs[1]] });
-    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:K1ABC 9V1NE OJ11']);
-    expect(s.st.ignored).toEqual([]);
+  it('moves on to the next CQ at once from a lost station, with tail-ending on or off', () => {
+    for (const tailEnd of [true, false]) {
+      const s = new Sim({ tailEnd });
+      s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+      // JA1KXM answers DV5CEL in slot 3; K1ABC's CQ in the same slot is called in slot 4.
+      s.run(0, 8, { 1: [cqs[0]], 3: ['DV5CEL JA1KXM -05', cqs[1]], 5: ['DV5CEL JA1KXM RR73', '9V1NE K1ABC -11'], 7: ['CQ JA1KXM PM95'] });
+      expect(texts(s).slice(0, 2), `tail-end ${tailEnd}`).toEqual(['2:JA1KXM 9V1NE OJ11', '4:K1ABC 9V1NE OJ11']);
+      expect(s.notices().map((n) => n.text)).toContain('JA1KXM answered DV5CEL');
+      // No tail-end call to JA1KXM after its RR73, and it is free to be called again later.
+      expect(texts(s).filter((t) => t.includes('JA1KXM'))).toEqual(['2:JA1KXM 9V1NE OJ11']);
+      expect(s.st.ignored).toEqual([]);
+    }
   });
 
   it('and CQ stop each other', () => {
