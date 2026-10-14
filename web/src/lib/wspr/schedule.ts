@@ -96,6 +96,23 @@ export function beaconOnSlot(nowMs: number, pct: number, lastTxSlot: number | nu
   return lastTxSlot === null ? slot : Math.max(slot, lastTxSlot + minGapSlots(pct) * WSPR_SLOT_MS);
 }
 
+/**
+ * The slot Transmit next slot takes at `nowMs`: the next slot at least 10 s away, and no sooner
+ * than the shortest gap after a slot in `busy` before it: the last transmission, one on air, the
+ * beacon's next slot. At 50% and below a receive slot then follows every transmission, as the
+ * radio needs to cool. The beacon's own slot is shared; a beacon slot after it is drawn again
+ * once it is sent (afterSlot in lib/state/wspr.svelte.ts).
+ */
+export function onceSlotAt(nowMs: number, pct: number, busy: readonly number[]): number {
+  const gap = minGapSlots(pct) * WSPR_SLOT_MS;
+  let slot = firstTxSlot(nowMs);
+  for (;;) {
+    const near = busy.find((b) => b < slot && slot - b < gap);
+    if (near === undefined) return slot;
+    slot = near + gap;
+  }
+}
+
 /** When Stop beacon after ends a beacon turned on at `startedAtMs`, UTC ms; null when it is Off. */
 export function stopsAtMs(startedAtMs: number, stopAfterMin: number): number | null {
   return stopAfterMin > 0 ? startedAtMs + stopAfterMin * 60_000 : null;

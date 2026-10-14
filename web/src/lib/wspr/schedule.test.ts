@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { LEAD_MS, TX_PCTS, beaconOnSlot, durationText, firstTxSlot, gapSlots, minGapSlots, nextStopAfter, nextTxSlot, normalisePct, normaliseStopAfter, soonestSlot, stopsAtMs } from './schedule';
+import { LEAD_MS, TX_PCTS, beaconOnSlot, onceSlotAt, durationText, firstTxSlot, gapSlots, minGapSlots, nextStopAfter, nextTxSlot, normalisePct, normaliseStopAfter, soonestSlot, stopsAtMs } from './schedule';
 
 const at = (h: number, m: number, s = 0, ms = 0) => Date.UTC(2026, 9, 14, h, m, s, ms);
 
@@ -196,3 +196,27 @@ describe('Tx percentages', () => {
     expect(normalisePct(0)).toBeNull();
   });
 });
+
+describe('Transmit next slot', () => {
+  it('takes the next slot at least 10 s away when nothing went out near it', () => {
+    expect(onceSlotAt(at(14, 5, 28), 20, [])).toBe(at(14, 6));
+    expect(onceSlotAt(at(14, 5, 28), 20, [at(13, 0)])).toBe(at(14, 6));
+  });
+
+  it('keeps a receive slot after a transmission at 50% and below, also one on air or the beacon’s next', () => {
+    // Sent in 14:04: 14:06 would follow at once.
+    expect(onceSlotAt(at(14, 5, 28), 20, [at(14, 4)])).toBe(at(14, 8));
+    expect(onceSlotAt(at(14, 5, 28), 50, [at(14, 4)])).toBe(at(14, 8));
+    // The beacon's slot 14:06 comes first, 2 s away: then the shortest gap after it.
+    expect(onceSlotAt(at(14, 5, 58), 20, [at(14, 6)])).toBe(at(14, 10));
+    // The beacon's own slot is shared: one transmission.
+    expect(onceSlotAt(at(14, 5, 28), 20, [at(14, 6)])).toBe(at(14, 6));
+    expect(onceSlotAt(at(14, 5, 28), 20, [at(14, 4), at(14, 8)])).toBe(at(14, 8));
+  });
+
+  it('may follow at once above 50%', () => {
+    expect(onceSlotAt(at(14, 5, 28), 100, [at(14, 4)])).toBe(at(14, 6));
+    expect(onceSlotAt(at(14, 5, 28), 55, [at(14, 4)])).toBe(at(14, 6));
+  });
+});
+
