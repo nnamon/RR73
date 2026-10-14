@@ -43,7 +43,8 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`, `wsprd`, `wsprsim`, `wsprcode`) in a container, used as the decoder and codec reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
-| `tools/refdata` | Build-time download and conversion of the country file, LoTW, POTA and SOTA lists into `web/public/data/`. See `docs/reference-data.md`. |
+| `tools/refdata` | Build-time conversion of the country file and download and conversion of the LoTW, POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
+| `refdata/bigcty` | The Big CTY release the app ships as its country file (MIT licence). |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
 | `docs/decisions/` | Architecture decision records. |

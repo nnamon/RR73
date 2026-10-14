@@ -1,6 +1,6 @@
 # Reference data
 
-RR73 ships four reference lists, fetched when the app is built: the country file, the LoTW user list, the POTA parks list and the SOTA summits list. `tools/refdata/build.mjs` downloads them and converts them to JSON in `web/public/data/`, which Vite copies into the app. The app reads them through `web/src/lib/reference/`. Nothing is fetched from these sources while the app runs.
+RR73 ships four reference lists: the country file, the LoTW user list, the POTA parks list and the SOTA summits list. The country file is a Big CTY release committed in the repository, in `refdata/bigcty/`; the other three are downloaded when the app is built. `tools/refdata/build.mjs` converts them to JSON in `web/public/data/`, which Vite copies into the app. The app reads them through `web/src/lib/reference/`. Nothing is fetched from these sources while the app runs, and the build makes no request to country-files.com.
 
 ## Sources and terms
 
@@ -8,7 +8,7 @@ Terms were checked on 13 October 2026. Each source's terms also travel in `data/
 
 | Source | Publisher | Download | Terms |
 | --- | --- | --- | --- |
-| Big CTY country file | Jim Reisert AD1C, country-files.com | The newest `bigcty-YYYYMMDD.zip` linked from https://www.country-files.com/category/big-cty/ (cty.dat, cty.csv, copyright.txt) | MIT licence (https://www.country-files.com/copyright/). `cty.json` carries the copyright and permission notice. |
+| Big CTY country file | Jim Reisert AD1C, country-files.com | Committed in `refdata/bigcty/` from the `bigcty-YYYYMMDD.zip` its `release.json` names. `update-bigcty.mjs` fetches newer releases linked from https://www.country-files.com/category/big-cty/ | MIT licence (https://www.country-files.com/copyright/). `cty.json` carries the copyright and permission notice. |
 | LoTW user activity | ARRL, Logbook of The World | https://lotw.arrl.org/lotw-user-activity.csv | No terms published for the file. ARRL documents it for logging software at https://lotw.arrl.org/lotw-help/developer-query-lotw-users/ and updates it about once a week. |
 | POTA parks | Parks on the Air | https://pota.app/all_parks_ext.csv | No terms found on docs.pota.app or its resources page. The POTA logo needs a licence; RR73 does not use it. |
 | SOTA summits | Summits on the Air | https://storage.sota.org.uk/summitslist.csv | Source: Summits on the Air. No endorsement implied. No licence found for the list. |
@@ -167,18 +167,41 @@ Tested in Chromium through Playwright: lookups online, then offline with the cou
 
 ## Refreshing
 
-`build.mjs` asks each source at most once per UTC day, with one attempt and no retries. It keeps each source's download, HTTP validators and converted files in `.refdata-cache/`, stamped with a hash of the converter code: a later day's request can come back 304 Not Modified, and a changed converter converts the kept download again without a request. When a download fails, the build ships the older copy (status `stale`) or goes on without the source (status `missing`), and the app reports the source as unavailable. The country file is the exception: every CQ row reads it, so with no download and no cached copy the build ships the Big CTY release pinned in `fixtures/reference/bigcty-20260915` (status `stale`, with a note), and `verify-dist.mjs` fails a build that has no country file. 0.11.1 to 0.12.2 shipped without one after the category page changed.
+`build.mjs` asks each downloaded source (LoTW, POTA and SOTA) at most once per UTC day, with one attempt and no retries. It keeps each source's download, HTTP validators and converted files in `.refdata-cache/`, stamped with a hash of the converter code: a later day's request can come back 304 Not Modified, and a changed converter converts the kept download again without a request. When a download fails, the build ships the older copy (status `stale`) or goes on without the source (status `missing`), and the app reports the source as unavailable. `manifest.json` records each source's status, download and check times, the publisher's data date, sizes and terms.
 
-Big CTY: since October 2026 the category page (`https://www.country-files.com/category/big-cty/`) shows each release as an excerpt, and only the release's own post links its zip. The build reads the category page, follows the newest release post when no newer zip link is on the page, and downloads the zip it links: three requests in one attempt. `manifest.json` records each source's status, download and check times, the publisher's data date, sizes and terms.
+The country file takes no part in this. Every CQ row reads it, so it does not depend on a download: every build converts the release committed in `refdata/bigcty/`, with no request and no cache entry. The manifest lists it with status `ok`, the release's date and zip URL, and a note that the copy is the one committed in the repository. `verify-dist.mjs` fails a build that has no country file. 0.11.1 to 0.12.2 shipped without one after the site's category page changed, and 0.12.3 fell back to a pinned release when its download failed.
+
+### The committed country file
+
+`refdata/bigcty/` holds one Big CTY release:
+
+| File | Contents |
+| --- | --- |
+| `cty.dat.gz` | cty.dat as released |
+| `cty-columns.csv.gz` | cty.csv without its alias column, which repeats cty.dat. It gives each entity its ADIF DXCC code. |
+| `copyright.txt` | The release's copyright and MIT permission notice, as released. `cty.json` carries it. |
+| `release.json` | The release date and the URL of the zip the files came from |
+
+The build, the unit tests (`bigCtyFixture` in `web/src/lib/reference/testing.ts`) and the tool tests read these files. There is no other copy.
+
+Big CTY releases a few times a month: the category page listed 10 releases from 27 June to 15 September 2026 when it was read on 14 October 2026, with none after. To take a newer release, in the node container from the repository root:
+
+```sh
+docker compose run --rm node node tools/refdata/update-bigcty.mjs
+```
+
+The command reads the category page. Since October 2026 the page shows each release as an excerpt, and only the release's own post links its zip. When the newest release is newer than the committed one, the command reads its post, downloads the zip, converts it as the build does and replaces the four files: three requests. Otherwise it reads the category page only and changes nothing. It prints the two release dates, the entity count, the entities added, removed or renamed, and the number of prefixes and callsigns. A failed request, or a zip that lacks cty.dat, cty.csv or copyright.txt or does not convert, leaves the files as they were.
+
+The command commits nothing. Review the diff, run the tool tests and the unit tests, and commit the files with a changelog line. `dxcc.test.ts` checks lookups that the release notes of 15 September 2026 describe, and `names.test.ts` checks that every entity has a display name of at most 14 characters: a failure after an update names the callsign or entity that changed.
 
 In CI the "Reference data" job keeps `.refdata-cache` in the Actions cache under the UTC date and chooses what to ask with `tools/refdata/ci-plan.mjs`:
 
-- Runs on main may ask every source, and the build asks each at most once per UTC day.
-- Branches, tags and pull requests restore the newest cache they can read, their own or main's, and build from it with no requests. A run that restores no cache at all asks, so a build before main has a cache still gets the country file.
+- Runs on main may ask LoTW, POTA and SOTA, and the build asks each at most once per UTC day. No run asks for the country file.
+- Branches, tags and pull requests restore the newest cache they can read, their own or main's, and build from it with no requests. A run that restores no cache at all asks, so a build before main has a cache still gets the LoTW and parks lists.
 - The SOTA list is asked at most once per UTC day across the repository. Actions caches belong to one branch each, so the job lists the repository's caches through the GitHub API (`actions: read`) for an entry `sota-asked-<date>`, and asks only when there is none. It saves that entry before the request goes out. A failed listing counts as asked.
 - The build records each attempt in the cache before its request, and the job saves the cache after a failed or cancelled build too, so a second run that day does not ask again.
 
-The web and end-to-end jobs take the output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. A release ships the data in main's newest cache. The end-to-end test of the country on CQ rows serves the country file from `fixtures/` and does not depend on the data the build fetched.
+The web and end-to-end jobs take the output as an artifact, and the web job checks the built app with `tools/refdata/verify-dist.mjs`: every listed file present and readable, the country file and manifest precached, nothing optional precached. A release ships the country file committed at its commit and the other lists from main's newest cache. The end-to-end test of the country on CQ rows serves the country file converted from `refdata/bigcty/` by the test helper and does not depend on a build of the reference data.
 
 Locally, in the node container from the repository root:
 
@@ -189,6 +212,7 @@ docker compose run --rm node node tools/refdata/build.mjs --offline        # reb
 docker compose run --rm node npm --prefix web run build
 docker compose run --rm node node tools/refdata/verify-dist.mjs web/dist
 docker compose run --rm node npm run test:tools                             # build script tests, no network
+docker compose run --rm node node tools/refdata/update-bigcty.mjs           # a newer Big CTY into refdata/bigcty, to review and commit
 ```
 
 Without `web/public/data` the app builds and runs; every lookup reports its source as unavailable.
@@ -200,4 +224,5 @@ Without `web/public/data` the app builds and runs; every lookup reports its sour
 - Two runs allowed to ask SOTA that list the caches within the same few seconds both ask: the entry is saved after the listing. Only main and runs without any cache may ask, so it takes a push to main and a run without a cache at the same moment. When saving the entry fails, a later run that day asks again.
 - On the day main first runs the job, a branch that asked SOTA the same day leaves main without the summits list until the next day.
 - A search near a country with many parks reads that country's whole shard: 388 kB gzipped for France. Splitting the largest shards by region would cut it.
-- Big CTY is found by scraping the category page for the newest zip link. A site redesign stops updates until `latestBigCty` follows it; the cached copy keeps shipping meanwhile.
+- `update-bigcty.mjs` finds releases by scraping the category page and the release post. A site redesign stops updates until `findLatestBigCty` follows it. Builds are unaffected and ship the committed release meanwhile.
+- The country file is as current as the last update someone committed. Nothing reports that a newer release is out.
