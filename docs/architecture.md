@@ -33,14 +33,17 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-ft8` | FT8 and FT4 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis. No decoding logic. |
 | `crates/rr73-dsp` | Shared DSP: FFT plans, windows, spectrogram with configurable bin and time resolution, resampling. |
 | `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. |
-| `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes. |
+| `crates/rr73-rtty` | RTTY: the ITA2 code with US and ITA2 figures, the continuous-phase AFSK encoder and the streaming decoder. See `docs/experiments/0005-rtty.md`. |
+| `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes; continuous signals with the SNR in 3000 Hz. |
 | `crates/rr73-corpus` | Corpus format: slot WAV plus sidecar JSON, reading, writing, and decode matching and scoring. |
 | `crates/rr73-bench` | Command-line bench: synthesise, run, compare. |
-| `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app. |
+| `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app; `rtty` holds the streaming RTTY receiver and the transmitter. |
 | `web/` | The app. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |
 | `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`) in a container, used as the decoder reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
+| `tools/minimodem` | minimodem in a container, the reference RTTY decoder for `rr73-bench rtty`. Never linked or copied. |
+| `tools/wasm-cost` | Cost of the WebAssembly exports per second of audio in headless Chromium and WebKit. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
