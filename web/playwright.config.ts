@@ -46,8 +46,8 @@ const reviewProjects = REVIEW
   ? [
       { name: 'slot-record', testMatch: /slot-record\.spec/, use: { ...desktop, ...holeMic } },
       // layout.spec also matches colours-layout.spec. Screenshots go to test-results/screens.
-      { name: 'review-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
-      { name: 'review-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
+      { name: 'review-375x667', testMatch: /(layout|states|operate)\.spec/, use: iphone(375, 667, 2) },
+      { name: 'review-393x852', testMatch: /(layout|states|operate)\.spec/, use: iphone(393, 852, 3) },
     ]
   : [];
 

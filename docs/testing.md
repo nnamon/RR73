@@ -26,7 +26,7 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 - `review-375x667` and `review-393x852` run every layout test in both themes and `states.spec.ts`, which walks Operate through receiving, CQ, calling, a QSO and Repeat CQ with real transmissions. They save the screens to `web/test-results/screens` (Operate states in `screens/states`, decode colours in `screens/colours`), named by size, theme and screen, such as `webkit-375x667-dark-log.png`. A run took 3.8 min with 5 workers on a 10-core machine (180 tests, 200 screens), most of it the 4 runs of `states.spec.ts`, 2.3 to 2.6 min each, which wait for real slots.
 - `slot-record` checks the lost-audio measure behind the decode test's skip (below).
 
-`e2e/operate.spec.ts` keeps the checks from `states.spec.ts` that CI needs: one bottom bar height in every state and the decode rows on screen, with decodes injected and no transmission.
+`e2e/operate.spec.ts` keeps the checks from `states.spec.ts` that CI needs, with decodes injected and no transmission: one bottom bar height in every state, the decode rows on screen, messages to you leading their slot, the dimming of unrelated rows while calling or in a QSO (and none while calling CQ, after End QSO or with Tx off), and a run of empty slots as one bar. The review projects also run it, which saves the empty-slot run in both themes at both sizes.
 
 ## Audio tests on a loaded host
 
