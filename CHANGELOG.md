@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.10.5 · 2026-10-14
 
 - Colours follow iOS: Apple's system colours, grouped backgrounds, system greys and hairline separators, in light and dark.
 - The dark theme has a true black background, with groups and sheets in dark grey.
