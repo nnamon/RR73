@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- CQ rows show the caller's country again. Since 0.11.1 the app shipped without its country file, because the country file's download page changed. The build now follows the new page, and when the download fails it ships the 15 September 2026 release.
+
 ## 0.12.2 · 2026-10-14
 
 - FT8 decoding goes on after each slot's first decodes with two finer searches of what is left, and adds what they find to the slot in the list within 2 s. Of the messages WSJT-X decodes, RR73 now finds 95 % on the ft8_lib test files, up from 89 %, and 84 % on 40m recordings, up from 74 %. It decodes signals 0.9 dB weaker in steady noise and 1.6 dB weaker with fading. The sequencer, Hunt and Repeat CQ act on these decodes too.

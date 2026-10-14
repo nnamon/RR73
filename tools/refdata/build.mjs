@@ -30,7 +30,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { download } from './http.mjs';
-import { BIGCTY_LIST, BIGCTY_PAGE, convertBigCty, latestBigCty } from './cty.mjs';
+import { BIGCTY_PAGE, PINNED_BIGCTY, convertBigCty, convertPinnedBigCty, findLatestBigCty } from './cty.mjs';
 import { LOTW_URL, convertLotw } from './lotw.mjs';
 import { POTA_URL, convertPota } from './pota.mjs';
 import { SOTA_URL, convertSota } from './sota.mjs';
@@ -59,14 +59,15 @@ export const SOURCES = {
     publisher: 'Jim Reisert AD1C, https://www.country-files.com',
     terms: 'MIT licence (https://www.country-files.com/copyright/). cty.json carries the copyright and permission notice.',
     async fetch({ get, prev }) {
-      const list = await get(BIGCTY_LIST);
-      const latest = latestBigCty(list.body.toString('utf8'));
-      if (!latest) throw new Error(`${BIGCTY_LIST} links no Big CTY zip`);
+      const latest = await findLatestBigCty(async (url) => (await get(url)).body.toString('utf8'));
       if (prev?.url === latest.url) return { unchanged: true };
       const zip = await get(latest.url);
       return { url: latest.url, body: zip.body, info: { date: latest.date } };
     },
     convert: (body, { url, info }) => convertBigCty(body, { url, date: info.date }),
+    // The country file is core: the app precaches it and every CQ row reads it. With no download
+    // and no cached copy, the build ships the release pinned in fixtures/.
+    pinned: () => ({ ...convertPinnedBigCty(), url: PINNED_BIGCTY.url }),
   },
   lotw: {
     title: 'LoTW user activity list',
@@ -243,7 +244,10 @@ function manifestEntry(src, meta, hasFiles, outDir) {
       entry.gzipBytes += gzipSync(body, { level: 9 }).length;
     }
   }
-  if (entry.status === 'stale') entry.note = `The download on ${day(meta.attemptedAt)} failed (${meta.error}). This copy is from ${day(meta.fetchedAt)}.`;
+  if (meta.pinned) {
+    entry.status = 'stale';
+    entry.note = `${meta.error ? `The download on ${day(meta.attemptedAt)} failed (${meta.error}), and` : 'This build made no download, and'} no cached copy was available. This copy is the release of ${meta.dataDate} pinned in fixtures/.`;
+  } else if (entry.status === 'stale') entry.note = `The download on ${day(meta.attemptedAt)} failed (${meta.error}). This copy is from ${day(meta.fetchedAt)}.`;
   if (entry.status === 'missing') entry.note = meta.error ? `The download on ${day(meta.attemptedAt)} failed (${meta.error}).` : 'This build has no copy.';
   return entry;
 }
@@ -271,6 +275,14 @@ export async function buildAll({ outDir, cacheDir, only = SOURCE_IDS, ask = SOUR
     const src = SOURCES[id];
     const { meta, hasFiles, dir } = await refresh(id, src, { cacheDir, now, fetch, offline, ask, converter, log });
     if (hasFiles) for (const f of meta.files) cpSync(join(dir, 'files', f), join(outDir, f));
+    if (!hasFiles && src.pinned) {
+      const pinned = src.pinned();
+      for (const [path, body] of Object.entries(pinned.files)) writeFileSync(join(outDir, path), body);
+      log(`${id}: no download and no cached copy; shipping the release pinned in fixtures/ (${pinned.dataDate})`, 'warning');
+      const pinnedMeta = { ...meta, url: pinned.url, fetchedAt: null, checkedAt: null, dataDate: pinned.dataDate, rawBytes: null, records: pinned.records, entry: pinned.entry, files: Object.keys(pinned.files), pinned: true };
+      manifest.sources[id] = manifestEntry(src, pinnedMeta, true, outDir);
+      continue;
+    }
     manifest.sources[id] = manifestEntry(src, meta, hasFiles, outDir);
   }
   writeFileSync(join(outDir, 'manifest.json'), JSON.stringify(manifest, null, 2));

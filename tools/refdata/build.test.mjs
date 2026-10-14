@@ -130,6 +130,39 @@ test('a failed first download: the source is missing and the build goes on', asy
   assert.equal(manifest.sources.cty.status, 'ok');
 });
 
+// The category page as country-files.com serves it from October 2026: each release an excerpt,
+// with the zip linked only from the release's own post.
+const EXCERPTS = `<article><a href="https://www.country-files.com/big-cty-06-september-2026-3/">Big CTY – 06 September 2026</a>
+<a href="https://www.country-files.com/big-cty-06-september-2026-3/#more-2806">Continue reading</a></article>
+<article><a href="https://www.country-files.com/big-cty-15-september-2026/">Big CTY – 15 September 2026</a>
+<a href="https://www.country-files.com/big-cty-15-september-2026/#more-2815">Continue reading</a></article>`;
+const POST = 'https://www.country-files.com/big-cty-15-september-2026/';
+
+test('a category page of excerpts: the newest release post gives the zip', async () => {
+  const d = dirs();
+  const fetch = fakeFetch({ ...network(), [BIGCTY_LIST]: { body: EXCERPTS }, [POST]: { body: `<p>Download <a href="${ZIP_URL}">bigcty-20260915.zip</a></p>` } });
+  const manifest = readManifest(await buildAll({ ...d, now: DAY1, fetch, only: ['cty'] }));
+  assert.equal(manifest.sources.cty.status, 'ok');
+  assert.equal(manifest.sources.cty.url, ZIP_URL);
+  assert.deepEqual(fetch.calls.map((c) => c.url), [BIGCTY_LIST, POST, ZIP_URL]);
+});
+
+test('no country file downloaded and none cached: the release pinned in fixtures/ ships', async () => {
+  const d = dirs();
+  const lines = [];
+  // 0.11.1 to 0.12.2 shipped without a country file when this happened.
+  const fetch = fakeFetch({ ...network(), [BIGCTY_LIST]: { body: '<html>no releases</html>' } });
+  const manifest = readManifest(await buildAll({ ...d, now: DAY1, fetch, only: ['cty'], log: (l) => lines.push(l) }));
+  const cty = manifest.sources.cty;
+  assert.equal(cty.status, 'stale');
+  assert.equal(cty.entry, 'cty.json');
+  assert.equal(cty.dataDate, '2026-09-15');
+  assert.equal(cty.records, 346);
+  assert.match(cty.note ?? '', /failed .* no cached copy was available\. This copy is the release of 2026-09-15 pinned in fixtures\//);
+  assert.ok(existsSync(join(d.outDir, 'cty.json')));
+  assert.ok(lines.some((l) => /^cty: no download and no cached copy; shipping the release pinned in fixtures\//.test(l)));
+});
+
 test('a converter error counts as a failed download', async () => {
   const d = dirs();
   const broken = fakeFetch({ ...network(), [SOTA_URL]: { body: 'not the summits list' } });
@@ -241,4 +274,15 @@ test('verify-dist: a consistent build passes; missing shards and wrong precache 
   assert.deepEqual(verifyDist(dist), [`pota: data/pota/${index.shards[0].file} is missing`]);
   rmSync(join(dist, 'data', 'manifest.json'));
   assert.match(verifyDist(dist)[0], /manifest.json is missing/);
+});
+
+test('verify-dist: a build without the country file fails', async () => {
+  const { verifyDist } = await import('./verify-dist.mjs');
+  const { cpSync } = await import('node:fs');
+  const d = dirs();
+  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['lotw'] });
+  const dist = join(tempDir('dist'), 'dist');
+  cpSync(d.outDir, join(dist, 'data'), { recursive: true });
+  writeFileSync(join(dist, 'sw.js'), 'precacheAndRoute([{url:"data/manifest.json",revision:"1"},{url:"data/cty.json",revision:"1"}])');
+  assert.ok(verifyDist(dist).includes('cty: the country file is missing; the build pins a release in fixtures/ for this'));
 });

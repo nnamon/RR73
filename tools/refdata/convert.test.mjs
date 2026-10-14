@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { readCtyJson, readLotwJson, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
-import { convertBigCty, latestBigCty } from './cty.mjs';
+import { bigCtyPosts, convertBigCty, convertPinnedBigCty, latestBigCty } from './cty.mjs';
 import { convertLotw } from './lotw.mjs';
 import { convertPota } from './pota.mjs';
 import { convertSota, dmyNumber } from './sota.mjs';
@@ -165,4 +165,25 @@ test('SOTA: day-month-year dates', () => {
   assert.equal(dmyNumber('31/12/2099'), 20991231);
   assert.equal(dmyNumber('1/8/2026'), 20260801);
   assert.equal(dmyNumber('2026-08-01'), null);
+});
+
+test('bigCtyPosts: release posts newest first, a WordPress "-3" slug and a #more link counted once', () => {
+  const page = ['14-july-2026', '06-september-2026-3', '15-september-2026', '15-september-2026/#more-2815', '1-august-2026'].map((s) => `<a href="https://www.country-files.com/big-cty-${s.split('/')[0]}/${s.includes('#') ? s.slice(s.indexOf('#')) : ''}">x</a>`).join('\n');
+  assert.deepEqual(bigCtyPosts(page), [
+    { url: 'https://www.country-files.com/big-cty-15-september-2026/', date: '2026-09-15' },
+    { url: 'https://www.country-files.com/big-cty-06-september-2026-3/', date: '2026-09-06' },
+    { url: 'https://www.country-files.com/big-cty-1-august-2026/', date: '2026-08-01' },
+    { url: 'https://www.country-files.com/big-cty-14-july-2026/', date: '2026-07-14' },
+  ]);
+  assert.deepEqual(bigCtyPosts('<a href="https://www.country-files.com/big-cty-31-smarch-2026/">x</a>'), []);
+});
+
+test('convertPinnedBigCty: the release pinned in fixtures/ converts as its zip would', () => {
+  const r = convertPinnedBigCty();
+  assert.equal(r.entry, 'cty.json');
+  assert.equal(r.dataDate, '2026-09-15');
+  assert.equal(r.records, 346);
+  const json = JSON.parse(r.files['cty.json']);
+  assert.match(json.notice, /^Big CTY by Jim Reisert AD1C/);
+  assert.ok(json.entities.some((e) => e.prefix === 'VK'));
 });
