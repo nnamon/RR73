@@ -26,6 +26,7 @@ export const STATUS = {
   webSdrRefused: 'Web SDR refused the connection',
   webSdrClosed: 'Web SDR closed',
   relayUnreachable: 'Relay unreachable',
+  relayRefused: 'Relay refused the request',
   foxUnknown: 'Fox callsign not in this message',
   houndCalling: (call: string) => `Calling the Fox · ${call}`,
   houndReport: (db: string, call: string) => `Report received · ${db} dB from ${call}`,

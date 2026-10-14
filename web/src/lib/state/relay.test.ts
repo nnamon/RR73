@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { RELAY_DEFAULTS, addRelay, chooseRelay, currentDialHz, relay, relayKey, relayName, removeRelay, setRelayKey, validateRelay, webSdrInput } from './relay.svelte';
+import { RELAY_DEFAULTS, addRelay, addUserReceiver, chooseRelay, currentDialHz, relay, relayKey, relayName, removeRelay, removeUserReceiver, setRelayKey, userReceivers, validateRelay, webSdrInput } from './relay.svelte';
 import { settings } from './settings.svelte';
 import { log } from '../log/log.svelte';
 
@@ -15,7 +15,7 @@ describe('the relay', () => {
   it('keeps only stored values of the right type, and a chosen relay only when it was added', () => {
     expect(validateRelay({ base: A, relays: [{ base: `${A}/`, key: 7 }, { base: 'nowhere' }, { base: A, key: 'x' }, 3], sdrOn: 'yes', receiver: '', receiverName: 'X' })).toEqual({
       base: A,
-      relays: [{ base: A, key: '' }],
+      relays: [{ base: A, key: '', receivers: [] }],
       sdrOn: false,
       receiver: null,
       receiverName: 'X',
@@ -40,8 +40,8 @@ describe('the relay', () => {
     // Adding one again chooses it and keeps its key.
     expect(addRelay(A)).toBe(A);
     expect(relay.relays).toEqual([
-      { base: A, key: 'a'.repeat(16) },
-      { base: B, key: '' },
+      { base: A, key: 'a'.repeat(16), receivers: [] },
+      { base: B, key: '', receivers: [] },
     ]);
     expect(relayKey()).toBe('a'.repeat(16));
     chooseRelay('https://unknown.example.org/qsp');
@@ -52,7 +52,7 @@ describe('the relay', () => {
   });
 
   it('gives the web SDR input only once it is on with a relay and a receiver', () => {
-    Object.assign(relay, { base: A, relays: [{ base: A, key: '' }, { base: B, key: '' }], sdrOn: false, receiver: 'r1', receiverName: 'R1' });
+    Object.assign(relay, { base: A, relays: [{ base: A, key: '', receivers: [] }, { base: B, key: '', receivers: [] }], sdrOn: false, receiver: 'r1', receiverName: 'R1' });
     expect(webSdrInput()).toBeNull();
     relay.sdrOn = true;
     expect(webSdrInput()).not.toBeNull();
@@ -64,7 +64,7 @@ describe('the relay', () => {
   });
 
   it('removes a relay with Undo, and none is in use after removing the one in use', () => {
-    Object.assign(relay, { base: A, relays: [{ base: A, key: 'a'.repeat(16) }, { base: B, key: '' }], sdrOn: true, receiver: 'r1', receiverName: 'R1' });
+    Object.assign(relay, { base: A, relays: [{ base: A, key: 'a'.repeat(16), receivers: [] }, { base: B, key: '', receivers: [] }], sdrOn: true, receiver: 'r1', receiverName: 'R1' });
     removeRelay(B);
     expect(relay.relays.map((r) => r.base)).toEqual([A]);
     expect(relay.base).toBe(A);
@@ -73,7 +73,41 @@ describe('the relay', () => {
     expect(webSdrInput()).toBeNull();
     expect(log.notice?.text).toBe('Removed relay.example.org');
     log.notice!.undo!();
-    expect(relay).toMatchObject({ base: A, relays: [{ base: A, key: 'a'.repeat(16) }], sdrOn: true, receiver: 'r1', receiverName: 'R1' });
+    expect(relay).toMatchObject({ base: A, relays: [{ base: A, key: 'a'.repeat(16), receivers: [] }], sdrOn: true, receiver: 'r1', receiverName: 'R1' });
+    Object.assign(relay, { ...RELAY_DEFAULTS, relays: [] });
+  });
+
+  it('keeps the KiwiSDRs added on each relay, checked again when read', () => {
+    const stored = { base: A, relays: [{ base: A, key: '', receivers: [{ host: 'kiwi.example.org', port: 8074 }, { host: 'Kiwi.Example.org', port: 8074 }, { host: 'bad host', port: 8073 }, { host: 'kiwi.example.org', port: 0 }, 'x'] }, { base: B, key: '' }] };
+    expect(validateRelay(stored).relays).toEqual([
+      { base: A, key: '', receivers: [{ host: 'kiwi.example.org', port: 8074 }] },
+      { base: B, key: '', receivers: [] },
+    ]);
+    // Setting a key keeps them.
+    Object.assign(relay, validateRelay(stored));
+    setRelayKey(A, 'a'.repeat(16));
+    expect(userReceivers(A)).toEqual([{ host: 'kiwi.example.org', port: 8074 }]);
+    Object.assign(relay, { ...RELAY_DEFAULTS, relays: [] });
+  });
+
+  it('adds a KiwiSDR to the relay in use and chooses it; removing it has Undo and stops the web SDR', () => {
+    Object.assign(relay, { base: A, relays: [{ base: A, key: '', receivers: [] }, { base: B, key: '', receivers: [] }], sdrOn: false, receiver: 'r1', receiverName: 'R1' });
+    const kiwi = { host: 'kiwi.example.org', port: 8074 };
+    addUserReceiver(kiwi);
+    addUserReceiver({ ...kiwi });
+    expect(userReceivers()).toEqual([kiwi]);
+    expect(userReceivers(B)).toEqual([]);
+    expect([relay.receiver, relay.receiverName]).toEqual(['kiwisdr://kiwi.example.org:8074', 'kiwi.example.org:8074']);
+    relay.sdrOn = true;
+    expect(webSdrInput()).not.toBeNull();
+    removeUserReceiver('kiwisdr://kiwi.example.org:8074');
+    expect(userReceivers()).toEqual([]);
+    expect([relay.receiver, relay.receiverName]).toEqual([null, '']);
+    expect(webSdrInput()).toBeNull();
+    expect(log.notice?.text).toBe('Removed kiwi.example.org:8074');
+    log.notice!.undo!();
+    expect(userReceivers()).toEqual([kiwi]);
+    expect(relay.receiver).toBe('kiwisdr://kiwi.example.org:8074');
     Object.assign(relay, { ...RELAY_DEFAULTS, relays: [] });
   });
 

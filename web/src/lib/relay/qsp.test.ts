@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { QspError, apiUrl, blockedFromPage, normaliseBase, qspAbout, qspErrorText, qspReceivers, qspStartSession, streamUrl, type FetchFn } from './qsp';
+import { QspError, apiUrl, blockedFromPage, normaliseBase, parseReceiverAddress, qspAbout, qspErrorText, qspReceivers, qspStartSession, receiverAddress, streamUrl, userReceiverId, userReceiverOf, type FetchFn } from './qsp';
 
 const BASE = 'https://relay.example.org/qsp';
 
@@ -65,5 +65,43 @@ describe('requests to the relay', () => {
     expect((await fail(answer(200, { nothing: true }))).kind).toBe('format');
     expect((await fail(async () => Promise.reject(new TypeError('Load failed')))).kind).toBe('network');
     expect(qspErrorText(new QspError('unauthorised'))).toMatch(/^The relay refused the access key/);
+  });
+});
+
+describe('receivers the operator adds', () => {
+  it('are read from a host, a port, an IPv6 address or a pasted URL', () => {
+    expect(parseReceiverAddress('kiwi.example.org')).toEqual({ host: 'kiwi.example.org', port: 8073 });
+    expect(parseReceiverAddress(' Kiwi.Example.org:8074 ')).toEqual({ host: 'kiwi.example.org', port: 8074 });
+    expect(parseReceiverAddress('http://kiwi.example.org:8073/?f=14074usb')).toEqual({ host: 'kiwi.example.org', port: 8073 });
+    expect(parseReceiverAddress('203.0.113.9:80')).toEqual({ host: '203.0.113.9', port: 80 });
+    expect(parseReceiverAddress('[2001:db8::1]:8074')).toEqual({ host: '2001:db8::1', port: 8074 });
+    expect(parseReceiverAddress('2001:db8::1')).toEqual({ host: '2001:db8::1', port: 8073 });
+    for (const bad of ['', ' ', 'kiwi example.org', 'user@kiwi.example.org', 'kiwi.example.org:0', 'kiwi.example.org:65536', 'kiwi.example.org:80a', '-kiwi.example.org', 'kiwi..example.org', 'kiwi_sdr.example.org']) {
+      expect(parseReceiverAddress(bad), bad).toBeNull();
+    }
+  });
+
+  it('keep an id that gives the address back, and show the port only when it is not 8073', () => {
+    for (const r of [
+      { host: 'kiwi.example.org', port: 8073 },
+      { host: '2001:db8::1', port: 8074 },
+    ]) {
+      expect(userReceiverOf(userReceiverId(r))).toEqual(r);
+    }
+    expect(userReceiverId({ host: '2001:db8::1', port: 8074 })).toBe('kiwisdr://[2001:db8::1]:8074');
+    expect(userReceiverOf('sarts-web888')).toBeNull();
+    expect(receiverAddress({ host: 'kiwi.example.org', port: 8073 })).toBe('kiwi.example.org');
+    expect(receiverAddress({ host: 'kiwi.example.org', port: 8074 })).toBe('kiwi.example.org:8074');
+    expect(receiverAddress({ host: '2001:db8::1', port: 8074 })).toBe('[2001:db8::1]:8074');
+  });
+
+  it('start sessions by kind and address', async () => {
+    let body: unknown = null;
+    const fetchFn: FetchFn = async (_url, init) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: 's1', receiver: 'kiwi.example.org:8074', dialHz: 7074000, encoding: 'ima-adpcm', state: 'waiting', stream: '/v1/sdr/sessions/s1/stream?ticket=t' }), { status: 201 });
+    };
+    await qspStartSession(BASE, '', userReceiverId({ host: 'kiwi.example.org', port: 8074 }), 7074000, '9V1NE', fetchFn);
+    expect(body).toEqual({ custom: { kind: 'kiwisdr', host: 'kiwi.example.org', port: 8074 }, dialHz: 7074000, listener: '9V1NE', encoding: 'ima-adpcm' });
   });
 });

@@ -31,7 +31,7 @@ export interface WebSdrConfig {
 
 export interface WebSdrStatus {
   state: 'connecting' | 'streaming' | 'ended';
-  /** For ended: busy, refused, closed, error, stopped, relay. */
+  /** For ended: busy, refused, closed, error, not-allowed, stopped, relay, relay-refused. */
   reason?: string;
   /** For ended: what happened, in words. */
   message?: string;
@@ -52,6 +52,14 @@ export function webSdrReport(contextRate: number, name: string): CaptureReport {
     autoGainControl: null,
     audioSession: null,
   };
+}
+
+/** Why a session did not start: the receiver busy, the relay refusing it, or the relay out of reach (a gateway's 5xx among them). */
+function startFailure(e: unknown): string {
+  if (!(e instanceof QspError)) return 'relay';
+  if (e.code === 'receiver-busy') return 'busy';
+  if (e.kind === 'unauthorised' || (e.kind === 'refused' && !/^5\d\d$/.test(e.code ?? ''))) return 'relay-refused';
+  return 'relay';
 }
 
 export class WebSdrInput implements InputSource {
@@ -154,7 +162,7 @@ export class WebSdrInput implements InputSource {
         ws.onclose = () => end('closed', 'The relay closed the stream.');
         ws.onerror = () => end('relay', 'The connection to the relay dropped.');
       } catch (e) {
-        end(e instanceof QspError && e.code === 'receiver-busy' ? 'busy' : 'relay', qspErrorText(e));
+        end(startFailure(e), qspErrorText(e));
       }
     };
     void connect();

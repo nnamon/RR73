@@ -68,7 +68,7 @@ function frame(seq: number, utcMs: number, n = 512, flags = 0): ArrayBuffer {
 const settle = () => new Promise((r) => setTimeout(r, 0));
 const T = Date.UTC(2026, 9, 15, 1, 0, 0);
 
-function setup() {
+function setup(post?: () => Response) {
   const { ctx, starts } = fakeContext();
   let now = T;
   const calls: string[] = [];
@@ -76,6 +76,7 @@ function setup() {
   const fetchFn: FetchFn = async (url, init) => {
     calls.push(`${init?.method} ${url}`);
     if (init?.method === 'POST') {
+      if (post) return post();
       return new Response(JSON.stringify({ id: 's1', receiver: 'r', dialHz: 14074000, encoding: 'ima-adpcm', state: 'waiting', stream: '/v1/sdr/sessions/s1/stream?ticket=t' }), { status: 201 });
     }
     return new Response(null, { status: 204 });
@@ -158,5 +159,19 @@ describe('the web SDR input', () => {
     // A close after that does not end it twice.
     FakeSocket.last!.onclose?.();
     expect(s.ended()).toBe(1);
+  });
+
+  it('says the relay refused a session it will not start, apart from a busy receiver and a gateway failure', async () => {
+    const ended = async (status: number, body: unknown) => {
+      const s = setup(() => new Response(JSON.stringify(body), { status }));
+      await s.input.open(s.ctx, null, s.events);
+      await settle();
+      return s.statuses.at(-1);
+    };
+    const notPublic = '192.168.1.50 is not on the public internet. This relay connects only to public receivers.';
+    expect(await ended(403, { error: { code: 'not-allowed', message: notPublic } })).toEqual({ state: 'ended', reason: 'relay-refused', message: notPublic });
+    expect(await ended(404, { error: { code: 'not-found', message: 'This relay has no receiver r.' } })).toMatchObject({ reason: 'relay-refused' });
+    expect(await ended(409, { error: { code: 'receiver-busy', message: 'All of this relay’s sessions on r are in use. Try again later.' } })).toMatchObject({ reason: 'busy' });
+    expect(await ended(502, null)).toMatchObject({ reason: 'relay' });
   });
 });
