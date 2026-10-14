@@ -6,7 +6,7 @@
 //! `rr73_rtty::DecoderConfig` and `rr73_rtty::TxConfig`; missing fields take their defaults
 //! (45.45 baud, 170 Hz shift, 1.5 stop bits, mark 1585 Hz, US figures, unshift on space).
 
-use rr73_rtty::ita2::code_for;
+use rr73_rtty::ita2::{code_for, other_case};
 use rr73_rtty::{DecoderConfig, Figures, Modulator, RttyDecoder, RttyEvent, TxConfig, encode};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
@@ -211,11 +211,7 @@ pub fn rtty_encode(text: &str, config_json: &str) -> Result<Vec<f32>, JsError> {
 /// `"ita2"`; anything else means US), each once, in order of appearance.
 #[wasm_bindgen]
 pub fn rtty_unsendable(text: &str, figures: &str) -> String {
-    let table = if figures.eq_ignore_ascii_case("ita2") {
-        Figures::Ita2
-    } else {
-        Figures::Us
-    };
+    let table = figures_of(figures);
     let mut out = String::new();
     for ch in text.chars() {
         if code_for(ch, table).is_none() && !out.contains(ch) {
@@ -223,6 +219,22 @@ pub fn rtty_unsendable(text: &str, figures: &str) -> String {
         }
     }
     out
+}
+
+/// `text` read in the other case with the `figures` table (`"us"` or `"ita2"`; anything else
+/// means US): letters as figures and figures as letters, so "QWU" gives "127". Space, CR, LF and
+/// characters with no reading in the other case are kept.
+#[wasm_bindgen]
+pub fn rtty_other_case(text: &str, figures: &str) -> String {
+    other_case(text, figures_of(figures))
+}
+
+fn figures_of(figures: &str) -> Figures {
+    if figures.eq_ignore_ascii_case("ita2") {
+        Figures::Ita2
+    } else {
+        Figures::Us
+    }
 }
 
 /// Default receiver and transmitter settings as JSON: `{ "decoder": {...}, "tx": {...} }`.
@@ -305,6 +317,14 @@ mod tests {
         let defaults: serde_json::Value = serde_json::from_str(&rtty_defaults()).expect("json");
         assert_eq!(defaults["decoder"]["mark_hz"], 1585.0);
         assert_eq!(defaults["tx"]["params"]["baud"], 45.45);
+    }
+
+    #[test]
+    fn other_case_follows_the_figures_table() {
+        assert_eq!(rtty_other_case("TOO QWU", "us"), "599 127");
+        assert_eq!(rtty_other_case("F", "us"), "!");
+        assert_eq!(rtty_other_case("F", "ITA2"), "F");
+        assert_eq!(rtty_other_case("S", "ita2"), "'");
     }
 
     #[test]

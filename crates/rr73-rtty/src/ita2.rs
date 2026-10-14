@@ -85,6 +85,28 @@ pub fn code_for(ch: char, figures: Figures) -> Option<(u8, Option<Case>)> {
         .map(|i| (i as u8, Some(Case::Figures)))
 }
 
+/// `text` as it reads in the other case: each letter's code read in figures case, and each
+/// figure's code read in letters case. A lost FIGS prints "599 127" as "TOO QWU"; read in the
+/// other case, "QWU" gives "127". Space, CR, LF, characters without a code and codes that print
+/// nothing or a control character (BELL, WRU) in the other case are kept as they are.
+pub fn other_case(text: &str, figures: Figures) -> String {
+    text.chars()
+        .map(|ch| {
+            let Some((code, Some(case))) = code_for(ch, figures) else {
+                return ch;
+            };
+            let other = match case {
+                Case::Letters => Case::Figures,
+                Case::Figures => Case::Letters,
+            };
+            match char_for(code, other, figures) {
+                Some(c) if !c.is_control() => c,
+                _ => ch,
+            }
+        })
+        .collect()
+}
+
 /// Turns text into codes, inserting LTRS and FIGS as the case changes.
 #[derive(Clone, Debug)]
 pub struct TextEncoder {
@@ -290,6 +312,23 @@ mod tests {
         let (codes, _) = TextEncoder::new(Figures::Us, true).encode("5 E");
         assert_eq!(decode_all(&codes, Figures::Us, false), "5 3");
         assert_eq!(decode_all(&codes, Figures::Us, true), "5 E");
+    }
+
+    #[test]
+    fn other_case_reads_letters_as_figures_and_back() {
+        assert_eq!(other_case("QWU", Figures::Us), "127");
+        assert_eq!(other_case("TOO QWU", Figures::Us), "599 127");
+        assert_eq!(other_case("599 127", Figures::Us), "TOO QWU");
+        assert_eq!(other_case("QWERTYUIOP", Figures::Ita2), "1234567890");
+        assert_eq!(other_case("qwu", Figures::Us), "127");
+        assert_eq!(other_case("5NN", Figures::Us), "T,,");
+        // F has a figure in the US table only; S is BELL in US figures and kept.
+        assert_eq!(other_case("F", Figures::Us), "!");
+        assert_eq!(other_case("F", Figures::Ita2), "F");
+        assert_eq!(other_case("S", Figures::Us), "S");
+        assert_eq!(other_case("S", Figures::Ita2), "'");
+        assert_eq!(other_case("A@B\r\n", Figures::Us), "-@?\r\n");
+        assert_eq!(other_case("", Figures::Us), "");
     }
 
     #[test]
