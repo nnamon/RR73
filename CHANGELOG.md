@@ -10,6 +10,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
 - The watchdog counts from your last touch, so Hunt and Repeat CQ stop at its limit however many QSOs they make. Responses refresh watchdog, in Settings › FT8 and FT4, restarts it with each new message as before. It starts off.
 - A QSO under way when the watchdog runs out now finishes and logs, then Tx goes off. The watchdog countdown reads Last QSO meanwhile. A call nobody has answered still stops at once.
+- Slots are named Even and Odd everywhere, as on the decode list's slot bars. ••• says Transmit in 1st (Even) or 2nd (Odd), and the status line "Tx6 · CQ 9V1NE OJ11 · Even · :30".
 
 ## 0.12.4 · 2026-10-14
 

@@ -8,9 +8,9 @@ describe('bottom bar view', () => {
   it('shows the next message with its slot and second', () => {
     const s = new Sim();
     s.call(1, 'CQ JA1KXM PM95');
-    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · 1st · :30');
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :30');
     s.call(1, 'CQ JA1KXM PM95', 2.5);
-    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx1 · JA1KXM 9V1NE OJ11 · Even · :00');
   });
 
   it('shows what is on air, then what it waits for', () => {
@@ -19,7 +19,7 @@ describe('bottom bar view', () => {
     s.run(2, 2);
     expect(barText(s.st)).toBe('JA1KXM · waiting for a reply');
     s.hear(3, ['9V1NE JA1KXM -09']);
-    expect(barText(s.st)).toBe('Tx3 · JA1KXM 9V1NE R-10 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx3 · JA1KXM 9V1NE R-10 · Even · :00');
   });
 
   it('says when the retries ran out, and is empty when idle', () => {
@@ -33,7 +33,7 @@ describe('bottom bar view', () => {
   it('waits for callers after a CQ', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    expect(barText(s.st)).toBe('Tx6 · CQ 9V1NE OJ11 · 1st · :00');
+    expect(barText(s.st)).toBe('Tx6 · CQ 9V1NE OJ11 · Even · :00');
   });
 
   it('marks the steps of the exchange as they happen, the first with the grid our Tx1 sends', () => {

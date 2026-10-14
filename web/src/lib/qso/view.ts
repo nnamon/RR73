@@ -17,7 +17,7 @@ export interface Step {
 }
 
 const signed = (r: string) => r.replace('-', MINUS);
-const ordinal = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
+const parityName = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
 
 /** The 5 steps of the exchange, from our side. */
 /** The grid our Tx1 carries ("OJ11"), or "Call" when it carries none, as with a compound callsign. */
@@ -64,7 +64,7 @@ export function steps(st: SeqState): Step[] {
 
 /**
  * The bottom bar's status line while calling or in a QSO: what is on air, what goes next with
- * its slot and second ("Tx6 · CQ 9V1NE OJ11 · 1st · :30"), or what RR73 waits for. Null when
+ * its slot and second ("Tx6 · CQ 9V1NE OJ11 · Even · :30"), or what RR73 waits for. Null when
  * idle.
  */
 export function barText(st: SeqState): string | null {
@@ -76,7 +76,7 @@ export function barText(st: SeqState): string | null {
   if (st.next) {
     const n = st.next;
     const start = n.slotStartMs + n.offsetS * 1000;
-    return `Tx${n.tx} · ${n.text} · ${ordinal(parityOf(n.slotStartMs, st.config.mode))} · :${utcTime(start).slice(6)}`;
+    return `Tx${n.tx} · ${n.text} · ${parityName(parityOf(n.slotStartMs, st.config.mode))} · :${utcTime(start).slice(6)}`;
   }
   if (p?.logged) return `${bare(p.call)} logged`;
   if (p) return `${bare(p.call)} · waiting for a reply`;

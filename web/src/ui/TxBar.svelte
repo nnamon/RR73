@@ -196,7 +196,7 @@
         Work dupes <span class="v">{settings.workDupes ? 'On' : 'Off'}</span>
       </button>
       <button class="mi" role="menuitem" onclick={() => void updateSettings({ cqParity: settings.cqParity === 'even' ? 'odd' : 'even' })}>
-        Transmit in <span class="v">{settings.cqParity === 'even' ? '1st' : '2nd'}</span>
+        Transmit in <span class="v">{settings.cqParity === 'even' ? '1st (Even)' : '2nd (Odd)'}</span>
       </button>
       <button class="mi" class:gap={practice.on} role="menuitem" onclick={() => void updateSettings({ huntOrder: HUNT_ORDERS[(HUNT_ORDERS.indexOf(huntOrder) + 1) % HUNT_ORDERS.length].id })}>
         Hunt order <span class="v">{huntOrder.label}</span>
