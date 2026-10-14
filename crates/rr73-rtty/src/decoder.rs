@@ -31,6 +31,9 @@ pub enum FramingErrors {
     Drop,
 }
 
+/// Default squelch threshold, in dB SNR in 3000 Hz.
+pub const DEFAULT_SQUELCH_DB: f64 = -14.0;
+
 /// Automatic frequency control.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
@@ -70,8 +73,10 @@ pub struct DecoderConfig {
     pub mark_hz: f64,
     /// Automatic frequency control.
     pub afc: AfcConfig,
-    /// Squelch threshold, in dB SNR in 3000 Hz; characters print only above it. `None` prints
-    /// everything.
+    /// Squelch threshold, in dB SNR in 3000 Hz. A character prints only when its own SNR
+    /// reaches it: the mark and space filter power at its 7 bit ends against the noise floor.
+    /// `None` prints everything. Default -14 dB: about 0.1 false characters per minute of
+    /// noise, and no loss of copy against no squelch (docs/experiments/0005-rtty.md).
     pub squelch_db: Option<f64>,
     /// How characters are framed.
     pub framer: Framer,
@@ -93,7 +98,7 @@ impl Default for DecoderConfig {
             params: RttyParams::default(),
             mark_hz: DEFAULT_MARK_HZ,
             afc: AfcConfig::default(),
-            squelch_db: None,
+            squelch_db: Some(DEFAULT_SQUELCH_DB),
             framer: Framer::Viterbi,
             framing_errors: FramingErrors::Print,
             atc_bits: 4.0,
@@ -175,7 +180,8 @@ pub enum RttyEvent {
         sample: u64,
         /// SNR of the pair, in dB in 3000 Hz.
         snr_db: f32,
-        /// Characters print.
+        /// The pair's SNR is at or above the squelch threshold (2 dB below it once open).
+        /// Characters still print one by one on their own SNR.
         squelch_open: bool,
     },
 }
@@ -203,6 +209,18 @@ pub struct RttyDecoder {
     pending_find: Option<(f64, f64)>,
     reported_mark_hz: f64,
     frames: Vec<Frame>,
+    /// Mark plus space filter power per decimated sample, for the squelch.
+    power: Vec<f32>,
+    /// Decimated samples since the last rebuild.
+    decimated: u64,
+    /// The last character passed the squelch.
+    burst: bool,
+}
+
+/// Length of the filter power history for the squelch, in decimated samples: the framer's
+/// output delay plus a few characters, as a power of two.
+fn power_len(cfg: &DecoderConfig, sps: f64) -> usize {
+    (((cfg.latency_chars + 4.0) * 8.0 * sps) as usize + 64).next_power_of_two()
 }
 
 impl RttyDecoder {
@@ -213,6 +231,7 @@ impl RttyDecoder {
         let params = config.params;
         let center_hz = params.center_hz(config.mark_hz);
         let design = design(&params);
+        let history = power_len(&config, design.sps);
         let mut d = Self {
             frontend: Frontend::new(&design, center_hz),
             demod: Demod::new(&design, &params, config.atc_bits, config.filter_bits),
@@ -233,6 +252,9 @@ impl RttyDecoder {
             pending_find: None,
             reported_mark_hz: config.mark_hz,
             frames: Vec::new(),
+            power: vec![0.0; history],
+            decimated: 0,
+            burst: false,
         };
         if config.afc.search_hz > 0.0 {
             d.pending_find = Some((center_hz, config.afc.search_hz));
@@ -265,6 +287,9 @@ impl RttyDecoder {
         self.text.reset();
         self.origin = self.samples;
         self.frames.clear();
+        self.power = vec![0.0; power_len(&self.cfg, self.design.sps)];
+        self.decimated = 0;
+        self.burst = false;
     }
 
     /// The settings the decoder was created with.
@@ -346,6 +371,9 @@ impl RttyDecoder {
             }
             if let Some(y) = self.frontend.push(x) {
                 let soft = self.demod.push(y);
+                let mask = self.power.len() - 1;
+                self.power[(self.decimated as usize) & mask] = soft.power;
+                self.decimated += 1;
                 self.framer.push(soft, &mut self.frames);
                 self.afc_count += 1;
                 if self.afc_count >= self.afc_period {
@@ -463,18 +491,62 @@ impl RttyDecoder {
         self.origin + s.max(0.0).round() as u64
     }
 
+    /// SNR of the character starting at decimated position `start`, in dB in 3000 Hz, over
+    /// its 7 bit ends and over its start bit alone.
+    fn char_snr_db(&self, start: f64) -> (f64, f64) {
+        let newest = self.decimated.saturating_sub(1);
+        let mask = self.power.len() - 1;
+        let at = |k: u32| {
+            let i = ((start + f64::from(k) * self.design.sps).round().max(0.0) as u64).min(newest);
+            f64::from(self.power[(i as usize) & mask])
+        };
+        let mean = (1..=7).map(at).sum::<f64>() / 7.0;
+        (self.power_snr_db(mean), self.power_snr_db(at(1)))
+    }
+
+    /// SNR for a mark plus space filter power, in dB in 3000 Hz: the power less the noise in
+    /// both filters, against the noise floor. A tone of amplitude A gives (A L / 2)^2 in a
+    /// filter of L samples; the noise floor of variance s^2 gives s^2 / 2 in 3000 Hz.
+    fn power_snr_db(&self, power: f64) -> f64 {
+        let var = self.spectrum.noise_variance();
+        let signal = power - 2.0 * var * self.demod.noise_gain();
+        if signal <= 0.0 {
+            return -40.0;
+        }
+        if var <= 0.0 {
+            return 60.0;
+        }
+        let l = self.demod.len() as f64;
+        (10.0 * (4.0 * signal / (l * l * var)).log10()).clamp(-40.0, 60.0)
+    }
+
+    /// Whether the squelch lets a character through. The first character after squelched ones
+    /// must also reach the threshold in its start bit: a frame that starts in the noise just
+    /// before a transmission reads its data bits from the transmission's first tones.
+    fn passes_squelch(&mut self, start: f64) -> bool {
+        let Some(th) = self.cfg.squelch_db else {
+            return true;
+        };
+        let (mean_db, start_db) = self.char_snr_db(start);
+        let pass = mean_db >= th && (self.burst || start_db >= th);
+        self.burst = pass;
+        pass
+    }
+
     fn emit_frames(&mut self, events: &mut Vec<RttyEvent>) {
         let frames = std::mem::take(&mut self.frames);
         for f in &frames {
             if f.framing_error && self.cfg.framing_errors == FramingErrors::Drop {
                 continue;
             }
+            // Squelched characters leave the case alone, so noise between transmissions cannot
+            // shift the receiver to figures.
+            if !self.passes_squelch(f.start) {
+                continue;
+            }
             let sample = self.frame_sample(f.start);
             let before = self.text.case();
             let decoded = self.text.push(f.code);
-            if !self.squelch_open {
-                continue;
-            }
             if let Decoded::Char(ch) = decoded {
                 events.push(RttyEvent::Char {
                     ch,

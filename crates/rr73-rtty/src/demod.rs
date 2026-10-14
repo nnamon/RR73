@@ -127,6 +127,8 @@ impl Frontend {
 pub(crate) struct Soft {
     pub mark: f32,
     pub space: f32,
+    /// Mark plus space filter power, in squared filter-output units.
+    pub power: f32,
 }
 
 impl Soft {
@@ -198,6 +200,31 @@ pub(crate) struct Demod {
     attack: f64,
     decay: f64,
     rate: f64,
+    noise_gain: f64,
+}
+
+/// Mean power at a matched filter's output for white noise of unit variance at 12 kHz: the
+/// energy of the combined response of the low-pass filter, the decimation and a filter of
+/// `len` decimated samples at `offset_hz` from the centre.
+fn noise_gain(design: &Design, len: usize, offset_hz: f64) -> f64 {
+    let taps = &design.taps;
+    let d = design.decim as i64;
+    let n = taps.len() as i64;
+    let psi = TAU * offset_hz / design.rate;
+    let span = (len as i64 - 1) * d;
+    (-(n - 1)..=span)
+        .map(|m| {
+            let mut acc = Complex64::new(0.0, 0.0);
+            for j in 0..len as i64 {
+                let t = j * d - m;
+                if (0..n).contains(&t) {
+                    let (s, c) = (psi * j as f64).sin_cos();
+                    acc += Complex64::new(c, -s) * f64::from(taps[t as usize]);
+                }
+            }
+            acc.norm_sqr()
+        })
+        .sum()
 }
 
 impl Demod {
@@ -207,6 +234,7 @@ impl Demod {
         let len = ((design.sps * filter_bits).round() as usize).max(2);
         let attack = 1.0 / (atc_bits * design.sps).max(1.0);
         Self {
+            noise_gain: noise_gain(design, len, params.mark_offset_hz()),
             len,
             ring_m: vec![Complex64::new(0.0, 0.0); len],
             ring_s: vec![Complex64::new(0.0, 0.0); len],
@@ -268,7 +296,18 @@ impl Demod {
         Soft {
             mark: self.mark.llr(pm),
             space: self.space.llr(ps),
+            power: (pm + ps) as f32,
         }
+    }
+
+    /// Matched filter length, in decimated samples.
+    pub fn len(&self) -> usize {
+        self.len
+    }
+
+    /// Mean power at each matched filter's output for white noise of unit variance at 12 kHz.
+    pub fn noise_gain(&self) -> f64 {
+        self.noise_gain
     }
 
     /// The frequency error since the last call, in Hz (positive when the signal is above the
@@ -319,6 +358,30 @@ mod tests {
                 assert!(d.taps.len() % 2 == 1 && d.taps.len() <= 1023);
             }
         }
+    }
+
+    #[test]
+    fn noise_gain_matches_measured_noise() {
+        use rand::SeedableRng;
+        use rand_distr::{Distribution, Normal};
+        let p = RttyParams::default();
+        let d = design(&p);
+        let mut fe = Frontend::new(&d, 1500.0);
+        let mut dm = Demod::new(&d, &p, 4.0, 1.0);
+        let mut rng = rand_chacha::ChaCha8Rng::seed_from_u64(3);
+        let normal = Normal::new(0.0, 1.0).expect("normal");
+        let (mut sum, mut count) = (0.0, 0.0);
+        for i in 0..240_000 {
+            if let Some(y) = fe.push(normal.sample(&mut rng)) {
+                let soft = dm.push(y);
+                if i > 12_000 {
+                    sum += f64::from(soft.power);
+                    count += 2.0;
+                }
+            }
+        }
+        let ratio = sum / count / dm.noise_gain();
+        assert!((ratio - 1.0).abs() < 0.05, "{ratio}");
     }
 
     #[test]

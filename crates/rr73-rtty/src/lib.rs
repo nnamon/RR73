@@ -22,7 +22,9 @@ mod spectrum;
 pub use config::{
     ConfigError, DEFAULT_MARK_HZ, Figures, Polarity, RttyParams, STANDARD_BAUD, STANDARD_SHIFTS_HZ,
 };
-pub use decoder::{AfcConfig, DecoderConfig, Framer, FramingErrors, RttyDecoder, RttyEvent};
+pub use decoder::{
+    AfcConfig, DEFAULT_SQUELCH_DB, DecoderConfig, Framer, FramingErrors, RttyDecoder, RttyEvent,
+};
 pub use ita2::Case;
 pub use modulator::{Idle, Modulator, TxConfig, encode};
 

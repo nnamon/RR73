@@ -280,6 +280,29 @@ fn squelch_keeps_noise_quiet_and_snr_reads_true() {
 }
 
 #[test]
+fn squelch_cuts_the_noise_around_a_transmission() {
+    let clean = encode(TEXT, &TxConfig::default()).expect("encode");
+    let cfg = DecoderConfig {
+        squelch_db: Some(-14.0),
+        ..DecoderConfig::default()
+    };
+    for seed in 0..6 {
+        let audio = render_continuous(
+            &clean,
+            &ContinuousChannel {
+                snr_db: -3.0,
+                lead_s: 1.5,
+                tail_s: 1.5,
+                ..ContinuousChannel::default()
+            },
+            seed,
+        );
+        let (text, _) = decode_all(&audio, cfg);
+        assert_eq!(text, TEXT.replace('\n', "\r\n"), "seed {seed}");
+    }
+}
+
+#[test]
 fn bad_settings_are_refused() {
     let mut cfg = DecoderConfig::default();
     cfg.params.baud = 1000.0;

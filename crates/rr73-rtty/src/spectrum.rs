@@ -147,6 +147,12 @@ impl Spectrum {
         self.noise
     }
 
+    /// Variance per sample at 12 kHz of white noise at the measured floor; 0 before the first
+    /// spectrum.
+    pub fn noise_variance(&self) -> f64 {
+        self.noise / BIN_HZ * 0.5 * SAMPLE_RATE
+    }
+
     /// Power in `lo_hz..=hi_hz` above the noise floor, and the number of bins summed.
     fn excess(&self, lo_hz: f64, hi_hz: f64) -> (f64, f64) {
         let last = self.power.len() - 1;

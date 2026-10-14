@@ -390,7 +390,11 @@ mod tests {
                 let lo = (i + 1).saturating_sub(l);
                 let mean = raw[lo..=i].iter().sum::<f64>() / l as f64;
                 let v = (10.0 * mean) as f32;
-                Soft { mark: v, space: -v }
+                Soft {
+                    mark: v,
+                    space: -v,
+                    power: 1.0,
+                }
             })
             .collect()
     }
