@@ -10,7 +10,14 @@
    * the queue is sent. A tap while ending keeps it going. Log QSO is at reduced opacity until the
    * strip has a callsign. ••• holds Repeat CQ, the macro set, Tune for 10 s, Save 2 min of audio
    * and Clear text. Halt ends a transmission at once and turns Repeat CQ off.
+   *
+   * Larger windows place the same parts as TxBar does. `panel`, regular width: a 336 pt column on
+   * the right, headed Transmit, with the status, the pane's QSO and macros (`children`, which
+   * scroll when the window is short), the buttons and Halt, 304 x 64 pt, always at the foot. `bottom`, regular width taller than wide: a bar
+   * with Halt 240 x 64 pt at the end of the row. `side`, a phone on its side: the column under the
+   * waterfall, with Halt across it.
    */
+  import type { Snippet } from 'svelte';
   import BarButtons, { type BarButton } from './BarButtons.svelte';
   import BarMenu, { type BarMenuItem } from './BarMenu.svelte';
   import { clock } from '../lib/state/now.svelte';
@@ -19,8 +26,18 @@
   import { hasAudio, keyboard, markRfHz, saveAudio, session, stepMacroSet, unmute } from '../lib/state/keyboard.svelte';
   import { spaceHz } from '../lib/rtty/settings';
   import { STATUS } from '../lib/qso/status';
+  import { layout } from '../lib/app/layout.svelte';
 
-  let { onsaved }: { onsaved?: (r: Awaited<ReturnType<typeof saveAudio>>) => void } = $props();
+  let {
+    onsaved,
+    variant = 'phone',
+    children,
+  }: {
+    onsaved?: (r: Awaited<ReturnType<typeof saveAudio>>) => void;
+    variant?: 'phone' | 'panel' | 'bottom' | 'side';
+    /** The panel's QSO and macros, between the status and the buttons. */
+    children?: Snippet;
+  } = $props();
 
   const s = session;
   const notice = $derived(s.notice && clock.ms - s.notice.atMs < 20_000 ? s.notice : null);
@@ -60,7 +77,7 @@
     { id: 'tx', ...txButton, pressed: s.tx !== 'off', onclick: onTx },
     { id: 'log', label: 'Log QSO', dim: !s.draft.fields.call, onclick: () => void s.logQso() },
     { id: 'more', label: 'More', icon: 'more', menu: { open }, onclick: () => (open = !open) },
-    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, onclick: () => halt() },
+    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, kbd: variant === 'panel' && layout.pointer === 'mouse' ? 'esc' : undefined, onclick: () => halt() },
   ]);
 
   const items: BarMenuItem[] = $derived([
@@ -85,17 +102,21 @@
   }
 </script>
 
-<section class="bar" aria-label="Transmit" bind:this={barEl}>
+<section class="bar {variant}" aria-label="Transmit" bind:this={barEl}>
+  {#if variant === 'panel'}<h2 class="head">Transmit</h2>{/if}
   {#if !keyboard.keyboardUp}
     <div class="status" role="status" data-testid="kb-status">
       <span class="msg">{text}</span>
       <span class="aside">{aside}</span>
     </div>
   {/if}
-  <BarButtons {buttons} keepFocus />
-  {#if open}
-    <BarMenu label="More" {items} onclose={close} />
-  {/if}
+  {#if children}<div class="mid">{@render children()}</div>{/if}
+  <div class="dock">
+    <BarButtons {buttons} {variant} keepFocus />
+    {#if open}
+      <BarMenu label="More" {items} onclose={close} />
+    {/if}
+  </div>
 </section>
 
 <style>
@@ -130,5 +151,75 @@
     font-size: var(--rr-text-foot);
     color: var(--rr-label2);
     font-variant-numeric: tabular-nums;
+  }
+
+  /* The phone: the menu belongs to the bar itself. */
+  .phone .dock {
+    display: contents;
+  }
+
+  /* Larger windows: the menu opens over the buttons. */
+  .dock {
+    position: relative;
+  }
+
+  /* As TxBar's: the bottom bar 16 pt in from the edges, the column under the waterfall 12 pt. */
+  .bottom {
+    padding: var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-3) + var(--rr-safe-bottom)) calc(var(--rr-space-4) + var(--rr-safe-left));
+  }
+
+  .side {
+    padding: var(--rr-space-2) calc(var(--rr-space-3) + var(--rr-safe-right)) calc(var(--rr-space-2) + var(--rr-safe-bottom)) var(--rr-space-3);
+  }
+
+  /* Regular width: the transmit panel on the right, Halt at its foot. */
+  .panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-3);
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--rr-space-3) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-4) + var(--rr-safe-bottom)) var(--rr-space-4);
+    background: var(--rr-bg);
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
+  }
+
+  .panel .status {
+    flex-direction: column;
+    gap: var(--rr-space-1);
+    align-items: flex-start;
+    height: auto;
+    padding: 0;
+  }
+
+  .panel .msg {
+    max-width: 100%;
+    font-weight: var(--rr-weight-medium);
+    line-height: var(--rr-leading-row);
+  }
+
+  .panel .aside {
+    margin-left: 0;
+  }
+
+  .head {
+    min-height: var(--rr-leading-foot);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-foot);
+    color: var(--rr-label2);
+  }
+
+  .mid {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-4);
+    min-height: 0;
+    margin: 0 calc(-1 * var(--rr-space-1));
+    padding: 0 var(--rr-space-1);
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 </style>

@@ -23,7 +23,9 @@
   import WavelogSettings from './views/WavelogSettings.svelte';
   import { go, redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
   import { layout, split } from './lib/app/layout.svelte';
-  import { currentListKeys, focusKind, shortcutOf } from './lib/app/shortcuts';
+  import { currentListKeys, focusKind, macroKeyOf, shortcutOf } from './lib/app/shortcuts';
+  import { isFt, isKeyboard } from './lib/clock/slots';
+  import { session, unmute } from './lib/state/keyboard.svelte';
   import { sheetOpen, sheets } from './lib/app/sheets.svelte';
   import { reloadIfIdle, update } from './lib/app/update.svelte';
   import { spotsShown } from './lib/state/features.svelte';
@@ -102,8 +104,21 @@
   /**
    * Keyboard shortcuts (lib/app/shortcuts.ts). Esc halts on every screen; the open sheet or menu
    * closes on the same press, by its own handling of Esc. The rest wait while a sheet is open.
+   * Each acts on the mode chosen: ⌥T is Tx in FT8 and FT4, the beacon in WSPR and the keyboard
+   * modes' Tx; ⌥C and ⌥H are FT8 and FT4 only. In a keyboard mode F1 to F12 send the macros on
+   * Operate, also while the text to send has focus.
    */
   function onkey(e: KeyboardEvent) {
+    const macro = isKeyboard(settings.mode) && tab === 'operate' && !sheetOpen() ? macroKeyOf(e) : null;
+    if (macro !== null) {
+      const m = settings.keyboard.macros[settings.keyboard.set][macro];
+      if (m) {
+        unmute();
+        session.tapMacro(m);
+      }
+      e.preventDefault();
+      return;
+    }
     const s = shortcutOf(e, focusKind(document.activeElement));
     if (!s) return;
     if (s === 'halt') {
@@ -111,12 +126,16 @@
       return;
     }
     if (sheetOpen()) return;
-    const ft = settings.mode !== 'WSPR';
+    const ft = isFt(settings.mode);
     const list = tab === 'operate' ? currentListKeys() : null;
     switch (s) {
       case 'tx':
         if (ft) setTxEnabled(!qso.st.txEnabled);
-        else setBeacon(!wspr.beacon.on);
+        else if (settings.mode === 'WSPR') setBeacon(!wspr.beacon.on);
+        else {
+          unmute();
+          session.txButton();
+        }
         break;
       case 'cq':
         if (!ft) return;

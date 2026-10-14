@@ -126,6 +126,9 @@
   --rr-halt-small: 32px;
   --rr-side: 334px;
   --rr-side-waterfall: 128px;
+  /* The keyboard modes' QSO form in the transmit panel: cells 52 pt high, RST cells 64 pt wide. */
+  --rr-cell: 52px;
+  --rr-cell-rst: 64px;
   --rr-ruler-regular: 26px;
   --rr-text-ruler-regular: 12px;
   --rr-text-halt: 20px;

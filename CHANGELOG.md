@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- RTTY on an iPad or a desktop has the transmit panel on the right, as FT8: the status, the QSO as a form, their station (country, distance and bearing, QSOs before) and Halt at its foot. The received text, the text to send and the macros take the left, under a waterfall a quarter of the window high.
+- RTTY on an upright iPad keeps the phone's order, with Tx, Log QSO, ••• and Halt along the bottom. On a phone on its side the macros and Halt move under the waterfall on the right.
+- In RTTY with a keyboard, F1 to F12 send the macros, also while you type, and ⌥T turns Tx on and off. ⌥T, ⌥C and ⌥H acted on FT8 in RTTY before. The shortcuts sheet lists the keys of the mode in use.
+
 ## 0.15.1 · 2026-10-14
 
 - At 50% and below, the WSPR beacon leaves at least one receive slot between transmissions: at 20% the gap is 2 to 8 slots, mean 5. It could send in 2 slots back to back, about 1 gap in 16 at 20%.

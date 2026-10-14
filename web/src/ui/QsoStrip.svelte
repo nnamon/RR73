@@ -4,6 +4,9 @@
    * RST sent and received, name and QTH. Contest set: callsign, sent ("599 042"), received and
    * Worked when the call is a dupe. Each field is edited in place; empty ones show their name.
    * The chevron opens the full QSO sheet.
+   *
+   * `panel`, in the transmit panel: the same fields as a form of two rows, each field a rounded
+   * cell of its own. The panel's heading carries Worked and the way to the sheet.
    */
   import Icon from './Icon.svelte';
   import type { Draft, DraftKey } from '../lib/keyboard/draft';
@@ -15,6 +18,7 @@
     worked,
     onedit,
     onsheet,
+    variant = 'strip',
   }: {
     draft: Draft;
     contest: boolean;
@@ -23,6 +27,7 @@
     worked: boolean;
     onedit: (key: DraftKey, value: string) => void;
     onsheet: () => void;
+    variant?: 'strip' | 'panel';
   } = $props();
 
   const f = $derived(draft.fields);
@@ -46,7 +51,7 @@
   const keyOff = { autocomplete: 'off', autocapitalize: 'characters', spellcheck: false } as const;
 </script>
 
-<div class="qs" role="group" aria-label="QSO">
+<div class="qs {variant}" class:contest role="group" aria-label="QSO">
   <label class="f call" class:filled={!!f.call}>
     {#if f.call}<small aria-hidden="true">Call</small>{/if}
     <input
@@ -70,7 +75,7 @@
       {#if received}<small aria-hidden="true">Rcvd</small>{/if}
       <input value={received} placeholder="Rcvd" aria-label="Received" {...keyOff} maxlength="9" onchange={(e) => editReceived(e.currentTarget.value)} data-testid="strip-rcvd" />
     </label>
-    {#if worked}<span class="wk">Worked</span>{/if}
+    {#if worked && variant === 'strip'}<span class="wk">Worked</span>{/if}
   {:else}
     <label class="f rcvd" class:filled={!!f.rstRcvd}>
       {#if f.rstRcvd}<small aria-hidden="true">Rcvd</small>{/if}
@@ -84,9 +89,9 @@
       {#if f.qth}<small aria-hidden="true">QTH</small>{/if}
       <input value={f.qth} placeholder="QTH" aria-label="QTH" {...keyOff} maxlength="30" oninput={(e) => onedit('qth', e.currentTarget.value)} data-testid="strip-qth" />
     </label>
-    {#if worked}<span class="wk">Worked</span>{/if}
+    {#if worked && variant === 'strip'}<span class="wk">Worked</span>{/if}
   {/if}
-  <button class="cv" aria-label="Open the QSO sheet" onclick={onsheet}><Icon name="chevright" size={14} /></button>
+  {#if variant === 'strip'}<button class="cv" aria-label="Open the QSO sheet" onclick={onsheet}><Icon name="chevright" size={14} /></button>{/if}
 </div>
 
 <style>
@@ -223,6 +228,58 @@
     width: var(--rr-tap);
     margin-left: auto;
     color: var(--rr-chev);
+  }
+
+  /*
+   * The transmit panel: call, sent and received on the first row, name and QTH on the second; in
+   * the Contest set, the call, then sent and received. Each cell is 52 pt high.
+   */
+  .panel {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) var(--rr-cell-rst) var(--rr-cell-rst);
+    gap: var(--rr-space-2);
+    height: auto;
+    margin: 0;
+    overflow: visible;
+    border-radius: 0;
+    background: none;
+  }
+
+  .panel .f {
+    width: auto;
+    height: var(--rr-cell);
+    border-radius: var(--rr-radius-m);
+    background: var(--rr-fill3);
+  }
+
+  .panel .f + .f {
+    box-shadow: none;
+  }
+
+  .panel .f.call,
+  .panel .f.name {
+    grid-column: span 2;
+  }
+
+  .panel .f.qth {
+    grid-column: span 2;
+  }
+
+  .panel.contest .f.call {
+    grid-column: 1 / -1;
+  }
+
+  .panel.contest .f.sent,
+  .panel.contest .f.rcvd {
+    grid-column: span 2;
+  }
+
+  .panel .filled input {
+    padding-top: var(--rr-space-4);
+  }
+
+  .panel .f:has(input:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
   }
 
   .cv:focus-visible {

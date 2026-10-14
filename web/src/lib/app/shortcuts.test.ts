@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
-import { focusKind, shortcutOf, stepSelection, type FocusKind, type KeyPress } from './shortcuts';
+import { MACRO_KEYS, focusKind, macroKeyOf, shortcutOf, stepSelection, type FocusKind, type KeyPress } from './shortcuts';
 
 const press = (key: string, code = '', mods: Partial<KeyPress> = {}): KeyPress => ({ key, code, altKey: false, ctrlKey: false, metaKey: false, ...mods });
 const alt = (key: string, code: string) => press(key, code, { altKey: true });
@@ -51,6 +51,22 @@ describe('shortcutOf', () => {
   it('leaves ⌘ and Ctrl combinations to the browser', () => {
     expect(shortcutOf(press('b', 'KeyB', { metaKey: true }), 'none')).toBeNull();
     expect(shortcutOf(press('t', 'KeyT', { ctrlKey: true, altKey: true }), 'none')).toBeNull();
+  });
+});
+
+describe('macroKeyOf', () => {
+  it('reads F1 to F12 as the macros in their order', () => {
+    expect(MACRO_KEYS).toBe(12);
+    expect(macroKeyOf(press('F1'))).toBe(0);
+    expect(macroKeyOf(press('F8'))).toBe(7);
+    expect(macroKeyOf(press('F12'))).toBe(11);
+  });
+
+  it('leaves other keys, F13 and up, and the keys with modifiers to others', () => {
+    for (const k of ['F', 'F0', 'F13', 'f1', '1', 'Enter']) expect(macroKeyOf(press(k))).toBeNull();
+    expect(macroKeyOf(press('F1', 'F1', { altKey: true }))).toBeNull();
+    expect(macroKeyOf(press('F1', 'F1', { ctrlKey: true }))).toBeNull();
+    expect(macroKeyOf(press('F1', 'F1', { metaKey: true }))).toBeNull();
   });
 });
 

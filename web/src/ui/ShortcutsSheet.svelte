@@ -1,10 +1,19 @@
 <script lang="ts">
-  /** The keyboard shortcuts (lib/app/shortcuts.ts), opened with ?. */
+  /** The keyboard shortcuts (lib/app/shortcuts.ts), opened with ?, for the mode chosen. */
   import Sheet from './Sheet.svelte';
+  import { isKeyboard } from '../lib/clock/slots';
+  import { settings } from '../lib/state/settings.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
-  const GROUPS: { label: string; keys: string[]; spoken: string }[][] = [
+  type Key = { label: string; keys: string[]; spoken: string };
+
+  const SCREENS: Key[] = [
+    { label: 'Operate, Log, Settings', keys: ['⌥', '1', '2', '3'], spoken: 'Option 1, 2, 3' },
+    { label: 'Keyboard shortcuts', keys: ['?'], spoken: 'Question mark' },
+  ];
+
+  const SLOTS: Key[][] = [
     [
       { label: 'Halt', keys: ['esc'], spoken: 'Escape' },
       { label: 'Call the selected station', keys: ['return'], spoken: 'Return' },
@@ -16,15 +25,28 @@
       { label: 'Hunt on or off', keys: ['⌥', 'H'], spoken: 'Option H' },
       { label: 'Change band', keys: ['B'], spoken: 'B' },
     ],
-    [
-      { label: 'Operate, Log, Settings', keys: ['⌥', '1', '2', '3'], spoken: 'Option 1, 2, 3' },
-      { label: 'Keyboard shortcuts', keys: ['?'], spoken: 'Question mark' },
-    ],
+    SCREENS,
   ];
+
+  /** RTTY and the keyboard modes after it: the function keys send the macros, also while typing. */
+  const KEYBOARD: Key[][] = [
+    [
+      { label: 'Halt', keys: ['esc'], spoken: 'Escape' },
+      { label: 'Send the line typed', keys: ['return'], spoken: 'Return' },
+      { label: 'Send a macro, in its order', keys: ['F1', '…', 'F12'], spoken: 'F1 to F12' },
+    ],
+    [
+      { label: 'Tx on or off', keys: ['⌥', 'T'], spoken: 'Option T' },
+      { label: 'Change band', keys: ['B'], spoken: 'B' },
+    ],
+    SCREENS,
+  ];
+
+  const groups = $derived(isKeyboard(settings.mode) ? KEYBOARD : SLOTS);
 </script>
 
 <Sheet bind:open title="Keyboard shortcuts">
-  {#each GROUPS as group, i (i)}
+  {#each groups as group, i (i)}
     <ul class="group keys">
       {#each group as k (k.label)}
         <li class="row">

@@ -158,6 +158,17 @@ Gestures:
 - The waterfall shrinks to a 48 pt strip without its ruler, keeping the marker and taps to tune. The tuning row and the status line hide. The received text keeps the rest: about 165 pt, 8 lines, at 393 x 852 with a 336 pt keyboard and its suggestions bar. Unverified: Safari may add its 44 pt bar of form arrows above the keyboard, which leaves 6 lines.
 - The keyboard goes down with a swipe down on the received text or the keyboard's own dismiss. Typing never starts a transmission by itself; Return or Tx does.
 
+### iPad, desktop and a phone on its side
+
+Approved 14 October 2026 from screenshots of a prototype (owner: "Looks good to me"), following the large-screen layout of decision 0008.
+
+- Regular width, wider than tall: the waterfall across at a quarter of the height (FT8 keeps a third: RTTY is read as text). Under it on the left: the tuning row, the received text, the text to send across the column and the macro row. On the right, the 336 pt transmit panel: the status line, the QSO as a form of two rows (Call, Sent and Rcvd; Name and QTH; in the Contest set the call, then sent and received with the serial numbers), Details for the QSO sheet, their station once the strip has a call (country, grid, distance and bearing from yours, the 3 latest QSOs with them, as FT8's station details), then Tx, Log QSO, ••• and Halt, 304 x 64 pt, at the foot. The form and their station scroll on a short window; the buttons and Halt stay.
+- Regular width, taller than wide: the strip, the text to send and the macro row under the received text, as on the phone; the bar along the bottom with Halt 240 x 64 pt at its end.
+- A phone on its side: on the left the tuning row, the received text, the strip and the text to send; on the right, under the waterfall, the macro row and the bar with Halt across the column. Each column takes the screen's safe-area inset on its own outer edge only.
+- With a keyboard and a pointer the macros show their keys, F1 to F12, and Halt shows esc. The function keys send the macros on Operate, also while the text to send has focus, as in fldigi. ⌥T is Tx on or off in RTTY, as it is FT8's Tx and WSPR's beacon; ⌥C and ⌥H are FT8 and FT4 only. The shortcuts sheet lists the keys of the mode in use.
+- Rejected: the macros as a grid of 2 columns in the panel. The panel needs about 650 pt for the status, the form, 4 rows of macros, the buttons and Halt, and gets 563 pt at 1180 x 820; the last row was cut.
+- Not tested on a device: an iPad with and without a hardware keyboard, and a phone on its side with its insets (the Playwright test sets them by hand).
+
 ### Transmitting with VOX
 
 - A transmission is a stream: the transmitter renders 100 ms blocks in the keyboard worker and posts them to the output worklet. The app keeps at most 0.4 s of text in the transmitter (`queued_s`) and holds the rest in its own queue, which is what makes backspace and the sent and queued display possible. The crate's `push_text` cannot take characters back.

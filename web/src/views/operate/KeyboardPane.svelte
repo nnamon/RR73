@@ -10,6 +10,15 @@
    * text. A tap on another word opens a menu of the strip's fields it can fill, with the
    * other-case reading first when the word reads differently ("QWU reads 127 in figures"). Touch
    * and hold any word: the same menu with Call added.
+   *
+   * Larger windows (lib/app/layout.svelte.ts) get the pane as its two parts (operate/panes.ts).
+   * The middle holds the tuning row, the received text, the text to send and the macro row, whose
+   * buttons show F1 to F12 with a keyboard and a pointer. The controls are, in regular width, the
+   * transmit panel: the status, the QSO as a form, their station (country, grid, distance and
+   * bearing, QSOs before) and the bar with Halt at its foot; upright, the
+   * strip joins the middle and the bar runs along the bottom. On a phone on its side the strip
+   * joins the middle too, and the macro row and the bar take the column under the waterfall, with
+   * Halt across it.
    */
   import { onMount } from 'svelte';
   import KeyboardBar from '../../ui/KeyboardBar.svelte';
@@ -29,6 +38,9 @@
   import { reference } from '../../lib/reference';
   import { settings } from '../../lib/state/settings.svelte';
   import { currentDialHz, keyboard, session, startKeyboard, unmute } from '../../lib/state/keyboard.svelte';
+  import { layout } from '../../lib/app/layout.svelte';
+  import { stationFacts } from '../../lib/keyboard/station';
+  import { clock } from '../../lib/state/now.svelte';
   import type { SaveResult } from '../../lib/slots/share';
 
   let { active = true }: PaneProps = $props();
@@ -38,6 +50,7 @@
   });
 
   const s = session;
+  const variant = $derived(layout.size === 'regular' ? (layout.upright ? 'bottom' : 'panel') : layout.size === 'compact-height' ? 'side' : 'phone');
   const contest = $derived(settings.keyboard.set === 'contest');
   const macros = $derived(settings.keyboard.macros[settings.keyboard.set]);
   const serial = $derived(serialText(settings.keyboard.nextSerial, settings.keyboard.serialDigits));
@@ -54,6 +67,11 @@
     const entries = settings.highlights;
     return (call: string) => callColour(call, me, index, band, 'RTTY', entries);
   });
+  // The panel's station facts follow the call and grid, and the day for "at 09:14".
+  const day = $derived(Math.floor(clock.ms / 86_400_000));
+  const facts = $derived(
+    variant === 'panel' && s.draft.fields.call ? stationFacts(s.draft.fields.call, s.draft.fields.grid, settings.grid, countries, log.live, day * 86_400_000 + 43_200_000) : null,
+  );
   const worked = $derived(isWorked(log.live, s.draft.fields.call, settings.band, 'RTTY', contest && settings.keyboard.contestId ? settings.keyboard.contestId : null));
 
   // The word menu.
@@ -123,39 +141,103 @@
     });
   }
 
-  // The floating notices (App.svelte) sit above the dock; 0 while Operate is hidden.
+  // The floating notices (App.svelte) sit above the dock or the bottom bar; 0 while Operate is
+  // hidden, and beside a panel or a column, which leave the bottom edge to the text.
   let dockH = $state(0);
   $effect(() => {
-    const h = active ? dockH : 0;
+    const h = active && (variant === 'phone' || variant === 'bottom') ? dockH : 0;
     document.documentElement.style.setProperty('--rr-bar-h', `${h}px`);
     return () => document.documentElement.style.removeProperty('--rr-bar-h');
   });
 </script>
 
-<div class="kp" data-keyboard-pane>
-  {#if !keyboard.keyboardUp}<TuningRow />{/if}
+{#snippet error()}
   {#if keyboard.status.state === 'failed'}
     <div class="decoder-error" role="alert">
       <p class="t">No RTTY: the modem did not load</p>
       <p class="s">The waterfall still works. Reload RR73 to try again.</p>
     </div>
   {/if}
+{/snippet}
+
+{#snippet text()}
   <ReceiveText lines={s.lines} {resolves} {colourOf} {onword} keyboardUp={keyboard.keyboardUp} marked={menu?.at ?? null} />
-  <div class="dock" bind:offsetHeight={dockH}>
-    <QsoStrip draft={s.draft} {contest} {serial} {worked} onedit={(k, v) => s.editField(k, v)} onsheet={openSheet} />
-    <SendField
-      value={s.field}
-      onAir={s.tx !== 'off'}
-      seconds={s.queueS}
-      unsendable={s.unsendable}
-      ontype={(v) => s.typed(v)}
-      onreturn={() => (unmute(), s.returnKey())}
-      onclear={() => s.clearField()}
-    />
-    <MacroRow {macros} ontap={(m) => (unmute(), s.tapMacro(m))} />
-    <KeyboardBar {onsaved} />
+{/snippet}
+
+{#snippet strip(v: 'strip' | 'panel')}
+  <QsoStrip variant={v} draft={s.draft} {contest} {serial} {worked} onedit={(k, val) => s.editField(k, val)} onsheet={openSheet} />
+{/snippet}
+
+{#snippet send()}
+  <SendField
+    value={s.field}
+    onAir={s.tx !== 'off'}
+    seconds={s.queueS}
+    unsendable={s.unsendable}
+    ontype={(v) => s.typed(v)}
+    onreturn={() => (unmute(), s.returnKey())}
+    onclear={() => s.clearField()}
+  />
+{/snippet}
+
+{#snippet macroRow()}
+  <MacroRow keys={variant !== 'phone' && layout.pointer === 'mouse'} {macros} ontap={(m) => (unmute(), s.tapMacro(m))} />
+{/snippet}
+
+{#if variant === 'phone'}
+  <div class="kp" data-keyboard-pane>
+    {#if !keyboard.keyboardUp}<TuningRow />{/if}
+    {@render error()}
+    {@render text()}
+    <div class="dock" bind:offsetHeight={dockH}>
+      {@render strip('strip')}
+      {@render send()}
+      {@render macroRow()}
+      <KeyboardBar {onsaved} />
+    </div>
   </div>
-</div>
+{:else}
+  <div class="middle" class:beside={variant !== 'bottom'} data-part="middle" data-keyboard-pane>
+    {#if !keyboard.keyboardUp}<TuningRow />{/if}
+    {@render error()}
+    {@render text()}
+    <div class="send">
+      {#if variant !== 'panel'}{@render strip('strip')}{/if}
+      {@render send()}
+      {#if variant !== 'side'}{@render macroRow()}{/if}
+    </div>
+  </div>
+  <div class="controls {variant}" data-part="controls" data-keyboard-pane bind:offsetHeight={dockH}>
+    {#if variant === 'panel'}
+      <KeyboardBar variant="panel" {onsaved}>
+        <section class="sec" aria-labelledby="kb-qso">
+          <div class="head">
+            <h2 id="kb-qso">QSO</h2>
+            {#if worked}<span class="wk">Worked</span>{/if}
+            <button class="link" onclick={openSheet}>Details</button>
+          </div>
+          {@render strip('panel')}
+        </section>
+        {#if facts}
+          <section class="sec" aria-labelledby="kb-station">
+            <div class="head"><h2 id="kb-station">{s.draft.fields.call}</h2></div>
+            <ul class="group facts">
+              <li class="row"><span class="row-main"><span class="row-title">Station</span><span class="row-sub" data-testid="kb-where">{facts.where}</span></span></li>
+              <li class="row"><span class="row-main"><span class="row-title">Worked before</span><span class="row-sub" data-testid="kb-before">{facts.before}</span></span></li>
+            </ul>
+          </section>
+        {/if}
+      </KeyboardBar>
+    {:else if variant === 'bottom'}
+      <KeyboardBar variant="bottom" {onsaved} />
+    {:else}
+      <div class="dock">
+        {@render macroRow()}
+        <KeyboardBar variant="side" {onsaved} />
+      </div>
+    {/if}
+  </div>
+{/if}
 
 {#if menu}
   <PopMenu label="Use {menu.word} as" header={menu.header} items={menu.items} anchor={menu.anchor} onclose={() => (menu = null)} />
@@ -174,6 +256,88 @@
     padding-top: var(--rr-space-1);
     background: var(--rr-dock);
     box-shadow: 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+  }
+
+  /*
+   * Beside the panel or the column on the right, the middle's right edge is not the screen's, and
+   * the column's left edge is not either: neither takes the screen's inset there.
+   */
+  .middle.beside {
+    --rr-safe-right: 0px;
+  }
+
+  .controls.panel,
+  .controls.side {
+    --rr-safe-left: 0px;
+  }
+
+  /* Larger windows: the text to send and the macros under the received text, across the middle. */
+  .send {
+    flex: none;
+    padding: var(--rr-space-2) 0 var(--rr-safe-bottom);
+    background: var(--rr-dock);
+    box-shadow: 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+  }
+
+  .controls.side {
+    background: var(--rr-dock);
+  }
+
+  .controls.side .dock {
+    flex: 1;
+    box-shadow: none;
+  }
+
+  .controls.bottom .dock {
+    padding-top: var(--rr-space-2);
+  }
+
+  /* The station's facts as an inset group, as in the station details sheet. */
+  .facts {
+    margin: 0;
+  }
+
+  .sec {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rr-space-2);
+  }
+
+  .head {
+    display: flex;
+    gap: var(--rr-space-2);
+    align-items: center;
+    min-height: var(--rr-leading-foot);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-foot);
+    color: var(--rr-label2);
+  }
+
+  .head h2 {
+    font: inherit;
+  }
+
+  /* A text button, 44 pt high, that reaches over the heading's line. */
+  .link {
+    min-height: var(--rr-tap);
+    margin: calc((var(--rr-leading-foot) - var(--rr-tap)) / 2) calc(-1 * var(--rr-space-2)) calc((var(--rr-leading-foot) - var(--rr-tap)) / 2) auto;
+    padding: 0 var(--rr-space-2);
+    color: var(--rr-accent);
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-regular);
+  }
+
+  .wk {
+    display: flex;
+    align-items: center;
+    height: var(--rr-space-5);
+    padding: 0 var(--rr-space-1-5);
+    border-radius: var(--rr-radius-pill);
+    background: var(--rr-fill);
+    color: var(--rr-label);
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-semibold);
   }
 
   .decoder-error {

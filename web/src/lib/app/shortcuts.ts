@@ -25,6 +25,21 @@ export type FocusKind = 'text' | 'control' | 'none';
 
 const ALT: Record<string, Shortcut> = { KeyT: 'tx', KeyC: 'cq', KeyH: 'hunt', Digit1: 'operate', Digit2: 'log', Digit3: 'settings' };
 
+/** F1 to F12 send the keyboard modes' macros, in their order. */
+export const MACRO_KEYS = 12;
+
+/**
+ * The macro a key press sends in a keyboard mode, 0 for F1, or null. The function keys type
+ * nothing, so they act while the text to send has focus, as in fldigi.
+ */
+export function macroKeyOf(e: KeyPress): number | null {
+  if (e.altKey || e.ctrlKey || e.metaKey) return null;
+  const m = /^F(\d{1,2})$/.exec(e.key);
+  if (!m) return null;
+  const n = Number(m[1]);
+  return n >= 1 && n <= MACRO_KEYS ? n - 1 : null;
+}
+
 /** The shortcut a key press asks for, or null. ⌥ is read from the physical key: on a Mac ⌥T types †. */
 export function shortcutOf(e: KeyPress, focus: FocusKind): Shortcut | null {
   if (e.key === 'Escape') return 'halt';

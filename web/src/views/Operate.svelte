@@ -44,7 +44,7 @@
   const live = $derived(audio.status === 'running');
 </script>
 
-<section class="operate {layout.size}" class:upright={layout.upright} class:whole={isKeyboard} aria-labelledby="operate-title">
+<section class="operate {layout.size}" class:upright={layout.upright} class:keyboard={isKeyboard} aria-labelledby="operate-title">
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   {#if layout.size !== 'regular'}<StationBar />{/if}
   <div class="notes" data-part="notes">
@@ -185,13 +185,9 @@
       / minmax(0, 1fr);
   }
 
-  /* A pane that marks no parts (the keyboard modes) takes the whole width under the waterfall. */
-  .regular.whole {
-    grid-template:
-      'notes' auto
-      'wf' auto
-      'middle' minmax(0, 1fr)
-      / minmax(0, 1fr);
+  /* The keyboard modes read text: the waterfall takes a quarter of the height. */
+  .regular.keyboard {
+    --rr-waterfall: calc(100dvh / 4);
   }
 
   .regular > :global(.wf-wrap) {

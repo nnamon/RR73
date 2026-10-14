@@ -193,19 +193,6 @@ async function noSideways(page: Page) {
 
 const SCREEN = 'main .pane:not([hidden]), .app > .top';
 
-test('regular width: RTTY, whose pane marks no parts, takes the whole width under the waterfall', { tag: '@ci-regular' }, async ({ page }, info) => {
-  test.skip(info.project.name.includes('852x393'), 'Regular width only: on its side a phone keeps the waterfall on the right');
-  await page.goto('./');
-  const settings = { callsign: '9V1NE', grid: 'OJ11', band: '20m', mode: 'RTTY', freqPicked: true, schema: 8 };
-  await seed(page, { qsos: [], ledger: [], activations: [], destinations: [], kv: [{ key: 'settings', value: settings }] });
-  await page.goto('./#/operate');
-  const width = page.viewportSize()!.width;
-  for (const el of [page.getByTestId('rx-text'), page.getByRole('region', { name: 'Transmit' })]) {
-    const b = (await el.boundingBox())!;
-    expect(b.x + b.width).toBeGreaterThan(width - 40);
-  }
-});
-
 test('regular width: tabs, the two panes, the transmit panel and Halt, then upright with a bottom bar', { tag: '@ci-regular' }, async ({ page }) => {
   const { width: W, height: H } = page.viewportSize()!;
   test.skip(W < 1000 || H < 500 || H > W, 'Regular width on its side');
