@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.3 · 2026-10-14
 
 - Decode colours start with RR73's scheme, chosen to stay apart with colour blindness: your call vermillion, CQ bluish green, Sent sky blue. Colours left at the old defaults change to it. Colours you changed stay.
 <!-- lint-copy: off -->
