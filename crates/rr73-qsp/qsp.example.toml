@@ -1,0 +1,47 @@
+# QSP settings. Every field is optional except each receiver's id, kind, name and host.
+# Run: rr73-qsp --config qsp.toml
+
+# Plain HTTP on this address, behind an HTTPS front that strips the API base's path.
+listen = "127.0.0.1:7373"
+
+# Keys the app sends as "Authorization: Bearer <key>", at least 16 characters each.
+# Leave empty for an instance anyone may use: it still reaches only the receivers below.
+access_keys = []
+
+# Origins a browser may call QSP from. Empty: any origin. No request carries cookies.
+allowed_origins = ["https://nnamon.github.io"]
+
+# Requests one key, or one address on an open instance, may make per minute.
+requests_per_minute = 120
+
+[sdr]
+# Whether users may name receivers of their own, by kind and address.
+user_receivers = false
+
+# The receivers this instance offers. kind: kiwisdr (KiwiSDR and Web-888).
+# free_channels: QSP does not connect when fewer channels than this would remain for others.
+# max_sessions: sessions this instance may hold on the receiver at once.
+# latency_s: how late the receiver's audio arrives, s; the app's calibration corrects the rest.
+
+[[sdr.receivers]]
+id = "sarts-web888"
+kind = "kiwisdr"
+name = "SARTS Web-888"
+location = "Singapore"
+grid = "OJ11"
+host = "167.172.88.10"
+port = 80
+latency_s = 0.3
+free_channels = 2
+max_sessions = 1
+
+[[sdr.receivers]]
+id = "9v1kg-web888"
+kind = "kiwisdr"
+name = "9V1KG Web-888"
+location = "Singapore"
+grid = "OJ11"
+host = "9v1kg.bpmsg.com"
+port = 8073
+free_channels = 1
+max_sessions = 1

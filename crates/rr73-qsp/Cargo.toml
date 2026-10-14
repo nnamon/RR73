@@ -1,0 +1,30 @@
+[package]
+name = "rr73-qsp"
+description = "QSP, the relay RR73 uses to receive from web SDRs and to report to PSK Reporter and WSPRnet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+axum = { version = "0.8", features = ["ws"] }
+clap.workspace = true
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+rand.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time", "sync", "signal", "io-util"] }
+tokio-tungstenite = "0.26"
+toml.workspace = true
+tower-http = { version = "0.6", features = ["cors"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+utoipa = { version = "5", features = ["axum_extras"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+
+[lints]
+workspace = true
