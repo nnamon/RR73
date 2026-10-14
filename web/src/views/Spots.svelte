@@ -6,7 +6,8 @@
    * station (lib/state/spots.svelte.ts). The practice band pauses spots.
    *
    * Beside the list (compact height and regular width) Spots follows the Log: the list on the
-   * left, the running activation in the detail pane on the right.
+   * left, the running activation in the detail pane on the right. Without activations the spot
+   * list takes one readable column.
    */
   import { layout, split } from '../lib/app/layout.svelte';
   import { refsLabel } from '../lib/log/activation';
@@ -89,38 +90,45 @@
     {#if layout.size === 'compact-height'}
       <BackLink to={href('operate')} label="Operate" title="Spots" id="spots-title" />
     {/if}
-    <div class="cols">
-      <div class="list-col">
+    {#if !features.activations}
+      <div class="one">
         {#if layout.size === 'regular'}<h1 class="large-title" id="spots-title">Spots</h1>{/if}
-        {#if features.activations && log.ready && log.current}
-          <div class="section">
-            <h2 class="section-head">Activation</h2>
-            <div class="group">
-              <div class="row running" aria-current="true">
-                <span class="ic" aria-hidden="true"><Icon name="mountain" size={20} /></span>
-                <span class="row-main">
-                  <span class="row-title">{refsLabel(log.current.refs)}</span>
-                  <span class="row-sub">Running, as {log.current.callsign}</span>
-                </span>
-              </div>
-            </div>
-          </div>
-        {:else if features.activations && log.ready}
-          {@render startRow()}
-        {/if}
         {@render spotSection()}
       </div>
-      <div class="detail-col">
-        {#if features.activations && log.ready && log.current}
-          <div class="detail"><ActivationPanel activation={log.current} /></div>
-        {:else}
-          <div class="empty">
-            <h2>No activation running</h2>
-            <p>Activations you start appear here with their QSOs and files.</p>
-          </div>
-        {/if}
+    {:else}
+      <div class="cols">
+        <div class="list-col">
+          {#if layout.size === 'regular'}<h1 class="large-title" id="spots-title">Spots</h1>{/if}
+          {#if log.ready && log.current}
+            <div class="section">
+              <h2 class="section-head">Activation</h2>
+              <div class="group">
+                <div class="row running" aria-current="true">
+                  <span class="ic" aria-hidden="true"><Icon name="mountain" size={20} /></span>
+                  <span class="row-main">
+                    <span class="row-title">{refsLabel(log.current.refs)}</span>
+                    <span class="row-sub">Running, as {log.current.callsign}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          {:else if log.ready}
+            {@render startRow()}
+          {/if}
+          {@render spotSection()}
+        </div>
+        <div class="detail-col">
+          {#if log.ready && log.current}
+            <div class="detail"><ActivationPanel activation={log.current} /></div>
+          {:else}
+            <div class="empty">
+              <h2>No activation running</h2>
+              <p>Activations you start appear here with their QSOs and files.</p>
+            </div>
+          {/if}
+        </div>
       </div>
-    </div>
+    {/if}
   </section>
 {:else}
   <section class="screen" aria-labelledby="spots-title">
@@ -184,6 +192,24 @@
     overscroll-behavior: contain;
     padding: 0 0 var(--rr-space-8) var(--rr-safe-left);
     box-shadow: inset calc(-1 * var(--rr-hairline)) 0 0 var(--rr-sep-strong);
+  }
+
+  /* Spots alone, without activations: one readable column. */
+  .one {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 var(--rr-safe-right) var(--rr-space-8) var(--rr-safe-left);
+  }
+
+  .one > :global(*) {
+    max-width: var(--rr-form);
+    margin-inline: auto;
+  }
+
+  .one .large-title {
+    padding-top: var(--rr-space-3);
   }
 
   .list-col .large-title {

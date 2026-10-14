@@ -126,7 +126,7 @@
     margin-bottom: var(--rr-space-1);
   }
 
-  /* A 44 px target around a 30 px pill. */
+  /* A 44 px target around a pill, styled as the decode list's filters. */
   .chip {
     display: flex;
     align-items: center;
@@ -139,18 +139,17 @@
     display: flex;
     align-items: center;
     height: var(--rr-chip);
-    padding: 0 var(--rr-space-3);
-    border-radius: var(--rr-radius-m);
+    padding: 0 calc(var(--rr-space-2) + var(--rr-space-half));
+    border-radius: var(--rr-radius-pill);
     background: var(--rr-fill-bg);
-    font-size: var(--rr-text-row);
+    font-size: var(--rr-text-sub);
     font-weight: var(--rr-weight-semibold);
-    letter-spacing: var(--rr-tracking-tight);
     white-space: nowrap;
   }
 
   .chip[aria-pressed='true'] .pill {
-    background: var(--rr-label);
-    color: var(--rr-on-strong);
+    background: var(--rr-accent-fill);
+    color: var(--rr-on-fill);
   }
 
   .chip:focus-visible {

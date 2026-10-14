@@ -73,7 +73,8 @@ describe('the country on CQ rows', () => {
     flushSync();
     const rows = [...target.querySelectorAll<HTMLElement>('button.dr')];
     expect(rows.map((r) => r.querySelector('[data-testid="chase-tag"]')?.textContent ?? null)).toEqual(['JA-1234', 'JA-1234', null]);
-    expect(rows.map((r) => r.querySelector('.c-country')?.textContent ?? null)).toEqual([null, null, 'Australia']);
+    expect(rows.map((r) => r.querySelector('.c-country')?.textContent ?? null)).toEqual(['JA-1234', 'JA-1234', 'Australia']);
+    expect(rows.map((r) => !!r.querySelector('.c-country.c-chase'))).toEqual([true, true, false]);
     expect(rows[0].getAttribute('aria-label')).toBe('−12 dB, DT 0.1 s, 1418 Hz, CQ POTA JA1KXM PM95, calling CQ, spotted, POTA JA-1234');
     expect(rows[2].getAttribute('aria-label')).not.toContain('spotted');
   });

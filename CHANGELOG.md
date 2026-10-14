@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Spots lists POTA and DX cluster spots, newest first, while POTA spots or Cluster spots is on in Settings › Optional features. The list refreshes every minute while Spots is open and online, and offline shows the last list with its time.
+- Chips choose POTA, SOTA, WWFF, IOTA or DX, FT8 and FT4 only, your bands and New only. A row reads Worked today for a station you worked on its band today, or New park, New summit, New WWFF or New IOTA for a reference not in your log.
+- Go on an FT8 or FT4 spot sets its band and mode and opens the band sheet with the frequency to set the radio to. The station's rows in the decode list show its reference, and the QSO with it logs that reference as theirs.
+- The practice band pauses spots: it sends nothing over the network.
+
 ## 0.14.3 · 2026-10-14
 
 - With Repeat CQ on, a QSO is followed by a station that called in the slot just ended, or by CQ. A caller heard earlier and not since is no longer answered: on the air they have usually moved on, and the report to them repeated into silence for up to 2 min.

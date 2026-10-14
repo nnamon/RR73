@@ -206,7 +206,7 @@
     <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
     {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
   {:else}
-    {#if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{:else if queued}<span class="c-queue" class:next={queued === 'Next'} class:dupe={queued === 'Dupe'} aria-hidden="true">{queued}</span>{:else if chased}<span class="c-queue next" aria-hidden="true" data-testid="chase-tag">{chased.text}</span>{:else if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{/if}
+    {#if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{:else if queued}<span class="c-queue" class:next={queued === 'Next'} class:dupe={queued === 'Dupe'} aria-hidden="true">{queued}</span>{:else if chased}<span class="c-country c-chase" aria-hidden="true" data-testid="chase-tag"><span>{chased.text}</span></span>{:else if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{/if}
     <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
@@ -628,6 +628,15 @@
     }
   }
 
+  /*
+   * The chased station's reference takes the country's place and gives way to the message as it
+   * does, bold and in the tint. On a tinted, faded or selected row it takes the country's colour.
+   */
+  .c-chase {
+    font-weight: var(--rr-weight-bold);
+    color: var(--rr-accent);
+  }
+
   /* Colours as for the numbers: on a tint, worked before, faded, selected. */
   .hl-background .c-country {
     color: var(--rr-label);
@@ -642,10 +651,7 @@
     color: var(--rr-tx-text);
   }
 
-  /*
-   * A caller waiting while we call CQ: Next in the tint, later places and Dupe in grey, where a CQ
-   * row has its country. The chased station's reference takes the tint too.
-   */
+  /* A caller waiting while we call CQ: Next in the tint, later places and Dupe in grey, where a CQ row has its country. */
   .c-queue {
     flex: none;
     font-size: var(--rr-text-caption);
