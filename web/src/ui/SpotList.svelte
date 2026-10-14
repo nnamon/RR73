@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * WSPR spots under a 22 pt bar per slot (lib/wspr/list.ts). A 32 pt row leads with the callsign
-   * in 16 pt semibold and the grid, and ends with distance, SNR, drift and audio frequency in
-   * aligned 12 pt columns ("8558 km −23 dB 0 Hz 1493 Hz"). Spots of slots older than the newest
+   * in 16 pt semibold and the grid, and ends with distance, reported power, SNR and drift in
+   * aligned 12 pt columns ("8558 km 37 dBm −23 dB 0 Hz"). The audio frequency is in the details,
+   * and a tap marks the trace on the waterfall. Spots of slots older than the newest
    * slot with spots fade. A spot of the station's own callsign shows in the My call colour.
    *
    * The beacon's transmissions are rows of their own, as in FT8: Next with a countdown, Sending
@@ -40,13 +41,14 @@
 
   const km = (s: Spot) => (s.km === null ? '' : `${Math.round(s.km)} km`);
   const db = (s: Spot) => `${signed(Math.round(s.snrDb))} dB`;
+  const dbm = (s: Spot) => (s.powerDbm === null ? '' : `${s.powerDbm} dBm`);
   const drift = (s: Spot) => {
     const v = Math.round(s.driftHz);
     return `${v > 0 ? '+' : v < 0 ? MINUS : ''}${Math.abs(v)} Hz`;
   };
 
   function spoken(s: Spot): string {
-    return [s.call ?? 'Unknown callsign', s.grid ?? '', s.km === null ? '' : `${Math.round(s.km)} km`, db(s), `drift ${drift(s)}`, `${Math.round(s.audioHz)} Hz`].filter(Boolean).join(', ');
+    return [s.call ?? 'Unknown callsign', s.grid ?? '', s.km === null ? '' : `${Math.round(s.km)} km`, dbm(s), db(s), `drift ${drift(s)}`].filter(Boolean).join(', ');
   }
 
   /** "in 0:32" before a Next slot; the time left on air while sending. */
@@ -141,9 +143,9 @@
           <span class="call" aria-hidden="true">{s.call ?? '<...>'}</span>
           <span class="grid" aria-hidden="true">{s.grid ?? ''}</span>
           <span class="n km" aria-hidden="true">{km(s)}</span>
+          <span class="n pw" aria-hidden="true">{dbm(s)}</span>
           <span class="n db" aria-hidden="true">{db(s)}</span>
           <span class="n dr" aria-hidden="true">{drift(s)}</span>
-          <span class="n hz" aria-hidden="true">{Math.round(s.audioHz)} Hz</span>
         </button>
       </li>
     {/if}
@@ -302,8 +304,8 @@
     min-width: 2.7em;
   }
 
-  .hz {
-    min-width: 3.7em;
+  .pw {
+    min-width: 3.9em;
   }
 
   /* A spot carrying the station's own callsign: the My call colour, as in FT8. */
