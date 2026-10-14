@@ -235,7 +235,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}

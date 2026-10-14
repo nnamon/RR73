@@ -34,6 +34,7 @@
    */
   import { dt, snr } from '../lib/clock/format';
   import { cqCountry } from '../lib/decode/country';
+  import { isLost, type LostMark } from '../lib/decode/lost';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
   import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
   import { outText, type RowItem } from '../lib/decode/list';
@@ -48,6 +49,7 @@
     preview = false,
     nowMs = 0,
     countries = null,
+    lost = [],
     onselect,
     oncall,
     ondetail,
@@ -62,6 +64,8 @@
     nowMs?: number;
     /** The country file, for the caller's country on CQ rows; null until it has loaded. */
     countries?: DxccIndex | null;
+    /** Stations we called that answered another station: their rows read Lost where a CQ row has its country. */
+    lost?: readonly LostMark[];
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
@@ -76,7 +80,7 @@
 
   type Out = ReturnType<typeof outText>;
 
-  function spoken(item: RowItem, o: Out | null, country: string | null = null): string {
+  function spoken(item: RowItem, o: Out | null, country: string | null = null, lostRow = false): string {
     const r = item.row;
     const parts = [
       o ? o.tag.replace(' · :', ', :') : '',
@@ -86,6 +90,7 @@
       // Our own rows say Next, Sending or Sent in their tag.
       r.mark && !item.out ? MARK_TEXT[r.mark] : '',
       country ?? '',
+      lostRow ? 'lost, answered another station' : '',
       r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
       r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
@@ -172,7 +177,7 @@
   }
 </script>
 
-{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null)}
+{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null, lostRow = false)}
   {#if o}<span class="c-tag" aria-hidden="true">{o.tag}</span>{/if}
   <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
   {#if r.badge}
@@ -184,7 +189,7 @@
     <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
     {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
   {:else}
-    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{/if}
+    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{:else if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{/if}
     <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
@@ -212,6 +217,7 @@
       {@const o = item.out ? outText(item.out, item.slotStartMs, r.decode.freq_hz, nowMs) : null}
       {@const next = item.out?.stage === 'next'}
       {@const country = item.out ? null : cqCountry(r, countries)}
+      {@const lostRow = !item.out && isLost(r.decode.text, item.slotStartMs, lost)}
       <li class="dr-item">
         {#if preview || next}
           <div
@@ -224,7 +230,7 @@
             data-testid={next ? 'next-row' : undefined}
           >
             <span class="visually-hidden">{spoken(item, o)}</span>
-            {@render cells(r, t, o, next, country)}
+            {@render cells(r, t, o, next, country, lostRow)}
           </div>
         {:else}
           <button
@@ -235,7 +241,7 @@
             style:--rr-ink-dark={ink?.dark}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
-            aria-label={spoken(item, o, country)}
+            aria-label={spoken(item, o, country, lostRow)}
             aria-pressed={selectedId === item.id}
             onpointerdown={(e) => down(e, item)}
             onpointermove={move}
@@ -244,7 +250,7 @@
             oncontextmenu={(e) => e.preventDefault()}
             onclick={(e) => click(e, item)}
           >
-            {@render cells(r, t, o, false, country)}
+            {@render cells(r, t, o, false, country, lostRow)}
           </button>
         {/if}
       </li>
@@ -597,6 +603,15 @@
   /* Colours as for the numbers: on a tint, worked before, faded, selected. */
   .hl-background .c-country {
     color: var(--rr-label);
+  }
+
+  /* A station we were calling, answering another station: a small red Lost where a CQ row has its country. */
+  .c-lost {
+    flex: none;
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-bold);
+    line-height: var(--rr-leading-caption);
+    color: var(--rr-tx-text);
   }
 
   .hl-ink .c-country {
