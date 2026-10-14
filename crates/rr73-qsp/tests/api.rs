@@ -154,6 +154,51 @@ async fn about_docs_and_the_key() {
     assert!(html.contains("<code>/v1/sdr/sessions</code>") && html.contains("NewSession"));
 }
 
+/// The browser asks before each keyed call from the app; the answer comes before the key check,
+/// and only for the allowed origins.
+#[tokio::test]
+async fn answers_the_browser_preflight_for_the_allowed_origin() {
+    let (port, _) = stand_in(0).await;
+    let mut c = config(port);
+    c.allowed_origins = vec!["https://nnamon.github.io".into()];
+    let app = router(AppState::new(c));
+    for (method, path) in [
+        ("POST", "/v1/sdr/sessions"),
+        ("PATCH", "/v1/sdr/sessions/abc"),
+        ("DELETE", "/v1/sdr/sessions/abc"),
+        ("GET", "/v1/sdr/receivers"),
+    ] {
+        let ask = |origin: &str| {
+            Request::builder()
+                .method("OPTIONS")
+                .uri(path)
+                .header("origin", origin)
+                .header("access-control-request-method", method)
+                .header("access-control-request-headers", "authorization,content-type")
+                .body(Body::empty())
+                .unwrap()
+        };
+        let res = app
+            .clone()
+            .oneshot(ask("https://nnamon.github.io"))
+            .await
+            .unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "{method} {path}");
+        let h = res.headers();
+        assert_eq!(h["access-control-allow-origin"], "https://nnamon.github.io");
+        let methods = h["access-control-allow-methods"].to_str().unwrap();
+        assert!(methods.contains(method), "{method} in {methods}");
+        let headers = h["access-control-allow-headers"].to_str().unwrap().to_lowercase();
+        assert!(headers.contains("authorization") && headers.contains("content-type"));
+        let res = app
+            .clone()
+            .oneshot(ask("https://elsewhere.example"))
+            .await
+            .unwrap();
+        assert!(res.headers().get("access-control-allow-origin").is_none());
+    }
+}
+
 #[tokio::test]
 async fn sessions_refuse_what_the_instance_does_not_offer() {
     let (port, _) = stand_in(0).await;

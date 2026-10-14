@@ -1,6 +1,7 @@
 // Where captured audio comes from. The capture engine opens one input source and connects its
-// node to the capture worklet: the microphone (the radio through the headset contact), or the
-// practice band (lib/practice/source.ts), which needs no microphone permission.
+// node to the capture worklet: the microphone (the radio through the headset contact), the
+// practice band (lib/practice/source.ts), which needs no microphone permission, or a web SDR
+// through a relay (lib/relay/sdr-input.ts).
 
 import { captureConstraints, readReport, type CaptureReport } from './report';
 
@@ -23,6 +24,12 @@ export interface InputEvents {
 }
 
 export interface InputSource {
+  /**
+   * A fixed correction of capture's timestamps, s, for an input that plays its audio late on
+   * purpose (the web SDR's playout delay). Left out: none. Inputs other than the microphone take
+   * no receive calibration.
+   */
+  readonly offsetS?: number;
   /** Why the source cannot open in this browser, or null. */
   unavailable(): StartError | null;
   /** Opens the input in `ctx`. Call from a tap: the microphone asks for permission. Throws a DOMException when it cannot. */

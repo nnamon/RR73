@@ -13,6 +13,7 @@
   import { href, route } from '../lib/app/router.svelte';
   import { presetLabel, presetOf } from '../lib/decode/highlight';
   import { practice } from '../lib/state/practice.svelte';
+  import { relay, relayName } from '../lib/state/relay.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
   import { loggingSummary } from '../lib/state/summaries';
@@ -39,6 +40,8 @@
     ],
     [
       { id: 'radio', title: 'Radio and audio', icon: 'mic', tile: 'orange', value: audio.status === 'running' ? 'Audio on' : 'Audio off' },
+      { id: 'sdr', title: 'Web SDR', icon: 'headphones', tile: 'teal', value: relay.sdrOn ? relay.receiverName || 'On' : 'Off' },
+      { id: 'relay', title: 'Relay', icon: 'globe', tile: 'grey', value: relayName(relay.base) },
       { id: 'logging', title: 'Logging', icon: 'book', tile: 'green', value: loggingSummary() },
       { id: 'practice', title: 'Practice band', icon: 'play', tile: 'teal', value: practice.on ? 'On' : 'Off' },
     ],

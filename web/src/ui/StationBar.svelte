@@ -18,6 +18,7 @@
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { practice } from '../lib/state/practice.svelte';
+  import { webSdrInput } from '../lib/state/relay.svelte';
   import { houndOn, qso } from '../lib/state/qso.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { audio, halt, tx } from '../lib/state/station.svelte';
@@ -71,6 +72,7 @@
   {live}
   spots={spotsShown()}
   practice={practice.on}
+  sdr={!practice.on && webSdrInput() !== null}
   onband={() => (sheets.band = true)}
   {regular}
   {tab}

@@ -89,6 +89,7 @@ export const ICONS = {
   sun: { stroke: ['M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6L7 7M17 17l1.4 1.4M5.6 18.4L7 17M17 7l1.4-1.4'], rings: [[12, 12, 3.5, 3.5]], width: 2.2 },
   info: { stroke: ['M12 11v5.5M12 7.8v.01'], rings: [[12, 12, 8.5, 8.5]], width: 2.2 },
   antenna: { stroke: ['M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 5.4a9.3 9.3 0 0 0 0 13.2M18.6 5.4a9.3 9.3 0 0 1 0 13.2'], dots: [[12, 12, 1.8]], width: 2.2 },
+  headphones: { stroke: ['M4 15v-3a8 8 0 0 1 16 0v3', 'M4 15a2 2 0 0 1 2-2h1.5v7H6a2 2 0 0 1-2-2z', 'M20 15a2 2 0 0 0-2-2h-1.5v7H18a2 2 0 0 0 2-2z'], width: 2.2 },
 } satisfies Record<string, IconShape>;
 
 export type IconName = keyof typeof ICONS;

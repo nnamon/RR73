@@ -1,0 +1,165 @@
+// QSP's API as RR73 uses it (docs/design/qsp.md, The API). Every path joins onto the relay's API
+// base, such as https://dmr.pwn.sg/qsp; requests carry the access key when one is set.
+
+export interface QspAbout {
+  name: string;
+  version: string;
+  api: string[];
+  auth: boolean;
+  services: string[];
+  userReceivers: boolean;
+}
+
+export interface QspReceiver {
+  id: string;
+  kind: string;
+  name: string;
+  location: string;
+  grid: string;
+}
+
+export interface QspSession {
+  id: string;
+  receiver: string;
+  dialHz: number;
+  encoding: string;
+  state: 'waiting' | 'streaming' | 'ended';
+  /** The stream's path with its one-time ticket; only in the answer that creates the session. */
+  stream?: string;
+  endReason?: string;
+  endMessage?: string;
+}
+
+/** Why a request to the relay failed: unreachable, a refused key, a refusal with QSP's own code, or an answer RR73 cannot read. */
+export type QspErrorKind = 'network' | 'timeout' | 'unauthorised' | 'refused' | 'format';
+
+export class QspError extends Error {
+  constructor(
+    readonly kind: QspErrorKind,
+    /** QSP's error code for kind refused: not-found, forbidden, receiver-busy, rate-limited, invalid. */
+    readonly code: string | null = null,
+    message = `Relay request failed: ${kind}`,
+  ) {
+    super(message);
+    this.name = 'QspError';
+  }
+}
+
+export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
+
+const TIMEOUT_MS = 10_000;
+
+/** The relay's base without a trailing slash; null when it is not an http or https address. */
+export function normaliseBase(text: string): string | null {
+  const t = text.trim().replace(/\/+$/, '');
+  if (!t) return null;
+  try {
+    const u = new URL(t);
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.search || u.hash) return null;
+    return t;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * True when a page at `pageProtocol` may not reach the relay: browsers block http from an https
+ * page, except on this device (localhost, 127.0.0.1).
+ */
+export function blockedFromPage(base: string, pageProtocol: string): boolean {
+  if (pageProtocol !== 'https:') return false;
+  const u = new URL(base);
+  return u.protocol === 'http:' && u.hostname !== 'localhost' && u.hostname !== '127.0.0.1';
+}
+
+/** A path under the API base. */
+export function apiUrl(base: string, path: string): string {
+  return `${base.replace(/\/+$/, '')}${path}`;
+}
+
+/** The stream's WebSocket address: https becomes wss, http becomes ws. */
+export function streamUrl(base: string, path: string): string {
+  return apiUrl(base, path).replace(/^http/, 'ws');
+}
+
+async function call<T>(base: string, key: string, method: string, path: string, body: unknown, fetchFn: FetchFn): Promise<T> {
+  const ctl = new AbortController();
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    ctl.abort();
+  }, TIMEOUT_MS);
+  let res: Response;
+  try {
+    const headers: Record<string, string> = {};
+    if (key) headers.Authorization = `Bearer ${key}`;
+    if (body !== undefined) headers['Content-Type'] = 'application/json';
+    res = await fetchFn(apiUrl(base, path), {
+      method,
+      headers,
+      body: body === undefined ? undefined : JSON.stringify(body),
+      signal: ctl.signal,
+      credentials: 'omit',
+      cache: 'no-store',
+    });
+  } catch {
+    throw new QspError(timedOut ? 'timeout' : 'network');
+  } finally {
+    clearTimeout(timer);
+  }
+  if (res.status === 204) return undefined as T;
+  let data: unknown = null;
+  try {
+    data = await res.json();
+  } catch {
+    if (res.ok) throw new QspError('format');
+  }
+  if (res.status === 401) throw new QspError('unauthorised', 'unauthorised');
+  if (!res.ok) {
+    const e = (data as { error?: { code?: unknown; message?: unknown } } | null)?.error;
+    throw new QspError('refused', typeof e?.code === 'string' ? e.code : String(res.status), typeof e?.message === 'string' ? e.message : undefined);
+  }
+  return data as T;
+}
+
+const pageFetch: FetchFn = (input, init) => globalThis.fetch(input, init);
+
+export function qspAbout(base: string, fetchFn: FetchFn = pageFetch): Promise<QspAbout> {
+  return call(base, '', 'GET', '/about', undefined, fetchFn);
+}
+
+export async function qspReceivers(base: string, key: string, fetchFn: FetchFn = pageFetch): Promise<QspReceiver[]> {
+  const r = await call<{ receivers?: QspReceiver[] }>(base, key, 'GET', '/v1/sdr/receivers', undefined, fetchFn);
+  if (!Array.isArray(r?.receivers)) throw new QspError('format');
+  return r.receivers;
+}
+
+export function qspStartSession(base: string, key: string, receiver: string, dialHz: number, listener: string, fetchFn: FetchFn = pageFetch): Promise<QspSession> {
+  return call(base, key, 'POST', '/v1/sdr/sessions', { receiver, dialHz, listener, encoding: 'ima-adpcm' }, fetchFn);
+}
+
+export function qspTune(base: string, key: string, id: string, dialHz: number, fetchFn: FetchFn = pageFetch): Promise<QspSession> {
+  return call(base, key, 'PATCH', `/v1/sdr/sessions/${encodeURIComponent(id)}`, { dialHz }, fetchFn);
+}
+
+export function qspStop(base: string, key: string, id: string, fetchFn: FetchFn = pageFetch): Promise<void> {
+  return call(base, key, 'DELETE', `/v1/sdr/sessions/${encodeURIComponent(id)}`, undefined, fetchFn);
+}
+
+/** The error in words for Settings: what happened and what to do. */
+export function qspErrorText(e: unknown): string {
+  if (!(e instanceof QspError)) return 'The relay sent an answer RR73 cannot read.';
+  switch (e.kind) {
+    case 'network':
+      return 'The relay is unreachable. Check the address and that this phone is online.';
+    case 'timeout':
+      return 'The relay did not answer within 10 s.';
+    case 'unauthorised':
+      return 'The relay refused the access key. Check it with whoever runs the relay.';
+    case 'format':
+      return 'The address answered, but not as a QSP relay. Check the address.';
+    case 'refused':
+      return e.message.startsWith('Relay request failed') ? `The relay refused the request (${e.code}).` : e.message;
+  }
+}

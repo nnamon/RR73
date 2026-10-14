@@ -12,6 +12,8 @@
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
   import PracticeSettings from './views/PracticeSettings.svelte';
+  import RelaySettings from './views/RelaySettings.svelte';
+  import WebSdrSettings from './views/WebSdrSettings.svelte';
   import FtSettings from './views/FtSettings.svelte';
   import WsprSettings from './views/WsprSettings.svelte';
   import RttySettings from './views/RttySettings.svelte';
@@ -182,6 +184,10 @@
     <Logging />
   {:else if sub === 'practice'}
     <PracticeSettings />
+  {:else if sub === 'relay'}
+    <RelaySettings />
+  {:else if sub === 'sdr'}
+    <WebSdrSettings />
   {:else if sub === 'ft8'}
     <FtSettings />
   {:else if sub === 'wspr'}

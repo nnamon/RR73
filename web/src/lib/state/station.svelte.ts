@@ -208,10 +208,15 @@ const haltHooks = new Set<() => void>();
 let levelLog: [number, number][] = [];
 let peakHold: { db: number; at: number } = { db: FLOOR_DB, at: 0 };
 
+/** The offset capture applies: the input source's own, or the radio's receive calibration. */
+function inputOffsetS(): number {
+  return inputSource ? (inputSource.offsetS ?? 0) : calibration.offsetS;
+}
+
 function getEngine(): CaptureEngine {
   if (engine) return engine;
   engine = new CaptureEngine(undefined, inputSource);
-  engine.mapper.inputOffsetS = inputSource ? 0 : calibration.offsetS;
+  engine.mapper.inputOffsetS = inputOffsetS();
   wake = new WakeLockKeeper();
   wake.onChange = (s) => (audio.wake = s);
   engine.onState((s) => {
@@ -500,13 +505,15 @@ export function startAudio() {
 }
 
 /**
- * Replaces the microphone with another input (the practice band), or null to go back to it.
- * Capture from the old input stops at once; startAudio() opens the new one.
+ * Replaces the microphone with another input (the practice band, a web SDR), or null to go back
+ * to it. Capture from the old input stops at once; startAudio() opens the new one. The same input
+ * again changes nothing.
  */
 export function setInputSource(src: InputSource | null) {
+  if (src === inputSource) return;
   inputSource = src;
   engine?.useSource(src);
-  if (engine) engine.mapper.inputOffsetS = src ? 0 : calibration.offsetS;
+  if (engine) engine.mapper.inputOffsetS = inputOffsetS();
 }
 
 /** Resumes audio after an interruption. Call from a tap. */
@@ -518,7 +525,7 @@ export function resumeAudio() {
 /** Switches the input device. Call from a change event. Another input has its own latency, so the receive calibration starts over. */
 export function useInput(deviceId: string | null) {
   calibration.reset();
-  getEngine().mapper.inputOffsetS = 0;
+  getEngine().mapper.inputOffsetS = inputOffsetS();
   return getEngine().useInput(deviceId);
 }
 

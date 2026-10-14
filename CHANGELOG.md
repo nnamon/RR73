@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Receive from a web SDR through a relay: Settings › Web SDR chooses one of the relay's receivers, which tunes to the band's dial. Tx stays on the radio. Operate shows Web SDR beside the band while it is on.
+- Decodes from a web SDR keep their DT: the relay stamps each frame with the time the receiver heard it, and RR73 takes its 1.5 s of buffering back off.
+- Settings › Relay lists the relays you add, each with its access key, and None. RR73 comes with no relay. Remove relay offers Undo.
+- QSP, the relay, is in the repository (`crates/rr73-qsp`) with a container image to run your own. It offers KiwiSDR receivers and describes its API at `/docs`.
+
 ## 0.15.3 · 2026-10-14
 
 - RTTY on an iPad or a desktop has the transmit panel on the right, as FT8: the status, the QSO as a form, their station (country, distance and bearing, QSOs before) and Halt at its foot. The received text, the text to send and the macros take the left, under a waterfall a quarter of the window high.

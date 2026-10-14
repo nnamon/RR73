@@ -11,6 +11,7 @@
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
   import { practice } from '../lib/state/practice.svelte';
+  import { relay, relayName } from '../lib/state/relay.svelte';
   import { presetLabel, presetOf } from '../lib/decode/highlight';
   import { loggingSummary as logging, radioSummary as radio } from '../lib/state/summaries';
 
@@ -239,6 +240,16 @@
       <a class="row link" href={href('settings', 'radio')}>
         <span class="row-main"><span class="row-title">Radio and audio</span></span>
         <span class="row-value">{radioSummary}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'sdr')}>
+        <span class="row-main"><span class="row-title">Web SDR</span></span>
+        <span class="row-value">{relay.sdrOn ? relay.receiverName || 'On' : 'Off'}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'relay')}>
+        <span class="row-main"><span class="row-title">Relay</span></span>
+        <span class="row-value">{relayName(relay.base)}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
