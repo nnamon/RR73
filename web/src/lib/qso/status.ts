@@ -24,6 +24,12 @@ export const STATUS = {
   houndCalling: (call: string) => `Calling the Fox · ${call}`,
   houndReport: (db: string, call: string) => `Report received · ${db} dB from ${call}`,
   houndLogged: (call: string) => `Logged · ${call}`,
+  beaconStopped: (after: string) => `Beacon stopped after ${after}`,
+  beaconOff: 'Audio stopped · Beacon off',
+  beaconSort: (by: string) => `Spots sorted by ${by}`,
+  beaconStopAfter: (after: string) => `Stop beacon after ${after}`,
+  beaconPct: (pct: number) => `Tx in ${pct}% of slots`,
+  noWsprCall: 'Callsign cannot be sent in WSPR',
 } as const;
 
 /** Why a call paused on its last message, after the message in the status line: "Tx1 · VK2LAW 9V1NE OJ11 · no reply". */

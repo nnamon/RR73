@@ -9,7 +9,11 @@ import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
 import { qso } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
-import { audioOut, deliverDecodes, noteHeardBack, onAudioChunk } from '../state/station.svelte';
+import { audioOut, deliverDecodes, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
+import { isFt } from '../clock/slots';
+import type { WsprDecode } from '../wspr/spots';
+import { TX_SECONDS } from '../wspr/schedule';
+import { wspr } from '../state/wspr.svelte';
 
 export interface E2eHooks {
   /** Decodes for the slot starting at `slotStartMs`, UTC ms. */
@@ -26,6 +30,12 @@ export interface E2eHooks {
   transmitted(): string[];
   /** Decodes of a slot RR73 transmitted `text` in at `f0Hz`, as if from the decoder. */
   heardBack(slotStartMs: number, text: string, f0Hz: number, decodes: Decode[]): void;
+  /** A WSPR slot's decodes, as if from the decoder. */
+  wsprDecoded(slotStartMs: number, decodes: WsprDecode[]): void;
+  /** Shows the beacon on air with `text` in the slot starting at `slotStartMs`, or nothing on air with null. No audio plays. */
+  wsprOnAir(slotStartMs: number, text: string | null): void;
+  /** Shows `text` as sent by the beacon in the slot starting at `slotStartMs`. */
+  wsprSent(slotStartMs: number, text: string): void;
 }
 
 declare global {
@@ -40,7 +50,7 @@ export function installE2eHooks() {
     rxLag = c.utcMs + (c.samples.length / 12000) * 1000 - Date.now();
   });
   window.__rr73 = {
-    decoded: (slotStartMs, decodes) => deliverDecodes({ startUtcMs: slotStartMs, mode: settings.mode, decodes, ms: 40 }),
+    decoded: (slotStartMs, decodes) => deliverDecodes({ startUtcMs: slotStartMs, mode: isFt(settings.mode) ? settings.mode : 'FT8', decodes, ms: 40 }),
     logged: async (record) => {
       await logQso(record);
     },
@@ -54,5 +64,13 @@ export function installE2eHooks() {
     rxLagMs: () => rxLag,
     transmitted: () => qso.sent.map((s) => s.text),
     heardBack: (slotStartMs, text, f0Hz, decodes) => noteHeardBack(slotStartMs, { text, f0Hz }, decodes),
+    wsprDecoded: (slotStartMs, decodes) => deliverWspr({ startUtcMs: slotStartMs, decodes, ms: 400 }),
+    wsprOnAir: (slotStartMs, text) => {
+      const start = slotStartMs + 1000;
+      wspr.onAir = text === null ? null : { text, slotStartMs, startMs: start, endMs: start + TX_SECONDS * 1000 };
+    },
+    wsprSent: (slotStartMs, text) => {
+      wspr.sent = [{ slotStartMs, text, freqHz: settings.wspr.txHz, complete: true }, ...wspr.sent];
+    },
   };
 }

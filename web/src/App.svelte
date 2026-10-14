@@ -9,6 +9,8 @@
   import Logging from './views/Logging.svelte';
   import Operate from './views/Operate.svelte';
   import PracticeSettings from './views/PracticeSettings.svelte';
+  import FtSettings from './views/FtSettings.svelte';
+  import WsprSettings from './views/WsprSettings.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
   import Settings from './views/Settings.svelte';
   import Spots from './views/Spots.svelte';
@@ -21,6 +23,7 @@
   import { settings, settingsStatus } from './lib/state/settings.svelte';
   import { busy } from './lib/state/station.svelte';
   import { startQso } from './lib/state/qso.svelte';
+  import { startWspr } from './lib/state/wspr.svelte';
 
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
@@ -85,6 +88,7 @@
   onMount(() => {
     startClock();
     startQso();
+    startWspr();
   });
 </script>
 
@@ -107,6 +111,10 @@
           <Logging />
         {:else if sub === 'practice'}
           <PracticeSettings />
+        {:else if sub === 'ft8'}
+          <FtSettings />
+        {:else if sub === 'wspr'}
+          <WsprSettings />
         {:else if sub === 'colours'}
           <DecodeColours />
         {:else if sub === 'versions'}

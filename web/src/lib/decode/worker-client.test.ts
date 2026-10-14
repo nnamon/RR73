@@ -136,3 +136,29 @@ describe('WorkerDecoder encoder', () => {
     await expect(d.pack('X', 'FT8')).rejects.toBeInstanceOf(DecoderUnavailableError);
   });
 });
+
+describe('WorkerDecoder for WSPR', () => {
+  it('transfers a WSPR slot with the wspr preset and resolves with its decodes and decoder time', async () => {
+    const { d, workers } = setup();
+    const samples = new Float32Array(1_440_000);
+    const done = d.decodeWspr(samples);
+    const { m, transfer } = workers[0].sent.at(-1)!;
+    expect(m).toMatchObject({ type: 'decodeWspr', id: 1, preset: 'wspr' });
+    expect(transfer).toEqual([samples.buffer]);
+    const decodes = [{ text: 'K1ABC FN42 37', freq_hz: 1500.2, dt_s: 0.3, drift_hz_per_s: 0.01, snr_db: -22 }];
+    workers[0].reply({ type: 'decodedWspr', id: 1, decodes, ms: 812 });
+    await expect(done).resolves.toEqual({ decodes, ms: 812 });
+  });
+
+  it('shares the limit of waiting slots with FT8', async () => {
+    const { d } = setup();
+    void d.decodeWspr(new Float32Array(10));
+    void d.decodeWspr(new Float32Array(10));
+    await expect(d.decodeWspr(new Float32Array(10))).rejects.toBeInstanceOf(DecoderBusyError);
+  });
+
+  it('has a CI gate file recorded for the WSPR preset', () => {
+    const gate = new URL('../../../../bench/wspr.json', import.meta.url);
+    expect(JSON.parse(readFileSync(gate, 'utf8')).preset).toBe('wspr');
+  });
+});

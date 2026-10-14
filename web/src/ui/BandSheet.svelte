@@ -4,10 +4,11 @@
    * sets the radio to the frequency shown. A tap on a band applies it and closes the sheet; a tap
    * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
    * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
+   * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
    */
   import Sheet from './Sheet.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
-  import type { Mode } from '../lib/clock/slots';
+  import { MODES, type Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { setHound, setHoundDial } from '../lib/state/qso.svelte';
@@ -47,10 +48,17 @@
     setHoundDial(band, r.hz);
   }
 
-  // FT4 has no usual frequency on 160m and 60m.
+  /** The mode after choosing band `b`: the same, or FT8 where FT4 has no usual frequency (160m, 60m); null where the mode has none. */
+  function modeOn(b: BandId, m: Mode): Mode | null {
+    if (dialHz(b, m) !== null) return m;
+    return m === 'FT4' && dialHz(b, 'FT8') !== null ? 'FT8' : null;
+  }
+
   function chooseBand(b: BandId) {
+    const m = modeOn(b, mode);
+    if (!m) return;
     band = b;
-    if (dialHz(b, mode) === null) mode = 'FT8';
+    mode = m;
     void updateSettings({ band, mode });
     open = false;
   }
@@ -65,15 +73,15 @@
   <fieldset class="bands">
     <legend class="visually-hidden">Band</legend>
     {#each BAND_IDS as b (b)}
-      <label class="tile" class:on={band === b}>
-        <input class="visually-hidden" type="radio" name="band" value={b} checked={band === b} onclick={() => chooseBand(b)} />
+      <label class="tile" class:on={band === b} class:off={!modeOn(b, mode)}>
+        <input class="visually-hidden" type="radio" name="band" value={b} checked={band === b} disabled={!modeOn(b, mode)} onclick={() => chooseBand(b)} />
         {b}
       </label>
     {/each}
   </fieldset>
   <fieldset class="seg">
     <legend class="visually-hidden">Mode</legend>
-    {#each ['FT8', 'FT4'] as const as m (m)}
+    {#each MODES as m (m)}
       <label class="seg-i" class:on={mode === m} class:off={dialHz(band, m) === null}>
         <input class="visually-hidden" type="radio" name="mode" value={m} checked={mode === m} disabled={dialHz(band, m) === null} onchange={() => chooseMode(m)} />
         {m}
@@ -144,6 +152,11 @@
   .tile.on {
     background: var(--rr-accent-fill);
     color: var(--rr-on-fill);
+  }
+
+  .tile.off {
+    opacity: 0.35;
+    cursor: default;
   }
 
   .tile:has(:focus-visible) {

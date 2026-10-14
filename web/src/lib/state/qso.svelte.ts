@@ -351,8 +351,12 @@ export function startQso() {
     { capture: true, passive: true },
   );
   // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
-  // its worked-before list, so dupes survive a reload.
+  // its worked-before list, so dupes survive a reload. In WSPR the sequencer stops: Tx, Hunt and
+  // a transmission on air.
   $effect.root(() => {
+    $effect(() => {
+      if (settings.mode === 'WSPR') untrack(() => haltTx());
+    });
     $effect(() => {
       const worked = workedFrom(log.qsos);
       untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));

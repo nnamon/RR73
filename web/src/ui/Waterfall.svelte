@@ -12,16 +12,21 @@
    * green marker moves Rx. A tap sets Tx where it lands. A mostly vertical movement does nothing:
    * the waterfall takes every touch, so a drag never scrolls the screen.
    * Without a pointer, two sliders (hidden until focused) set Tx and Rx.
+   *
+   * WSPR shows 1400 to 1600 Hz over two 2-minute slots, with its own ruler (a tick every 10 Hz, a
+   * label every 50 Hz) and a 6 Hz Tx marker around the signal centre. It has no Rx marker: the
+   * decoder searches the whole window.
    */
   import { onMount } from 'svelte';
   import { WaterfallClient } from '../lib/waterfall/client';
   import { paletteFrom } from '../lib/waterfall/colormap';
   import type { FrameInfo } from '../lib/waterfall/renderer';
   import { FREQ_LIMITS, xOfHz } from '../lib/waterfall/pick';
-  import { STEP_HZ, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
-  import { bracket, rulerLabels, ticks } from '../lib/waterfall/axis';
+  import { STEP_HZ_OF, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
+  import { bracket, ruler } from '../lib/waterfall/axis';
+  import { viewOf } from '../lib/waterfall/spectrum';
   import type { Contrast } from '../lib/waterfall/levels';
-  import { utcTime } from '../lib/clock/format';
+  import { utcHm, utcTime } from '../lib/clock/format';
   import type { Mode } from '../lib/clock/slots';
   import { onAudioChunk, onTxWave, recentTxWaves } from '../lib/state/station.svelte';
 
@@ -29,6 +34,7 @@
     mode,
     rxHz,
     txHz,
+    markHz = null,
     txSlots = [],
     contrast = 'normal',
     stoppedAtUtcMs = null,
@@ -36,8 +42,11 @@
     onset,
   }: {
     mode: Mode;
-    rxHz: number;
+    /** Null hides the Rx marker (WSPR). */
+    rxHz: number | null;
     txHz: number;
+    /** A selected signal's frequency, Hz, marked in the accent colour (a WSPR spot); null for none. */
+    markHz?: number | null;
     /** Starts of the slots RR73 transmitted in, UTC ms: drawn from the transmitted audio. */
     txSlots?: number[];
     contrast?: Contrast;
@@ -61,11 +70,14 @@
   const sent = $derived(new Set(txSlots));
   let rulerH = $state(0);
   // Each label sits 14 px above its line; a label that would cross the top edge or reach the ruler is dropped.
+  // WSPR slots start on whole minutes: "14:04".
+  const timeText = $derived(mode === 'WSPR' ? utcHm : utcTime);
   const labels = $derived(
-    marks.map((b) => ({ key: b.utcMs, text: `${utcTime(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0 && l.top + 13 <= height - rulerH),
+    marks.map((b) => ({ key: b.utcMs, text: `${timeText(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0 && l.top + 13 <= height - rulerH),
   );
-  const TICKS = ticks();
-  const LABELS = rulerLabels();
+  const axis = $derived(ruler(mode));
+  const view = $derived(viewOf(mode));
+  const step = $derived(STEP_HZ_OF[mode]);
 
   /** The press in progress, and the marker it moves once it is a drag. */
   let press: { id: number; x0: number; y0: number; t0: number; which: Marker; g: Gesture } | null = null;
@@ -73,10 +85,11 @@
   let tagWidth = $state(96);
   const shownRx = $derived(live?.which === 'rx' ? live.hz : rxHz);
   const shownTx = $derived(live?.which === 'tx' ? live.hz : txHz);
-  const tagLeft = $derived(live ? labelLeft(xOfHz(live.hz) * width, tagWidth, width) : 0);
+  const tagLeft = $derived(live ? labelLeft(xOfHz(live.hz, mode) * width, tagWidth, width) : 0);
   const limits = $derived(FREQ_LIMITS[mode]);
-  const rxBand = $derived(bracket(shownRx, mode));
+  const rxBand = $derived(shownRx === null ? null : bracket(shownRx, mode));
   const txBand = $derived(bracket(shownTx, mode));
+  const markBand = $derived(markHz === null ? null : bracket(markHz, mode));
 
   // Each effect reads its value first: `client?.` skips its arguments while there is no client,
   // and an effect that read nothing would never run again.
@@ -106,7 +119,7 @@
 
   function down(e: PointerEvent) {
     if (e.button !== 0 || press) return;
-    press = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, which: grabbed(at(e), width, rxHz, txHz), g: 'pending' };
+    press = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, which: grabbed(at(e), width, rxHz, txHz, mode), g: 'pending' };
   }
 
   function move(e: PointerEvent) {
@@ -181,7 +194,7 @@
   });
 </script>
 
-<figure class="wf-wrap" aria-label="Waterfall, 0 to 3000 Hz, newest at the top">
+<figure class="wf-wrap" aria-label="Waterfall, {view.minHz} to {view.maxHz} Hz, newest at the top">
   <!-- svelte-ignore a11y_no_static_element_interactions (the sliders below are the way in without a pointer) -->
   <div class="wf" class:dragging={!!live} bind:this={box} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} data-testid="waterfall-area">
     <div class="pic" bind:this={pic}>
@@ -193,18 +206,23 @@
         <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
       {/if}
       {#if hint && !live}
-        <span class="hint" data-testid="drag-hint">Drag to move Tx. Drag the green marker to move Rx.</span>
+        <span class="hint" data-testid="drag-hint">{rxHz === null ? 'Drag to move Tx.' : 'Drag to move Tx. Drag the green marker to move Rx.'}</span>
       {/if}
     </div>
     <div class="ruler" aria-hidden="true" bind:clientHeight={rulerH}>
-      {#each TICKS as t (t.hz)}
+      {#each axis.ticks as t (t.hz)}
         <i class="tick" class:major={t.major} style:left="{t.x * 100}%"></i>
       {/each}
-      {#each LABELS as l (l.hz)}
-        <span class="rl" class:end={l.align === 'end'} style:left="{l.x * 100}%">{l.text}</span>
+      {#each axis.labels as l (l.hz)}
+        <span class="rl" class:start={l.align === 'start'} class:end={l.align === 'end'} style:left="{l.x * 100}%">{l.text}</span>
       {/each}
     </div>
-    <i class="mark rx" data-testid="rx-marker" style:left="calc({rxBand.x0 * 100}% - 1px)" style:width="calc({(rxBand.x1 - rxBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    {#if rxBand}
+      <i class="mark rx" data-testid="rx-marker" style:left="calc({rxBand.x0 * 100}% - 1px)" style:width="calc({(rxBand.x1 - rxBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    {/if}
+    {#if markBand}
+      <i class="mark sel" data-testid="selected-marker" style:left="calc({markBand.x0 * 100}% - 1px)" style:width="calc({(markBand.x1 - markBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    {/if}
     <i class="mark tx" data-testid="tx-marker" style:left="calc({txBand.x0 * 100}% - 1px)" style:width="calc({(txBand.x1 - txBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
     {#if live}
       <span class="tag {live.which}" bind:clientWidth={tagWidth} style:left="{tagLeft}px" data-testid="drag-label">{live.which === 'tx' ? 'Tx' : 'Rx'} {live.hz} Hz</span>
@@ -215,23 +233,25 @@
     type="range"
     min={limits.minHz}
     max={limits.maxHz}
-    step={STEP_HZ}
+    {step}
     value={txHz}
     aria-label="Transmit frequency, Hz"
     aria-valuetext="{txHz} Hz"
     onchange={(e) => set('tx', Number(e.currentTarget.value))}
   />
-  <input
-    class="visually-hidden slider"
-    type="range"
-    min={limits.minHz}
-    max={limits.maxHz}
-    step={STEP_HZ}
-    value={rxHz}
-    aria-label="Receive frequency, Hz"
-    aria-valuetext="{rxHz} Hz"
-    onchange={(e) => set('rx', Number(e.currentTarget.value))}
-  />
+  {#if rxHz !== null}
+    <input
+      class="visually-hidden slider"
+      type="range"
+      min={limits.minHz}
+      max={limits.maxHz}
+      {step}
+      value={rxHz}
+      aria-label="Receive frequency, Hz"
+      aria-valuetext="{rxHz} Hz"
+      onchange={(e) => set('rx', Number(e.currentTarget.value))}
+    />
+  {/if}
   <p class="visually-hidden" aria-live="polite">{announce}</p>
 </figure>
 
@@ -330,6 +350,10 @@
     transform: translateX(calc(-100% - var(--rr-space-half)));
   }
 
+  .rl.start {
+    transform: translateX(var(--rr-space-half));
+  }
+
   .gap {
     position: absolute;
     top: var(--rr-space-4);
@@ -387,6 +411,12 @@
 
   .mark.tx {
     border-color: var(--rr-wf-tx);
+  }
+
+  /* A selected spot: dashed accent lines, no fill, so its trace shows between them. */
+  .mark.sel {
+    border-style: dashed;
+    border-color: var(--rr-accent);
   }
 
   .mark.tx::before {

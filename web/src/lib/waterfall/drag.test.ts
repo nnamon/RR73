@@ -79,3 +79,17 @@ describe('labelLeft', () => {
     expect(labelLeft(390, 100, W)).toBe(289);
   });
 });
+
+describe('dragging in WSPR', () => {
+  it('reads 1400 to 1600 Hz across the width in 1 Hz steps, inside 1410 to 1590 Hz', () => {
+    expect(dragHz(W / 2, W, 'WSPR')).toBe(1500);
+    expect(dragHz(W / 2 + 2, W, 'WSPR')).toBe(1501);
+    expect(dragHz(0, W, 'WSPR')).toBe(1410);
+    expect(dragHz(W, W, 'WSPR')).toBe(1590);
+  });
+
+  it('always moves Tx: WSPR has no Rx marker', () => {
+    expect(grabbed(W / 2, W, null, 1500, 'WSPR')).toBe('tx');
+  });
+});
+

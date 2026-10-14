@@ -121,3 +121,23 @@ describe('DecoderCore encoder', () => {
     expect(posted[2]).toEqual({ type: 'error', id: 2, detail: 'Error: base tone 5000 Hz is outside 100 to 3000 Hz' });
   });
 });
+
+describe('DecoderCore for WSPR', () => {
+  it('decodes a WSPR slot with its preset and reports the decodes and the time taken', async () => {
+    const mod = fakeModule();
+    const { core, posted } = setup(async () => mod);
+    await core.handle({ type: 'decodeWspr', id: 4, preset: 'wspr', samples: new Float32Array(1_440_000) });
+    expect(mod.decode_wspr).toHaveBeenCalledWith(expect.any(Float32Array), 'wspr');
+    expect(posted[1]).toEqual({ type: 'decodedWspr', id: 4, decodes: [{ text: 'K1ABC FN42 37', freq_hz: 1500.2, dt_s: 0.3, drift_hz_per_s: 0.01, snr_db: -22 }], ms: 25 });
+  });
+
+  it('packs and synthesises WSPR text with the WSPR codec', async () => {
+    const synth = vi.fn(() => new Float32Array(3));
+    const { core, posted } = setup(async () => fakeModule({ synthesize_wspr: synth, pack_wspr: () => '{"ok":false,"text":"K1ABC FN42 31","message_type":0,"error":"power 31 dBm"}' }));
+    await core.handle({ type: 'pack', id: 1, text: 'K1ABC FN42 31', mode: 'WSPR' });
+    await core.handle({ type: 'synth', id: 2, text: 'K1ABC FN42 37', mode: 'WSPR', f0Hz: 1500, sampleRate: 48000 });
+    expect(posted[1]).toEqual({ type: 'packed', id: 1, packed: { ok: false, text: 'K1ABC FN42 31', i3n3: '', error: 'power 31 dBm' } });
+    expect(synth).toHaveBeenCalledWith('K1ABC FN42 37', 1500, 48000);
+    expect(posted[2]).toMatchObject({ type: 'synthesized', id: 2 });
+  });
+});

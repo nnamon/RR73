@@ -57,7 +57,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0) {
     synthesize: async (text, mode, f0, rate) => {
       texts.push(`${text}@${f0}/${rate}/${mode}`);
       if (encoderDelay) clock.advanceTo(clock.toUtcMs(clock.currentTime)! + encoderDelay);
-      return new Float32Array(Math.round((mode === 'FT8' ? 12.64 : 5.04) * rate));
+      return new Float32Array(Math.round((mode === 'FT8' ? 12.64 : mode === 'WSPR' ? 110.592 : 5.04) * rate));
     },
   };
   const sched = new TxScheduler({
@@ -271,3 +271,33 @@ describe('TxScheduler', () => {
     expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'encode' }]);
   });
 });
+
+describe('TxScheduler in WSPR', () => {
+  const wspr = (over = {}) => req({ text: '9V1NE OJ11 37', mode: 'WSPR', slotStartMs: T0 + 120_000, startOffsetS: 1, ...over });
+
+  it('starts 1 s into the slot and plays the whole 110.6 s', async () => {
+    const { clock, reports, sched } = setup();
+    clock.advanceTo(T0 + 120_600);
+    await sched.schedule(wspr());
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 121_000)!, 9);
+    clock.advanceTo(T0 + 121_000);
+    expect(reports[0]).toEqual({ type: 'started', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', startUtcMs: T0 + 121_000, lateS: 0 });
+    clock.advanceTo(T0 + 121_000 + 110_592);
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', complete: true });
+  });
+
+  it('starts up to 1 s late, and misses the slot after that', async () => {
+    const late = setup();
+    late.clock.advanceTo(T0 + 121_900);
+    await late.sched.schedule(wspr());
+    expect(late.clock.played).toHaveLength(1);
+    late.clock.advanceTo(T0 + 122_000);
+    expect((late.reports[0] as { lateS: number }).lateS).toBeCloseTo(0.92, 2);
+    const missed = setup();
+    missed.clock.advanceTo(T0 + 122_100);
+    await missed.sched.schedule(wspr());
+    expect(missed.clock.played).toEqual([]);
+    expect(missed.reports).toEqual([{ type: 'missed', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', reason: 'late' }]);
+  });
+});
+

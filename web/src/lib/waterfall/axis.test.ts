@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIGNAL_WIDTH_HZ, bracket, rulerLabels, ticks } from './axis';
+import { SIGNAL_WIDTH_HZ, bracket, ruler, rulerLabels, ticks } from './axis';
 
 describe('waterfall ruler', () => {
   it('has a tick every 100 Hz and a taller one every 500 Hz', () => {
@@ -31,3 +31,26 @@ describe('marker width', () => {
     expect(bracket(2990, 'FT8').x1).toBe(1);
   });
 });
+
+describe('the WSPR ruler', () => {
+  it('ticks every 10 Hz, taller and labelled every 50 Hz, with the ends inside the edges', () => {
+    const { ticks: t, labels } = ruler('WSPR');
+    expect(t).toHaveLength(19);
+    expect(t.filter((x) => x.major).map((x) => x.hz)).toEqual([1450, 1500, 1550]);
+    expect(labels.map((l) => [l.text, l.x, l.align])).toEqual([
+      ['1400', 0, 'start'],
+      ['1450', 0.25, 'centre'],
+      ['1500', 0.5, 'centre'],
+      ['1550', 0.75, 'centre'],
+      ['1600', 1, 'end'],
+    ]);
+  });
+
+  it('marks a WSPR signal 6 Hz wide around its centre', () => {
+    const b = bracket(1500, 'WSPR');
+    expect(b.x0).toBeCloseTo(0.485, 9);
+    expect(b.x1).toBeCloseTo(0.515, 9);
+    expect(SIGNAL_WIDTH_HZ.WSPR).toBe(6);
+  });
+});
+

@@ -7,6 +7,8 @@
     /** The visible text; for an icon button, its accessible name. */
     label: string;
     icon?: IconName;
+    /** A small glyph after the text, such as the chevrons of a button that opens a choice. */
+    trail?: IconName;
     /** plain: grey; soft: a light accent tint (armed); selected: solid accent (active); air: solid red; run: green; halt: a red tint. */
     tone?: 'plain' | 'soft' | 'selected' | 'air' | 'run' | 'halt';
     /** A toggle's state, for aria-pressed. */
@@ -48,6 +50,7 @@
       <span class="face" class:open={b.menu?.open}>
         {#if b.dot}<span class="dot" class:blink={b.dot === 'blink'} aria-hidden="true"></span>{/if}
         {#if b.icon}<Icon name={b.icon} size={20} />{:else}{b.label}{/if}
+        {#if b.trail}<Icon name={b.trail} size={12} class="trail" />{/if}
       </span>
     </button>
   {/each}
@@ -94,6 +97,11 @@
 
   .b.icon .face {
     padding: 0;
+  }
+
+  .face :global(.trail) {
+    margin-left: calc(-1 * var(--rr-space-half));
+    color: var(--rr-label2);
   }
 
   .b:focus-visible {

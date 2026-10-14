@@ -53,6 +53,8 @@ export const ICONS = {
   chevdown: { stroke: ['M6.5 9.5L12 15L17.5 9.5'], width: 2.4 },
   chevright: { stroke: ['M9 5L16 12L9 19'], width: 2.3 },
   chevup: { stroke: ['M6.5 14.5L12 9L17.5 14.5'], width: 2.4 },
+  // A choice from a menu: chevrons up and down, as iOS's pop-up buttons.
+  updown: { stroke: ['M7.5 9.5L12 5L16.5 9.5M7.5 14.5L12 19L16.5 14.5'], width: 2.4 },
   // Reorder handle: three lines, as in iOS table views.
   grip: { stroke: ['M4.5 8H19.5M4.5 12H19.5M4.5 16H19.5'], width: 1.8 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
