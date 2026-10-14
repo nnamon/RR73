@@ -4,7 +4,7 @@ RR73 has two halves that share one signal-processing core:
 
 - **The app** (`web/`): a Svelte single-page app installed to the iPhone home screen. It captures radio audio from the headset microphone contact, shows the band, decodes, sequences QSOs, transmits through the headphone contact and keeps the log.
 - **The research bench** (`crates/rr73-bench`, `tools/`): measures decoder builds against a corpus of recorded and synthetic slots, with WSJT-X's `jt9` as the reference.
-- **The relay** (`crates/rr73-qsp`): QSP, an optional service the operator runs on a server. It brings web SDR audio to the app, stamped with UTC. See `docs/design/qsp.md`.
+- **The relay** (`crates/rr73-qsp`): QSP, an optional server for the services a web page cannot reach directly. Web SDR receive is the first; PSK Reporter reports and WSPRnet uploads are planned. See `docs/design/qsp.md`.
 
 The decoder and the protocol code are Rust crates. The app runs them as WebAssembly in Web Workers. The bench runs the same crates natively.
 
@@ -149,7 +149,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/keyboard` | The keyboard modes' engine, mode-agnostic (RTTY first, then PSK31, Olivia and the rest): the modem interface, the keyboard worker that holds the modem, the stream worklet and the pump that feeds it 0.3 s ahead, the send queue, macros and their fields, the received text, words and the other-case reading, the QSO strip's draft and its log record, and the session that ties them together (`session.svelte.ts`). The runtime that drives them is `lib/state/keyboard.svelte.ts`. See `docs/design/rtty.md`. |
 | `lib/rtty` | RTTY's modem over `rr73-wasm`'s `RttyReceiver` and `RttyTransmitter`, its settings and their mapping to the crate's configs, and its dial per band. |
 | `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, RTTY stations whose transmissions play as they fall due, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
-| `lib/relay` | The QSP client: the API calls, the stream's frame decoder, and the web SDR as a capture input source that plays each frame 1.5 s after its UTC and takes those seconds back off capture's timestamps. The relays and the switch live in `lib/state/relay.svelte.ts`. See `docs/design/qsp.md`. |
+| `lib/relay` | The QSP client: the API calls, the stream's frame decoder, and the web SDR as a capture input source. Each frame plays 1.5 s after its UTC, and the source subtracts that delay from capture's timestamps. The relays and the switch live in `lib/state/relay.svelte.ts`. See `docs/design/qsp.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
 | `lib/app` | Routing, updates (the service worker, stale builds), the version history, the size classes (`layout.svelte.ts`: compact, compact height, regular) and the keyboard shortcuts (`shortcuts.ts`). See `docs/decisions/0008-large-screens.md`. |

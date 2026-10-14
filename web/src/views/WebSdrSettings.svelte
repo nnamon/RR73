@@ -1,8 +1,8 @@
 <script lang="ts">
   /**
-   * Settings › Web SDR: receive from a web SDR through the relay in place of the radio. Tx stays
-   * on the radio's headset cable. The receivers come from the relay; the one chosen tunes to the
-   * band's dial. The practice band, while on, comes first.
+   * Settings › Web SDR: receive audio from a web SDR through the relay. Tx still goes to the radio.
+   * The relay lists its receivers, and the chosen one tunes to the band's dial. While the practice
+   * band is on, it keeps the input.
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -37,10 +37,10 @@
   const ready = $derived(!!relay.base && !!relay.receiver);
   const stateText = $derived.by(() => {
     if (!relay.sdrOn) return '';
-    if (practice.on) return 'Waits while the practice band is on.';
+    if (practice.on) return 'Paused while the practice band is on';
     const s = webSdr.status;
-    if (!s) return 'Starts with audio.';
-    if (s.state === 'connecting') return 'Connecting';
+    if (!s) return 'Waiting for Start audio in Operate';
+    if (s.state === 'connecting') return `Connecting to ${relay.receiverName}`;
     if (s.state === 'streaming') return `Receiving from ${relay.receiverName}`;
     return s.message ?? 'Stopped';
   });
@@ -71,7 +71,7 @@
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       </div>
-      <p class="section-foot">A web SDR reaches RR73 through a relay. Choose one first.</p>
+      <p class="section-foot">Web SDR receive needs a relay.</p>
     </div>
   {:else}
     <div class="section">
@@ -92,10 +92,10 @@
         {:else if error}
           <p class="none err" role="alert">{error}</p>
         {:else}
-          <p class="none">Asking the relay for its receivers.</p>
+          <p class="none">Loading receivers from the relay</p>
         {/if}
       </div>
-      <p class="section-foot">Tunes to the band’s dial. Other listeners see your callsign.</p>
+      <p class="section-foot">The receiver tunes to the band’s dial. Its other listeners see your callsign.</p>
     </div>
   {/if}
 </section>

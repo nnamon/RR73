@@ -1,5 +1,5 @@
 // QSP's API as RR73 uses it (docs/design/qsp.md, The API). Every path joins onto the relay's API
-// base, such as https://dmr.pwn.sg/qsp; requests carry the access key when one is set.
+// base, such as https://relay.example.org/qsp; requests carry the access key when one is set.
 
 export interface QspAbout {
   name: string;
@@ -149,16 +149,16 @@ export function qspStop(base: string, key: string, id: string, fetchFn: FetchFn 
 
 /** The error in words for Settings: what happened and what to do. */
 export function qspErrorText(e: unknown): string {
-  if (!(e instanceof QspError)) return 'The relay sent an answer RR73 cannot read.';
+  if (!(e instanceof QspError)) return 'RR73 could not read the relay’s response.';
   switch (e.kind) {
     case 'network':
       return 'The relay is unreachable. Check the address and that this phone is online.';
     case 'timeout':
       return 'The relay did not answer within 10 s.';
     case 'unauthorised':
-      return 'The relay refused the access key. Check it with whoever runs the relay.';
+      return 'The relay refused the access key. Ask the relay’s operator for a valid key.';
     case 'format':
-      return 'The address answered, but not as a QSP relay. Check the address.';
+      return 'This address is not a QSP relay. Check the address.';
     case 'refused':
       return e.message.startsWith('Relay request failed') ? `The relay refused the request (${e.code}).` : e.message;
   }

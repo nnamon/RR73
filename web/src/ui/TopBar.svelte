@@ -56,7 +56,7 @@
     spots: boolean;
     /** The practice band runs in place of the radio. */
     practice?: boolean;
-    /** A web SDR, through a relay, receives in place of the radio. */
+    /** Receive audio comes from a web SDR. */
     sdr?: boolean;
     onband: () => void;
     /** Regular width: tabs in the middle, and Halt on the other screens while Tx is on. */
@@ -222,7 +222,7 @@
     white-space: nowrap;
   }
 
-  /* The web SDR in the accent tint: its signals are on the air. */
+  /* The web SDR badge uses the accent tint. */
   .sdr {
     background: var(--rr-sel-tint);
     color: var(--rr-accent);

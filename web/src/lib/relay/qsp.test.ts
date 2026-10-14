@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { QspError, apiUrl, blockedFromPage, normaliseBase, qspAbout, qspErrorText, qspReceivers, qspStartSession, streamUrl, type FetchFn } from './qsp';
 
-const BASE = 'https://dmr.pwn.sg/qsp';
+const BASE = 'https://relay.example.org/qsp';
 
 function answer(status: number, body: unknown): FetchFn {
   return async () => new Response(body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body), { status });
@@ -9,12 +9,12 @@ function answer(status: number, body: unknown): FetchFn {
 
 describe('the relay address', () => {
   it('is an http or https API base, kept without a trailing slash', () => {
-    expect(normaliseBase(' https://dmr.pwn.sg/qsp/ ')).toBe(BASE);
+    expect(normaliseBase(' https://relay.example.org/qsp/ ')).toBe(BASE);
     expect(normaliseBase('http://127.0.0.1:7373')).toBe('http://127.0.0.1:7373');
     expect(normaliseBase('')).toBeNull();
-    expect(normaliseBase('dmr.pwn.sg/qsp')).toBeNull();
-    expect(normaliseBase('ftp://dmr.pwn.sg')).toBeNull();
-    expect(normaliseBase('https://dmr.pwn.sg/qsp?x=1')).toBeNull();
+    expect(normaliseBase('relay.example.org/qsp')).toBeNull();
+    expect(normaliseBase('ftp://relay.example.org')).toBeNull();
+    expect(normaliseBase('https://relay.example.org/qsp?x=1')).toBeNull();
   });
 
   it('at http is blocked from the https app, except on this device', () => {
@@ -27,7 +27,7 @@ describe('the relay address', () => {
 
   it('joins paths onto the base, and streams over wss from https', () => {
     expect(apiUrl(`${BASE}/`, '/about')).toBe(`${BASE}/about`);
-    expect(streamUrl(BASE, '/v1/sdr/sessions/abc/stream?ticket=t')).toBe('wss://dmr.pwn.sg/qsp/v1/sdr/sessions/abc/stream?ticket=t');
+    expect(streamUrl(BASE, '/v1/sdr/sessions/abc/stream?ticket=t')).toBe('wss://relay.example.org/qsp/v1/sdr/sessions/abc/stream?ticket=t');
     expect(streamUrl('http://127.0.0.1:7373', '/x')).toBe('ws://127.0.0.1:7373/x');
   });
 });
@@ -58,9 +58,9 @@ describe('requests to the relay', () => {
         (e: unknown) => e as QspError,
       );
     expect((await fail(answer(401, { error: { code: 'unauthorised', message: 'x' } }))).kind).toBe('unauthorised');
-    const busy = await fail(answer(409, { error: { code: 'receiver-busy', message: 'This instance already listens to sarts-web888 as often as it may.' } }));
+    const busy = await fail(answer(409, { error: { code: 'receiver-busy', message: 'All of this relay’s sessions on sarts-web888 are in use. Try again later.' } }));
     expect([busy.kind, busy.code]).toEqual(['refused', 'receiver-busy']);
-    expect(qspErrorText(busy)).toBe('This instance already listens to sarts-web888 as often as it may.');
+    expect(qspErrorText(busy)).toBe('All of this relay’s sessions on sarts-web888 are in use. Try again later.');
     expect((await fail(answer(200, '<html>'))).kind).toBe('format');
     expect((await fail(answer(200, { nothing: true }))).kind).toBe('format');
     expect((await fail(async () => Promise.reject(new TypeError('Load failed')))).kind).toBe('network');

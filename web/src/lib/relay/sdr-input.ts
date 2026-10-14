@@ -1,11 +1,10 @@
 /**
- * A web SDR through a QSP relay as a capture input (docs/design/qsp.md). QSP stamps each frame
- * with the UTC of its first sample. A frame plays PLAYOUT_S after that time on the audio clock,
- * which leaves room for the network's jitter, and the input's offset takes those seconds back off
- * capture's timestamps: the decoder sees each sample at the time QSP gave it. Contiguous frames
- * keep one mapping from UTC to the audio clock, so they join sample for sample; the mapping is set
- * again after a gap, or when it has drifted 20 ms from the clocks. The node goes to the capture
- * worklet only, as the practice band's does.
+ * A web SDR, through a QSP relay, as a capture input (docs/design/qsp.md). QSP stamps each frame
+ * with the UTC of its first sample. Each frame plays PLAYOUT_S after that time on the audio clock
+ * to absorb network jitter. The input's offset subtracts the same delay from capture's
+ * timestamps, so the decoder sees each sample at QSP's time. Contiguous frames share one mapping
+ * from UTC to the audio clock and join without a gap. The mapping is reset after a gap, or when it
+ * drifts 20 ms from the clocks. The node feeds only the capture worklet, like the practice band's.
  */
 
 import type { InputEvents, InputSource, OpenedInput, StartError } from '../audio/input';
@@ -13,9 +12,9 @@ import type { CaptureReport } from '../audio/report';
 import { FLAG_GAP, FRAME_RATE, decodeFrame } from './frame';
 import { QspError, qspErrorText, qspStartSession, qspStop, qspTune, streamUrl, type FetchFn } from './qsp';
 
-/** Seconds between a frame's UTC and when it plays: room for the network's jitter. */
+/** Delay from a frame's UTC to its playout, s. Absorbs network jitter. */
 export const PLAYOUT_S = 1.5;
-/** Drift between the mapping and the clocks that sets it again, ms. */
+/** Drift between the mapping and the clocks that resets the mapping, ms. */
 const DRIFT_MS = 20;
 
 /** Where the session goes and what it reports, read when the input opens. */
@@ -56,7 +55,7 @@ export function webSdrReport(contextRate: number, name: string): CaptureReport {
 }
 
 export class WebSdrInput implements InputSource {
-  /** Capture's timestamps less the playout delay: each sample keeps the time QSP gave it. */
+  /** Subtracts the playout delay from capture's timestamps, so each sample keeps QSP's time. */
   readonly offsetS = -PLAYOUT_S;
   private session: { base: string; key: string; id: string } | null = null;
 
@@ -153,7 +152,7 @@ export class WebSdrInput implements InputSource {
         ws.binaryType = 'arraybuffer';
         ws.onmessage = onMessage;
         ws.onclose = () => end('closed', 'The relay closed the stream.');
-        ws.onerror = () => end('relay', 'The relay stream failed.');
+        ws.onerror = () => end('relay', 'The connection to the relay dropped.');
       } catch (e) {
         end(e instanceof QspError && e.code === 'receiver-busy' ? 'busy' : 'relay', qspErrorText(e));
       }

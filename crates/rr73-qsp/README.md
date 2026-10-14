@@ -1,12 +1,12 @@
 # rr73-qsp
 
-QSP relays a web SDR's audio to RR73, which cannot open a KiwiSDR's plain `ws://` connection from its https page. It is optional: RR73 works without one, and anyone can run their own. Reports to PSK Reporter and uploads to WSPRnet follow. The design is in `docs/design/qsp.md`.
+QSP is the relay server for RR73. It handles the services a web page on an iPhone cannot reach directly. The first is web SDR receive: KiwiSDRs serve only plain `ws://`, which Safari blocks from the https app. Reports to PSK Reporter and uploads to WSPRnet are planned. The design is in `docs/design/qsp.md`.
 
-QSP carries no credentials for other services and reaches only the receivers its settings list.
+RR73 works without a relay, and anyone can run one. QSP never receives credentials for other services, and it connects only to the receivers its settings list.
 
 ## Running it
 
-QSP speaks plain HTTP behind an HTTPS front, such as Caddy, which strips the path of the API base. The address RR73 needs is that API base, such as `https://dmr.pwn.sg/qsp`.
+QSP serves plain HTTP behind an HTTPS front, such as Caddy, which strips the API base's path. Operators enter the API base in RR73, such as `https://relay.example.org/qsp`.
 
 ```sh
 docker build -f docker/qsp.Dockerfile -t rr73-qsp .
@@ -17,16 +17,16 @@ docker run -d --name qsp --restart unless-stopped -p 127.0.0.1:7373:7373 -v /etc
 In the container, set `listen = "0.0.0.0:7373"`; the `-p 127.0.0.1:7373:7373` keeps the port off the internet. Then in Caddy:
 
 ```
-dmr.pwn.sg {
+relay.example.org {
     handle_path /qsp/* {
         reverse_proxy 127.0.0.1:7373
     }
 }
 ```
 
-Caddy passes WebSockets through as they are. If the site already sits in a `handle` block, the `/qsp/*` block goes first.
+Caddy proxies WebSockets without extra settings. If the site already uses `handle` blocks, put the `/qsp/*` block first.
 
-Check it: `curl https://dmr.pwn.sg/qsp/about`. The API is described at `/docs`, and the OpenAPI document is at `/openapi.json`.
+Check it with `curl https://relay.example.org/qsp/about`. The API reference is at `/docs`, and the OpenAPI document at `/openapi.json`.
 
 ## Settings
 
@@ -41,4 +41,4 @@ Log detail: `RUST_LOG=debug`. QSP logs no request bodies.
 
 ## Receivers
 
-QSP connects to a receiver when the app opens a stream, after reading its `/status` page, and closes when the app stops. It sends `SET keepalive` every 5 s, takes audio only (no waterfall) at 12 kHz, and shows the listener as "<callsign> via RR73". Respect each receiver's own rules, and its owner's wishes.
+QSP reads a receiver's `/status` page and connects when the app opens a stream. It disconnects when the app stops. It sends `SET keepalive` every 5 s, takes audio at 12 kHz without the waterfall, and shows the listener as "<callsign> via RR73". Follow each receiver's published rules and its owner's requests.

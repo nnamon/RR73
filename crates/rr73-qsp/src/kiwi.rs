@@ -238,9 +238,9 @@ pub enum Event {
 /// Why a session ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum End {
-    /// Too few free channels, by the status page or the receiver's own word.
+    /// Too few free channels, by the status page or the receiver's own message.
     Busy,
-    /// The receiver turned QSP away.
+    /// The receiver refused the connection.
     Refused(String),
     /// The receiver closed the connection; with its last notice when it gave one.
     Closed(Option<String>),
@@ -265,9 +265,9 @@ impl End {
     /// What happened, in words.
     pub fn message(&self) -> String {
         match self {
-            End::Busy => "The receiver has no channel to spare.".into(),
+            End::Busy => "The receiver has no free channel.".into(),
             End::Refused(why) => format!("The receiver refused the connection: {why}."),
-            End::Closed(Some(n)) => format!("The receiver closed the connection after: {n}."),
+            End::Closed(Some(n)) => format!("The receiver closed the connection. Its last message: {n}."),
             End::Closed(None) => "The receiver closed the connection.".into(),
             End::Error(why) => format!("The connection failed: {why}."),
             End::Stopped => "Stopped.".into(),

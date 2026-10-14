@@ -152,9 +152,9 @@ describe('the web SDR input', () => {
     const s = setup();
     await s.input.open(s.ctx, null, s.events);
     await settle();
-    FakeSocket.last!.send(JSON.stringify({ type: 'status', state: 'ended', reason: 'busy', message: 'The receiver has no channel to spare.' }));
+    FakeSocket.last!.send(JSON.stringify({ type: 'status', state: 'ended', reason: 'busy', message: 'The receiver has no free channel.' }));
     expect(s.ended()).toBe(1);
-    expect(s.statuses.at(-1)).toEqual({ state: 'ended', reason: 'busy', message: 'The receiver has no channel to spare.' });
+    expect(s.statuses.at(-1)).toEqual({ state: 'ended', reason: 'busy', message: 'The receiver has no free channel.' });
     // A close after that does not end it twice.
     FakeSocket.last!.onclose?.();
     expect(s.ended()).toBe(1);

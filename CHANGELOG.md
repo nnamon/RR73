@@ -2,12 +2,16 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- New wording for Settings › Relay, Settings › Web SDR and the relay's error messages. Settings › Relay describes the relay as a server for any service a web page cannot reach directly.
+
 ## 0.16.0 · 2026-10-14
 
-- Receive from a web SDR through a relay: Settings › Web SDR chooses one of the relay's receivers, which tunes to the band's dial. Tx stays on the radio. Operate shows Web SDR beside the band while it is on.
-- Decodes from a web SDR keep their DT: the relay stamps each frame with the time the receiver heard it, and RR73 takes its 1.5 s of buffering back off.
-- Settings › Relay lists the relays you add, each with its access key, and None. RR73 comes with no relay. Remove relay offers Undo.
-- QSP, the relay, is in the repository (`crates/rr73-qsp`) with a container image to run your own. It offers KiwiSDR receivers and describes its API at `/docs`.
+- Settings › Web SDR receives from a KiwiSDR through a QSP relay, tuned to the band's dial. Tx still goes to the radio, and Operate shows a Web SDR badge.
+- QSP stamps each audio frame with UTC, so decodes from a web SDR show the DT at the receiver.
+- Settings › Relay keeps the relays you add, each with its own access key. None is the default.
+- QSP, the relay server, is in `crates/rr73-qsp` with a Dockerfile and a setup guide. Web SDR receive is its first service. Its API reference is at `/docs`.
 
 ## 0.15.3 · 2026-10-14
 

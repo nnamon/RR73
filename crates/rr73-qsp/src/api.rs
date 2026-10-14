@@ -117,7 +117,7 @@ impl IntoResponse for ApiError {
     }
 }
 
-/// The instance, as Settings › Relay's Test reads it.
+/// The relay's name, version and services.
 #[derive(Debug, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct About {
@@ -334,7 +334,7 @@ async fn create_session(
                 ApiError(
                     StatusCode::NOT_FOUND,
                     "not-found",
-                    format!("No receiver {id} here."),
+                    format!("This relay has no receiver {id}."),
                 )
             })?;
             let t = Target {
@@ -352,7 +352,7 @@ async fn create_session(
                 return Err(ApiError(
                     StatusCode::FORBIDDEN,
                     "forbidden",
-                    "This instance takes only the receivers it lists.".into(),
+                    "This relay accepts only the receivers it lists.".into(),
                 ));
             }
             if c.host.is_empty() || c.host.contains(['/', ' ', '@']) {
@@ -376,7 +376,7 @@ async fn create_session(
             return Err(ApiError(
                 StatusCode::BAD_REQUEST,
                 "invalid",
-                "Give receiver or custom, not both.".into(),
+                "Send exactly one of receiver and custom.".into(),
             ));
         }
     };
@@ -389,7 +389,7 @@ async fn create_session(
         return Err(ApiError(
             StatusCode::CONFLICT,
             "receiver-busy",
-            format!("This instance already listens to {receiver} as often as it may."),
+            format!("All of this relay’s sessions on {receiver} are in use. Try again later."),
         ));
     }
     let id = token();
@@ -478,7 +478,7 @@ async fn stream(
             return Err(ApiError(
                 StatusCode::FORBIDDEN,
                 "forbidden",
-                "The ticket is wrong or already used.".into(),
+                "The stream ticket is invalid or already used.".into(),
             ));
         }
         v.ticket = None;
@@ -533,7 +533,7 @@ async fn pump(
                     let _ = socket.send(Message::Close(None)).await;
                     break (end.code(), end.message());
                 }
-                None => break ("error", "The receiver's connection stopped.".to_string()),
+                None => break ("error", "The connection to the receiver dropped.".to_string()),
             },
             m = socket.recv() => match m {
                 Some(Ok(Message::Close(_))) | None | Some(Err(_)) => {
@@ -585,7 +585,7 @@ async fn guard(
         return Err(ApiError(
             StatusCode::UNAUTHORIZED,
             "unauthorised",
-            "This instance needs an access key: Authorization: Bearer <key>.".into(),
+            "This relay requires an access key in the header Authorization: Bearer <key>.".into(),
         ));
     };
     let minute = s.started.elapsed().as_secs() / 60;
@@ -598,7 +598,10 @@ async fn guard(
             return Err(ApiError(
                 StatusCode::TOO_MANY_REQUESTS,
                 "rate-limited",
-                format!("More than {} requests this minute.", s.config.requests_per_minute),
+                format!(
+                    "Rate limit of {} requests per minute reached. Try again in a minute.",
+                    s.config.requests_per_minute
+                ),
             ));
         }
     }
@@ -612,7 +615,7 @@ async fn guard(
     paths(health, about, receivers, create_session, get_session, tune_session, delete_session, stream),
     components(schemas(About, Receiver, ReceiverList, NewSession, CustomReceiver, SessionView, Tune, ErrorBody, ErrorDetail, Encoding, ReceiverKind)),
     modifiers(&KeyScheme),
-    tags((name = "instance", description = "No key needed."), (name = "sdr", description = "Web SDR receive."))
+    tags((name = "instance", description = "The relay itself. No access key needed."), (name = "sdr", description = "Web SDR receive."))
 )]
 pub struct ApiDoc;
 
@@ -627,7 +630,7 @@ impl utoipa::Modify for KeyScheme {
                 SecurityScheme::Http(
                     HttpBuilder::new()
                         .scheme(HttpAuthScheme::Bearer)
-                        .description(Some("The instance's access key, when it has any."))
+                        .description(Some("Required when the relay has access keys."))
                         .build(),
                 ),
             );

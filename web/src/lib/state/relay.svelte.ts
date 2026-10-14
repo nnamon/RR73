@@ -1,10 +1,9 @@
 /**
- * The relay (QSP, docs/design/qsp.md) and receiving from a web SDR through it. Kept in IndexedDB
- * under their own key ("relay"), outside the settings record, as the practice band's switches
- * are. The app knows no relay: the operator adds each one, with its access key, and chooses one
- * of them or none.
+ * The relays (QSP, docs/design/qsp.md) and web SDR receive through them. Stored in IndexedDB under
+ * their own key ("relay"), outside the settings record, like the practice band's switches. The app
+ * ships with no relay. The operator adds each one with its access key and chooses one or none.
  *
- * The practice band comes first: while it is on, its input stays, and the web SDR waits.
+ * While the practice band is on, it keeps the input and the web SDR waits.
  */
 
 import { untrack } from 'svelte';

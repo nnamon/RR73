@@ -1,10 +1,10 @@
-// Receiving from a web SDR end to end in Chromium, with no microphone: Settings › Relay and
-// Settings › Web SDR set up against a stand-in QSP relay (page.route and page.routeWebSocket), which
-// streams e2e/fixtures/ft8-loop.wav in QSP's frames (docs/design/qsp.md), each stamped with the
-// UTC of its first sample. The loop starts on every slot boundary, so each slot holds one copy of
-// each message at the DT the fixture gives. The app plays each frame 1.5 s after its time and takes
-// those seconds back off; the decodes show the fixture's DT when it does. No request leaves for a
-// real server.
+// Web SDR receive end to end in Chromium, with no microphone. Settings › Relay and Settings › Web
+// SDR are set up against a stand-in QSP relay (page.route and page.routeWebSocket). The relay
+// streams e2e/fixtures/ft8-loop.wav in QSP's frames (docs/design/qsp.md), each stamped with the UTC
+// of its first sample. The loop restarts on every slot boundary, so each slot holds one copy of
+// each message at the fixture's DT. The app plays each frame 1.5 s after its UTC and subtracts
+// that delay from capture's timestamps, so the decodes show the fixture's DT. No request reaches
+// a real server.
 import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { loadWasm } from './wasm';
@@ -130,7 +130,7 @@ test('receives from a web SDR through a relay, at the time the relay gives each 
   await expect(address).toBeFocused();
   await address.fill('relay.test');
   await address.press('Enter');
-  await expect(page.getByRole('alert')).toHaveText('Enter the relay’s address, such as https://relay.example.org/qsp.');
+  await expect(page.getByRole('alert')).toHaveText('That is not an http or https address. Enter the relay’s API base, such as https://relay.example.org/qsp.');
   await address.fill(`${BASE}/`);
   await address.press('Enter');
   await expect(address).toBeHidden();

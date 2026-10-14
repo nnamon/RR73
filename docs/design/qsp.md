@@ -1,6 +1,6 @@
 # QSP
 
-QSP, after the Q-code for relaying, is a small server RR73 can use for the few things a web page on an iPhone cannot do by itself: receive from a web SDR, report decodes to PSK Reporter and upload WSPR spots. It is optional. RR73 works without one, and anyone can run their own from this repository. Approved by the owner on 15 October 2026; the planning page is https://claude.ai/artifact/FeuzcBQMBs32Eh9sRuBHry.
+QSP, named after the Q-code for relaying, is a server for the services a web page on an iPhone cannot reach directly. Web SDR receive shipped in 0.16.0. Reports to PSK Reporter and WSPR uploads are planned. RR73 works without a relay, and anyone can run one from this repository. The design was approved on 15 October 2026.
 
 ## Principles
 
@@ -8,7 +8,7 @@ QSP, after the Q-code for relaying, is a small server RR73 can use for the few t
 - QSP carries no credentials for other services. It does only what needs no account. Logbooks are reached from the phone directly (Wavelog, later Cloudlog) or through Wavelog, which uploads to QRZ Logbook, eQSL and Club Log.
 - Nothing goes out one callsign at a time. Every link batches, and each service gets the fewest requests its own published rules allow.
 - No self-spotting.
-- Open source in this repository, under the workspace licence. Each release can publish a container image.
+- Open source in this repository, under the workspace licence. `docker/qsp.Dockerfile` builds the server image.
 
 ## What needs it
 
@@ -18,7 +18,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 | --- | --- | --- |
 | KiwiSDR receivers, other web SDR kinds later | QSP | KiwiSDRs serve plain `ws://`; Safari refuses it from the https app. |
 | PSK Reporter, reports | QSP | IPFIX over UDP to port 4739; a web page cannot send UDP. |
-| PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). It pushes; nothing polls. Topic names and terms of use: Unverified. |
+| PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). The feed pushes reports to the page. Topic names and terms of use: Unverified. |
 | WSPRnet | QSP | An upload can go out from the page, but its answer cannot be read. |
 | Wavelog, Cloudlog | Direct | The operator's own server. Cloudlog is not scheduled. |
 | QRZ XML, HamQTH | Direct | Open to browsers. Not scheduled. |
@@ -27,7 +27,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 
 - One program, `rr73-qsp` (`crates/rr73-qsp`), configured by one TOML file (`crates/rr73-qsp/qsp.example.toml`).
 - It listens on plain HTTP on the loopback interface behind an HTTPS front. The front strips the API base's path: the app's address is the API base and every request joins onto it, so QSP serves from its own root and has no path to configure.
-- The first instance is `https://dmr.pwn.sg/qsp`, behind the Caddy that already serves that host:
+- The owner's instance runs at `https://dmr.pwn.sg/qsp`, behind the Caddy that already serves that host:
 
   ```
   dmr.pwn.sg {
@@ -39,7 +39,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 
 ## The API
 
-Versioned under `/v1`; `/docs`, `/openapi.json`, `/about` and `/health` are not. Requests carry `Authorization: Bearer <key>` when the instance lists access keys. Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. CORS answers the origins the settings list, or any origin when they list none: no request carries cookies.
+Versioned under `/v1`; `/docs`, `/openapi.json`, `/about` and `/health` are not. Requests carry `Authorization: Bearer <key>` when the instance lists access keys. Errors are JSON: `{"error": {"code": "…", "message": "…"}}`. CORS allows the origins the settings list, or any origin when the list is empty. No request carries cookies.
 
 | Request | Purpose |
 | --- | --- |
@@ -79,9 +79,9 @@ Time comes from QSP's clock, which its host keeps by NTP. A receiver's GPS time 
 
 ## Building order
 
-Real services first, owner's call on 15 October 2026: each part is built against the real service and tested against a small stand-in, with no mock mode in QSP itself.
+Each part is built against the real service and tested against a small stand-in. QSP has no mock mode.
 
-1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app.
+1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app. Shipped in 0.16.0.
 2. PSK Reporter: reports through QSP, who heard you from the MQTT feed.
 3. WSPRnet uploads.
 
@@ -118,7 +118,6 @@ One upload per 2-minute slot with spots, none for an empty slot; slots that wait
 - Access keys, compared in constant time; none means open. An open instance still reaches only the services and receivers its settings list, so it cannot be used as an open proxy.
 - A limit on requests per key.
 - Logs carry no request bodies.
-- No third-party credentials, ever.
 
 ## Testing
 

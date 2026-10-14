@@ -1,9 +1,8 @@
 <script lang="ts">
   /**
-   * Settings › Relay: which QSP relay RR73 uses, if any (docs/design/qsp.md). The app knows no
-   * relay: the operator adds each by its API base, and the list keeps them to choose from, None
-   * first and chosen by default. The chosen relay shows its access key, Test relay, which reads
-   * its /about and, with Web SDR, its receivers, and Remove relay, with Undo.
+   * Settings › Relay: the QSP relay in use (docs/design/qsp.md). The list holds None, the default,
+   * and each relay the operator added by its API base. The chosen relay shows its access key, Test
+   * relay and Remove relay. Test reads /about and, when the relay offers web SDR, its receivers.
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -19,7 +18,7 @@
   let result = $state<{ ok: boolean; text: string } | null>(null);
   let testing = $state(false);
 
-  // The key field and Test's answer follow the relay chosen.
+  // Show the chosen relay's key and clear the last test result.
   $effect(() => {
     key = relayKey(relay.base);
     result = null;
@@ -49,11 +48,11 @@
     }
     const base = normaliseBase(address);
     if (!base) {
-      addressError = 'Enter the relay’s address, such as https://relay.example.org/qsp.';
+      addressError = 'That is not an http or https address. Enter the relay’s API base, such as https://relay.example.org/qsp.';
       return;
     }
     if (blockedFromPage(base, location.protocol)) {
-      addressError = 'The browser blocks a relay at an http address from RR73, which runs on https. Enter an https address.';
+      addressError = 'Browsers block http requests from an https app. Enter the relay’s https address.';
       return;
     }
     addRelay(base);
@@ -107,7 +106,7 @@
         </button>
       {/each}
     </div>
-    <p class="section-foot">Brings web SDR audio to RR73. Carries no passwords for other services.</p>
+    <p class="section-foot">QSP relays connect RR73 to services a web page cannot reach, such as web SDRs.</p>
   </div>
 
   <div class="section">
@@ -137,7 +136,7 @@
     {#if addressError}
       <p class="section-foot err" role="alert">{addressError}</p>
     {:else if adding}
-      <p class="section-foot">The relay’s API base, from whoever runs it.</p>
+      <p class="section-foot">The relay’s operator gives you its API base.</p>
     {/if}
   </div>
 
@@ -166,7 +165,7 @@
           </span>
         </button>
       </div>
-      <p class="section-foot">From whoever runs the relay, when it asks for one.</p>
+      <p class="section-foot">The relay’s operator issues access keys. The relay never receives passwords for other services.</p>
     </div>
 
     <div class="section center">
