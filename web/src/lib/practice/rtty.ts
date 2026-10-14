@@ -55,7 +55,8 @@ export class RttyStations {
       station('OH2BAX', 2240, -2, 'PEKKA', 'ESPOO', 25_000, true, 877),
       station('DL5ABC', 905, 0, 'HANS', 'MUNICH', null),
     ];
-    this.stations.forEach((s, i) => (s.nextCqMs = startMs + 3000 + i * 9000));
+    // The first CQ waits 6 s: the receiver has settled on the pair by then.
+    this.stations.forEach((s, i) => (s.nextCqMs = startMs + 6000 + i * 9000));
   }
 
   /** Text the operator handed to the transmitter. */

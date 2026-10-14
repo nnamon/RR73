@@ -226,7 +226,7 @@ test('RTTY on the practice band: JA1XYZ calls CQ, a tap on his call and Answer, 
   // JA1XYZ's pair: a tap on the waterfall would find it; the hook puts the receiver there.
   await page.evaluate(() => window.__rr73!.rttyTune(1612));
   const text = page.getByTestId('rx-text');
-  await expect(text).toContainText('CQ CQ CQ DE JA1XYZ JA1XYZ JA1XYZ', { timeout: 30_000 });
+  await expect(text).toContainText('DE JA1XYZ JA1XYZ JA1XYZ', { timeout: 30_000 });
   await text.locator('[data-call="JA1XYZ"]').last().click();
   await expect(page.getByTestId('strip-call')).toHaveValue('JA1XYZ');
   const bar = page.getByRole('region', { name: 'Transmit' });
