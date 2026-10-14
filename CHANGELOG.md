@@ -8,6 +8,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - CQ rows name the calling station's country before the numbers, in the short form operators use: "Australia", "Germany", "South Korea". When the row is short of room, the country ends in "…" or drops out, and the message stays whole.
 - Practice band stations get callsigns of their own country. In 0.10.5 an Australian station could get a VK9 call, which belongs to Norfolk Island, and a Russian one a UA9 call, from Asiatic Russia.
 - CQ tapped before audio runs shows Audio off and tries once a slot. Before, the refusals planned slot after slot until the browser ran out of stack, which left the CQ about 26 hours ahead, so it never went out.
+- Decodes from a slot that audio joined partway through report their real SNR. They read up to 50 dB high before, so a QSO started from one sent the wrong report.
 
 ## 0.10.5 · 2026-10-14
 

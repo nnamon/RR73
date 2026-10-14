@@ -86,6 +86,7 @@ struct Workspace {
     codeword: [u8; CODEWORD_BITS],
     ldpc: LdpcScratch,
     noise: Vec<f32>,
+    live: Vec<bool>,
     audio: Vec<f32>,
     seen: Vec<Payload>,
     subtract: SubtractScratch,
@@ -102,6 +103,7 @@ impl Default for Workspace {
             codeword: [0; CODEWORD_BITS],
             ldpc: LdpcScratch::default(),
             noise: Vec::new(),
+            live: Vec::new(),
             audio: Vec::new(),
             seen: Vec::new(),
             subtract: SubtractScratch::default(),
@@ -255,6 +257,10 @@ impl Pipeline {
         let last_needed = i64::from(*range.end()) + ((layout.symbols.saturating_sub(1)) * sp.time_osr) as i64;
         let frames = (samples.len().div_ceil(hop) as i64).min(last_needed + 1).max(0) as usize;
 
+        // Silence is found once, in the input: subtraction writes small non-zero values into
+        // silent samples that a subtracted signal spans, so later passes cannot find it.
+        crate::silence::live_frames(samples, &spec_config, frames, &mut ws.live);
+
         let passes = config.passes.max(1);
         if passes > 1 {
             ws.audio.clear();
@@ -323,7 +329,7 @@ impl Pipeline {
                     continue;
                 }
                 let tones = rr73_ft8::tones::from_payload(layout.mode, &valid.payload);
-                let snr_db = snr_scale.estimate(&view, &cand, &tones, &mut ws.noise);
+                let snr_db = snr_scale.estimate(&view, &cand, &tones, &ws.live, &mut ws.noise);
                 // An OSD codeword claiming an SNR below what decoding reaches is noise.
                 if outcome.osd && snr_db < config.validate.osd_min_snr_db {
                     stats.implausible += 1;
