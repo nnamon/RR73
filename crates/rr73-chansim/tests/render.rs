@@ -91,6 +91,28 @@ fn dt_shifts_the_start_and_partial_signals_are_cut() {
 }
 
 #[test]
+fn cut_leaves_out_the_start_in_place_and_length_stops_it() {
+    // 2 s cut: silent until 0.5 + 2 s, then the rest of the message where it would have been.
+    let mut s = SimSignal::new("CQ K1ABC FN42", 1500.0, 0.0, 0.0);
+    s.cut_s = 2.0;
+    let cut = render(&quiet(Mode::Ft8, vec![s.clone()]), 1).expect("render").0;
+    let whole = render(
+        &quiet(Mode::Ft8, vec![SimSignal::new("CQ K1ABC FN42", 1500.0, 0.0, 0.0)]),
+        1,
+    )
+    .expect("render")
+    .0;
+    assert!(power(&cut[..29_900]) < 1e-12);
+    assert_eq!(&cut[30_100..150_000], &whole[30_100..150_000]);
+    // Sent for its first 2 s only: silent after 0.5 + 2 s.
+    s.cut_s = 0.0;
+    s.length_s = Some(2.0);
+    let stopped = render(&quiet(Mode::Ft8, vec![s]), 1).expect("render").0;
+    assert_eq!(&stopped[6_000..29_900], &whole[6_000..29_900]);
+    assert!(power(&stopped[30_100..]) < 1e-12);
+}
+
+#[test]
 fn loops_carry_signals_past_the_end_over_to_the_start() {
     let at = |dt: f64| quiet(Mode::Ft8, vec![SimSignal::new("CQ K1ABC FN42", 1500.0, dt, 0.0)]);
     // Starting 11 s into the slot, the transmission runs 8.64 s past its end. The loop is
