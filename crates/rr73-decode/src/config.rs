@@ -100,6 +100,10 @@ pub struct SearchParams {
     pub ft4_dt_min_s: f32,
     /// FT4 DT search range end, in seconds from the nominal start.
     pub ft4_dt_max_s: f32,
+    /// Leave spectrogram frames that overlap digital silence out of the sync score
+    /// (`crate::silence`).
+    #[serde(default)]
+    pub skip_silent_frames: bool,
 }
 
 /// Refinement implementations.
@@ -135,6 +139,10 @@ pub struct DemodParams {
     pub kind: DemodKind,
     /// Variance the 174 LLRs are scaled to (ft8_lib uses 24).
     pub llr_variance: f32,
+    /// Erase symbols in spectrogram frames that overlap digital silence and leave them out
+    /// of the variance (`crate::silence`).
+    #[serde(default)]
+    pub skip_silent_frames: bool,
 }
 
 /// LDPC decoder implementations.
@@ -257,6 +265,7 @@ impl DecoderConfig {
                 ft8_dt_max_s: 2.5,
                 ft4_dt_min_s: -1.0,
                 ft4_dt_max_s: 1.0,
+                skip_silent_frames: false,
             },
             refine: RefineParams {
                 kind: RefineKind::None,
@@ -264,6 +273,7 @@ impl DecoderConfig {
             demod: DemodParams {
                 kind: DemodKind::MaxLog,
                 llr_variance: 24.0,
+                skip_silent_frames: false,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,

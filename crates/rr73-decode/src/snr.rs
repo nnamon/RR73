@@ -201,6 +201,7 @@ mod tests {
                 layout: &layout,
                 time_osr: 2,
                 freq_osr: 2,
+                live: &[],
             };
             let mut cands = Vec::new();
             CostasSearch {
@@ -260,6 +261,7 @@ mod tests {
                         layout: &layout,
                         time_osr: 2,
                         freq_osr: 2,
+                        live: &[],
                     };
                     let cand = cand.unwrap_or_else(|| {
                         let mut cands = Vec::new();
@@ -316,6 +318,7 @@ mod tests {
             layout: &layout,
             time_osr: 2,
             freq_osr: 2,
+            live: &[],
         };
         let scale = SnrScale::new(&layout, 3840, &WindowKind::Hann.build(3840));
         let snr = scale.estimate(&view, &Candidate::new(0, 0, 0.0), &[0; 79], &[], &mut Vec::new());

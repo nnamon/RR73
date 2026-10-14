@@ -202,6 +202,7 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
         reference_key: opts.reference.clone(),
         audio_s: None,
         audio_fill: None,
+        silent_s: Vec::new(),
         then: Vec::new(),
         environment: util::environment(0),
         wall_s: 0.0,

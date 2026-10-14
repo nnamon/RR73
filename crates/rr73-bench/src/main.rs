@@ -73,6 +73,10 @@ enum Command {
         /// slot with silence.
         #[arg(long, value_enum, default_value_t = run::AudioFill::Absent)]
         audio_fill: run::AudioFill,
+        /// Set a span of each slot to digital silence before decoding: START:END in seconds
+        /// from the slot start, such as 0:2.5. Repeat for more spans.
+        #[arg(long = "silent-s", value_name = "START:END", value_parser = run::silent_span)]
+        silent_s: Vec<(f64, f64)>,
         /// A later stage run on the residual: a preset name and `key=value` overrides in
         /// one argument, such as "subtract-3-osd2 search.max_candidates=300". Repeat for
         /// more stages.
@@ -211,6 +215,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             reference,
             audio_s,
             audio_fill,
+            silent_s,
             then,
             synth,
             noise_count,
@@ -233,6 +238,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 reference,
                 audio_s,
                 audio_fill,
+                silent_s,
                 then,
             };
             let (results, path) = run::run(&opts)?;

@@ -39,6 +39,9 @@ pub struct RunOptions {
     pub audio_s: Option<f64>,
     /// What stands in for the rest of the slot when `audio_s` is set.
     pub audio_fill: AudioFill,
+    /// Spans of each slot set to digital silence (zeros) before decoding, as start and end
+    /// in seconds from the slot start.
+    pub silent_s: Vec<(f64, f64)>,
     /// Later stages, each `"<preset> [key=value ...]"`, run after the preset on the same
     /// slot (see [`rr73_decode::DecodeSession`]). FT8 and FT4 presets only.
     pub then: Vec<String>,
@@ -65,6 +68,7 @@ struct Plan<'a> {
     stages: Vec<(String, DecoderConfig)>,
     audio_s: Option<f64>,
     fill: AudioFill,
+    silent_s: Vec<(f64, f64)>,
 }
 
 /// The decoder a preset names.
@@ -123,8 +127,8 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
             }
         }
         Decoder::Wspr(_) => {
-            if !opts.then.is_empty() || opts.audio_s.is_some() {
-                return Err("--then and --audio-s apply to FT8 and FT4 presets only".into());
+            if !opts.then.is_empty() || opts.audio_s.is_some() || !opts.silent_s.is_empty() {
+                return Err("--then, --audio-s and --silent-s apply to FT8 and FT4 presets only".into());
             }
         }
     }
@@ -133,6 +137,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         stages,
         audio_s: opts.audio_s,
         fill: opts.audio_fill,
+        silent_s: opts.silent_s.clone(),
     };
     let files = if opts.paths.is_empty() {
         Vec::new()
@@ -183,6 +188,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         reference_key: opts.reference.clone(),
         audio_s: opts.audio_s,
         audio_fill: opts.audio_s.map(|_| opts.audio_fill),
+        silent_s: opts.silent_s.iter().map(|&(a, b)| [a, b]).collect(),
         then: opts.then.clone(),
         environment: util::environment(threads),
         wall_s,
@@ -193,10 +199,23 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let out = opts.out.clone().unwrap_or_else(|| {
         let mut key = opts.overrides.clone();
         key.extend(opts.then.iter().map(|t| format!("then {t}")));
+        key.extend(opts.silent_s.iter().map(|(a, b)| format!("silent {a}:{b}")));
         default_path(&git_sha, &opts.preset, &key)
     });
     results::save(&results, &out)?;
     Ok((results, out))
+}
+
+/// Parses a `--silent-s` span, `START:END` in seconds.
+pub fn silent_span(spec: &str) -> Result<(f64, f64), String> {
+    let bad = || format!("--silent-s {spec:?}: expected START:END in seconds, such as 0:2.5");
+    let (a, b) = spec.split_once(':').ok_or_else(bad)?;
+    let a: f64 = a.trim().parse().map_err(|_| bad())?;
+    let b: f64 = b.trim().parse().map_err(|_| bad())?;
+    if !(a.is_finite() && b.is_finite() && a < b) {
+        return Err(bad());
+    }
+    Ok((a, b))
 }
 
 /// Parses a `--then` stage: a preset name followed by `key=value` overrides, separated by
@@ -310,6 +329,13 @@ fn run_decoder(
             // order.
             ctx.ft.hashes = CallsignHashes::new();
             let mut cut = samples.to_vec();
+            for &(a, b) in &plan.silent_s {
+                let at = |s: f64| ((s.max(0.0) * 12_000.0).round() as usize).min(cut.len());
+                let (a, b) = (at(a), at(b));
+                if a < b {
+                    cut[a..b].fill(0.0);
+                }
+            }
             let mut partial = false;
             if let Some(seconds) = plan.audio_s {
                 let keep = ((seconds.max(0.0) * 12_000.0).round() as usize).min(cut.len());
@@ -614,6 +640,7 @@ mod tests {
             stages: Vec::new(),
             audio_s: None,
             fill: AudioFill::Absent,
+            silent_s: Vec::new(),
         };
         let r = process_job(job, &plan, &mut Contexts::default());
         assert_eq!((r.expected, r.matched, r.unique), (1, 1, 0), "{:?}", r.decodes);

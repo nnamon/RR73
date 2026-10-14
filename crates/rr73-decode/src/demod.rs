@@ -42,6 +42,9 @@ impl Demodulator for MaxLogDemod {
 
     fn llrs(&self, view: &SymbolView<'_>, cand: &Candidate, llr: &mut [f32; CODEWORD_BITS]) {
         llr.fill(0.0);
+        // Bits of symbols in frames that overlap silence: erased, and left out of the
+        // variance so the scale follows the symbols that carry audio.
+        let mut silent = [false; CODEWORD_BITS];
         let layout = view.layout;
         let bps = layout.bits_per_symbol;
         let tones = layout.tones.min(MAX_TONES).min(layout.gray.len());
@@ -51,9 +54,14 @@ impl Demodulator for MaxLogDemod {
             if base + bps > CODEWORD_BITS {
                 break;
             }
-            let Some(row) = view.row(view.symbol_frame(cand.frame, sym)) else {
+            let frame = view.symbol_frame(cand.frame, sym);
+            let Some(row) = view.row(frame) else {
                 continue;
             };
+            if !view.is_live(frame) {
+                silent[base..base + bps].fill(true);
+                continue;
+            }
             let mut complete = true;
             for (v, l) in level.iter_mut().enumerate().take(tones) {
                 let bin = view.tone_bin(cand.bin, layout.gray[v] as usize);
@@ -78,7 +86,27 @@ impl Demodulator for MaxLogDemod {
                 llr[base + i] = one - zero;
             }
         }
-        normalise_variance(llr, self.variance);
+        normalise_variance_over(llr, self.variance, &silent);
+    }
+}
+
+/// As [`normalise_variance`], with the variance taken over the entries not marked in
+/// `skip`. Skipped entries stay zero.
+pub fn normalise_variance_over(llr: &mut [f32], target: f32, skip: &[bool]) {
+    if !skip.iter().any(|&s| s) {
+        normalise_variance(llr, target);
+        return;
+    }
+    let mut kept: Vec<f32> = llr
+        .iter()
+        .zip(skip)
+        .filter(|&(_, &s)| !s)
+        .map(|(&x, _)| x)
+        .collect();
+    normalise_variance(&mut kept, target);
+    let mut it = kept.into_iter();
+    for (x, &s) in llr.iter_mut().zip(skip) {
+        *x = if s { 0.0 } else { it.next().unwrap_or(0.0) };
     }
 }
 
@@ -124,6 +152,7 @@ mod tests {
             layout,
             time_osr: 2,
             freq_osr: 2,
+            live: &[],
         };
         let mut cands = Vec::new();
         CostasSearch {
@@ -170,6 +199,7 @@ mod tests {
             layout: &layout,
             time_osr: 2,
             freq_osr: 2,
+            live: &[],
         };
         let mut llr = [1.0f32; 174];
         MaxLogDemod { variance: 24.0 }.llrs(&view, &Candidate::new(0, 10, 0.0), &mut llr);

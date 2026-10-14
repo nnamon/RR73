@@ -33,6 +33,9 @@ pub struct Results {
     /// What stood in for the rest of a cut slot (`--audio-fill`).
     #[serde(default)]
     pub audio_fill: Option<crate::run::AudioFill>,
+    /// Spans set to silence before decoding (`--silent-s`), start and end in seconds.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub silent_s: Vec<[f64; 2]>,
     /// Later stages (`--then`), each a preset name followed by `key=value` overrides.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub then: Vec<String>,

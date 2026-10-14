@@ -466,13 +466,20 @@ impl DecodeSession {
         };
     }
 
+    /// The spectrogram as the search reads it.
     fn view(&self) -> SymbolView<'_> {
-        let sp = &self.stages[self.stage].config.spectrogram;
+        let config = &self.stages[self.stage].config;
+        let sp = &config.spectrogram;
         SymbolView {
             spec: &self.ctx.ws.spec,
             layout: self.layout,
             time_osr: sp.time_osr,
             freq_osr: sp.freq_osr,
+            live: if config.search.skip_silent_frames {
+                &self.ctx.ws.live
+            } else {
+                &[]
+            },
         }
     }
 
@@ -527,6 +534,11 @@ impl DecodeSession {
             layout: self.layout,
             time_osr: sp.time_osr,
             freq_osr: sp.freq_osr,
+            live: if config.demod.skip_silent_frames {
+                &ws.live
+            } else {
+                &[]
+            },
         };
         let stats = &mut self.stats;
         let timings = &mut self.timings;

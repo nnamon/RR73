@@ -274,6 +274,7 @@ mod tests {
             reference_key: None,
             audio_s: None,
             audio_fill: None,
+            silent_s: Vec::new(),
             then: Vec::new(),
             environment: Environment {
                 os: "linux".into(),

@@ -46,13 +46,14 @@ Signals are random standard QSO messages (CQ with a grid, call pairs with a grid
 
 ## Running
 
-`rr73-bench run --preset <name> [--set key=value ...] [--then STAGE ...] [--threads N] [--reference KEY] [--audio-s SECONDS [--audio-fill absent|zero]] [--out FILE] <paths>...`
+`rr73-bench run --preset <name> [--set key=value ...] [--then STAGE ...] [--threads N] [--reference KEY] [--audio-s SECONDS [--audio-fill absent|zero]] [--silent-s START:END ...] [--out FILE] <paths>...`
 
 - Finds every slot under the paths, decodes them in parallel (one decoder context per thread, callsign hashes cleared before each slot), and scores each slot.
 - `--set` overrides a preset value by dotted key: `--set ldpc.max_iterations=50`, `--set ldpc.kind=min-sum`. `rr73-bench presets baseline` prints every key.
 - `--threads 1` gives single-thread timing. The default uses every CPU.
 - `--then "<preset> key=value ..."` adds a later stage that runs on the residual after the preset (and after earlier `--then` stages) and keeps only new decodes; repeat it for more stages. Each decode records its `stage` (0 for the preset), each slot its `stage_s` times, and the run prints decodes, matches and time per stage. Every slot records `step_max_s` and `step_max_by_kind`, the longest single step of the session.
 - `--audio-s 11.8` decodes only the first 11.8 s of each slot (early decoding). With `--audio-fill absent` (the default) the audio ends there and the decoder treats the slot as partial: cut symbols become erasures. `--audio-fill zero` pads the slot with zeros instead.
+- `--silent-s 0:2` sets that span of each slot (seconds from the slot start) to zeros before decoding, as the app writes where no audio arrived: before capture started, or in a hole after an interruption. Repeat it for more spans.
 - `--synth <set>` renders a synthetic set in memory and decodes it as `synth` would write it, with the same seeds and 16-bit rounding, so the results match a run over the written files. It saves disk for WSPR sets: a 120 s slot is 2.9 MB, so 1000 noise slots would take 2.9 GB. `--noise-count`, `--per-step` and `--crowded-count` size the sets as for `synth`.
 - A WSPR preset (`wspr`, `wspr-deep`) decodes WSPR slots; an FT8 preset decodes FT8 and FT4 slots. A slot of the other family counts as an error.
 - Writes `results/<git-sha>-<preset>.json`; with overrides the name gains `-<hash>` of the override list. `--out` names the file instead.
@@ -77,6 +78,7 @@ A decode matches an expected entry when the message text is equal after trimming
 | `config` | The full decoder configuration that ran. |
 | `reference_key` | `--reference`, or `null`. |
 | `audio_s`, `audio_fill` | `--audio-s` and `--audio-fill`, or `null` for whole slots. |
+| `silent_s` | The `--silent-s` spans as `[start, end]` pairs, omitted when there are none. |
 | `then` | The `--then` stages, omitted when there are none. |
 | `environment` | `os`, `arch`, `cpus`, `threads` used, build `profile`, `bench_version`. |
 | `wall_s` | Wall time of the run, including reading files and scoring, in seconds. |
@@ -201,7 +203,7 @@ docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --o
 
 `wspr` is the WSPR decoder (`rr73_decode::wspr`, `WsprConfig::wspr`): one FFT of the 120 s slot cut to a 375 Hz complex baseband around 1500 Hz; a one-symbol spectrogram (0.73 Hz bins, quarter-symbol hop); sync-vector correlation over signal centres 1400 to 1600 Hz, DT -2 to 6 s and drift up to ±4 Hz over the transmission, ranked by the sync sum as a fraction of the power read, keeping up to 60 local maxima at 4 standard deviations or more; refinement of start, frequency and drift from the phase coherence of 5-symbol blocks; soft bits from 7-symbol noncoherent block detection, then from single symbols when that gives no message; the Fano decoder (10000 steps per bit, threshold step 1, bias 0.4); unpack, callsign layout and re-encoding checks; a second pass after subtracting the first pass's decodes from the baseband, with candidates within 4.5 Hz of a decode skipped in its own pass and within 2 Hz and 1 s of a subtracted one. `wspr-deep` allows 120 candidates and 50000 steps per bit. `docs/experiments/0004-wspr.md` has the measurements. Overrides: `search.*` (`search.guard_hz` for the skip distance), `refine.kind` (`none`, `grid`, `coherent`), `refine.block`, `demod.kind` (`noncoherent`, `block`), `demod.blocks` (a JSON list such as `[7,1]`), `demod.llr_scale`, `fano.max_cycles_per_bit`, `fano.delta`, `fano.bias`, `validate.max_hard_errors`, `validate.min_snr_db`, `passes`.
 
-The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth. Both leave out spectrogram frames whose window overlaps digital silence: a run of at least 32 zero samples, as the app writes where no audio arrived (`crates/rr73-decode/src/silence.rs`). A slot that audio joined partway through then reports the SNR of the audio it holds.
+The decoder reports for each decode the base-tone frequency, DT from the nominal start (0.5 s into the slot), SNR in 2500 Hz, pass, LDPC iterations, hard errors (code bits changed from the channel decision) and the sync score. SNR compares the mean power of the transmitted-tone cells with the 20th percentile of the cells around the transmission's footprint, converted to a mean and to 2500 Hz from the window's noise bandwidth. Both leave out spectrogram frames whose window overlaps digital silence: a run of at least 32 zero samples, as the app writes where no audio arrived (`crates/rr73-decode/src/silence.rs`). A slot that audio joined partway through then reports the SNR of the audio it holds. `search.skip_silent_frames` leaves such frames out of the sync score as well, and `demod.skip_silent_frames` erases the symbols in them and leaves them out of the LLR variance; both are off in every preset (`docs/experiments/0003-anytime.md`).
 
 ## Baseline, 2026-10-13
 

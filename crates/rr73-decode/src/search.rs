@@ -53,6 +53,9 @@ impl CostasSearch {
                     break;
                 }
                 let Some(row) = view.row(f) else { break };
+                if !view.is_live(f) {
+                    continue;
+                }
                 let sm = tone as usize;
                 let Ok(p) = usize::try_from(view.tone_bin(bin, sm)) else {
                     continue;
@@ -70,10 +73,10 @@ impl CostasSearch {
                 if sm < last_tone {
                     add(row.get(p + step));
                 }
-                if k > 0 {
+                if k > 0 && view.is_live(f - tosr) {
                     add(view.row(f - tosr).and_then(|r| r.get(p)));
                 }
-                if k + 1 < group.tones.len() {
+                if k + 1 < group.tones.len() && view.is_live(f + tosr) {
                     add(view.row(f + tosr).and_then(|r| r.get(p)));
                 }
             }
@@ -188,6 +191,7 @@ mod tests {
             layout,
             time_osr: 2,
             freq_osr: 2,
+            live: &[],
         }
     }
 
@@ -241,6 +245,54 @@ mod tests {
             v.freq_hz(best)
         );
         assert!((v.dt_s(best) - 0.2).abs() <= 0.013, "dt {}", v.dt_s(best));
+    }
+
+    #[test]
+    fn silent_frames_leave_the_sync_score_alone() {
+        // The first 2 s silent, as when capture starts partway into a slot: the signal's
+        // first Costas array lies in silence. Its comparisons there read 0 dB (silence
+        // against silence) and pulled the mean down by about a third, so weak signals fell
+        // below the threshold. Left out, the score is that of the two arrays in the audio.
+        let layout = test_layouts::ft8();
+        let config =
+            rr73_dsp::SpectrogramConfig::oversampled(1920, 2, 2, 200.0, 3000.0, 12_000).expect("config");
+        let search = CostasSearch {
+            max_candidates: 20,
+            min_score_db: 5.0,
+        };
+        let near = |v: &SymbolView<'_>, c: &Candidate| {
+            (v.freq_hz(c) - 1500.0).abs() <= 1.6 && (v.dt_s(c) - 0.2).abs() <= 0.05
+        };
+        for seed in 1..=4u64 {
+            let tones = testsig::random_tones(&layout, seed);
+            let clean = testsig::render(&layout, &tones, 1500.0, 0.2, -20.0, Some(seed + 10));
+            let mut audio = clean.clone();
+            audio[..24_000].fill(0.0);
+            let (full_spec, spec) = (
+                testsig::spectrogram(&layout, &clean),
+                testsig::spectrogram(&layout, &audio),
+            );
+            let mut live = Vec::new();
+            crate::silence::live_frames(&audio, &config, spec.frames(), &mut live);
+            let full = view(&full_spec, &layout);
+            let plain = view(&spec, &layout);
+            let masked = SymbolView { live: &live, ..plain };
+            let mut out = Vec::new();
+            search.search(&masked, masked.frame_range(-2.3, 2.5), &mut out);
+            let best = *out
+                .iter()
+                .find(|c| near(&masked, c))
+                .expect("signal found with the mask");
+            let s_full = CostasSearch::score(&full, best.frame, best.bin).expect("score");
+            let s_plain = CostasSearch::score(&plain, best.frame, best.bin).expect("score");
+            let s_masked = CostasSearch::score(&masked, best.frame, best.bin).expect("score");
+            // Measured: full slot 7.9 to 8.4 dB, silence counted 4.8 to 6.1 dB, left out 7.2 to
+            // 9.1 dB.
+            assert!(
+                (s_masked - s_full).abs() <= 1.5 && s_plain < s_full - 1.5,
+                "seed {seed}: full slot {s_full:.2} dB, silence counted {s_plain:.2} dB, left out {s_masked:.2} dB"
+            );
+        }
     }
 
     #[test]
