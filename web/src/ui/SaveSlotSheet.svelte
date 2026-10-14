@@ -12,9 +12,11 @@
   let status = $state('');
 
   function describe(s: SlotSummary): string {
-    const p = parity(s.startUtcMs, s.mode) === 'even' ? 'Even' : 'Odd';
     const share = Math.round((s.filled / SLOT_SAMPLES[s.mode]) * 100);
     const state = s.gap ? `audio gap, ${share} % recorded` : s.lateStart ? `started late, ${share} % recorded` : 'complete';
+    // WSPR slots have no parity.
+    if (s.mode === 'WSPR') return `${s.mode} · ${state}`;
+    const p = parity(s.startUtcMs, s.mode) === 'even' ? 'Even' : 'Odd';
     return `${s.mode} · ${p} · ${state}`;
   }
 

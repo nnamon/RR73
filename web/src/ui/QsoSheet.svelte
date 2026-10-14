@@ -12,6 +12,7 @@
   import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
+  import { isFt } from '../lib/clock/slots';
   import { features } from '../lib/state/features.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
@@ -51,7 +52,8 @@
       date = isoDate(t);
       time = isoTime(t);
       band = q?.band ?? settings.band;
-      mode = q ? displayMode(q) : settings.mode;
+      // QSOs are FT8 or FT4 here: WSPR spots never become QSOs.
+      mode = q ? displayMode(q) : isFt(settings.mode) ? settings.mode : 'FT8';
       freq = q ? mhzText(q.freqHz) : defaultFreq(band, mode);
       grid = q?.gridsquare ?? '';
       sent = q?.rstSent ?? '';

@@ -36,6 +36,8 @@ export interface E2eHooks {
   wsprOnAir(slotStartMs: number, text: string | null): void;
   /** Shows `text` as sent by the beacon in the slot starting at `slotStartMs`. */
   wsprSent(slotStartMs: number, text: string): void;
+  /** The beacon now: on air (UTC ms), the next Tx slot, and the slots with spots. */
+  wsprState(): { onAir: { text: string; slotStartMs: number; startMs: number } | null; next: number | null; on: boolean; slots: { startUtcMs: number; spots: number; ms: number }[] };
 }
 
 declare global {
@@ -72,5 +74,11 @@ export function installE2eHooks() {
     wsprSent: (slotStartMs, text) => {
       wspr.sent = [{ slotStartMs, text, freqHz: settings.wspr.txHz, complete: true }, ...wspr.sent];
     },
+    wsprState: () => ({
+      onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
+      next: wspr.next?.slotStartMs ?? null,
+      on: wspr.beacon.on,
+      slots: wspr.slots.map((s) => ({ startUtcMs: s.startUtcMs, spots: s.spots.length, ms: s.ms })),
+    }),
   };
 }
