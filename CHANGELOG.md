@@ -2,6 +2,22 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- WSPR is a third mode in the band sheet, beside FT8 and FT4. Set the radio to shows WSPRnet's dial for the band: 14.0956 MHz USB on 20m.
+- Every band has a WSPR dial from WSPRnet's table, 60m included, and 2m has one for WSPR only.
+- In WSPR, Operate lists the spots of each 2-minute slot, farthest first: callsign, grid, distance, SNR, drift and audio frequency. The header of the slot in progress says when its spots arrive.
+- Sort spots by distance, SNR or callsign from ••• or Settings › WSPR.
+- Tap a spot to mark its trace on the waterfall. Touch and hold it for the frequency on air, DT, bearing, power in W and how often it was heard.
+- The WSPR waterfall shows 1400 to 1600 Hz over 2 slots, with a 6 Hz Tx marker. Drag or tap it to set the Tx frequency, from 1410 to 1590 Hz.
+- Beacon transmits your callsign, grid and power in a share of slots set beside the Beacon button, 20% by default, starting 1 s into an even minute. The button shows the next Tx slot, then On air.
+- Compound callsigns such as 9V1NE/P beacon as WSPR Type 2 and Type 3 messages in turn. Type 3 needs a 6-character grid.
+- Stop beacon after turns the beacon off 1 h after Beacon on by default. Set any number of minutes, or Off, in Settings › WSPR or •••.
+- ••• in WSPR holds Transmit next slot, Tune for 10 s, Save slot, Sort by and Stop beacon after. Halt ends a transmission and turns the beacon off.
+- A change of mode turns the beacon off. A change of band ends a transmission on air and keeps the beacon on.
+- Settings has a Modes group: FT8 and FT4 opens the settings that were on the Settings screen, and WSPR its own.
+- Spots stay out of the log, ADIF files and Wavelog.
+
 ## 0.11.1 · 2026-10-14
 
 - The dB and Hz numbers on decode rows start at one position on every row. A 4-digit frequency pushed them 2 pt left.

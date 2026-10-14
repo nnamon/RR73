@@ -28,6 +28,8 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 
 `e2e/operate.spec.ts` keeps the checks from `states.spec.ts` that CI needs, with decodes injected and no transmission: one bottom bar height in every state, the decode rows on screen, messages to you leading their slot, the dimming of unrelated rows while calling or in a QSO (and none while calling CQ, after End QSO or with Tx off), and a run of empty slots as one bar. The review projects also run it, which saves the empty-slot run in both themes at both sizes.
 
+`e2e/wspr.spec.ts` runs WSPR in Operate with the page clock held at the mockup's moments and spots injected through the review hooks: the band sheet's WSPR dial, the 200 Hz ruler, spots farthest first, Beacon with its Next row, the Tx percentage menu, Halt, on air and Sent (shown through hooks: nothing transmits), the ••• menu and a spot's details. CI runs it in light at 375 x 667 (about 7 s); the review projects run both themes at both sizes and save 8 screens each to `screens/wspr`. The beacon's timing and Stop beacon after are unit tests (`src/lib/wspr/schedule.test.ts`, `src/lib/state/wspr.test.ts`); WSPR decoding is tested in Rust and gated in CI (`bench/wspr.json`).
+
 `e2e/hound.spec.ts` runs Hound with injected decodes: the band sheet's dial frequency (refused outside the band, then set), calling the Fox, the report read from a multi-call message, and the Hound item in •••. CI runs it in light at 375 x 667; the review projects run it in both themes at both sizes and save its 4 screenshots.
 
 ## Audio tests on a loaded host

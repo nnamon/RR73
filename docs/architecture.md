@@ -15,7 +15,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
         +----------------+-----------------+
         |                                  |
   waterfall worker                  slot assembler
-  (display FFT, OffscreenCanvas)    (UTC-aligned 15 s / 7.5 s slots)
+  (display FFT, OffscreenCanvas)    (UTC-aligned 15 s / 7.5 s / 120 s slots)
                                            |
                                   decoder workers (rr73-wasm)
                                            |
@@ -135,13 +135,14 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. |
 | `lib/qso` | The QSO sequencer: a pure state machine for answering, CQ, Run and Hunt. See `docs/design/sequencer.md`. |
+| `lib/wspr` | WSPR's pure parts: the beacon schedule, its messages, spots (distance, sorting, drift) and the rows of Operate's spot list. The runtime that drives them is `lib/state/wspr.svelte.ts`. See `docs/design/wspr.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
 | `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
 | `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
-| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. |
+| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`). |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
 
@@ -149,7 +150,7 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
 - The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it.
-- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s, as in WSJT-X.
+- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X.
 
 ## Updates
 
