@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
-from rr73_kiwi.bands import FT8_DIAL_HZ
+from rr73_kiwi.bands import ALL_DIAL_HZ
 from rr73_kiwi.politeness import ACCESS_CLASSES, DEFAULT_SESSION_S, MAX_SESSION_S, MIN_SESSION_S, rules_for
 
 MINUTES_PER_DAY = 24 * 60
@@ -94,9 +94,9 @@ def _plan(entries: object, where: str) -> tuple[BandWindow, ...]:
         bands = entry.get("bands")
         if not isinstance(bands, list) or not bands or not all(isinstance(b, str) for b in bands):
             raise ConfigError(f"{here}: bands must be a non-empty list of band names")
-        unknown = [b for b in bands if b not in FT8_DIAL_HZ]
+        unknown = [b for b in bands if b not in ALL_DIAL_HZ]
         if unknown:
-            raise ConfigError(f"{here}: unknown bands {unknown}; known bands are {list(FT8_DIAL_HZ)}")
+            raise ConfigError(f"{here}: unknown bands {unknown}; known bands are {list(ALL_DIAL_HZ)}")
         start, end = _parse_hhmm(entry.get("from"), here), _parse_hhmm(entry.get("to"), here)
         if start == end:
             raise ConfigError(f"{here}: from and to are equal")

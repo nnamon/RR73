@@ -97,3 +97,9 @@ hex 09bde3506149dc1fd2c8  # K1ABC W9XYZ, g15 report code 187
 hex 09bde3506149dc3fa508  # R + 73
 hex 000000204def1a9fa4c8  # CQ K1ABC with RR73 as g15 32403
 hex 000000204def1a9fa448  # CQ K1ABC with nothing after the callsign
+
+# FT8 DXpedition mode: a Fox with a standard callsign, hashed in its multi-call message, and a
+# Hound with a compound callsign. Apart from the KH1/KH7Z cases, so no slot resolves a hash
+# from another signal.
+text K1ABC RR73; W9XYZ <KH7Z> -16
+text <KH7Z> W2/G4XYZ

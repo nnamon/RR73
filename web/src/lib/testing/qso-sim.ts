@@ -2,7 +2,7 @@
 // end on time) and the decoder (decodes for a slot arrive 0.1 s after it ends). Used by
 // sequencer.test.ts; not part of the app.
 
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, type FtMode as Mode } from '../clock/slots';
 import type { Decode } from '../decode/types';
 import { initialState, reduce, type SeqConfig, type SeqEffect, type SeqEvent, type SeqState } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
@@ -22,10 +22,14 @@ export function config(over: Partial<SeqConfig> = {}): SeqConfig {
     maxRetries: 3,
     order: 'first',
     workDupes: false,
+    run: false,
+    tailEnd: true,
+    huntOrder: 'unworked',
     watchdogMs: 6 * 60_000,
     cqParity: 'even',
     cqModifier: null,
     preset: 'subtract-3',
+    hound: false,
     ...over,
   };
 }
@@ -35,6 +39,8 @@ export interface Transmission {
   tx: TxNum;
   text: string;
   offsetS: number;
+  /** Tx audio frequency the sequencer set (Hound), Hz; null for the operator's. */
+  freqHz: number | null;
 }
 
 export function decode(text: string, snr_db = -10, freq_hz = 1200, dt_s = 0.1): Decode {
@@ -45,14 +51,12 @@ export class Sim {
   st: SeqState;
   effects: SeqEffect[] = [];
   sent: Transmission[] = [];
-  pending: { tx: TxNum; text: string; slotStartMs: number; startOffsetS: number } | null = null;
+  pending: { tx: TxNum; text: string; slotStartMs: number; startOffsetS: number; freqHz: number | null } | null = null;
   readonly mode: Mode;
 
-  constructor(over: Partial<SeqConfig> = {}, confirmed = true) {
+  constructor(over: Partial<SeqConfig> = {}) {
     this.st = initialState(config(over));
     this.mode = this.st.config.mode;
-    if (confirmed) this.send({ type: 'bandConfirmed', band: '20m', dialHz: this.st.config.dialHz, mode: this.mode, nowMs: T0 - 60_000 });
-    this.effects = [];
   }
 
   get len() {
@@ -69,7 +73,7 @@ export class Sim {
     this.st = r.state;
     this.effects.push(...r.effects);
     for (const f of r.effects) {
-      if (f.type === 'scheduleTx') this.pending = { tx: f.tx, text: f.text, slotStartMs: f.slotStartMs, startOffsetS: f.startOffsetS };
+      if (f.type === 'scheduleTx') this.pending = { tx: f.tx, text: f.text, slotStartMs: f.slotStartMs, startOffsetS: f.startOffsetS, freqHz: f.freqHz };
       if (f.type === 'cancelTx') this.pending = null;
     }
     return r.effects;
@@ -81,7 +85,7 @@ export class Sim {
     if (!p || p.slotStartMs !== this.at(i)) return;
     this.pending = null;
     this.send({ type: 'txStarted', slotStartMs: p.slotStartMs, text: p.text, nowMs: p.slotStartMs + p.startOffsetS * 1000 });
-    this.sent.push({ slot: i, tx: p.tx, text: p.text, offsetS: p.startOffsetS });
+    this.sent.push({ slot: i, tx: p.tx, text: p.text, offsetS: p.startOffsetS, freqHz: p.freqHz });
     if (haltAtS !== undefined) {
       this.send({ type: 'halt', nowMs: this.at(i, haltAtS) });
       this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: false, nowMs: this.at(i, haltAtS) });
@@ -92,7 +96,7 @@ export class Sim {
   }
 
   /** The decodes of slot i arrive `delayS` after it ends. */
-  hear(i: number, decodes: (string | Decode)[], delayS = 0.1, pass: 'early' | 'final' = 'final') {
+  hear(i: number, decodes: (string | Decode)[], delayS = 0.1, pass: 'early' | 'final' | 'late' = 'final') {
     return this.send({
       type: 'slotDecoded',
       slotStartMs: this.at(i),

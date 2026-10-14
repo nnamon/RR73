@@ -6,20 +6,25 @@
  */
 
 import { untrack } from 'svelte';
-import { initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
+import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
-import { parity as parityOf, type Parity } from '../clock/slots';
-import { dialHz } from '../radio/bands';
+import { STATUS } from '../qso/status';
+import type { LostMark } from '../decode/lost';
+import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
+import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
+import type { BandId } from '../radio/bands';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
 import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
 import { log, logQso } from '../log/log.svelte';
+import { features } from './features.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
-import { audio, audioOut, codec, onAudioStatus, onHalt, onSlotDecoded } from './station.svelte';
+import { txLevel } from './practice.svelte';
+import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
 
 export interface SentRow {
   slotStartMs: number;
@@ -35,7 +40,7 @@ export interface Selected {
 }
 
 export interface Notice {
-  kind: NoticeKind | 'refused' | 'encode';
+  kind: NoticeKind | 'refused' | 'encode' | 'info';
   text: string;
   atMs: number;
 }
@@ -47,6 +52,8 @@ class QsoRuntime {
   notice = $state<Notice | null>(null);
   /** On air now: start and end, UTC ms. */
   onAir = $state<{ text: string; tx: TxNum; startMs: number; endMs: number } | null>(null);
+  /** Stations we called that answered another station: their rows read Lost (lib/decode/lost.ts). */
+  lostTo = $state.raw<LostMark[]>([]);
 }
 
 export const qso = new QsoRuntime();
@@ -54,25 +61,55 @@ export const qso = new QsoRuntime();
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
 const sessionStart = Date.now();
 
-/** The call and grid on air: the running activation's, else Settings. */
-function configNow() {
-  const a = log.current;
+/** The sequencer's mode: FT8 or FT4. In WSPR the sequencer stays idle (qsoForMode) and keeps FT8. */
+function ftMode(): FtMode {
+  return isFt(settings.mode) ? settings.mode : 'FT8';
+}
+
+/** The call and grid on air: the running activation's (with Activations on), else Settings. Exported for tests. */
+export function configNow() {
+  const a = features.activations ? log.current : null;
   return {
     myCall: a?.callsign || settings.callsign,
     myGrid: a?.grid || settings.grid,
-    mode: settings.mode,
+    mode: ftMode(),
     band: settings.band,
-    dialHz: dialHz(settings.band, settings.mode) ?? 0,
+    dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,
     order: settings.queueOrder,
     workDupes: settings.workDupes,
-    watchdogMs: 6 * 60_000,
+    run: settings.run,
+    tailEnd: settings.tailEnd,
+    huntOrder: settings.huntOrder,
+    watchdogMs: settings.watchdog ? Math.round(settings.watchdogMin * 60_000) : 0,
+    watchdogRefresh: settings.watchdogRefresh,
+    huntCalls: settings.huntCalls,
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
+    hound: houndOn(),
   };
+}
+
+/** Hound mode is on for this band: FT8 only, as WSJT-X's FT8 DXpedition mode. */
+export function houndOn(): boolean {
+  return settings.mode === 'FT8' && settings.houndBands.includes(settings.band);
+}
+
+/**
+ * Turns Hound mode on or off for the band in use. A Tx frequency below 1000 Hz moves to
+ * 1000 Hz, where a Fox answers calls.
+ */
+export function setHound(on: boolean) {
+  const bands = on ? [...new Set([...settings.houndBands, settings.band])] : settings.houndBands.filter((b) => b !== settings.band);
+  void updateSettings({ houndBands: bands, ...(on && settings.txHz < HOUND_MIN_HZ ? { txHz: houndCallHz(settings.txHz) } : {}) });
+}
+
+/** Stores the DXpedition's dial frequency for Hound mode on `band`, Hz. */
+export function setHoundDial(band: BandId, hz: number) {
+  void updateSettings({ houndDialHz: { ...settings.houndDialHz, [band]: hz } });
 }
 
 const scheduler = new TxScheduler({
@@ -81,7 +118,7 @@ const scheduler = new TxScheduler({
     return out ? webAudioOut(out.ctx, out.mapper) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
-  gate: () => (audio.status !== 'running' ? 'Resume audio to transmit.' : notReady(qso.st)),
+  gate: () => (audio.status !== 'running' ? STATUS.audioOff : notReady(qso.st)),
   report: onTxReport,
 });
 
@@ -95,7 +132,8 @@ export function dispatch(e: SeqEvent) {
   const p = r.state.partner;
   if (p && (p.call !== before || e.type === 'callStation')) {
     const hz = clampHz(p.freqHz, r.state.config.mode);
-    void updateSettings(settings.holdTx ? { rxHz: hz } : { rxHz: hz, txHz: hz });
+    // A Hound calls above 1000 Hz, away from the Fox: only Rx moves to it.
+    void updateSettings(settings.holdTx || r.state.config.hound ? { rxHz: hz } : { rxHz: hz, txHz: hz });
   }
   for (const f of r.effects) {
     switch (f.type) {
@@ -105,8 +143,8 @@ export function dispatch(e: SeqEvent) {
           mode: r.state.config.mode,
           slotStartMs: f.slotStartMs,
           startOffsetS: f.startOffsetS,
-          f0Hz: settings.txHz,
-          level: settings.outputLevel,
+          f0Hz: f.freqHz ?? settings.txHz,
+          level: txLevel(settings.outputLevel),
         });
         break;
       case 'cancelTx':
@@ -121,6 +159,9 @@ export function dispatch(e: SeqEvent) {
         break;
       case 'queueChanged':
         break;
+      case 'lostTo':
+        qso.lostTo = [...qso.lostTo, { call: f.call, other: f.other, slotStartMs: f.slotStartMs }].slice(-20);
+        break;
     }
   }
 }
@@ -128,20 +169,28 @@ export function dispatch(e: SeqEvent) {
 function onTxReport(r: TxReport) {
   const now = Date.now();
   if (r.type === 'started') {
+    // Hound sets its own frequency for some transmissions; the plan still holds it here.
+    const n = qso.st.next;
+    const hz = (n && n.slotStartMs === r.slotStartMs && n.text === r.text ? n.freqHz : null) ?? settings.txHz;
     const txn = (Object.entries(messages(qso.st)).find(([, t]) => t === r.text)?.[0] ?? '6') as unknown as TxNum;
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
-    const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
+    // A transmission that started part way through ends on time.
+    const dur = (qso.st.config.mode === 'FT8' ? 12_640 : 5_040) - r.skippedS * 1000;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
-    qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
+    // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
+    markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: hz });
+    qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: hz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
+    void showTx(r.startUtcMs, r.text, qso.st.config.mode, hz, r.skippedS);
   } else if (r.type === 'ended') {
     qso.onAir = null;
+    if (!r.complete) cutTx(now);
     dispatch({ type: 'txEnded', slotStartMs: r.slotStartMs, text: r.text, complete: r.complete, nowMs: now });
   } else if (r.type === 'missed') {
-    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: 'The message could not be encoded. Check it in Messages.', atMs: now };
+    if (r.reason === 'encode') qso.notice = { kind: 'encode', text: STATUS.encode, atMs: now };
     dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
   } else {
     qso.notice = { kind: 'refused', text: r.reason, atMs: now };
-    dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
+    dispatch({ type: 'txRefused', slotStartMs: r.slotStartMs, nowMs: now });
   }
 }
 
@@ -160,7 +209,8 @@ export function setFrequencies(f: { rxHz?: number; txHz?: number }) {
   const mode = settings.mode;
   const patch: { rxHz?: number; txHz?: number; freqPicked: true } = { freqPicked: true };
   if (f.rxHz !== undefined) patch.rxHz = clampHz(f.rxHz, mode);
-  if (f.txHz !== undefined) patch.txHz = clampHz(f.txHz, mode);
+  // A Hound's calls stay at 1000 Hz or above.
+  if (f.txHz !== undefined) patch.txHz = clampHz(houndOn() ? houndCallHz(f.txHz) : f.txHz, mode);
   const moved = patch.txHz !== undefined && patch.txHz !== settings.txHz;
   void updateSettings(patch);
   if (moved) retune();
@@ -177,13 +227,18 @@ function retune() {
     mode: qso.st.config.mode,
     slotStartMs: p.slotStartMs,
     startOffsetS: p.offsetS,
-    f0Hz: settings.txHz,
-    level: settings.outputLevel,
+    f0Hz: p.freqHz ?? settings.txHz,
+    level: txLevel(settings.outputLevel),
   });
 }
 
 export function select(s: Selected | null) {
   qso.selected = s;
+}
+
+/** A tap on a decode row: selects it, or clears the selection when the row is already selected. */
+export function tapRow(s: Selected) {
+  qso.selected = qso.selected?.id === s.id ? null : s;
 }
 
 /**
@@ -213,10 +268,15 @@ export function setTxEnabled(on: boolean) {
   dispatch({ type: 'enableTx', on, nowMs: Date.now() });
 }
 
-/** Turns Run on or off. Call from the tap. */
+/** Run on or off: what the CQ loop does after a QSO. It starts nothing by itself. */
 export function setRun(on: boolean) {
+  void updateSettings({ run: on });
+}
+
+/** Turns Hunt on or off. Call from the tap. */
+export function setHunt(on: boolean) {
   if (on) unmute();
-  dispatch({ type: 'runMode', on, nowMs: Date.now() });
+  dispatch({ type: 'hunt', on, nowMs: Date.now() });
 }
 
 export function setStopAfter(on: boolean) {
@@ -231,12 +291,27 @@ export function editMessage(tx: TxNum, text: string) {
   dispatch({ type: 'editMessage', tx, text, nowMs: Date.now() });
 }
 
-/** The band sheet confirmed the radio's dial. A different band or mode first stops Tx. */
-export function confirmBand(band: string, mode: 'FT8' | 'FT4') {
-  const c = qso.st.config;
-  const now = Date.now();
-  if (c.band !== band || c.mode !== mode) dispatch({ type: 'bandChanged', nowMs: now });
-  dispatch({ type: 'bandConfirmed', band, dialHz: dialHz(band as never, mode) ?? 0, mode, nowMs: now });
+/** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
+export function endQso() {
+  dispatch({ type: 'endQso', nowMs: Date.now() });
+}
+
+/**
+ * Clear decodes from the ••• menu: empties the decode list and its selection, and drops the Sent
+ * rows of slots that have ended. The sequencer is untouched: a QSO under way, its Next row, a
+ * transmission on air and Hunt's candidates stay.
+ */
+export function clearDecodeList(nowMs = Date.now()) {
+  clearDecodes();
+  const slotMs = SLOT_MS[qso.st.config.mode];
+  qso.sent = qso.sent.filter((s) => s.slotStartMs + slotMs > nowMs);
+  qso.selected = null;
+  qso.notice = { kind: 'info', text: STATUS.decodesCleared, atMs: nowMs };
+}
+
+/** A notice in the status line, such as the result of Find clear Tx. */
+export function showNotice(text: string) {
+  qso.notice = { kind: 'info', text, atMs: Date.now() };
 }
 
 /** When a call to a decode heard in `slotStartMs` would start, and in which parity. */
@@ -276,7 +351,7 @@ let started = false;
 export function startQso() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  onSlotDecoded((slotStartMs, decodes) => dispatch({ type: 'slotDecoded', slotStartMs, pass: 'final', decodes, nowMs: Date.now() }));
+  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, nowMs: Date.now() }));
   onAudioStatus((s) => {
     if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });
     else if (s === 'stopped' || s === 'failed') dispatch({ type: 'audioStopped', nowMs: Date.now() });
@@ -297,21 +372,38 @@ export function startQso() {
     },
     { capture: true, passive: true },
   );
-  // The band and mode in Settings until the band sheet confirms them; Tx stays off until then.
-  {
-    const c = configNow();
-    dispatch({ type: 'configure', patch: { band: c.band, mode: c.mode, dialHz: c.dialHz }, nowMs: Date.now() });
-  }
   // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
-  // its worked-before list, so dupes survive a reload.
+  // its worked-before list, so dupes survive a reload. In WSPR and RTTY the sequencer stops: Tx,
+  // Hunt and a transmission on air.
   $effect.root(() => {
+    $effect(() => {
+      if (!isFt(settings.mode)) untrack(() => haltTx());
+    });
     $effect(() => {
       const worked = workedFrom(log.qsos);
       untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));
     });
     $effect(() => {
       const c = configNow();
-      const patch = { myCall: c.myCall, myGrid: c.myGrid, txHz: c.txHz, ack: c.ack, order: c.order, workDupes: c.workDupes, cqParity: c.cqParity };
+      const patch = {
+        myCall: c.myCall,
+        myGrid: c.myGrid,
+        band: c.band,
+        mode: c.mode,
+        dialHz: c.dialHz,
+        txHz: c.txHz,
+        ack: c.ack,
+        order: c.order,
+        workDupes: c.workDupes,
+        cqParity: c.cqParity,
+        run: c.run,
+        tailEnd: c.tailEnd,
+        huntOrder: c.huntOrder,
+        watchdogMs: c.watchdogMs,
+        watchdogRefresh: c.watchdogRefresh,
+        huntCalls: c.huntCalls,
+        hound: c.hound,
+      };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });

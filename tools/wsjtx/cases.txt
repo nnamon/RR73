@@ -132,6 +132,23 @@ K1ABC RR73; W9XYZ <KH1/KH7Z> -09
 K1ABC RR73; W9XYZ <KH1/KH7Z> +33
 K1ABC RR73; W9XYZ KH1/KH7Z -08
 
+# A Hound's QSO with a Fox in FT8 DXpedition mode, as in K1JT's FT8 DXpedition Mode User Guide:
+# the Fox's CQ, a Hound's call, the Fox's report, the R-report and the Fox's RR73 (alone or
+# with the next Hound's report), for a Fox with a compound callsign and with a standard one
+CQ KH1/KH7Z
+CQ KH7Z AJ10
+KH7Z K1ABC FN42
+K1ABC KH7Z -13
+K1ABC <KH1/KH7Z> -14
+KH7Z K1ABC R-11
+K1ABC KH7Z RR73
+K1ABC <KH1/KH7Z> RR73
+KH7Z W9XYZ R-16
+W9XYZ RR73; G4AAA <KH1/KH7Z> -10
+K1ABC RR73; W9XYZ <KH7Z> -16
+<KH7Z> W2/G4XYZ
+KH7Z <W2/G4XYZ> R-11
+
 # ARRL Field Day (types 0.3 and 0.4)
 K1ABC W9XYZ 6A WI
 W9XYZ K1ABC R 17B EMA

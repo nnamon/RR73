@@ -6,24 +6,66 @@
  *
  * Transmissions use one slot parity: the opposite of the station answered, or the operator's
  * choice for CQ. The sequencer decides on the final decoding pass of each slot of the other
- * parity and plans the next transmission for the slot that follows.
+ * parity and plans the next transmission for the slot that follows. Later passes of the same
+ * slot (deeper decoder stages) bring only new decodes, and act on what they hold as the final
+ * pass would have: in the slot that follows when still in time, else a cycle later.
  */
 
-import { SLOT_MS, parity as parityOf, slotStart, type Mode, type Parity } from '../clock/slots';
+import { SLOT_MS, parity as parityOf, slotStart, type FtMode as Mode, type Parity } from '../clock/slots';
+import { PAUSED, STATUS } from './status';
 import type { Decode } from '../decode/types';
 import { pathBetween } from './grid';
-import { buildMessages, formatReport, isGrid, parseExchange, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
+import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
 
 export type QueueOrder = 'first' | 'strongest' | 'farthest' | 'new';
+/**
+ * Order Hunt picks CQs in: not worked on this band and mode, strongest, newest (the CQ that
+ * started most recently), farthest, or new call (never worked). Ties go to the strongest.
+ */
+export type HuntOrder = 'unworked' | 'strongest' | 'newest' | 'farthest' | 'new';
+export const HUNT_ORDERS: readonly HuntOrder[] = ['unworked', 'strongest', 'newest', 'farthest', 'new'];
+/** Answering: we call them (by hand or from Hunt). CQ: they call us. */
 export type Phase = 'idle' | 'answering' | 'cq';
 
-/** How late a transmission may start after slot + 0.5 s, s. */
-export const LATE_S: Record<Mode, number> = { FT8: 1.5, FT4: 1.0 };
+/**
+ * How late a transmission may start after slot + 0.5 s, s. Past the shift limit it leaves out its
+ * first part and ends on time. At the limit WSJT-X's jt9 decodes every one at -16 dB (FT8) and
+ * -12 dB (FT4), and loses 2.6 dB (FT8) and 2 dB (FT4) at the weak end (docs/design/sequencer.md).
+ */
+export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25 };
+/**
+ * Up to this late, s, a transmission goes out whole (tx/scheduler.ts), and a newer message may
+ * replace ours on air in its slot. jt9 finds none sent whole from 2.5 s late in FT8 and 1.0 s in
+ * FT4; the limits keep 1 s and 0.5 s clear of that. A replacement sent whole after part of our CQ
+ * decodes as well as one sent alone; cut after it, it fails from 3 s (FT8) and 1 s (FT4) whatever
+ * the level (docs/design/sequencer.md).
+ */
+export const SHIFT_LIMIT_S: Record<Mode, number> = { FT8: 1.5, FT4: 0.5 };
 /** Time the audio layer needs to synthesise and start a transmission after a decision, s. */
 export const LEAD_S = 0.2;
-/** A caller not heard for this many slots leaves the queue. */
+/** A caller not heard for this many slots leaves the queue; Hunt forgets a CQ as old. */
 const STALE_SLOTS = 4;
+/** Hunt does not call a station that ignored it again for this long, ms. */
+export const IGNORE_MS = 10 * 60_000;
+/** Slots to wait for a lost station to end its QSO before giving up. */
+export const TAIL_WATCH_SLOTS = 8;
+/** Hound: the lowest Tx1 frequency; a Fox does not answer calls below it, Hz. */
+export const HOUND_MIN_HZ = 1000;
+/** Hound: a repeated R-report moves this far from where the Fox called us, Hz. */
+export const HOUND_SHIFT_HZ = 300;
+/** Hound: the top of the Fox's range, which repeated R-reports stay within, Hz. */
+const FOX_TOP_HZ = 900;
+
+/** Hound: where Tx1 goes out for the operator's Tx frequency `hz`: 1000 Hz or above. */
+export function houndCallHz(hz: number): number {
+  return Math.max(hz, HOUND_MIN_HZ);
+}
+
+/** Hound: where a repeated R-report goes, 300 Hz above `foxHz` within the Fox's range, else below. */
+export function houndRepeatHz(foxHz: number): number {
+  return foxHz + HOUND_SHIFT_HZ <= FOX_TOP_HZ ? foxHz + HOUND_SHIFT_HZ : foxHz - HOUND_SHIFT_HZ;
+}
 
 export interface SeqConfig {
   myCall: string;
@@ -36,15 +78,32 @@ export interface SeqConfig {
   ack: 'RR73' | 'RRR';
   /** Repeats of an unanswered message before giving up. */
   maxRetries: number;
+  /** Hunt: calls to a station that has not answered before Hunt moves on. Defaults to 1 + maxRetries. */
+  huntCalls?: number;
   order: QueueOrder;
   workDupes: boolean;
-  /** Watchdog limit, ms. */
+  /** Run: after a QSO from CQ, answer the next caller or call CQ again. Off: Tx goes off after the QSO. */
+  run: boolean;
+  /** Call a lost station once more after it ends its QSO with the other station. */
+  tailEnd: boolean;
+  huntOrder: HuntOrder;
+  /** Watchdog limit, ms; 0 turns the watchdog off. */
   watchdogMs: number;
+  /**
+   * The watchdog's count restarts each time the QSO moves on (a new message goes out), as well as
+   * on the operator's actions. Off (the default), only the operator's actions restart it.
+   */
+  watchdogRefresh?: boolean;
   /** Parity for calling CQ. */
   cqParity: Parity;
   cqModifier: string | null;
   /** Decoder preset, recorded with each QSO. */
   preset: string;
+  /**
+   * FT8 DXpedition mode as a Hound (docs/design/hound.md): Tx1 at 1000 Hz or above, the
+   * R-report at the frequency the Fox sent our report on, logged on the Fox's RR73.
+   */
+  hound: boolean;
 }
 
 export interface Worked {
@@ -74,6 +133,30 @@ export interface Caller {
   distanceKm: number | null;
 }
 
+/** A plain CQ heard, for Hunt. */
+export interface HeardCq {
+  call: string;
+  grid: string | null;
+  snrDb: number;
+  dtS: number;
+  freqHz: number;
+  /** Slot of the latest CQ heard, UTC ms. */
+  heardMs: number;
+  /** First slot of this run of CQs, UTC ms. */
+  sinceMs: number;
+  /** Decode order. */
+  seq: number;
+}
+
+/** The station we call answered another station. */
+export interface Lost {
+  other: string;
+  /** Waiting for the end of their QSO, or our one more call is planned or sent. */
+  state: 'watching' | 'called';
+  /** Slot their message to the other station was heard in, UTC ms. */
+  sinceMs: number;
+}
+
 export interface Partner {
   call: string;
   grid: string | null;
@@ -92,6 +175,8 @@ export interface Partner {
   /** Start of our first transmission to them, UTC ms. */
   startMs: number | null;
   logged: boolean;
+  /** Hound: the frequency the Fox sent our report on, where our R-report goes, Hz. */
+  foxHz: number | null;
 }
 
 export interface Planned {
@@ -104,25 +189,39 @@ export interface Planned {
   /** A slot of our parity that came too late for this decision, UTC ms. */
   tooLateFor: number | null;
   scheduled: boolean;
+  /** Tx audio frequency the sequencer sets (Hound), Hz; null for the operator's Tx frequency. */
+  freqHz: number | null;
 }
 
 export interface Sent {
   tx: TxNum;
+  /** Tx audio frequency the sequencer set (Hound), Hz; null for the operator's. */
+  freqHz: number | null;
   text: string;
   slotStartMs: number;
 }
 
-export type NoticeKind = 'watchdog' | 'audio' | 'band' | 'no-reply' | 'dropped' | 'incomplete' | 'not-ready' | 'cannot-call';
+export type NoticeKind = 'watchdog' | 'audio' | 'no-reply' | 'dropped' | 'incomplete' | 'not-ready' | 'cannot-call' | 'lost';
 
 export interface SeqState {
   config: SeqConfig;
   phase: Phase;
-  run: boolean;
+  /** Hunt: answers CQs one after another until the operator stops it. */
+  hunt: boolean;
+  /** QSOs logged since Hunt started. */
+  huntQsos: number;
+  /** The station answered was called from CQ: the CQ loop carries on after this QSO when Run is on. */
+  resumeCq: boolean;
   txEnabled: boolean;
   stopAfter: boolean;
-  /** Answering gave up after the retries; Tx stays enabled on the last message. */
+  /** The watchdog ran out during a QSO: it finishes, then Tx goes off. */
+  watchdogEnding: boolean;
+  /** Answering gave up; Tx stays enabled on the last message. */
   paused: boolean;
+  /** Why answering gave up, for the status line. */
+  pausedWhy: string | null;
   partner: Partner | null;
+  lost: Lost | null;
   /** Operator edits to Tx1 to Tx6, kept until the partner changes (Tx6 is kept). */
   edits: Partial<Record<TxNum, string>>;
   current: TxNum | null;
@@ -133,30 +232,44 @@ export interface SeqState {
   parity: Parity | null;
   queue: Caller[];
   seq: number;
+  /** Plain CQs of the last few slots, for Hunt. */
+  cqs: HeardCq[];
+  /** Stations that did not answer Hunt, with when they were given up, UTC ms. */
+  ignored: { call: string; atMs: number }[];
+  /** Stations that answered another station while Hunt called them, with when, UTC ms. */
+  lostTo: { call: string; atMs: number }[];
   watchdogFromMs: number;
   lastTxText: string | null;
-  bandConfirmed: boolean;
   audioOk: boolean;
   worked: Worked[];
   /** QSOs completed with this state, newest last; the app keeps the records. */
   completed: number;
+  /** Hound: the Fox last logged, for the status line until the next call. */
+  houndLogged: string | null;
+  /** The last slot decided on its final pass, with the decode texts acted on since, so a later pass acts only on new ones. */
+  decided: { slotStartMs: number; texts: string[] } | null;
 }
 
 export type SeqEvent =
-  | { type: 'slotDecoded'; slotStartMs: number; pass: 'early' | 'final'; decodes: Decode[]; nowMs: number }
+  /**
+   * Decodes of a slot. `early` comes before the slot ends, `final` when it ends; `late` holds
+   * only the decodes that later decoder stages added after `final`.
+   */
+  | { type: 'slotDecoded'; slotStartMs: number; pass: 'early' | 'final' | 'late'; decodes: Decode[]; nowMs: number }
   | { type: 'callStation'; decode: Decode; slotStartMs: number; nowMs: number }
   | { type: 'callCq'; nowMs: number }
   | { type: 'enableTx'; on: boolean; nowMs: number }
-  | { type: 'runMode'; on: boolean; nowMs: number }
+  | { type: 'hunt'; on: boolean; nowMs: number }
   | { type: 'stopAfterQso'; on: boolean; nowMs: number }
   | { type: 'halt'; nowMs: number }
+  | { type: 'endQso'; nowMs: number }
   | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
   | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
+  /** The output refused the transmission (audio not running, not set up): tick plans again once its slot has passed. */
+  | { type: 'txRefused'; slotStartMs: number; nowMs: number }
   | { type: 'audioStopped'; nowMs: number }
   | { type: 'audioResumed'; nowMs: number }
-  | { type: 'bandChanged'; nowMs: number }
-  | { type: 'bandConfirmed'; band: string; dialHz: number; mode: Mode; nowMs: number }
   | { type: 'touch'; nowMs: number }
   | { type: 'tick'; nowMs: number }
   | { type: 'editMessage'; tx: TxNum; text: string; nowMs: number }
@@ -165,11 +278,13 @@ export type SeqEvent =
   | { type: 'setWorked'; worked: Worked[]; nowMs: number };
 
 export type SeqEffect =
-  | { type: 'scheduleTx'; tx: TxNum; text: string; slotStartMs: number; startOffsetS: number }
+  | { type: 'scheduleTx'; tx: TxNum; text: string; slotStartMs: number; startOffsetS: number; freqHz: number | null }
   | { type: 'cancelTx'; stopPlaying: boolean }
   | { type: 'logQso'; record: LogQsoRecord }
   | { type: 'notice'; kind: NoticeKind; text: string }
-  | { type: 'queueChanged'; callers: Caller[] };
+  | { type: 'queueChanged'; callers: Caller[] }
+  /** The station we call answered another station, first seen in the slot at slotStartMs: its rows there read Lost. */
+  | { type: 'lostTo'; call: string; other: string; slotStartMs: number };
 
 export interface SeqResult {
   state: SeqState;
@@ -191,11 +306,16 @@ export function initialState(config: SeqConfig): SeqState {
   return {
     config,
     phase: 'idle',
-    run: false,
+    hunt: false,
+    huntQsos: 0,
+    resumeCq: false,
     txEnabled: false,
     stopAfter: false,
+    watchdogEnding: false,
     paused: false,
+    pausedWhy: null,
     partner: null,
+    lost: null,
     edits: {},
     current: null,
     next: null,
@@ -205,12 +325,16 @@ export function initialState(config: SeqConfig): SeqState {
     parity: null,
     queue: [],
     seq: 0,
+    cqs: [],
+    ignored: [],
+    lostTo: [],
     watchdogFromMs: 0,
     lastTxText: null,
-    bandConfirmed: false,
     audioOk: true,
     worked: [],
     completed: 0,
+    houndLogged: null,
+    decided: null,
   };
 }
 
@@ -221,16 +345,16 @@ const dayOf = (ms: number) => new Date(ms).toISOString().slice(0, 10).replace(/-
 /** Why transmitting is not possible now, or null. */
 export function notReady(st: SeqState): string | null {
   const c = st.config;
-  if (!c.myCall.trim() || !isGrid(c.myGrid)) return 'Set your callsign and grid in Settings to transmit.';
-  if (!st.bandConfirmed) return 'Confirm the band in the band sheet to transmit.';
-  if (!st.audioOk) return 'Resume audio to transmit.';
+  if (!c.myCall.trim() || !isGrid(c.myGrid)) return STATUS.setUp;
+  if (!st.audioOk) return STATUS.audioOff;
   return null;
 }
 
 export function messages(st: SeqState): Record<TxNum, string> {
   const p = st.partner;
   const generated = buildMessages({
-    dx: p?.call ?? null,
+    // A Hound calls a Fox with a compound callsign by its base callsign (K1JT's guide).
+    dx: p ? (st.config.hound ? foxCall(p.call) : p.call) : null,
     me: st.config.myCall,
     grid: st.config.myGrid,
     report: p ? (p.reportSent ?? p.snrDb) : null,
@@ -256,6 +380,48 @@ export function ourSlot(st: SeqState, nowMs: number): { slotStartMs: number; off
   return { slotStartMs: cur + 2 * len, offsetS: 0.5, tooLateFor: cur };
 }
 
+/** Worked on this band and mode, on any day. */
+function workedHere(worked: Worked[], call: string, c: SeqConfig): boolean {
+  return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode);
+}
+
+/** Worked today on this band and mode: a dupe. */
+function dupeOf(worked: Worked[], call: string, c: SeqConfig, nowMs: number): boolean {
+  const day = dayOf(nowMs);
+  return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode && w.day === day);
+}
+
+/** Plain CQs in Hunt's order. */
+export function orderHunt(cqs: HeardCq[], order: HuntOrder, worked: Worked[], config: SeqConfig): HeardCq[] {
+  const strongest = (a: HeardCq, b: HeardCq) => b.snrDb - a.snrDb || a.seq - b.seq;
+  const km = (q: HeardCq) => (q.grid ? (pathBetween(config.myGrid, q.grid)?.km ?? -1) : -1);
+  const fresh = (q: HeardCq) => Number(!workedHere(worked, q.call, config));
+  const newCall = (q: HeardCq) => Number(!worked.some((w) => sameCall(w.call, q.call)));
+  const by: Record<HuntOrder, (a: HeardCq, b: HeardCq) => number> = {
+    unworked: (a, b) => fresh(b) - fresh(a) || strongest(a, b),
+    strongest,
+    newest: (a, b) => b.sinceMs - a.sinceMs || strongest(a, b),
+    farthest: (a, b) => km(b) - km(a) || strongest(a, b),
+    new: (a, b) => newCall(b) - newCall(a) || strongest(a, b),
+  };
+  return [...cqs].sort(by[order]);
+}
+
+/**
+ * The CQs Hunt may answer after the slot starting at `slotStartMs`: plain CQs heard in it, less
+ * dupes and stations that ignored Hunt in the last 10 min, in Hunt's order.
+ */
+export function huntCandidates(st: SeqState, slotStartMs: number, nowMs: number): HeardCq[] {
+  const c = st.config;
+  const ignored = st.ignored.filter((i) => nowMs - i.atMs < IGNORE_MS);
+  const open = st.cqs.filter((q) => q.heardMs === slotStartMs && !dupeOf(st.worked, q.call, c, nowMs) && !ignored.some((i) => sameCall(i.call, q.call)));
+  return orderHunt(open, c.huntOrder, st.worked, c);
+}
+
+const ENDS: ExchangeKind[] = ['rr73', 'rrr', '73'];
+const TO_OTHER: ExchangeKind[] = ['report', 'rreport', ...ENDS];
+
+
 class Machine {
   st: SeqState;
   fx: SeqEffect[] = [];
@@ -266,6 +432,10 @@ class Machine {
 
   get cfg() {
     return this.st.config;
+  }
+
+  get len() {
+    return SLOT_MS[this.cfg.mode];
   }
 
   notice(kind: NoticeKind, text: string) {
@@ -286,8 +456,38 @@ class Machine {
       st.next = null;
       return;
     }
-    st.next = { tx, text, ...ourSlot(st, nowMs), scheduled: false };
+    let slot = ourSlot(st, nowMs);
+    const air = st.onAir;
+    if (air?.slotStartMs === slot.slotStartMs) {
+      // A newer message replaces ours on air in the slot early in it: a call to a CQ heard while
+      // our CQ plays goes out now. Later, or when ours ends a QSO (RR73, RRR, 73) or is the same
+      // message, ours plays out and the new one goes a cycle later.
+      const early = slot.offsetS - 0.5 <= SHIFT_LIMIT_S[this.cfg.mode] + 1e-9;
+      if (early && air.text !== text && air.tx !== 4 && air.tx !== 5) {
+        this.fx.push({ type: 'cancelTx', stopPlaying: true });
+        st.onAir = null;
+      } else slot = { slotStartMs: slot.slotStartMs + 2 * this.len, offsetS: 0.5, tooLateFor: slot.slotStartMs };
+    }
+    st.next = { tx, text, ...slot, scheduled: false, freqHz: this.txFreq(tx) };
     this.flush();
+  }
+
+  /**
+   * Hound: the R-report goes where the Fox sent our report, and a repeat 300 Hz away; anything
+   * else at the operator's Tx frequency, raised to 1000 Hz. Null outside Hound mode.
+   */
+  txFreq(tx: TxNum): number | null {
+    if (!this.cfg.hound) return null;
+    const p = this.st.partner;
+    if (tx === 3 && p?.foxHz != null) return this.st.retries > 0 ? houndRepeatHz(p.foxHz) : p.foxHz;
+    return this.cfg.txHz < HOUND_MIN_HZ ? houndCallHz(this.cfg.txHz) : null;
+  }
+
+  /** Withdraws the planned transmission. */
+  unplan() {
+    const st = this.st;
+    if (st.next?.scheduled) this.fx.push({ type: 'cancelTx', stopPlaying: false });
+    st.next = null;
   }
 
   /** Schedules the planned transmission if it can go out, or withdraws it if it no longer can. */
@@ -295,7 +495,7 @@ class Machine {
     const n = this.st.next;
     if (!n) return;
     if (!n.scheduled && this.canTransmit()) {
-      this.fx.push({ type: 'scheduleTx', tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, startOffsetS: n.offsetS });
+      this.fx.push({ type: 'scheduleTx', tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, startOffsetS: n.offsetS, freqHz: n.freqHz });
       n.scheduled = true;
     } else if (n.scheduled && !this.canTransmit()) {
       this.fx.push({ type: 'cancelTx', stopPlaying: false });
@@ -303,25 +503,58 @@ class Machine {
     }
   }
 
-  /** Stops everything at once: Halt, audio stops, band changes, the watchdog. */
-  stopAll(nowMs: number) {
+  /** Stops everything at once: Halt, End QSO, audio stops, a mode change, the watchdog. */
+  stopAll() {
     const st = this.st;
     st.txEnabled = false;
-    st.run = false;
+    st.hunt = false;
     st.stopAfter = false;
+    st.watchdogEnding = false;
     st.paused = false;
+    st.pausedWhy = null;
     if (st.next) st.next.scheduled = false;
     this.fx.push({ type: 'cancelTx', stopPlaying: true });
-    void nowMs;
+  }
+
+  clearQueue() {
+    if (!this.st.queue.length) return;
+    this.st.queue = [];
+    this.fx.push({ type: 'queueChanged', callers: [] });
+  }
+
+  /** Back to idle: no partner, no plan, an empty queue. Operator edits other than Tx6 go. */
+  reset() {
+    const st = this.st;
+    this.clearPartner();
+    st.phase = 'idle';
+    st.resumeCq = false;
+    st.current = null;
+    st.next = null;
+    this.clearQueue();
   }
 
   resetWatchdog(nowMs: number) {
-    this.st.watchdogFromMs = nowMs;
+    const st = this.st;
+    st.watchdogFromMs = nowMs;
+    // The operator is here: after a QSO the watchdog was letting finish, Hunt and CQ carry on.
+    st.watchdogEnding = false;
+  }
+
+  /** No partner: operator edits other than Tx6 go, and nothing is paused or lost. */
+  clearPartner() {
+    const st = this.st;
+    st.partner = null;
+    st.retries = 0;
+    st.lost = null;
+    st.paused = false;
+    st.pausedWhy = null;
+    const tx6 = st.edits[6];
+    st.edits = tx6 ? { 6: tx6 } : {};
   }
 
   newPartner(call: string, d: { grid: string | null; freqHz: number; snrDb: number; dtS: number }) {
-    const st = this.st;
-    st.partner = {
+    this.clearPartner();
+    this.st.partner = {
       call,
       grid: d.grid,
       freqHz: d.freqHz,
@@ -337,28 +570,61 @@ class Machine {
       rcvdAck: false,
       startMs: null,
       logged: false,
+      foxHz: null,
     };
-    const tx6 = st.edits[6];
-    st.edits = tx6 ? { 6: tx6 } : {};
-    st.retries = 0;
-    st.paused = false;
+    this.st.houndLogged = null;
   }
 
-  /** Ends the QSO with the partner. Answering stops Tx; CQ carries on at the next decision. */
-  endQso() {
+  /** The watchdog limit, min, to 0.1. */
+  watchdogMin(): number {
+    return Math.round((this.cfg.watchdogMs / 60000) * 10) / 10;
+  }
+
+  /**
+   * A QSO is under way once the station has sent us a message, or called us after our CQ. Calls
+   * nobody has answered yet are not: the watchdog ends those at once.
+   */
+  underway(): boolean {
     const st = this.st;
-    st.partner = null;
-    st.retries = 0;
-    const tx6 = st.edits[6];
-    st.edits = tx6 ? { 6: tx6 } : {};
-    if (st.phase === 'answering' || st.stopAfter) {
+    const p = st.partner;
+    if (!p || st.paused) return false;
+    return st.phase === 'cq' || p.rcvdRpt || p.rcvdRRpt || p.rcvdAck || p.logged;
+  }
+
+  /**
+   * The QSO with the partner is over, logged (`done`) or not. Hunt picks the next station at its
+   * next decision. The CQ loop carries on with the next caller or CQ when Run is on, and after a
+   * caller who did not finish; a station called from CQ returns to it only when logged with Run
+   * on. Otherwise Tx goes off, as WSJT-X does with "Disable Tx after sending 73". Stop after QSO and
+   * a watchdog that ran out during the QSO turn Tx off.
+   */
+  afterQso(nowMs: number, done: boolean) {
+    const st = this.st;
+    const fromCq = st.phase === 'cq';
+    const loop = fromCq || (st.resumeCq && done);
+    const stop = st.stopAfter || st.watchdogEnding;
+    this.clearPartner();
+    st.resumeCq = false;
+    if (st.hunt && !stop) {
       st.phase = 'idle';
-      st.txEnabled = false;
-      st.run = false;
-      st.stopAfter = false;
       st.current = null;
-      if (st.next?.scheduled) this.fx.push({ type: 'cancelTx', stopPlaying: false });
-      st.next = null;
+      this.unplan();
+      return;
+    }
+    if (!st.hunt && loop && !stop && (this.cfg.run || (fromCq && !done))) {
+      st.phase = 'cq';
+      this.nextCaller(nowMs);
+      return;
+    }
+    st.phase = 'idle';
+    st.txEnabled = false;
+    st.hunt = false;
+    st.stopAfter = false;
+    st.current = null;
+    this.unplan();
+    if (st.watchdogEnding) {
+      st.watchdogEnding = false;
+      this.notice('watchdog', STATUS.watchdog(this.watchdogMin()));
     }
   }
 
@@ -387,6 +653,7 @@ class Machine {
     };
     st.worked.push({ call: record.call, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid });
     st.completed++;
+    if (st.hunt) st.huntQsos++;
     this.fx.push({ type: 'logQso', record });
     this.markQueue(nowMs);
   }
@@ -438,7 +705,9 @@ class Machine {
     const st = this.st;
     const same = st.lastSent?.tx === tx && st.current === tx;
     st.retries = same ? st.retries + 1 : 0;
-    if (same && st.retries > this.cfg.maxRetries) {
+    // Hunt's own limit covers the calls before an answer; a QSO under way keeps the usual one.
+    const limit = st.hunt && tx === 1 ? (this.cfg.huntCalls ?? this.cfg.maxRetries + 1) - 1 : this.cfg.maxRetries;
+    if (same && st.retries > limit) {
       this.giveUp(nowMs);
       return;
     }
@@ -446,21 +715,47 @@ class Machine {
     this.plan(tx, nowMs);
   }
 
+  /** Answering stops calling and keeps Tx enabled on the last message, as WSJT-X does. */
+  pause(why: string) {
+    const st = this.st;
+    st.paused = true;
+    st.pausedWhy = why;
+    if (st.next?.scheduled) this.fx.push({ type: 'cancelTx', stopPlaying: false });
+    if (st.next) st.next.scheduled = false;
+  }
+
+  /** Hunt leaves a station that did not answer alone for 10 min. */
+  ignore(call: string, nowMs: number) {
+    const st = this.st;
+    st.ignored = [...st.ignored.filter((i) => !sameCall(i.call, call) && nowMs - i.atMs < IGNORE_MS), { call: bare(call), atMs: nowMs }];
+  }
+
   giveUp(nowMs: number) {
     const st = this.st;
-    const call = st.partner?.call ?? '';
-    const n = this.cfg.maxRetries;
-    if (st.phase === 'answering') {
-      st.paused = true;
-      if (st.next?.scheduled) this.fx.push({ type: 'cancelTx', stopPlaying: false });
-      if (st.next) st.next.scheduled = false;
-      this.notice('no-reply', `No reply from ${bare(call)} after ${n} repeats. Tap Call to try again.`);
+    const call = bare(st.partner?.call ?? '');
+    if (this.cfg.hound && st.partner?.rcvdRpt) {
+      this.notice('no-reply', STATUS.noReplyNotLogged(call));
+      this.afterQso(nowMs, false);
       return;
     }
-    this.notice('dropped', `${bare(call)} went quiet after ${n} repeats and was not logged.`);
-    st.partner = null;
-    st.retries = 0;
-    this.nextCaller(nowMs);
+    if (st.phase === 'answering') {
+      if (st.hunt) {
+        this.ignore(call, nowMs);
+        this.notice('no-reply', STATUS.noReply(call));
+        this.afterQso(nowMs, false);
+        return;
+      }
+      this.pause(PAUSED.noReply);
+      this.notice('no-reply', STATUS.noReply(call));
+      return;
+    }
+    // Repeats of RR73 to a caller who keeps sending the R-report end a QSO that is logged already.
+    if (st.partner?.logged) {
+      this.afterQso(nowMs, true);
+      return;
+    }
+    this.notice('dropped', STATUS.noReplyNotLogged(call));
+    this.afterQso(nowMs, false);
   }
 
   /** CQ and Run: answers the next caller in the queue, or calls CQ again. */
@@ -468,8 +763,7 @@ class Machine {
     const st = this.st;
     const pick = this.ordered().find((c) => this.cfg.workDupes || !c.dupe);
     if (!pick) {
-      st.partner = null;
-      st.retries = 0;
+      this.clearPartner();
       st.parity = this.cfg.cqParity;
       this.plan(6, nowMs);
       return;
@@ -490,9 +784,7 @@ class Machine {
   }
 
   isDupe(call: string, nowMs: number): boolean {
-    const c = this.cfg;
-    const day = dayOf(nowMs);
-    return this.st.worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode && w.day === day);
+    return dupeOf(this.st.worked, call, this.cfg, nowMs);
   }
 
   markQueue(nowMs: number) {
@@ -502,18 +794,23 @@ class Machine {
     }
   }
 
-  /** Adds stations calling us to the queue (CQ and Run). Returns true when the queue changed. */
-  addCallers(slotStartMs: number, decodes: Decode[], nowMs: number): boolean {
+  /**
+   * Adds stations calling us to the queue (CQ and Run). Returns true when the queue changed. A
+   * later pass (`more`) only adds: the final pass of its slot already renewed the queue.
+   */
+  addCallers(slotStartMs: number, decodes: Decode[], nowMs: number, more = false): boolean {
     const st = this.st;
     const me = this.cfg.myCall;
     let changed = false;
-    if (!st.run) {
+    if (more) {
+      // Nothing to renew.
+    } else if (!this.cfg.run) {
       // Without Run, only the stations calling in the latest slot are candidates.
       if (st.queue.length) changed = true;
       st.queue = [];
     } else {
       const before = st.queue.length;
-      st.queue = st.queue.filter((c) => slotStartMs - c.heardMs <= STALE_SLOTS * SLOT_MS[this.cfg.mode]);
+      st.queue = st.queue.filter((c) => slotStartMs - c.heardMs <= STALE_SLOTS * this.len);
       changed ||= st.queue.length !== before;
     }
     for (const d of decodes) {
@@ -545,26 +842,180 @@ class Machine {
     return changed;
   }
 
-  slotDecoded(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
+  /**
+   * Keeps the plain CQs of the last few slots for Hunt. A station heard sending anything else is
+   * in a QSO and leaves the list. Directed CQs (CQ DX, CQ NA, CQ POTA) are left out until RR73
+   * has the reference data to judge them.
+   */
+  noteCqs(slotStartMs: number, decodes: Decode[], nowMs: number) {
     const st = this.st;
     const me = this.cfg.myCall;
-    const len = SLOT_MS[this.cfg.mode];
+    const busy: string[] = [];
+    const cqs = st.cqs.filter((q) => slotStartMs - q.heardMs <= STALE_SLOTS * this.len);
+    for (const d of decodes) {
+      const ex = parseExchange(d.text);
+      if (!ex.from || sameCall(ex.from, me)) continue;
+      if (ex.kind !== 'cq') {
+        busy.push(ex.from);
+        continue;
+      }
+      if (ex.modifier) continue;
+      const found = cqs.find((q) => sameCall(q.call, ex.from));
+      const entry: HeardCq = {
+        call: ex.from,
+        grid: ex.grid ?? found?.grid ?? null,
+        snrDb: d.snr_db,
+        dtS: d.dt_s,
+        freqHz: d.freq_hz,
+        heardMs: slotStartMs,
+        sinceMs: found && slotStartMs - found.heardMs <= 2 * this.len ? found.sinceMs : slotStartMs,
+        seq: found?.heardMs === slotStartMs ? found.seq : st.seq++,
+      };
+      if (found) Object.assign(found, entry);
+      else cqs.push(entry);
+    }
+    st.cqs = cqs.filter((q) => !busy.some((b) => sameCall(b, q.call)));
+    if (st.ignored.length) st.ignored = st.ignored.filter((i) => nowMs - i.atMs < IGNORE_MS);
+    if (st.lostTo.length) st.lostTo = st.lostTo.filter((l) => nowMs - l.atMs < IGNORE_MS);
+  }
+
+  /** Hunt with nobody in a QSO: calls the first CQ heard in the slot just decoded. */
+  huntPick(slotStartMs: number, nowMs: number) {
+    const st = this.st;
+    if (!st.hunt || !st.txEnabled || st.partner) return;
+    const pick = huntCandidates(st, slotStartMs, nowMs)[0];
+    if (!pick) return;
+    this.newPartner(pick.call, pick);
+    st.phase = 'answering';
+    st.parity = opposite(parityOf(pick.heardMs, this.cfg.mode));
+    st.lastSent = null;
+    this.plan(1, nowMs);
+  }
+
+  /**
+   * The station we call, before it has answered us, sends a report, an R-report, RR73 or 73 to
+   * another station: calling stops. Hunt moves on to the next CQ at once. Called by hand with
+   * tail-ending on, one more call goes out in the next slot of our parity once they send RR73 or
+   * 73 to that station (or call CQ). Returns true when this decides the slot.
+   */
+  lostStation(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean): boolean {
+    const st = this.st;
+    const p = st.partner!;
+    if (p.rcvdRpt || p.rcvdAck || p.logged) return false;
+    const me = this.cfg.myCall;
+    const theirs = e.decodes.map((d) => parseExchange(d.text)).filter((x) => sameCall(x.from, p.call));
+    const toOther = theirs.filter((x) => x.to && !sameCall(x.to, me) && TO_OTHER.includes(x.kind)).at(-1);
+    const call = bare(p.call);
+    const lost = st.lost;
+    if (!lost) {
+      if (!toOther) return false;
+      const other = bare(toOther.to!);
+      st.lost = { other, state: 'watching', sinceMs: e.slotStartMs };
+      this.fx.push({ type: 'lostTo', call, other, slotStartMs: e.slotStartMs });
+      this.unplan();
+      // Hunt never waits for a lost station: another CQ is worth more than a tail-end call.
+      if (!this.cfg.tailEnd || st.hunt) {
+        this.notice('lost', STATUS.answered(call, other));
+        // Hunt: a station that answers another station twice in 10 min does not hear us well,
+        // so it is left alone for 10 min, as one that does not reply.
+        const twice = st.hunt && st.lostTo.some((l) => sameCall(l.call, call) && e.nowMs - l.atMs < IGNORE_MS);
+        if (st.hunt) st.lostTo = [...st.lostTo.filter((l) => !sameCall(l.call, call) && e.nowMs - l.atMs < IGNORE_MS), { call, atMs: e.nowMs }];
+        this.drop(PAUSED.answered(other), e.nowMs, twice);
+        return true;
+      }
+      this.notice('lost', STATUS.answered(call, other));
+      if (ENDS.includes(toOther.kind)) this.tailCall(e);
+      return true;
+    }
+    if (lost.state === 'watching') {
+      const ended = theirs.some((x) => x.kind === 'cq' || (ENDS.includes(x.kind) && x.to && !sameCall(x.to, me)));
+      if (ended) {
+        this.tailCall(e);
+        return true;
+      }
+      if (e.slotStartMs - lost.sinceMs > TAIL_WATCH_SLOTS * this.len) {
+        this.notice('lost', STATUS.stillWorking(call, lost.other));
+        this.drop(PAUSED.working(lost.other), e.nowMs, false);
+      }
+      return true;
+    }
+    // One more call went out: an answer goes on as usual, anything else ends it.
+    if (sentLastSlot || toOther) {
+      this.notice('no-reply', STATUS.noReply(call));
+      this.drop(PAUSED.noReply, e.nowMs, true);
+      return true;
+    }
+    return false;
+  }
+
+  /** Calls the lost station once more, in the next slot of our parity. */
+  tailCall(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
+    const st = this.st;
+    st.lost = { ...st.lost!, state: 'called' };
+    st.parity = opposite(parityOf(e.slotStartMs, this.cfg.mode));
+    st.retries = 0;
+    st.lastSent = null;
+    this.plan(st.current ?? 1, e.nowMs);
+  }
+
+  /** Answering gives up on a station: Hunt moves on, by hand the call pauses on its last message. */
+  drop(why: string, nowMs: number, ignored: boolean) {
+    const st = this.st;
+    if (st.hunt) {
+      if (ignored && st.partner) this.ignore(st.partner.call, nowMs);
+      this.afterQso(nowMs, false);
+      return;
+    }
+    st.lost = null;
+    this.pause(why);
+  }
+
+  slotDecoded(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
+    const st = this.st;
+    if (e.pass === 'late') {
+      // Only the decodes no pass of this slot has brought yet, and only for the slot decided last.
+      const seen = st.decided;
+      if (seen?.slotStartMs !== e.slotStartMs) return;
+      const fresh = e.decodes.filter((d) => !seen.texts.includes(d.text));
+      if (!fresh.length) return;
+      seen.texts.push(...fresh.map((d) => d.text));
+      e = { ...e, decodes: fresh };
+    } else if (e.pass === 'final') st.decided = { slotStartMs: e.slotStartMs, texts: e.decodes.map((d) => d.text) };
     // Keep the partner's latest signal for the report and the log.
     if (st.partner) {
-      const heard = e.decodes.filter((d) => sameCall(parseExchange(d.text).from, st.partner!.call));
+      const heard = e.decodes.filter((d) => parseParts(d.text).some((x) => sameCall(x.from, st.partner!.call)));
       const last = heard[heard.length - 1];
       if (last) Object.assign(st.partner, { snrDb: last.snr_db, dtS: last.dt_s, freqHz: last.freq_hz });
     }
     if (st.phase === 'cq' && e.pass === 'early') {
-      if (st.run) this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
+      if (this.cfg.run) this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
       return;
     }
-    if (e.pass !== 'final' || st.phase === 'idle') return;
+    if (e.pass === 'early') return;
+    this.noteCqs(e.slotStartMs, e.decodes, e.nowMs);
+    this.decide(e);
+    if (st.hunt && st.phase === 'idle') this.huntPick(e.slotStartMs, e.nowMs);
+  }
+
+  /**
+   * Acts on a slot's decodes. A later pass (`late`) acts only on what its decodes hold: a reply,
+   * the partner answering another station, a caller. What they lack was the final pass's to act
+   * on, so nothing repeats or moves on for want of an answer.
+   */
+  decide(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
+    const st = this.st;
+    const me = this.cfg.myCall;
+    const more = e.pass === 'late';
+    if (st.phase === 'idle') return;
     // Replies come in the other parity; the slot we transmitted in tells us nothing.
     if (st.parity && parityOf(e.slotStartMs, this.cfg.mode) === st.parity) return;
-    const sentLastSlot = st.lastSent?.slotStartMs === e.slotStartMs - len;
+    const sentLastSlot = !more && st.lastSent?.slotStartMs === e.slotStartMs - this.len;
 
-    if (st.phase === 'cq') this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
+    if (this.cfg.hound && st.phase === 'answering' && st.partner && !st.partner.logged) {
+      this.houndDecide(e, sentLastSlot, more);
+      return;
+    }
+    const added = st.phase === 'cq' && this.addCallers(e.slotStartMs, e.decodes, e.nowMs, more);
 
     if (st.partner) {
       const p = st.partner;
@@ -572,15 +1023,16 @@ class Machine {
       const ex = replies[replies.length - 1];
       if (p.logged) {
         // Calling side after RR73: the QSO is in the log. Without Run, a station that missed our
-        // RR73 and repeats its R-report gets it again; otherwise move on.
-        if (!st.run && ex?.kind === 'rreport') {
+        // RR73 and repeats its R-report gets it again; otherwise the QSO is over.
+        if (!this.cfg.run && ex?.kind === 'rreport') {
           this.goTo(4, e.nowMs);
           return;
         }
-        this.endQso();
-        if (st.phase === 'cq') this.nextCaller(e.nowMs);
+        if (!more) this.afterQso(e.nowMs, true);
         return;
       }
+      if (ex) st.lost = null;
+      else if (st.phase === 'answering' && !st.paused && this.lostStation(e, sentLastSlot)) return;
       const r = ex ? this.reply(ex, e.nowMs) : null;
       if (r === 'complete') {
         this.complete(e.nowMs);
@@ -588,20 +1040,19 @@ class Machine {
         return;
       }
       if (r === 'incomplete') {
-        this.notice('incomplete', `${bare(p.call)} ended the QSO before the reports were exchanged. It was not logged.`);
-        this.endQso();
-        if (st.phase === 'cq') this.nextCaller(e.nowMs);
+        this.notice('incomplete', STATUS.endedEarly(bare(p.call)));
+        this.afterQso(e.nowMs, false);
         return;
       }
       if (r === 'done') {
-        this.endQso();
-        if (st.phase === 'cq') this.nextCaller(e.nowMs);
+        this.afterQso(e.nowMs, true);
         return;
       }
       if (typeof r === 'number') {
         this.goTo(r, e.nowMs);
         return;
       }
+      if (more) return;
       if (sentLastSlot && st.current) {
         if (st.paused) return;
         this.goTo(st.current, e.nowMs);
@@ -614,25 +1065,73 @@ class Machine {
     // Calling CQ with nobody in the QSO.
     if (st.phase === 'cq') {
       const callers = this.ordered().filter((c) => this.cfg.workDupes || !c.dupe);
-      if (callers.length) {
+      if (callers.length && (!more || added)) {
         this.nextCaller(e.nowMs);
         return;
       }
-      if (sentLastSlot || !st.next) this.plan(6, e.nowMs);
+      if (!more && (sentLastSlot || !st.next)) this.plan(6, e.nowMs);
     }
+  }
+
+  /**
+   * Hound (FT8 DXpedition mode): the Fox works several Hounds in each slot, in standard messages
+   * and multi-call messages, so only the parts addressed to us count and the Fox working others
+   * never reads as a lost station. A report gets the R-report at the frequency it came on; RR73
+   * after our report logs the QSO and Tx goes off. Tx1 repeats until the Fox answers or the
+   * watchdog stops it; the R-report repeats up to the retry limit, 300 Hz away.
+   */
+  houndDecide(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean, more = false) {
+    const st = this.st;
+    const p = st.partner!;
+    const me = this.cfg.myCall;
+    const toUs = e.decodes.flatMap((d) => parseParts(d.text).flatMap((x) => (sameCall(x.to, me) && fromFox(x, p.call) ? [{ x, d }] : [])));
+    // The Fox sends RR73 only after hearing our R-report, so an RR73 without a report to us is
+    // another Hound's.
+    if (p.rcvdRpt && toUs.some(({ x }) => ENDS.includes(x.kind))) {
+      p.rcvdAck = true;
+      this.complete(e.nowMs);
+      st.houndLogged = bare(p.call);
+      this.afterQso(e.nowMs, true);
+      return;
+    }
+    const rpt = toUs.filter(({ x }) => x.kind === 'report' || x.kind === 'rreport').at(-1);
+    if (rpt) {
+      p.reportRcvd = rpt.x.report;
+      p.rcvdRpt = true;
+      p.foxHz = Math.round(rpt.d.freq_hz);
+      Object.assign(p, { snrDb: rpt.d.snr_db, dtS: rpt.d.dt_s });
+      st.paused = false;
+      st.pausedWhy = null;
+      this.goTo(3, e.nowMs);
+      return;
+    }
+    if (more) return;
+    if (sentLastSlot && st.current && !st.paused) {
+      // Tx1 repeats with no limit, as WSJT-X's Hound does; the watchdog ends it.
+      if (st.current === 1) this.plan(1, e.nowMs);
+      else this.goTo(st.current, e.nowMs);
+      return;
+    }
+    if (st.next && !st.next.scheduled && st.current) this.plan(st.current, e.nowMs);
   }
 
   callStation(e: Extract<SeqEvent, { type: 'callStation' }>) {
     const st = this.st;
     const me = this.cfg.myCall;
-    const ex = parseExchange(e.decode.text);
+    const parts = parseParts(e.decode.text);
+    const ex = parts.find((x) => sameCall(x.to, me)) ?? parts[0];
     let dx: string | null;
     if (ex.kind === 'cq') dx = ex.from;
     else if (sameCall(ex.to, me)) dx = ex.from;
     else if (sameCall(ex.from, me)) dx = ex.to;
     else dx = ex.from ?? ex.to;
+    if (ex.multi && dx === '<...>') {
+      this.notice('cannot-call', STATUS.foxUnknown);
+      return;
+    }
+    if (ex.multi && dx) dx = bare(dx);
     if (!dx || sameCall(dx, me)) {
-      this.notice('cannot-call', 'There is no other callsign in this message to call.');
+      this.notice('cannot-call', STATUS.noCall);
       return;
     }
     this.resetWatchdog(e.nowMs);
@@ -641,14 +1140,21 @@ class Machine {
     } else {
       Object.assign(st.partner, { freqHz: e.decode.freq_hz, snrDb: e.decode.snr_db, dtS: e.decode.dt_s });
       st.paused = false;
+      st.pausedWhy = null;
+      st.lost = null;
       st.retries = 0;
     }
+    // A station called by hand follows the answering path: CQ stops until this QSO is done.
+    const fromCq = st.phase === 'cq' && !st.hunt;
+    st.resumeCq = fromCq || (st.phase === 'answering' && st.resumeCq);
+    if (fromCq) this.clearQueue();
     st.queue = st.queue.filter((c) => !sameCall(c.call, dx));
     st.parity = opposite(parityOf(e.slotStartMs, this.cfg.mode));
-    if (st.phase !== 'cq') st.phase = 'answering';
+    st.phase = 'answering';
     st.txEnabled = true;
     st.lastSent = null;
     const addressed = sameCall(ex.to, me) ? this.reply(ex, e.nowMs) : null;
+    if (this.cfg.hound && st.partner && (addressed === 3 || addressed === 4)) st.partner.foxHz = Math.round(e.decode.freq_hz);
     if (addressed === 'complete') {
       this.complete(e.nowMs);
       this.goTo(5, e.nowMs);
@@ -664,16 +1170,55 @@ class Machine {
   callCq(nowMs: number) {
     const st = this.st;
     this.resetWatchdog(nowMs);
+    this.clearPartner();
     st.phase = 'cq';
-    st.partner = null;
-    st.retries = 0;
-    st.paused = false;
+    st.hunt = false;
+    st.resumeCq = false;
     st.lastSent = null;
     st.parity = this.cfg.cqParity;
     st.txEnabled = true;
     this.plan(6, nowMs);
     const why = notReady(st);
     if (why) this.notice('not-ready', why);
+  }
+
+  /**
+   * Hunt on: CQ stops. A QSO under way carries on and Hunt picks after it; a CQ with nobody in a
+   * QSO, or a call that gave up, ends at once. Picks at once when a CQ from the slot just ended
+   * can still be answered in the slot under way. Hunt off: a QSO under way finishes, then Tx goes
+   * off.
+   */
+  hunt(on: boolean, nowMs: number) {
+    const st = this.st;
+    this.resetWatchdog(nowMs);
+    st.stopAfter = false;
+    if (!on) {
+      st.hunt = false;
+      if (!st.partner || st.paused) {
+        this.clearPartner();
+        st.phase = 'idle';
+        st.txEnabled = false;
+        st.current = null;
+        this.unplan();
+      }
+      return;
+    }
+    st.hunt = true;
+    st.huntQsos = 0;
+    st.resumeCq = false;
+    if (!st.partner || st.paused || st.lost?.state === 'watching') {
+      this.clearPartner();
+      st.phase = 'idle';
+      st.current = null;
+      this.unplan();
+      this.clearQueue();
+    }
+    st.txEnabled = true;
+    const why = notReady(st);
+    if (why) this.notice('not-ready', why);
+    const cur = slotStart(nowMs, this.cfg.mode);
+    if (!st.partner && (nowMs - cur) / 1000 + LEAD_S <= 0.5 + LATE_S[this.cfg.mode]) this.huntPick(cur - this.len, nowMs);
+    this.flush();
   }
 
   txStarted(e: Extract<SeqEvent, { type: 'txStarted' }>) {
@@ -683,13 +1228,13 @@ class Machine {
     // is on air: note it, and keep the plan, which the audio layer reports as missed.
     if (!n || n.slotStartMs !== e.slotStartMs || n.text !== e.text) {
       const tx = (Object.entries(messages(st)).find(([, t]) => t === e.text)?.[0] ?? '6') as unknown as TxNum;
-      st.onAir = { tx: Number(tx) as TxNum, text: e.text, slotStartMs: e.slotStartMs };
-      if (e.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
+      st.onAir = { tx: Number(tx) as TxNum, text: e.text, slotStartMs: e.slotStartMs, freqHz: null };
+      if (this.cfg.watchdogRefresh && e.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
       st.lastTxText = e.text;
       return;
     }
-    st.onAir = { tx: n.tx, text: n.text, slotStartMs: n.slotStartMs };
-    if (n.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
+    st.onAir = { tx: n.tx, text: n.text, slotStartMs: n.slotStartMs, freqHz: n.freqHz };
+    if (this.cfg.watchdogRefresh && n.text !== st.lastTxText) this.resetWatchdog(e.nowMs);
     st.lastTxText = n.text;
     if (st.partner && st.partner.startMs === null && n.tx !== 6) st.partner.startMs = e.slotStartMs + n.offsetS * 1000;
     st.next = null;
@@ -713,18 +1258,31 @@ class Machine {
       p.sentAck = true;
       if (p.rcvdRRpt) {
         this.complete(e.nowMs);
-        if (st.phase === 'answering' || st.stopAfter) this.endQso();
+        // Calling CQ, the next decode decides: a repeated R-report, the next caller or the end.
+        if (st.phase === 'answering' || st.stopAfter || st.watchdogEnding) this.afterQso(e.nowMs, true);
       }
     }
-    if (sent.tx === 5) this.endQso();
+    if (sent.tx === 5) this.afterQso(e.nowMs, true);
   }
 
   tick(nowMs: number) {
     const st = this.st;
-    if (st.txEnabled && nowMs - st.watchdogFromMs >= this.cfg.watchdogMs) {
-      const min = Math.round(this.cfg.watchdogMs / 60000);
-      this.stopAll(nowMs);
-      this.notice('watchdog', `Tx stopped: ${min} min without a touch or a new message. Enable Tx to carry on.`);
+    const limit = this.cfg.watchdogMs;
+    // A QSO the watchdog let finish that paused or ended some other way: Tx goes off now.
+    if (st.watchdogEnding && st.txEnabled && (st.paused || !st.partner)) {
+      this.stopAll();
+      this.notice('watchdog', STATUS.watchdog(this.watchdogMin()));
+      return;
+    }
+    if (st.txEnabled && limit > 0 && nowMs - st.watchdogFromMs >= limit && !st.watchdogEnding) {
+      // A QSO under way finishes first, and Hunt and Repeat CQ start nothing after it.
+      if (this.underway()) {
+        st.watchdogEnding = true;
+        this.notice('watchdog', STATUS.watchdogLast);
+        return;
+      }
+      this.stopAll();
+      this.notice('watchdog', STATUS.watchdog(this.watchdogMin()));
       return;
     }
     const n = st.next;
@@ -746,33 +1304,30 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
     case 'callCq':
       m.callCq(e.nowMs);
       break;
+    case 'hunt':
+      m.hunt(e.on, e.nowMs);
+      break;
     case 'enableTx':
       st.txEnabled = e.on;
       if (e.on) {
         m.resetWatchdog(e.nowMs);
         st.paused = false;
-        if (st.current && (!st.next || st.next.slotStartMs + (0.5 + LATE_S[st.config.mode]) * 1000 < e.nowMs)) m.plan(st.current, e.nowMs);
+        st.pausedWhy = null;
+        // Never while a lost station is still in its QSO.
+        const watching = st.lost?.state === 'watching';
+        if (st.current && !watching && (!st.next || st.next.slotStartMs + (0.5 + LATE_S[st.config.mode]) * 1000 < e.nowMs)) m.plan(st.current, e.nowMs);
         const why = notReady(st);
         if (why) m.notice('not-ready', why);
       } else if (st.next) st.next.scheduled = false;
       if (!e.on) m.fx.push({ type: 'cancelTx', stopPlaying: false });
       m.flush();
       break;
-    case 'runMode':
-      st.run = e.on;
-      m.resetWatchdog(e.nowMs);
-      if (e.on && st.phase !== 'cq') m.callCq(e.nowMs);
-      if (!e.on && st.queue.length) {
-        st.queue = [];
-        m.fx.push({ type: 'queueChanged', callers: [] });
-      }
-      break;
     case 'stopAfterQso':
       st.stopAfter = e.on;
       m.resetWatchdog(e.nowMs);
       break;
     case 'halt':
-      m.stopAll(e.nowMs);
+      m.stopAll();
       // Calling CQ with nobody in a QSO has no state worth keeping: back to idle.
       if (st.phase === 'cq' && !st.partner) {
         st.phase = 'idle';
@@ -780,6 +1335,12 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         st.next = null;
         st.queue = [];
       }
+      break;
+    case 'endQso':
+      // The operator ends the QSO: Tx, Run and Hunt stop and the sequencer goes back to idle.
+      // Nothing is logged; a QSO already logged stays in the log.
+      m.stopAll();
+      m.reset();
       break;
     case 'txStarted':
       m.txStarted(e);
@@ -795,32 +1356,18 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         m.plan(st.current, Math.max(e.nowMs, e.slotStartMs + len + 1));
       }
       break;
+    case 'txRefused':
+      // Planning again at once would be refused again in the same call stack, slot after slot.
+      if (st.next?.slotStartMs === e.slotStartMs) st.next.scheduled = false;
+      break;
     case 'audioStopped':
-      if (st.txEnabled || st.run) m.notice('audio', 'Tx stopped because the audio stopped. The QSO keeps its place; resume audio, then enable Tx.');
-      m.stopAll(e.nowMs);
+      if (st.txEnabled || st.hunt) m.notice('audio', STATUS.audioStopped);
+      m.stopAll();
       st.audioOk = false;
       break;
     case 'audioResumed':
       st.audioOk = true;
       break;
-    case 'bandChanged':
-      if (st.txEnabled || st.run) m.notice('band', 'Tx stopped for the band change. Confirm the band to transmit again.');
-      m.stopAll(e.nowMs);
-      st.bandConfirmed = false;
-      break;
-    case 'bandConfirmed': {
-      const modeChanged = e.mode !== st.config.mode;
-      Object.assign(st.config, { band: e.band, dialHz: e.dialHz, mode: e.mode });
-      st.bandConfirmed = true;
-      if (modeChanged) {
-        st.partner = null;
-        st.phase = 'idle';
-        st.current = null;
-        st.next = null;
-        st.queue = [];
-      }
-      break;
-    }
     case 'touch':
       m.resetWatchdog(e.nowMs);
       break;
@@ -841,6 +1388,7 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         m.callCq(e.nowMs);
         break;
       }
+      st.lost = null;
       m.fixReport(e.tx);
       st.retries = 0;
       m.plan(e.tx, e.nowMs);
@@ -849,6 +1397,17 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       const was = { ...st.config };
       Object.assign(st.config, e.patch);
       const changed = (k: keyof SeqConfig) => e.patch[k] !== undefined && e.patch[k] !== was[k];
+      // Choosing a band applies it and Tx keeps its state. A new mode changes the slot length,
+      // and Hound changes the frequencies and the exchange, so a QSO in progress cannot carry
+      // on: everything stops.
+      if (changed('mode') || changed('hound')) {
+        st.houndLogged = null;
+        m.stopAll();
+        m.reset();
+        break;
+      }
+      // Run off: the queue goes; the QSO in progress carries on.
+      if (changed('run') && !st.config.run) m.clearQueue();
       if (changed('order') || changed('workDupes')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
       // Only a change to the message text plans the transmission again; Settings sends every
       // value whenever one changes, and a new plan would replace a transmission about to start.

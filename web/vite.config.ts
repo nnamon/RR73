@@ -42,16 +42,19 @@ export default defineConfig({
     svelte(),
     changelog(),
     VitePWA({
-      registerType: 'autoUpdate',
-      injectRegister: 'auto',
+      // A new version installs and waits; the app lets it take over at a safe moment and reloads
+      // (src/lib/app/update.svelte.ts registers the worker). Taking over at once (autoUpdate)
+      // deleted the running build's files from the cache while that build still needed them.
+      registerType: 'prompt',
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'icon.svg', 'apple-touch-icon-180x180.png'],
       manifest: {
         name: 'RR73',
         short_name: 'RR73',
         description: 'FT8 and FT4 through the headset jack.',
-        // Literal colours: the manifest cannot read CSS. They match --rr-bg and --rr-accent-fill (light).
-        theme_color: '#F2F3F6',
-        background_color: '#F2F3F6',
+        // Literal colours: the manifest cannot read CSS. They match --rr-bg in light.
+        theme_color: '#F2F2F7',
+        background_color: '#F2F2F7',
         display: 'standalone',
         orientation: 'any',
         start_url: base,
@@ -64,9 +67,17 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,wasm}'],
+        // Reference data (tools/refdata): the country file and the data manifest install with the
+        // app. The LoTW list and the park and summit lists belong to optional features; the app
+        // fetches and keeps them itself only when the feature is on (src/lib/reference/store.ts).
+        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,wasm}', 'data/manifest.json', 'data/cty.json'],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
+        // Wait for SKIP_WAITING from the app. The first install controls the open page at once.
+        skipWaiting: false,
+        clientsClaim: true,
+        // Takes over at once from builds up to 0.5.0, which expect it (public/sw-handover.js).
+        importScripts: ['sw-handover.js'],
       },
     }),
   ],

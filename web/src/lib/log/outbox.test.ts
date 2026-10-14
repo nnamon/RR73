@@ -86,7 +86,7 @@ function harness(opts: { behaviour?: Behaviour; dests?: DestinationId[] } = {}) 
     destinations: () => dests,
     entries: () => entries,
     qso: (id) => qsos.get(id),
-    settle: (e) => reconcile({ entry: e, dest: facts(e.destinationId), qso: qsos.get(e.qsoId)!, activation: null, sendEdits: true, now: clock.now() }) ?? e,
+    settle: (e) => reconcile({ entry: e, dest: facts(e.destinationId), qso: qsos.get(e.qsoId)!, activation: null, sendEdits: true, sendAutomatically: true, now: clock.now() }) ?? e,
     commit: async (changed) => put(changed),
   });
   let n = 0;
@@ -112,13 +112,13 @@ function harness(opts: { behaviour?: Behaviour; dests?: DestinationId[] } = {}) 
         { id: `q${n}`, now: clock.now(), activation: null, callsign: '9V1NE' },
       );
       qsos.set(q.id, q);
-      put(ids.map((id) => reconcile({ entry: null, dest: facts(id), qso: q, activation: null, sendEdits: true, now: clock.now() })!));
+      put(ids.map((id) => reconcile({ entry: null, dest: facts(id), qso: q, activation: null, sendEdits: true, sendAutomatically: true, now: clock.now() })!));
       outbox.kick();
       return q;
     },
     change(q: Qso) {
       qsos.set(q.id, q);
-      put(ids.map((id) => reconcile({ entry: entries.find((e) => e.qsoId === q.id && e.destinationId === id) ?? null, dest: facts(id), qso: q, activation: null, sendEdits: true, now: clock.now() })!));
+      put(ids.map((id) => reconcile({ entry: entries.find((e) => e.qsoId === q.id && e.destinationId === id) ?? null, dest: facts(id), qso: q, activation: null, sendEdits: true, sendAutomatically: true, now: clock.now() })!));
       outbox.kick();
     },
   };
@@ -318,5 +318,37 @@ describe('outbox', () => {
     const q = h.log();
     await h.clock.advance(UNDO_MS);
     expect(h.entry(q.id)).toMatchObject({ state: 'waiting', attempts: 1, lastError: 'The destination gave no answer. RR73 tries again later.' });
+  });
+
+  it('never sends a QSO that is not sent, even on Send now, until it is queued', async () => {
+    const h = harness();
+    h.outbox.start();
+    const q = h.log();
+    h.put([{ ...h.entry(q.id), state: 'not-sent', nextAttemptAt: null }]);
+    await h.clock.advance(10 * HEARTBEAT_MS);
+    await h.outbox.sendNow();
+    await h.clock.advance(0);
+    expect(h.calls).toEqual([]);
+    h.put([{ ...h.entry(q.id), state: 'waiting', nextAttemptAt: h.clock.now() }]);
+    await h.outbox.sendNow();
+    expect(h.calls.map((c) => c.qsoId)).toEqual([q.id]);
+  });
+
+  it('runs a Send now that arrives during a run once that run ends', async () => {
+    let release: () => void = () => undefined;
+    const h = harness({ behaviour: (q) => new Promise<Receipt>((r) => (release = () => r(delivered(q)))) });
+    h.outbox.start();
+    const a = h.log(-60_000);
+    await h.clock.advance(UNDO_MS);
+    expect(h.calls.map((c) => c.qsoId)).toEqual([a.id]);
+    // A QSO still held for Undo, queued by the operator while the first request is out.
+    const b = h.log();
+    const now = h.outbox.sendNow();
+    release();
+    await h.clock.advance(0);
+    release();
+    await now;
+    expect(h.calls.map((c) => c.qsoId)).toEqual([a.id, b.id]);
+    expect([h.entry(a.id).state, h.entry(b.id).state]).toEqual(['delivered', 'delivered']);
   });
 });

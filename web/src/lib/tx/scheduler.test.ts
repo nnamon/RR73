@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PRE_ROLL_MS, TxScheduler, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
+import { PRE_ROLL_MS, TxScheduler, cutStart, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
 
 /** Lets promises and the scheduler's async steps run. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -57,7 +57,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0) {
     synthesize: async (text, mode, f0, rate) => {
       texts.push(`${text}@${f0}/${rate}/${mode}`);
       if (encoderDelay) clock.advanceTo(clock.toUtcMs(clock.currentTime)! + encoderDelay);
-      return new Float32Array(Math.round((mode === 'FT8' ? 12.64 : 5.04) * rate));
+      return new Float32Array(Math.round((mode === 'FT8' ? 12.64 : mode === 'WSPR' ? 110.592 : 5.04) * rate));
     },
   };
   const sched = new TxScheduler({
@@ -107,7 +107,7 @@ describe('TxScheduler', () => {
     expect(clock.played[0].level).toBe(0.5);
     expect(reports).toEqual([]);
     clock.advanceTo(T0 + 15500);
-    expect(reports).toEqual([{ type: 'started', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', startUtcMs: T0 + 15500, lateS: 0 }]);
+    expect(reports).toEqual([{ type: 'started', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', startUtcMs: T0 + 15500, lateS: 0, skippedS: 0 }]);
     clock.advanceTo(T0 + 15000 + 13200);
     expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', complete: true });
     expect(sched.busy).toBe(false);
@@ -124,14 +124,41 @@ describe('TxScheduler', () => {
     expect((reports[0] as { lateS: number }).lateS).toBeCloseTo(1.22, 2);
   });
 
+  it('later than the shift limit, keeps its place in the slot and leaves out its first part', async () => {
+    for (const [mode, inS, dur] of [
+      ['FT8', 3.0, 12.64],
+      ['FT4', 1.2, 5.04],
+    ] as const) {
+      const { clock, reports, sched } = setup();
+      clock.advanceTo(T0 + 15000 + inS * 1000);
+      await sched.schedule(req({ mode }));
+      const lateS = inS + 0.02 - 0.5;
+      // It starts now and ends where the whole message would: 0.5 s + its length into the slot.
+      expect(clock.played[0].samples / clock.sampleRate, mode).toBeCloseTo(dur - lateS, 3);
+      expect(clock.played[0].when + clock.played[0].samples / clock.sampleRate, mode).toBeCloseTo(clock.toContextTime(T0 + 15500 + dur * 1000)!, 3);
+      clock.advanceTo(T0 + 15000 + (inS + 0.1) * 1000);
+      expect(reports[0], mode).toMatchObject({ type: 'started' });
+      expect((reports[0] as { skippedS: number }).skippedS, mode).toBeCloseTo(lateS, 3);
+    }
+  });
+
+  it('fades in where it starts part way through', () => {
+    const out = cutStart(new Float32Array(1000).fill(1), 400, 240);
+    expect(out).toHaveLength(600);
+    expect(out[0]).toBe(0);
+    expect(out[120]).toBeCloseTo(0.5, 2);
+    expect(out[239]).toBeGreaterThan(0.99);
+    expect(out[240]).toBe(1);
+  });
+
   it('reports a start later than the limit as missed and plays nothing', async () => {
     const { clock, reports, sched } = setup();
-    clock.advanceTo(T0 + 15000 + 2000);
+    clock.advanceTo(T0 + 15000 + 4500);
     await sched.schedule(req());
     expect(clock.played).toEqual([]);
     expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'late' }]);
     const ft4 = setup();
-    ft4.clock.advanceTo(T0 + 15000 + 1490);
+    ft4.clock.advanceTo(T0 + 15000 + 1740);
     await ft4.sched.schedule(req({ mode: 'FT4' }));
     expect(ft4.reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'late' }]);
   });
@@ -271,3 +298,33 @@ describe('TxScheduler', () => {
     expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'encode' }]);
   });
 });
+
+describe('TxScheduler in WSPR', () => {
+  const wspr = (over = {}) => req({ text: '9V1NE OJ11 37', mode: 'WSPR', slotStartMs: T0 + 120_000, startOffsetS: 1, ...over });
+
+  it('starts 1 s into the slot and plays the whole 110.6 s', async () => {
+    const { clock, reports, sched } = setup();
+    clock.advanceTo(T0 + 120_600);
+    await sched.schedule(wspr());
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 121_000)!, 9);
+    clock.advanceTo(T0 + 121_000);
+    expect(reports[0]).toEqual({ type: 'started', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', startUtcMs: T0 + 121_000, lateS: 0, skippedS: 0 });
+    clock.advanceTo(T0 + 121_000 + 110_592);
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', complete: true });
+  });
+
+  it('starts up to 1 s late, and misses the slot after that', async () => {
+    const late = setup();
+    late.clock.advanceTo(T0 + 121_900);
+    await late.sched.schedule(wspr());
+    expect(late.clock.played).toHaveLength(1);
+    late.clock.advanceTo(T0 + 122_000);
+    expect((late.reports[0] as { lateS: number }).lateS).toBeCloseTo(0.92, 2);
+    const missed = setup();
+    missed.clock.advanceTo(T0 + 122_100);
+    await missed.sched.schedule(wspr());
+    expect(missed.clock.played).toEqual([]);
+    expect(missed.reports).toEqual([{ type: 'missed', slotStartMs: T0 + 120_000, text: '9V1NE OJ11 37', reason: 'late' }]);
+  });
+});
+

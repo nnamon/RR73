@@ -3,16 +3,39 @@
  * at the output rate as soon as it is decided, then handed to the audio graph 0.5 s before it
  * starts, with the clock mapping of that moment: the audio clock can drift against UTC, and a
  * sound scheduled 15 s ahead would carry that drift into its start. It starts at slot + offset
- * (0.5 s, or later for a late start). A start that would come more than the late-start limit
- * after slot + 0.5 s is reported as missed. Halt stops the sound within one render quantum
- * (128 frames).
+ * (0.5 s in FT8 and FT4, 1 s in WSPR, or later for a late start). A late start up to the shift
+ * limit plays the whole message; later than that the message keeps its place in the slot and
+ * leaves out its first part. A start that would come more than the late-start limit after the
+ * nominal start is reported as missed. Halt stops the sound within one render quantum (128
+ * frames).
  *
- * Transmitting needs running audio and a confirmed band; otherwise the request is refused.
+ * Transmitting needs running audio, a callsign and a grid; otherwise the request is refused.
  * The scheduler plays through the output only while it transmits.
  */
 
-import type { Mode } from '../clock/slots';
-import { LATE_S } from '../qso/sequencer';
+import type { SlotMode as Mode } from '../clock/slots';
+import { LATE_S, SHIFT_LIMIT_S } from '../qso/sequencer';
+
+/** Where a transmission starts in its slot, s. */
+export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
+/** How late after the nominal start a transmission may still start, s. WSPR decoders take DT up to 2 s and more. */
+const LATE_LIMIT_S: Record<Mode, number> = { ...LATE_S, WSPR: 1 };
+/**
+ * Up to this many seconds after the nominal start a late transmission goes out whole. Later, it
+ * keeps its place in the slot and leaves out its first part, so it ends on time and its DT stays
+ * near 0 (docs/design/sequencer.md, late start). WSPR always goes out whole.
+ */
+export const SHIFT_S: Record<Mode, number> = { ...SHIFT_LIMIT_S, WSPR: Infinity };
+/** Fade-in where a transmission starts part way through, s: no click on the air. */
+const CUT_FADE_S = 0.005;
+
+/** `samples` from `skip` on, faded in over `fade` samples. */
+export function cutStart(samples: Float32Array, skip: number, fade: number): Float32Array {
+  const out = samples.slice(Math.min(skip, samples.length));
+  const n = Math.min(fade, out.length);
+  for (let i = 0; i < n; i++) out[i] *= 0.5 - 0.5 * Math.cos((Math.PI * i) / n);
+  return out;
+}
 
 /** The audio clock and output, behind an interface so tests can run on a fake clock. */
 export interface TxAudio {
@@ -49,7 +72,8 @@ export interface TxRequest {
 }
 
 export type TxReport =
-  | { type: 'started'; slotStartMs: number; text: string; startUtcMs: number; lateS: number }
+  /** `skippedS`: seconds left out of the start of a transmission that started part way through. */
+  | { type: 'started'; slotStartMs: number; text: string; startUtcMs: number; lateS: number; skippedS: number }
   | { type: 'ended'; slotStartMs: number; text: string; complete: boolean }
   | { type: 'missed'; slotStartMs: number; text: string; reason: 'late' | 'encode' | 'busy' }
   | { type: 'refused'; slotStartMs: number; text: string; reason: string };
@@ -68,14 +92,14 @@ export class TxScheduler {
   private readonly clear: (h: unknown) => void;
   /** Bumped by cancel and halt so a synthesis still running is dropped when it finishes. */
   private generation = 0;
-  private playing: { slotStartMs: number; text: string; when: number; handle: Playing; started: boolean; startTimer: unknown } | null = null;
+  private playing: { slotStartMs: number; text: string; when: number; skippedS: number; handle: Playing; started: boolean; startTimer: unknown } | null = null;
   /** The wait before a transmission goes to the audio graph; resolved early by cancel and halt. */
   private preroll: { timer: unknown; release: () => void } | null = null;
 
   constructor(opts: {
     audio: () => TxAudio | null;
     encoder: Encoder;
-    /** Why transmitting is not allowed now (audio stopped, band unconfirmed), or null. */
+    /** Why transmitting is not allowed now (audio stopped, no callsign), or null. */
     gate: () => string | null;
     report: (r: TxReport) => void;
     timer?: (fn: () => void, ms: number) => unknown;
@@ -136,25 +160,27 @@ export class TxScheduler {
     }
     const earliest = now.currentTime + MIN_LEAD_S;
     const when = Math.max(target, earliest);
-    const lateS = req.startOffsetS - 0.5 + (when - target);
-    if (lateS > LATE_S[req.mode] + 1e-3) {
+    const lateS = req.startOffsetS - NOMINAL_S[req.mode] + (when - target);
+    if (lateS > LATE_LIMIT_S[req.mode] + 1e-3) {
       this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'late' });
       return;
     }
-    const handle = now.play(samples, when, req.level);
-    const entry = { slotStartMs: req.slotStartMs, text: req.text, when, handle, started: false, startTimer: null as unknown };
+    const skippedS = lateS > SHIFT_S[req.mode] + 1e-3 ? lateS : 0;
+    const out = skippedS > 0 ? cutStart(samples, Math.round(skippedS * now.sampleRate), Math.round(CUT_FADE_S * now.sampleRate)) : samples;
+    const handle = now.play(out, when, req.level);
+    const entry = { slotStartMs: req.slotStartMs, text: req.text, when, skippedS, handle, started: false, startTimer: null as unknown };
     this.playing = entry;
     const startUtcMs = now.toUtcMs(when) ?? req.slotStartMs + (req.startOffsetS + (when - target)) * 1000;
     entry.startTimer = this.timer(() => {
       if (this.playing !== entry) return;
       entry.started = true;
-      this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS) });
+      this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS), skippedS });
     }, Math.max(0, (when - now.currentTime) * 1000));
     handle.onended = () => {
       if (this.playing !== entry) return;
       this.playing = null;
       this.clear(entry.startTimer);
-      if (!entry.started) this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS) });
+      if (!entry.started) this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS), skippedS });
       this.report({ type: 'ended', slotStartMs: req.slotStartMs, text: req.text, complete: true });
     };
   }
@@ -177,7 +203,7 @@ export class TxScheduler {
     p.handle.onended = null;
     p.handle.stop();
     if (p.started || this.audible(p)) {
-      if (!p.started) this.report({ type: 'started', slotStartMs: p.slotStartMs, text: p.text, startUtcMs: this.audio()?.toUtcMs(p.when) ?? Date.now(), lateS: 0 });
+      if (!p.started) this.report({ type: 'started', slotStartMs: p.slotStartMs, text: p.text, startUtcMs: this.audio()?.toUtcMs(p.when) ?? Date.now(), lateS: 0, skippedS: p.skippedS });
       this.report({ type: 'ended', slotStartMs: p.slotStartMs, text: p.text, complete: false });
     } else this.report({ type: 'missed', slotStartMs: p.slotStartMs, text: p.text, reason: 'late' });
   }

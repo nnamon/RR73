@@ -5,14 +5,19 @@
  *
  * Sequencer wiring: on the logQso(record) effect, call `logQso(record)`. It stores the QSO,
  * queues it for each destination and shows "Logged … · Edit · Undo". `undoQso(id)` removes it.
+ *
+ * Send automatically is off by default: QSOs wait as not sent until the operator reviews the log
+ * and taps Send to Wavelog (`sendToWavelog`). With it on, the outbox sends by itself as in 0.5.0.
  */
 
+import { features } from '../state/features.svelte';
 import { settings } from '../state/settings.svelte';
 import { checkRefs } from './activation';
 import { fileParts, markHandled, markSubmitted, reconcile, requeue, retry, UNDO_MS, type DestinationFacts } from './ledger';
+import { migrateLogging } from './migrations';
 import { Outbox, systemClock, type DestinationStatus, type SendingDestination } from './outbox';
-import { adifChanged, createQso, displayMode, newId, stampActivation } from './qso';
-import { loadSnapshot, saveChanges, saveLoggingSettings, type Changes } from './store';
+import { adifChanged, createQso, displayMode, newId, stampActivation, withAllFields } from './qso';
+import { loadSnapshot, saveChanges, saveLoggingSettings, saveMigrations, setLogStore, type Changes } from './store';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
 import { testConnection, type FetchLike, type TestResult } from './wavelog';
@@ -39,7 +44,8 @@ export const DEFAULT_FILES: Record<FileDestinationId, FileDestinationConfig> = {
   'sota-file': { id: 'sota-file', kind: 'sota-file', enabled: true },
   'wwff-file': { id: 'wwff-file', kind: 'wwff-file', enabled: true },
 };
-export const DEFAULT_LOGGING: LoggingSettings = { sendAutomatically: true, sendEdits: true };
+/** The operator reviews the log before anything goes to Wavelog, so sending automatically starts off. */
+export const DEFAULT_LOGGING: LoggingSettings = { sendAutomatically: false, sendEdits: true };
 
 export const DESTINATION_NAMES: Record<DestinationId, string> = { wavelog: 'Wavelog', 'adif-file': 'ADIF', 'pota-file': 'POTA', 'sota-file': 'SOTA', 'wwff-file': 'WWFF' };
 
@@ -56,9 +62,11 @@ export function wavelogReady(w: WavelogConfig): boolean {
 export interface LogNotice {
   /** Changes with every notice, so a new one restarts its timer. */
   seq: number;
-  kind: 'logged' | 'deleted' | 'removed' | 'info';
+  kind: 'logged' | 'deleted' | 'removed' | 'info' | 'cleared';
   qsoId: string | null;
   text: string;
+  /** Undo for a 'cleared' notice. */
+  undo?: () => void;
 }
 
 class LogState {
@@ -76,14 +84,36 @@ class LogState {
   offlineSince = $state<number | null>(null);
   outbox = $state.raw<Partial<Record<DestinationId, DestinationStatus>>>({});
   notice = $state.raw<LogNotice | null>(null);
-  /** The QSO sheet: closed, a new QSO (null id) or an existing one. */
-  editor = $state.raw<{ open: boolean; qsoId: string | null }>({ open: false, qsoId: null });
+  /** The QSO sheet: closed, a new QSO (null id), an existing one, or a keyboard mode's strip to log. */
+  editor = $state.raw<{ open: boolean; qsoId: string | null; draft?: QsoDraftInit | null }>({ open: false, qsoId: null });
+  /** Send to Wavelog: progress while it runs, then what happened. */
+  sync = $state.raw<SyncState>({ running: false, total: 0, done: 0, summary: null });
 
   /** QSOs that are not deleted, newest first. */
   live = $derived(this.qsos.filter((q) => q.deletedAt === null));
   index = $derived(byQso(this.ledger));
   current = $derived(this.activations.find((a) => a.endedAt === null) ?? null);
   facts = $derived(destinationFacts(this.wavelog, this.files));
+}
+
+export interface SyncSummary {
+  at: number;
+  total: number;
+  delivered: number;
+  refused: number;
+  /** Tried and failed (network, server), or not tried because a failure stopped the run. */
+  unsent: number;
+  /** "3 delivered. 1 refused: see To do." */
+  text: string;
+  ok: boolean;
+}
+
+export interface SyncState {
+  running: boolean;
+  total: number;
+  /** QSOs Wavelog has answered for so far. */
+  done: number;
+  summary: SyncSummary | null;
 }
 
 export const log = new LogState();
@@ -98,11 +128,12 @@ export function destinationFacts(w: WavelogConfig, files: Record<FileDestination
 
 const byId = new Map<string, Qso>();
 const now = () => systemClock.now();
-let fetchFn: FetchLike = (input, init) => fetch(input, init);
+const pageFetch: FetchLike = (input, init) => fetch(input, init);
+let fetchFn: FetchLike = pageFetch;
 
-/** Tests replace fetch to talk to a fake Wavelog. */
-export function setFetch(f: FetchLike) {
-  fetchFn = f;
+/** Tests replace fetch to talk to a fake Wavelog, and the practice log to talk to its stand-in. Null restores the page's fetch. */
+export function setFetch(f: FetchLike | null) {
+  fetchFn = f ?? pageFetch;
 }
 
 function activationOf(id: string | null): Activation | null {
@@ -124,7 +155,7 @@ function settleQso(q: Qso, at: number, only?: DestinationId): LedgerEntry[] {
   for (const dest of log.facts) {
     if (only && dest.id !== only) continue;
     const cur = entryOf(q.id, dest.id);
-    const next = reconcile({ entry: cur, dest, qso: q, activation: activationOf(q.activationId), sendEdits: log.settings.sendEdits, now: at });
+    const next = reconcile({ entry: cur, dest, qso: q, activation: activationOf(q.activationId), sendEdits: log.settings.sendEdits, sendAutomatically: log.settings.sendAutomatically, now: at });
     if (next && JSON.stringify(next) !== JSON.stringify(cur)) out.push(next);
   }
   return out;
@@ -145,6 +176,7 @@ async function commit(c: Changes): Promise<void> {
     const m = new Map(log.ledger.map((e) => [key(e), e]));
     for (const e of c.ledger) m.set(key(e), e);
     log.ledger = [...m.values()];
+    if (log.sync.running) trackProgress();
   }
   if (c.activations?.length) {
     const m = new Map(log.activations.map((a) => [a.id, a]));
@@ -167,7 +199,7 @@ async function commit(c: Changes): Promise<void> {
 /** The destinations the outbox sends to: Wavelog when set up. Relay destinations join here later. */
 function sending(): SendingDestination[] {
   if (!wavelogReady(log.wavelog)) return [];
-  const a = wavelogAdapter(log.wavelog, stationFor, fetchFn, now);
+  const a = wavelogAdapter(log.wavelog, stationFor, fetchFn, now, () => log.settings.sendAutomatically);
   return a.send ? [{ id: a.id, send: a.send }] : [];
 }
 
@@ -181,7 +213,7 @@ export const outbox = new Outbox({
     const q = byId.get(e.qsoId);
     const dest = log.facts.find((f) => f.id === e.destinationId);
     if (!q || !dest) return e;
-    return reconcile({ entry: e, dest, qso: q, activation: activationOf(q.activationId), sendEdits: log.settings.sendEdits, now: now() }) ?? e;
+    return reconcile({ entry: e, dest, qso: q, activation: activationOf(q.activationId), sendEdits: log.settings.sendEdits, sendAutomatically: log.settings.sendAutomatically, now: now() }) ?? e;
   },
   commit: (ledger) => commit({ ledger }),
   onStatus: (id, s) => (log.outbox = { ...log.outbox, [id]: s }),
@@ -194,7 +226,7 @@ export function loadLog(): Promise<void> {
   loading ??= (async () => {
     try {
       const s = await loadSnapshot();
-      for (const q of s.qsos) byId.set(q.id, q);
+      for (const q of s.qsos) byId.set(q.id, withAllFields(q));
       log.qsos = sortQsos([...byId.values()]);
       log.ledger = s.ledger;
       log.activations = s.activations.sort((a, b) => b.startedAt - a.startedAt);
@@ -202,10 +234,18 @@ export function loadLog(): Promise<void> {
         if (d.kind === 'wavelog') log.wavelog = { ...DEFAULT_WAVELOG, ...d };
         else if (FILE_IDS.includes(d.id)) log.files = { ...log.files, [d.id]: { ...DEFAULT_FILES[d.id], ...d } };
       }
-      log.settings = { ...DEFAULT_LOGGING, ...s.settings };
+      const m = migrateLogging(s.settings, s.migrations, DEFAULT_LOGGING);
+      log.settings = m.settings;
+      if (m.changed) {
+        await saveLoggingSettings(m.settings);
+        await saveMigrations(m.applied);
+      }
     } catch {
       log.storageError = STORAGE_FAILED;
     }
+    // Entries follow Send automatically: none waiting while it is off, none not sent while it is on.
+    const at = now();
+    await commit({ ledger: [...byId.values()].flatMap((q) => settleQso(q, at, 'wavelog')) });
     log.ready = true;
     watchNetwork();
     if (log.settings.sendAutomatically) outbox.start();
@@ -230,6 +270,41 @@ function watchNetwork() {
   });
 }
 
+let practiceLog = false;
+
+/**
+ * Switches between the log and the practice log (a database of its own, store.ts). The outbox
+ * stops, the copy in memory is dropped and the chosen log loads. Nothing is written to the
+ * log being left.
+ */
+export async function useLog(practice: boolean, again = false): Promise<void> {
+  if (!again && practice === practiceLog && loading) return loading;
+  practiceLog = practice;
+  outbox.stop();
+  await loading?.catch(() => undefined);
+  setLogStore(practice);
+  byId.clear();
+  log.ready = false;
+  log.qsos = [];
+  log.ledger = [];
+  log.activations = [];
+  log.wavelog = DEFAULT_WAVELOG;
+  log.files = DEFAULT_FILES;
+  log.settings = DEFAULT_LOGGING;
+  log.outbox = {};
+  log.sync = { running: false, total: 0, done: 0, summary: null };
+  log.storageError = null;
+  log.editor = { open: false, qsoId: null };
+  dismissNotice();
+  loading = null;
+  await loadLog();
+}
+
+/** Loads the current log again from storage, after Clear practice log or its Undo. */
+export function reloadLog(): Promise<void> {
+  return useLog(practiceLog, true);
+}
+
 let askedToPersist = false;
 /** Asks the browser not to evict the log under storage pressure. */
 function persistStorage() {
@@ -246,7 +321,8 @@ function persistStorage() {
 export async function addQso(record: LogQsoRecord): Promise<Qso> {
   await loadLog();
   const at = now();
-  const activation = record.activationId === undefined ? log.current : activationOf(record.activationId);
+  // With Activations off (Settings › Optional features) a running activation is hidden, and new QSOs stay out of it.
+  const activation = record.activationId === undefined ? (features.activations ? log.current : null) : activationOf(record.activationId);
   const q = createQso(record, { id: newId(), now: at, activation, callsign: settings.callsign });
   byId.set(q.id, q);
   await commit({ qsos: [q], ledger: settleQso(q, at) });
@@ -316,9 +392,14 @@ function show(n: Omit<LogNotice, 'seq'>, ms = UNDO_MS) {
   noticeTimer = setTimeout(() => (log.notice = null), ms);
 }
 
+/** A notice from outside the log, such as Clear practice log with its Undo. */
+export function notify(n: Omit<LogNotice, 'seq'>) {
+  show(n);
+}
+
 /** "Logged ZL1TQK 20m FT8 −08 / −11" with Edit and Undo, for UNDO_MS. */
 export function showLogged(q: Qso) {
-  show({ kind: 'logged', qsoId: q.id, text: `Logged ${q.call} ${q.band} ${displayMode(q)} ${reportsText(q)}` });
+  show({ kind: 'logged', qsoId: q.id, text: ['Logged', q.call, q.band, displayMode(q), reportsText(q)].filter(Boolean).join(' ') });
 }
 
 export function dismissNotice() {
@@ -332,8 +413,35 @@ export function openEditor(qsoId: string | null) {
   log.editor = { open: true, qsoId };
 }
 
+/** A keyboard mode's QSO strip, opened in the QSO sheet to log (the strip's chevron). */
+export interface QsoDraftInit {
+  call: string;
+  startMs: number;
+  band: string;
+  mode: 'RTTY';
+  /** Dial plus mark tone, Hz. */
+  freqHz: number;
+  rstSent: string;
+  rstRcvd: string;
+  name: string;
+  qth: string;
+  grid: string;
+  notes: string;
+  /** Contest serial numbers, sent and received; '' outside the Contest set. */
+  stx: string;
+  srx: string;
+  contestId: string;
+  /** Called once the sheet has logged the QSO: the strip clears and the serial steps on. */
+  onlogged: () => void;
+}
+
+/** Opens the QSO sheet with a keyboard mode's strip, to log it. */
+export function openDraft(draft: QsoDraftInit) {
+  log.editor = { open: true, qsoId: null, draft };
+}
+
 export function closeEditor() {
-  log.editor = { open: false, qsoId: log.editor.qsoId };
+  log.editor = { open: false, qsoId: log.editor.qsoId, draft: null };
 }
 
 export interface ActivationInput {
@@ -380,7 +488,7 @@ export async function updateActivation(id: string, patch: Partial<ActivationInpu
   const ledger = [...byId.values()].filter((q) => q.activationId === id).flatMap((q) => settleQso(q, at));
   // A new station location may cure refusals for this activation's QSOs.
   if (patch.wavelogStationId !== undefined && patch.wavelogStationId !== a.wavelogStationId) {
-    ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.fix === 'wavelog-station' && byId.get(e.qsoId)?.activationId === id));
+    ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.fix === 'wavelog-station' && byId.get(e.qsoId)?.activationId === id, log.settings.sendAutomatically));
   }
   await commit({ qsos, ledger });
   outbox.kick();
@@ -402,9 +510,9 @@ export async function setWavelog(patch: Partial<WavelogConfig>): Promise<void> {
   const at = now();
   const ledger: LedgerEntry[] = [];
   if (next.url !== before.url || next.apiKey !== before.apiKey) {
-    ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.scope === 'destination' || e.refusal?.fix === 'wavelog-address' || e.refusal?.fix === 'wavelog-key'));
+    ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.scope === 'destination' || e.refusal?.fix === 'wavelog-address' || e.refusal?.fix === 'wavelog-key', log.settings.sendAutomatically));
   }
-  if (next.stationId !== before.stationId) ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.fix === 'wavelog-station'));
+  if (next.stationId !== before.stationId) ledger.push(...requeue(log.ledger, 'wavelog', at, (e) => e.refusal?.fix === 'wavelog-station', log.settings.sendAutomatically));
   if (wavelogReady(next) !== wavelogReady(before)) for (const q of byId.values()) ledger.push(...settleQso(q, at, 'wavelog'));
   await commit({ ledger });
   outbox.kick();
@@ -419,7 +527,7 @@ export async function testWavelog(cfg: Pick<WavelogConfig, 'url' | 'apiKey' | 's
   await setWavelog(patch);
   if (r.ok) {
     // The key and station location work now: send what was refused for them.
-    await commit({ ledger: requeue(log.ledger, 'wavelog', now(), (e) => e.refusal?.scope === 'destination') });
+    await commit({ ledger: requeue(log.ledger, 'wavelog', now(), (e) => e.refusal?.scope === 'destination', log.settings.sendAutomatically) });
     outbox.kick();
   }
   return r;
@@ -439,24 +547,30 @@ export async function setFileDestination(id: FileDestinationId, enabled: boolean
   await commit({ ledger: [...byId.values()].flatMap((q) => settleQso(q, at, id)) });
 }
 
+/**
+ * Changes the logging settings. Switching Send automatically on queues every QSO not sent;
+ * switching it off takes what is queued back to not sent.
+ */
 export async function setLoggingSettings(patch: Partial<LoggingSettings>): Promise<void> {
   await loadLog();
+  const before = log.settings;
   log.settings = { ...log.settings, ...patch };
   try {
     await saveLoggingSettings(log.settings);
   } catch {
     log.storageError = STORAGE_FAILED;
   }
+  if (log.settings.sendAutomatically !== before.sendAutomatically) {
+    const at = now();
+    await commit({ ledger: [...byId.values()].flatMap((q) => settleQso(q, at, 'wavelog')) });
+  }
   if (log.settings.sendAutomatically) outbox.start();
   else outbox.stop();
 }
 
-/** Send again: one refused QSO back in the outbox, sent at once. */
+/** Send again: one refused QSO sent at once. */
 export async function retryQso(qsoId: string, dest: DestinationId): Promise<void> {
-  const e = entryOf(qsoId, dest);
-  if (!e) return;
-  await commit({ ledger: [retry(e, now())] });
-  await outbox.sendNow();
+  if (dest === 'wavelog') await sendToWavelog([qsoId]);
 }
 
 /** The operator made the edit or delete at the destination by hand. */
@@ -486,9 +600,76 @@ export async function markFileHandled(partKey: string): Promise<void> {
   await commit({ ledger });
 }
 
-/** Send now: every waiting QSO, whether or not RR73 sends by itself. */
-export function sendNow(): Promise<void> {
-  return outbox.sendNow();
+/** Wavelog entries ready to send: not sent, or queued, for QSOs that are not deleted. */
+export function unsentForWavelog(): LedgerEntry[] {
+  return log.ledger.filter((e) => e.destinationId === 'wavelog' && (e.state === 'not-sent' || e.state === 'waiting') && byId.get(e.qsoId)?.deletedAt === null);
+}
+
+let batch: { ids: Set<string>; start: number } | null = null;
+
+function trackProgress() {
+  if (!batch) return;
+  const b = batch;
+  const done = log.ledger.filter((e) => e.destinationId === 'wavelog' && b.ids.has(e.qsoId) && (e.lastAttemptAt ?? 0) >= b.start).length;
+  if (done !== log.sync.done) log.sync = { ...log.sync, done };
+}
+
+/**
+ * Send to Wavelog: every QSO not yet sent (or the ones given, refused ones included), oldest
+ * first, one request each. Progress shows in `log.sync`; the summary is returned, kept in
+ * `log.sync.summary` and shown as a notice. A refused key or a failure stops the run; with Send
+ * automatically off, QSOs left unsent stay not sent.
+ */
+export async function sendToWavelog(qsoIds?: readonly string[]): Promise<SyncSummary | null> {
+  await loadLog();
+  if (log.sync.running) return null;
+  const want = qsoIds ? new Set(qsoIds) : null;
+  const picked = (want ? log.ledger.filter((e) => e.destinationId === 'wavelog' && want.has(e.qsoId) && ['not-sent', 'waiting', 'refused'].includes(e.state)) : unsentForWavelog())
+    .filter((e) => byId.get(e.qsoId)?.deletedAt === null)
+    .sort((a, b) => byId.get(a.qsoId)!.start - byId.get(b.qsoId)!.start || byId.get(a.qsoId)!.createdAt - byId.get(b.qsoId)!.createdAt);
+  if (!picked.length) return null;
+  const start = now();
+  batch = { ids: new Set(picked.map((e) => e.qsoId)), start };
+  log.sync = { running: true, total: picked.length, done: 0, summary: null };
+  try {
+    // Queued: the outbox sends waiting entries only.
+    await commit({ ledger: picked.map((e) => (e.state === 'refused' ? retry(e, start) : { ...e, state: 'waiting', nextAttemptAt: start })) });
+    await outbox.sendNow();
+  } finally {
+    // Left queued when a failure stopped the run: not sent again while Send automatically is off.
+    const at = now();
+    const ids = batch.ids;
+    batch = null;
+    await commit({ ledger: [...ids].flatMap((id) => settleQso(byId.get(id)!, at, 'wavelog')) });
+    const summary = summarise(ids, start);
+    log.sync = { running: false, total: picked.length, done: summary.delivered + summary.refused, summary };
+    show({ kind: 'info', qsoId: ids.size === 1 ? [...ids][0] : null, text: summary.text });
+  }
+  return log.sync.summary;
+}
+
+function summarise(ids: Set<string>, start: number): SyncSummary {
+  const entries = log.ledger.filter((e) => e.destinationId === 'wavelog' && ids.has(e.qsoId));
+  const delivered = entries.filter((e) => (e.state === 'delivered' || e.state === 'changed') && (e.deliveredAt ?? 0) >= start);
+  const refused = entries.filter((e) => e.state === 'refused');
+  const unsent = entries.filter((e) => e.state === 'not-sent' || e.state === 'waiting');
+  const failure = unsent.find((e) => e.lastError && (e.lastAttemptAt ?? 0) >= start)?.lastError ?? null;
+  const auto = log.settings.sendAutomatically;
+  const parts: string[] = [];
+  if (ids.size === 1) {
+    const call = byId.get([...ids][0])?.call ?? 'The QSO';
+    if (delivered.length) parts.push(`Delivered ${call} to Wavelog.`);
+    else if (refused.length) parts.push(`Wavelog refused ${call}: see To do.`);
+    else parts.push(failure ?? `${call} was not sent.`);
+  } else {
+    if (delivered.length) parts.push(`${delivered.length} delivered.`);
+    if (refused.length) parts.push(`${refused.length} refused: see To do.`);
+    if (unsent.length) {
+      if (failure) parts.push(failure);
+      parts.push(`${unsent.length} ${unsent.length === 1 ? 'QSO is' : 'QSOs are'} ${auto ? 'waiting' : 'not sent'}.`);
+    }
+  }
+  return { at: now(), total: ids.size, delivered: delivered.length, refused: refused.length, unsent: unsent.length, text: parts.join(' '), ok: !refused.length && !unsent.length };
 }
 
 /** Chooses the Wavelog station location for an activation, or the default for QSOs outside one, and sends refused QSOs again. */

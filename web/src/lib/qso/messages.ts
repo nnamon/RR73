@@ -1,7 +1,8 @@
 /**
  * Reads decoded FT8 and FT4 messages for the sequencer, and builds Tx1 to Tx6
  * (docs/design/sequencer.md). Only the standard exchange is read: CQ, grid, report, R-report,
- * RRR, RR73 and 73. Anything else is 'other'.
+ * RRR, RR73 and 73, and the Fox's multi-call message of FT8 DXpedition mode (parseParts).
+ * Anything else is 'other'.
  */
 
 import { baseCall, looksLikeCall } from '../decode/marking';
@@ -23,6 +24,8 @@ export interface Exchange {
   report: number | null;
   /** CQ modifier, such as DX or POTA. */
   modifier: string | null;
+  /** One of the two parts of a Fox's multi-call message (parseParts). */
+  multi?: boolean;
 }
 
 const GRID = /^[A-R]{2}\d{2}$/;
@@ -64,6 +67,38 @@ export function parseExchange(text: string): Exchange {
   if (REPORT.test(w)) return { ...base, kind: 'report', report: Number(w) };
   if (RREPORT.test(w)) return { ...base, kind: 'rreport', report: Number(w.slice(1)) };
   return { ...base, kind: 'other' };
+}
+
+/** A Fox's multi-call message: RR73 to one Hound, a report to the next, the Fox's callsign hashed. */
+const MULTI = /^(\S+) RR73; (\S+) (<[^>]+>) ([+-]\d{2})$/;
+
+/**
+ * The parts of a decoded message. A Fox's multi-call message (FT8 DXpedition mode,
+ * "K1ABC RR73; W9XYZ <KH1/KH7Z> -08") gives two, both from the Fox: RR73 to the first station
+ * and a report to the second. The Fox's callsign shows as <...> until the decoder has heard it
+ * in full. Any other message gives one part, as parseExchange reads it.
+ */
+export function parseParts(text: string): Exchange[] {
+  const m = MULTI.exec(text.trim().toUpperCase().replace(/\s+/g, ' '));
+  if (!m || !looksLikeCall(m[1]) || !looksLikeCall(m[2])) return [parseExchange(text)];
+  const part = { from: m[3], grid: null, modifier: null, multi: true };
+  return [
+    { ...part, to: m[1], kind: 'rr73', report: null },
+    { ...part, to: m[2], kind: 'report', report: Number(m[4]) },
+  ];
+}
+
+/**
+ * True when a part comes from the Fox `fox`: its callsign, or the unknown hash <...> of a
+ * multi-call message, which only a Fox sends.
+ */
+export function fromFox(x: Exchange, fox: string): boolean {
+  return sameCall(x.from, fox) || (!!x.multi && x.from === '<...>');
+}
+
+/** The callsign a Hound sends to a Fox: the base callsign of a compound one ("KH1/KH7Z" gives "KH7Z"). */
+export function foxCall(call: string): string {
+  return baseCall(bare(call));
 }
 
 /** A report as sent on air: whole dB, −50 to +49, signed, two digits: "-09", "+03". */

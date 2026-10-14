@@ -1,17 +1,23 @@
 /**
- * Draws the waterfall: newest time at the top, 0 to 3000 Hz across, one device pixel per row.
+ * Draws the waterfall: newest time at the top, the mode's view across (spectrum.ts: 0 to 3000 Hz
+ * for FT8 and FT4, 1400 to 1600 Hz for WSPR), one device pixel per row.
  * Runs in the waterfall worker on an OffscreenCanvas, or on the main thread where
  * OffscreenCanvas is missing; both use this class.
  *
- * The visible height covers about 45 s (three FT8 slots), so the row period follows the canvas
- * height. A slot boundary paints a hairline into the row that contains it. When audio stops and
+ * The visible height covers the view's span (45 s, three FT8 slots; 240 s, two WSPR slots; four
+ * FT8 slots in regular width, setSpan), so
+ * the row period follows the canvas height. A change between views starts the picture afresh. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
+ * In the slots RR73 transmitted in, the receive audio is the radio's own transmission, so those
+ * rows show the transmitted audio instead (setTxWave), as a strong signal over an even floor. A
+ * row in such a slot that no transmitted audio covers is blank.
  */
 
 import { buildLut, type WaterfallPalette } from './colormap';
-import { LevelMapper } from './levels';
-import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { LevelMapper, bandFor, type Contrast } from './levels';
+import { DISPLAY_RATE, DisplaySpectrum, FT_VIEW, binHz, binsOf, viewOf, type View } from './spectrum';
+import { NOISE_POSITION } from './levels';
+import { SLOT_MS, hasSlots, isFt, type Mode } from '../clock/slots';
 import { QuietTracker, quietestHz } from './pick';
 
 /** The parts of a 2D context the renderer uses, shared by canvas and OffscreenCanvas. */
@@ -36,10 +42,28 @@ export interface FrameInfo {
   rowMs: number;
 }
 
-/** Visible span of the waterfall, s. */
-export const VISIBLE_S = 45;
+/** Visible span of the FT8 and FT4 waterfall, s. */
+export const VISIBLE_S = FT_VIEW.visibleS;
 /** A jump of more than this between chunks is a gap in the audio, ms. */
 const GAP_MS = 150;
+
+/** Transmitted audio drawn on the waterfall. */
+export interface TxWave {
+  /** UTC of samples[0], ms. */
+  startUtcMs: number;
+  /** End of the transmission, UTC ms; earlier than the audio's end after Halt. */
+  endUtcMs: number;
+  /** The transmitted audio at 12 kHz (DISPLAY_RATE). */
+  samples: Float32Array;
+}
+
+/** Transmissions kept for drawing: the visible 45 s holds at most 4 FT8 or 7 FT4 slots, 240 s 3 WSPR slots. */
+const TX_WAVES_KEPT = 8;
+/** dB under its peak where a transmitted row reaches the floor colour. */
+const TX_RANGE_DB = 30;
+/** Levels for the transmitted rows: the floor sits where receive noise does, the tones near the top. */
+const TX_FLOOR = Math.round(NOISE_POSITION * 255);
+const TX_TOP = 240;
 
 interface Row {
   levels: Uint8Array;
@@ -55,16 +79,19 @@ interface Column {
   peak: boolean;
 }
 
-export function columns(width: number): Column[] {
+export function columns(width: number, view: View = FT_VIEW): Column[] {
   const out: Column[] = [];
+  const bin = binHz(view);
+  const { first, count } = binsOf(view);
+  const span = view.maxHz - view.minHz;
   for (let x = 0; x < width; x++) {
-    const b0 = ((x * MAX_HZ) / width) / BIN_HZ;
-    const b1 = (((x + 1) * MAX_HZ) / width) / BIN_HZ;
+    const b0 = (view.minHz + (x * span) / width) / bin - first;
+    const b1 = (view.minHz + ((x + 1) * span) / width) / bin - first;
     if (b1 - b0 >= 1) {
-      out.push({ i0: Math.floor(b0), i1: Math.min(DISPLAY_BINS - 1, Math.ceil(b1) - 1), frac: 0, peak: true });
+      out.push({ i0: Math.floor(b0), i1: Math.min(count - 1, Math.ceil(b1) - 1), frac: 0, peak: true });
     } else {
       const c = (b0 + b1) / 2;
-      const i0 = Math.min(DISPLAY_BINS - 2, Math.floor(c));
+      const i0 = Math.max(0, Math.min(count - 2, Math.floor(c)));
       out.push({ i0, i1: i0 + 1, frac: c - i0, peak: false });
     }
   }
@@ -80,18 +107,19 @@ export class WaterfallRenderer {
   private readonly palette: WaterfallPalette;
   private cols: Column[] = [];
   private hop = 1000;
-  private readonly spectrum = new DisplaySpectrum();
-  private readonly mapper = new LevelMapper();
-  private readonly db = new Float32Array(DISPLAY_BINS);
-  /** The newest DISPLAY_FFT samples. */
-  private readonly frame = new Float32Array(DISPLAY_FFT);
+  private view: View;
+  private spectrum: DisplaySpectrum;
+  private mapper: LevelMapper;
+  private db: Float32Array<ArrayBuffer>;
+  /** The newest view.fft samples. */
+  private frame: Float32Array<ArrayBuffer>;
   private sinceRow = 0;
   /** UTC of the sample after the last one received, ms. */
   private expectedUtc: number | null = null;
   /** Sample index and UTC the row times are counted from. */
   private anchor: { index: number; utcMs: number } | null = null;
   private nextIndex = -1;
-  /** Samples of real audio in the frame, up to DISPLAY_FFT. */
+  /** Samples of real audio in the frame, up to view.fft. */
   private valid = 0;
   /** Exact zeros in a row at the end of the frame. */
   private zeroRun = 0;
@@ -101,14 +129,47 @@ export class WaterfallRenderer {
   private marks: { utcMs: number; row: number }[] = [];
   private lastRowUtc: number | null = null;
   private readonly quiet: QuietTracker;
+  /** Starts of the slots RR73 transmitted in, UTC ms. */
+  private txSlots = new Set<number>();
+  private txWaves: TxWave[] = [];
+  private txFrame: Float32Array<ArrayBuffer>;
+  private txDb: Float32Array<ArrayBuffer>;
 
   constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
     this.ctx = ctx;
     this.palette = palette;
     this.mode = mode;
-    this.quiet = new QuietTracker(mode);
+    this.quiet = new QuietTracker(isFt(mode) ? mode : 'FT8');
     this.lut = buildLut(palette.stops);
+    this.view = viewOf(mode);
+    this.spectrum = new DisplaySpectrum(this.view);
+    this.mapper = new LevelMapper(12, bandFor(this.view));
+    this.db = new Float32Array(this.spectrum.bins);
+    this.frame = new Float32Array(this.view.fft);
+    this.txFrame = new Float32Array(this.view.fft);
+    this.txDb = new Float32Array(this.spectrum.bins);
     this.resize(width, height);
+  }
+
+  /** Bins in a row. */
+  private get bins(): number {
+    return this.spectrum.bins;
+  }
+
+  /** Sets up the spectrum, levels and frames for another view, and starts the picture afresh. */
+  private useView(view: View) {
+    this.view = view;
+    this.spectrum = new DisplaySpectrum(view);
+    const contrast = this.contrast;
+    this.mapper = new LevelMapper(1000 / this.rowMs, bandFor(view));
+    this.mapper.setContrast(contrast);
+    this.db = new Float32Array(this.spectrum.bins);
+    this.frame = new Float32Array(view.fft);
+    this.txFrame = new Float32Array(view.fft);
+    this.txDb = new Float32Array(this.spectrum.bins);
+    this.history = [];
+    this.resize(this.width, this.height);
+    this.clear();
   }
 
   /** Row period, ms. */
@@ -118,13 +179,25 @@ export class WaterfallRenderer {
 
   setMode(mode: Mode) {
     this.mode = mode;
-    this.quiet.setMode(mode);
-    this.redraw();
+    if (isFt(mode)) this.quiet.setMode(mode);
+    const view = viewOf(mode);
+    if (view !== this.view) this.useView(view);
+    else this.redraw();
   }
 
   /** The quietest Tx frequency from the last 2 to 4 slots, nearest `nearHz` among equals, Hz; or null. */
   quietest(nowMs: number, nearHz: number): number | null {
-    return quietestHz(this.quiet.slots(nowMs), this.mode, nearHz);
+    return isFt(this.mode) ? quietestHz(this.quiet.slots(nowMs), this.mode, nearHz) : null;
+  }
+
+  /** The time the picture covers, s; null for the view's own. */
+  private spanS: number | null = null;
+
+  /** Sets the time the picture covers, s, or null for the view's own: four FT8 slots in regular width. */
+  setSpan(seconds: number | null) {
+    if (seconds === this.spanS) return;
+    this.spanS = seconds;
+    this.resize(this.width, this.height);
   }
 
   /** Sets the canvas size in device pixels and redraws the history. */
@@ -133,10 +206,84 @@ export class WaterfallRenderer {
     this.height = Math.max(1, Math.round(height));
     this.ctx.canvas.width = this.width;
     this.ctx.canvas.height = this.height;
-    this.cols = columns(this.width);
-    this.hop = Math.max(64, Math.round((VISIBLE_S * DISPLAY_RATE) / this.height));
+    this.cols = columns(this.width, this.view);
+    this.hop = Math.max(64, Math.round(((this.spanS ?? this.view.visibleS) * DISPLAY_RATE) / this.height));
+    this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
     this.redraw();
+  }
+
+  private contrast: Contrast = 'normal';
+
+  /** Sets the contrast of the colormap for the rows drawn from now on. */
+  setContrast(c: Contrast) {
+    this.contrast = c;
+    this.mapper.setContrast(c);
+  }
+
+  /**
+   * Sets the slots RR73 transmitted in, UTC ms. Their rows show the transmitted audio, or blank
+   * where none covers them, including rows drawn before the slot was known.
+   */
+  setTxSlots(starts: readonly number[]) {
+    this.txSlots = new Set(starts);
+    this.redrawTx();
+  }
+
+  /**
+   * Adds or updates a transmission's audio (matched by its start), including rows drawn before
+   * it arrived. A Halt sends the same transmission again with an earlier end.
+   */
+  setTxWave(w: TxWave) {
+    this.txWaves = [...this.txWaves.filter((x) => x.startUtcMs !== w.startUtcMs), w].slice(-TX_WAVES_KEPT);
+    this.redrawTx();
+  }
+
+  /** Redraws the rows in transmitted slots from the transmitted audio. */
+  private redrawTx() {
+    let changed = false;
+    for (const r of this.history) {
+      if (!this.inTxSlot(r.utcMs)) continue;
+      const lv = this.txLevels(r.utcMs);
+      if (lv) {
+        r.levels = lv;
+        r.blank = false;
+        changed = true;
+      } else if (!r.blank) {
+        r.blank = true;
+        changed = true;
+      }
+    }
+    if (changed) this.redraw();
+  }
+
+  /**
+   * Levels for a row centred at `utcMs` from the transmitted audio, or null where no transmission
+   * covers it. Each row is levelled against its own peak: RR73 does not know the radio's power.
+   */
+  private txLevels(utcMs: number): Uint8Array | null {
+    const w = this.txWaves.find((x) => utcMs >= x.startUtcMs && utcMs < x.endUtcMs);
+    if (!w) return null;
+    const fft = this.view.fft;
+    const centre = Math.round(((utcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
+    const end = Math.round(((w.endUtcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
+    for (let i = 0, j = centre - fft / 2; i < fft; i++, j++) this.txFrame[i] = j >= 0 && j < end && j < w.samples.length ? w.samples[j] : 0;
+    this.spectrum.compute(this.txFrame, this.txDb);
+    let peak = -Infinity;
+    for (const v of this.txDb) if (v > peak) peak = v;
+    const out = new Uint8Array(this.bins);
+    if (!Number.isFinite(peak)) return out.fill(TX_FLOOR);
+    for (let k = 0; k < this.bins; k++) {
+      const p = Math.min(1, Math.max(0, (this.txDb[k] - (peak - TX_RANGE_DB)) / TX_RANGE_DB));
+      out[k] = Math.round(TX_FLOOR + p * (TX_TOP - TX_FLOOR));
+    }
+    return out;
+  }
+
+  private inTxSlot(utcMs: number): boolean {
+    if (!this.txSlots.size || !hasSlots(this.mode)) return false;
+    const slot = SLOT_MS[this.mode];
+    return this.txSlots.has(Math.floor(utcMs / slot) * slot);
   }
 
   /** Clears the picture and the history. */
@@ -175,7 +322,7 @@ export class WaterfallRenderer {
       if (jump > GAP_MS) {
         const count = Math.min(this.height, Math.floor(jump / this.rowMs));
         const from = this.lastRowUtc ?? utcMs - jump;
-        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: from + i * this.rowMs, blank: true });
+        for (let i = 1; i <= count; i++) rows.push({ levels: new Uint8Array(this.bins), utcMs: from + i * this.rowMs, blank: true });
       }
       if (this.expectedUtc !== null && Math.abs(jump) > GAP_MS) {
         // The frame holds audio from before the break; a row across it would smear.
@@ -188,26 +335,32 @@ export class WaterfallRenderer {
     }
     this.nextIndex = index + samples.length;
     this.expectedUtc = t0 + (samples.length / DISPLAY_RATE) * 1000;
+    const fft = this.view.fft;
     let at = 0;
     while (at < samples.length) {
-      const n = Math.min(samples.length - at, this.hop - this.sinceRow, DISPLAY_FFT);
+      const n = Math.min(samples.length - at, this.hop - this.sinceRow, fft);
       this.frame.copyWithin(0, n);
-      this.frame.set(samples.subarray(at, at + n), DISPLAY_FFT - n);
+      this.frame.set(samples.subarray(at, at + n), fft - n);
       this.countValid(samples, at, n);
       at += n;
       this.sinceRow += n;
       if (this.sinceRow >= this.hop) {
         this.sinceRow = 0;
         // The row shows the window's centre.
-        const t = t0 + ((at - DISPLAY_FFT / 2) / DISPLAY_RATE) * 1000;
+        const t = t0 + ((at - fft / 2) / DISPLAY_RATE) * 1000;
         // Only full frames of audio get a spectrum: a window that starts in silence splatters
         // across every bin. Until then the row is blank, so the time scale keeps moving.
-        if (this.valid < DISPLAY_FFT) {
-          rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+        if (this.valid < fft) {
+          rows.push({ levels: new Uint8Array(this.bins), utcMs: t, blank: true });
+          continue;
+        }
+        if (this.inTxSlot(t)) {
+          const lv = this.txLevels(t);
+          rows.push(lv ? { levels: lv, utcMs: t, blank: false } : { levels: new Uint8Array(this.bins), utcMs: t, blank: true });
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
-        this.quiet.add(this.db, t);
+        if (isFt(this.mode)) this.quiet.add(this.db, t);
         rows.push({ levels: this.mapper.map(this.db), utcMs: t, blank: false });
       }
     }
@@ -226,7 +379,7 @@ export class WaterfallRenderer {
       if (samples[i] === 0) {
         if (++this.zeroRun >= 32) this.valid = 0;
       } else this.zeroRun = 0;
-      if (this.valid < DISPLAY_FFT) this.valid++;
+      if (this.valid < this.view.fft) this.valid++;
     }
   }
 
@@ -285,9 +438,10 @@ export class WaterfallRenderer {
 
   /** Records the row and its slot boundary; returns true when a boundary falls in it. */
   private note(row: Row): boolean {
-    const slot = SLOT_MS[this.mode];
     let crossed = false;
-    if (this.lastRowUtc !== null) {
+    // RTTY is continuous: no slot lines.
+    if (this.lastRowUtc !== null && hasSlots(this.mode)) {
+      const slot = SLOT_MS[this.mode];
       const b = Math.floor(row.utcMs / slot) * slot;
       if (b > this.lastRowUtc && b <= row.utcMs) {
         this.marks.push({ utcMs: b, row: this.rowCount });

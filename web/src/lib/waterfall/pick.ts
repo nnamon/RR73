@@ -3,19 +3,23 @@
  * mode, and the quietest stretch of the band for a Tx frequency.
  */
 
-import { BIN_HZ, DISPLAY_BINS, MAX_HZ } from './spectrum';
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { BIN_HZ, DISPLAY_BINS, viewOf } from './spectrum';
+import { SLOT_MS, type FtMode, type Mode } from '../clock/slots';
 
 /** Width of a signal, Hz: FT8 is 8 tones 6.25 Hz apart, FT4 4 tones 20.83 Hz apart. */
-export const SIGNAL_HZ: Record<Mode, number> = { FT8: 50, FT4: 83 };
+export const SIGNAL_HZ: Record<FtMode, number> = { FT8: 50, FT4: 83 };
 
 /**
- * Lowest and highest audio frequency for the lowest tone, Hz. The top tone stays under about
- * 2850 Hz, inside the passband of an SSB filter, in both modes.
+ * Lowest and highest audio frequency for the lowest tone (FT8 and FT4) or the signal centre
+ * (WSPR), Hz. The top tone stays under about 2850 Hz, inside the passband of an SSB filter, in
+ * FT8 and FT4. A WSPR signal, 6 Hz wide, stays 7 Hz inside the 1400 to 1600 Hz window.
  */
 export const FREQ_LIMITS: Record<Mode, { minHz: number; maxHz: number }> = {
   FT8: { minHz: 200, maxHz: 2800 },
   FT4: { minHz: 200, maxHz: 2767 },
+  WSPR: { minHz: 1410, maxHz: 1590 },
+  // RTTY's pair: its mark tone, kept so both tones stay inside 200 to 2900 Hz (lib/rtty/settings.ts).
+  RTTY: { minHz: 200, maxHz: 2900 },
 };
 
 /** `hz` rounded to 1 Hz and kept inside the mode's limits. */
@@ -26,17 +30,19 @@ export function clampHz(hz: number, mode: Mode): number {
 
 /**
  * Frequency under a point `x` CSS pixels from the left edge of a waterfall `width` CSS pixels
- * wide, Hz. The waterfall shows 0 to MAX_HZ across its width at any device pixel ratio, so CSS
- * pixels map directly.
+ * wide, Hz. The waterfall shows the mode's view (0 to 3000 Hz, or 1400 to 1600 Hz in WSPR) across
+ * its width at any device pixel ratio, so CSS pixels map directly.
  */
 export function hzAtX(x: number, width: number, mode: Mode): number {
-  if (!(width > 0)) return clampHz(MAX_HZ / 2, mode);
-  return clampHz((x / width) * MAX_HZ, mode);
+  const v = viewOf(mode);
+  if (!(width > 0)) return clampHz((v.minHz + v.maxHz) / 2, mode);
+  return clampHz(v.minHz + (x / width) * (v.maxHz - v.minHz), mode);
 }
 
-/** Position of `hz` from the left, 0 to 1. */
-export function xOfHz(hz: number): number {
-  return Math.min(1, Math.max(0, hz / MAX_HZ));
+/** Position of `hz` from the left of the mode's view, 0 to 1. */
+export function xOfHz(hz: number, mode: Mode = 'FT8'): number {
+  const v = viewOf(mode);
+  return Math.min(1, Math.max(0, (hz - v.minHz) / (v.maxHz - v.minHz)));
 }
 
 /** Slots of spectrum the quiet search uses: at least 2, at most 4. */
@@ -48,7 +54,7 @@ export const QUIET_MAX_SLOTS = 4;
  * 13.1 s plus their DT and FT4 signals by 5.5 s; the next slot's start 0.5 s early at the
  * soonest. A row is in the pause when its window (171 ms) is.
  */
-export const PAUSE_S: Record<Mode, { from: number; to: number }> = { FT8: { from: 14.2, to: 15 }, FT4: { from: 6.3, to: 7.4 } };
+export const PAUSE_S: Record<FtMode, { from: number; to: number }> = { FT8: { from: 14.2, to: 15 }, FT4: { from: 6.3, to: 7.4 } };
 
 /** Power per bin of one slot: the mean over the slot, and the mean over its pause. */
 export interface SlotPower {
@@ -62,15 +68,15 @@ export interface SlotPower {
  * each waterfall row (dB per bin) and its time.
  */
 export class QuietTracker {
-  private mode: Mode;
+  private mode: FtMode;
   private current: { start: number; firstMs: number; lastMs: number; sum: Float64Array; rows: number; pause: Float64Array; pauseRows: number } | null = null;
   private done: { start: number; power: SlotPower }[] = [];
 
-  constructor(mode: Mode) {
+  constructor(mode: FtMode) {
     this.mode = mode;
   }
 
-  setMode(mode: Mode) {
+  setMode(mode: FtMode) {
     if (mode === this.mode) return;
     this.mode = mode;
     this.reset();
@@ -138,7 +144,7 @@ const TIE = 0.25;
  * shape of the radio's filter, so its slope does not pull the choice to the band edges. Among
  * equally quiet windows, the one nearest `nearHz` wins, so a clear Tx frequency stays put.
  */
-export function quietestHz(slots: SlotPower[], mode: Mode, nearHz: number): number | null {
+export function quietestHz(slots: SlotPower[], mode: FtMode, nearHz: number): number | null {
   const use = slots.slice(-QUIET_MAX_SLOTS);
   if (use.length < QUIET_MIN_SLOTS) return null;
   const pauses = use.flatMap((u) => (u.pause ? [u.pause] : []));

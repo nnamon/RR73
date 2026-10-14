@@ -49,8 +49,8 @@ function qso(id: string, startMs = T, activation: Activation | null = null): Qso
   );
 }
 
-const run = (entry: LedgerEntry | null, q: Qso, dest = WAVELOG, opts: { activation?: Activation | null; sendEdits?: boolean; now?: number } = {}) =>
-  reconcile({ entry, dest, qso: q, activation: opts.activation ?? null, sendEdits: opts.sendEdits ?? true, now: opts.now ?? q.updatedAt });
+const run = (entry: LedgerEntry | null, q: Qso, dest = WAVELOG, opts: { activation?: Activation | null; sendEdits?: boolean; auto?: boolean; now?: number } = {}) =>
+  reconcile({ entry, dest, qso: q, activation: opts.activation ?? null, sendEdits: opts.sendEdits ?? true, sendAutomatically: opts.auto ?? true, now: opts.now ?? q.updatedAt });
 
 const edit = (q: Qso, at: number, patch: Partial<Qso> = {}): Qso => ({ ...q, ...patch, updatedAt: at });
 const del = (q: Qso, at: number): Qso => ({ ...q, deletedAt: at, updatedAt: at });
@@ -264,7 +264,10 @@ describe('files', () => {
 
 describe('picking the next QSO', () => {
   const qs = [qso('late', T + 600_000), qso('early', T), qso('mid', T + 300_000)];
-  const start = (id: string) => qs.find((q) => q.id === id)!.start;
+  const start = (id: string) => {
+    const q = qs.find((x) => x.id === id)!;
+    return [q.start, q.createdAt] as const;
+  };
   const entries = qs.map((q) => run(null, q)!);
 
   it('takes the oldest QSO that is due', () => {
@@ -275,9 +278,72 @@ describe('picking the next QSO', () => {
     expect(pickNext(entries, 'pota-file', T + 10_000_000, start)).toBeNull();
   });
 
+  it('takes QSOs with the same start time in the order they were logged', () => {
+    const same = [qso('z-second', T), qso('a-third', T), qso('m-first', T)].map((q, i) => ({ ...q, createdAt: [2000, 3000, 1000][i] }));
+    const order = (id: string) => {
+      const q = same.find((x) => x.id === id)!;
+      return [q.start, q.createdAt] as const;
+    };
+    let rest = same.map((q) => ({ ...run(null, q)!, nextAttemptAt: 0 }));
+    const picked: string[] = [];
+    for (let e = pickNext(rest, 'wavelog', T, order); e; e = pickNext(rest, 'wavelog', T, order)) {
+      picked.push(e.qsoId);
+      rest = rest.filter((x) => x !== e);
+    }
+    expect(picked).toEqual(['m-first', 'z-second', 'a-third']);
+  });
+
   it('takes held QSOs too when forced, and knows the earliest next attempt', () => {
     expect(pickNext(entries, 'wavelog', T, start, true)?.qsoId).toBe('early');
     expect(earliestAttempt(entries, ['wavelog'])).toBe(T + 60_000 + UNDO_MS);
     expect(earliestAttempt(entries, ['pota-file'])).toBeNull();
+  });
+});
+
+describe('with Send automatically off', () => {
+  const off = { auto: false };
+
+  it('keeps a new QSO not sent, with no attempt planned', () => {
+    const q = qso('q1');
+    expect(run(null, q, WAVELOG, off)).toMatchObject({ state: 'not-sent', nextAttemptAt: null, attempts: 0 });
+    // File destinations do not depend on it.
+    expect(run(null, qso('q2', T, ACT), POTA, { ...off, activation: ACT })?.state).toBe('file-ready');
+  });
+
+  it('takes a queued QSO back to not sent when switched off, keeping why it failed, and queues it again when switched on', () => {
+    const q = qso('q1');
+    const failed = applyReceipt(run(null, q)!, { qsoId: 'q1', outcome: 'retry', message: 'offline', timeout: false, retryAfterMs: null }, q.updatedAt, T + 80_000, T + 110_000);
+    const parked = run(failed, q, WAVELOG, { ...off, now: T + 90_000 })!;
+    expect(parked).toMatchObject({ state: 'not-sent', nextAttemptAt: null, attempts: 1, lastError: 'offline' });
+    expect(run(parked, q, WAVELOG, off)).toEqual(parked);
+    expect(run(parked, q, WAVELOG, { now: T + 95_000 })).toMatchObject({ state: 'waiting', nextAttemptAt: T + 95_000 });
+    // Logged a moment ago: still held for Undo.
+    expect(run(run(null, q, WAVELOG, off), q, WAVELOG, { now: q.createdAt + 1000 })).toMatchObject({ state: 'waiting', nextAttemptAt: q.createdAt + UNDO_MS });
+  });
+
+  it('drops a deleted QSO that was not sent, and restores it as not sent', () => {
+    const q = qso('q1');
+    const notSent = run(null, q, WAVELOG, off)!;
+    const gone = run(notSent, del(q, T + 70_000), WAVELOG, off)!;
+    expect(gone.state).toBe('not-needed');
+    expect(run(gone, edit(q, T + 80_000), WAVELOG, { ...off, now: T + 80_000 })?.state).toBe('not-sent');
+  });
+
+  it('makes a refused QSO not sent again after the fix', () => {
+    const q = qso('q1');
+    const refused = applyReceipt(run(null, q, WAVELOG, off)!, { qsoId: 'q1', outcome: 'refused', message: 'bad', refusal: { fix: 'edit-qso', scope: 'qso' } }, q.updatedAt, T + 80_000, 0);
+    expect(run(refused, edit(q, T + 90_000), WAVELOG, { ...off, now: T + 90_000 })).toMatchObject({ state: 'not-sent', lastError: null, refusal: null });
+    const key = { ...refused, refusal: { fix: 'wavelog-key', scope: 'destination' } } as LedgerEntry;
+    expect(requeue([key], 'wavelog', T + 100_000, () => true, false)).toMatchObject([{ state: 'not-sent', nextAttemptAt: null, refusal: null }]);
+    expect(requeue([key], 'wavelog', T + 100_000)).toMatchObject([{ state: 'waiting', nextAttemptAt: T + 100_000 }]);
+  });
+
+  it('refuses QSOs not sent for a destination-wide reason, and never picks them to send', () => {
+    const entries = ['a', 'b'].map((id) => run(null, qso(id), WAVELOG, off)!);
+    expect(refuseWaiting(entries, 'wavelog', 'key', { fix: 'wavelog-key', scope: 'destination' }).map((e) => e.state)).toEqual(['refused', 'refused']);
+    const order = () => [T, T] as const;
+    expect(pickNext(entries, 'wavelog', T + 10_000_000, order)).toBeNull();
+    expect(pickNext(entries, 'wavelog', T + 10_000_000, order, true)).toBeNull();
+    expect(earliestAttempt(entries, ['wavelog'])).toBeNull();
   });
 });

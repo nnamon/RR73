@@ -13,7 +13,7 @@
  * Positions written twice keep the first write. Slots with no audio at all are not emitted.
  */
 
-import { SLOT_SAMPLES, SLOT_RATE, type Mode } from '../clock/slots';
+import { SLOT_SAMPLES, SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
 
 /** A block of the capture stream. */
 export interface StreamChunk {

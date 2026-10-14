@@ -52,7 +52,7 @@ docker compose run --rm wsjtx python3 tools/wsjtx/vectors.py tools/wsjtx/cases.t
 tools/wsjtx/decodes.sh
 ```
 
-- `vectors.py` runs `ft8sim` on every message in `cases.txt` (346 lines) and writes `fixtures/ft8/wsjtx.json`: the input, the text WSJT-X displays, i3.n3, the 77 message bits and the 79 FT8 channel symbols. `ft8sim` prints n3 as `*` for some type 4 messages; the file stores null. Each run uses a temporary directory, so its WAV file never lands in the repository.
+- `vectors.py` runs `ft8sim` on every message in `cases.txt` (359 messages) and writes `fixtures/ft8/wsjtx.json`: the input, the text WSJT-X displays, i3.n3, the 77 message bits and the 79 FT8 channel symbols. `ft8sim` prints n3 as `*` for some type 4 messages; the file stores null. Each run uses a temporary directory, so its WAV file never lands in the repository.
 - `decodes.sh` runs on the host. It builds FT8 and FT4 slots from `decode_cases.txt` with the `slot_wav` example of rr73-ft8 (12 signals per slot, 180 Hz apart), decodes them with `jt9` through `decodes.py`, and writes `fixtures/ft8/wsjtx_decodes.json`: each payload with the text `jt9` shows for it, or null. The slots live in `results/wsjtx-decodes/` and are removed afterwards. `decodes.py` accepts decode lines with an empty message, which `jt9` prints for some payloads it cannot unpack.
 - `crates/rr73-ft8/tests/wsjtx.rs` and `wsjtx_decodes.rs` check rr73-ft8 against both files and list each place where rr73-ft8 differs on purpose.
 
@@ -78,3 +78,16 @@ Six ft8_lib test WAVs at commit 9fec6ca, decoded with `reference.py --print`, ag
 | `websdr_test11` | 21 | 25 | 21 |
 
 The one listed message `jt9` missed is `LZ1CWK DC8VA RR73` in `websdr_test1`.
+
+## WSPR
+
+The image also holds `wsprsim`, `wsprcode` and `wsprd` from the same package. `wsprd` on the PATH is a wrapper (`wsprd.sh`) that, unless `-a` is given, points it at a temporary directory removed afterwards, so `ALL_WSPR.TXT`, `wspr_spots.txt`, `hashtable.txt`, `wspr_timer.out` and `wspr_wisdom.dat` never land in the repository and no callsign hash table carries over between runs.
+
+```sh
+docker compose run --rm wsjtx python3 tools/wsjtx/wspr_vectors.py tools/wsjtx/wspr_cases.txt fixtures/wspr/wsjtx.json
+```
+
+- `wspr_vectors.py` runs `wsprsim -cd` and `wsprcode` on every message in `wspr_cases.txt` (314 lines: 236 of type 1, 47 of type 2, 31 of type 3; 85 picked by hand, the rest drawn once at random) and writes `fixtures/wspr/wsjtx.json`: the input, the text `wsprcode` decodes, the power field, the 11 bytes `wsprsim` prints (50 message bits and the zero tail) and the 162 channel symbols.
+- `crates/rr73-wspr/tests/wsjtx.rs` checks that rr73-wspr packs every message to the same bytes and symbols and unpacks it to the text `wsprcode` shows. `wsprcode` prints type 3 callsigns as `<...>` because it has no hash table, and shows the locator of `0M0DRQ RO04 10` as `RO  `; the test lists that difference.
+- `wsprsim` exits with status 1 after printing when it writes no file. It packs any text without checks: lower case, powers outside the 19 levels and 6-character locators in a type 1 message (it keeps the first 4) all give a packed message. The case list therefore holds only messages that rr73-wspr accepts, and rr73-wspr refuses the rest with a reason.
+- The type 2 prefix and suffix layout and the type 3 hash were read from `wsprsim -d` output for chosen messages; see `crates/rr73-wspr/src/message.rs`.

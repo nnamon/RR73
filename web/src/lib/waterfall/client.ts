@@ -6,8 +6,9 @@
 
 import type { WaterfallPalette } from './colormap';
 import type { FromWaterfall, ToWaterfall } from './protocol';
-import { WaterfallRenderer, type Context2D, type FrameInfo } from './renderer';
+import { WaterfallRenderer, type Context2D, type FrameInfo, type TxWave } from './renderer';
 import type { Mode } from '../clock/slots';
+import type { Contrast } from './levels';
 
 export class WaterfallClient {
   /** True when the worker draws; false on the main-thread fallback. */
@@ -65,6 +66,40 @@ export class WaterfallClient {
     if (this.worker) this.send({ type: 'mode', mode });
     else if (this.local) {
       this.local.setMode(mode);
+      this.onFrame(this.local.info());
+    }
+  }
+
+  /** The time the picture covers, s, or null for the view's own (45 s in FT8 and FT4, 240 s in WSPR). */
+  setSpan(seconds: number | null) {
+    if (this.worker) this.send({ type: 'span', seconds });
+    else if (this.local) {
+      this.local.setSpan(seconds);
+      this.onFrame(this.local.info());
+    }
+  }
+
+  setContrast(contrast: Contrast) {
+    if (this.worker) this.send({ type: 'contrast', contrast });
+    else this.local?.setContrast(contrast);
+  }
+
+  /** Slots RR73 transmitted in, UTC ms: drawn from their transmitted audio, or blank. */
+  setTxSlots(starts: readonly number[]) {
+    if (this.worker) this.send({ type: 'txSlots', starts: [...starts] });
+    else if (this.local) {
+      this.local.setTxSlots(starts);
+      this.onFrame(this.local.info());
+    }
+  }
+
+  /** A transmission's audio to draw in its slot. The samples are copied, so the caller keeps them. */
+  setTxWave(wave: TxWave) {
+    if (this.worker) {
+      const samples = wave.samples.slice();
+      this.send({ type: 'txWave', wave: { ...wave, samples } }, [samples.buffer]);
+    } else if (this.local) {
+      this.local.setTxWave(wave);
       this.onFrame(this.local.info());
     }
   }

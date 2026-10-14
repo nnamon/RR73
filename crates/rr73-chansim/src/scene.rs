@@ -49,6 +49,14 @@ pub struct SimSignal {
     pub fading: Option<Watterson>,
     /// Linear frequency drift, in Hz per second.
     pub drift_hz_per_s: f64,
+    /// Seconds cut from the start of the transmission, the rest keeping its place in time: a
+    /// late start that skips the first symbols. 0 sends it whole.
+    #[serde(default)]
+    pub cut_s: f64,
+    /// Seconds of the transmission sent, from its start: a transmission stopped part way.
+    /// `None` sends it to the end.
+    #[serde(default)]
+    pub length_s: Option<f64>,
 }
 
 impl SimSignal {
@@ -61,6 +69,8 @@ impl SimSignal {
             snr_db,
             fading: None,
             drift_hz_per_s: 0.0,
+            cut_s: 0.0,
+            length_s: None,
         }
     }
 }
@@ -103,8 +113,20 @@ pub enum RenderError {
 /// Renders `scene` with randomness from `seed`: one slot of 12 kHz audio and the truth for
 /// each signal. The same scene and seed give the same samples on every run. Signal `i`
 /// takes its fading from random stream `i + 1`, so adding a signal leaves the others
-/// unchanged; the noise uses stream 0.
+/// unchanged; the noise uses stream 0. Parts of a signal outside the slot are cut.
 pub fn render(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
+    render_placed(scene, seed, false)
+}
+
+/// Renders `scene` as a loop: as [`render`], but a signal that runs past the end of the
+/// slot continues at its start, and one that starts before the slot ends at its end. Played
+/// back to back, the audio carries every signal whole whatever sample playback starts at.
+/// DT may take any value; a start position wraps modulo the slot length (15 s for FT8).
+pub fn render_loop(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
+    render_placed(scene, seed, true)
+}
+
+fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<Truth>), RenderError> {
     let params = scene.mode.params();
     let len = (f64::from(params.slot_s) * channel::SAMPLE_RATE).round() as usize;
     let mut audio = vec![0.0f32; len];
@@ -116,7 +138,9 @@ pub fn render(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), Render
         if !(s.freq_hz.is_finite()
             && s.dt_s.is_finite()
             && s.snr_db.is_finite()
-            && s.drift_hz_per_s.is_finite())
+            && s.drift_hz_per_s.is_finite()
+            && s.cut_s.is_finite()
+            && s.length_s.is_none_or(f64::is_finite))
         {
             return Err(RenderError::NotFinite(i));
         }
@@ -134,8 +158,14 @@ pub fn render(scene: &Scene, seed: u64) -> Result<(Vec<f32>, Vec<Truth>), Render
         rng.set_stream(i as u64 + 1);
         let wave = channel::apply(&wave, s.drift_hz_per_s, s.fading, &mut rng, &mut plans);
         let start = ((f64::from(params.start_offset_s) + s.dt_s) * channel::SAMPLE_RATE).round() as i64;
-        for (k, &v) in wave.iter().enumerate() {
+        let slot_len = len as i64;
+        let cut = (s.cut_s.max(0.0) * channel::SAMPLE_RATE).round() as usize;
+        let end = s.length_s.map_or(wave.len(), |l| {
+            (l.max(0.0) * channel::SAMPLE_RATE).round() as usize
+        });
+        for (k, &v) in wave.iter().enumerate().take(end).skip(cut) {
             let n = start + k as i64;
+            let n = if wrap { n.rem_euclid(slot_len.max(1)) } else { n };
             if n >= 0
                 && let Some(x) = audio.get_mut(n as usize)
             {
@@ -178,6 +208,8 @@ pub fn single<R: Rng>(mode: Mode, snr_db: f64, fading: Option<Watterson>, rng: &
         snr_db,
         fading,
         drift_hz_per_s: 0.0,
+        cut_s: 0.0,
+        length_s: None,
     };
     Scene {
         mode,
@@ -233,6 +265,8 @@ pub fn crowded<R: Rng>(
             snr_db: rng.random_range(snr_range_db.0..=snr_range_db.1),
             fading: None,
             drift_hz_per_s: 0.0,
+            cut_s: 0.0,
+            length_s: None,
         })
         .collect();
     Scene {

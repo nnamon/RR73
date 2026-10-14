@@ -34,10 +34,10 @@ test('Start audio plays the start chime inside the tap and reports the keying ch
   expect(played).toHaveLength(1);
   // 1.5 s lead, 0.45 s chime, 0.2 s tail.
   expect(played[0].seconds).toBeCloseTo(2.15, 2);
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
 
   await page.evaluate(() => (location.hash = '#/settings/radio'));
-  await expect(page.getByText(/did not drop during the start chime/)).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText(/Failed at \d\d:\d\d: receive audio did not drop\./)).toBeVisible({ timeout: 10_000 });
 });
 
 test('with the start chime off, Start audio plays only silence and runs no keying check', async ({ page }) => {
@@ -51,7 +51,7 @@ test('with the start chime off, Start audio plays only silence and runs no keyin
   const played = await clips(page);
   expect(played).toHaveLength(1);
   expect(played[0].seconds).toBeCloseTo(0.1, 2);
-  await expect(page.getByText('Receiving')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
   await page.waitForTimeout(3000);
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await expect(page.getByText(/Not checked yet/)).toBeVisible();

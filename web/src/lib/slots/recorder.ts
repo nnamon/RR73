@@ -5,7 +5,7 @@
 
 import type { AssembledSlot } from './assembler';
 import { slotStem } from '../clock/format';
-import { SLOT_RATE } from '../clock/slots';
+import { SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
 import { encodeWav16 } from './wav';
 import { sidecar, type SidecarInput } from './sidecar';
 
@@ -17,11 +17,16 @@ export interface SlotFiles {
 
 export class SlotRecorder {
   readonly capacity: number;
+  private readonly perMode: Partial<Record<Mode, number>>;
   private slots: AssembledSlot[] = [];
 
-  /** Keeps `capacity` slots: 8 FT8 slots are 2 minutes and about 5.8 MB. */
-  constructor(capacity = 8) {
+  /**
+   * Keeps `capacity` slots: 8 FT8 slots are 2 minutes and about 5.8 MB. `perMode` keeps fewer of
+   * a mode's slots: a WSPR slot alone is 2 minutes.
+   */
+  constructor(capacity = 8, perMode: Partial<Record<Mode, number>> = {}) {
     this.capacity = capacity;
+    this.perMode = perMode;
   }
 
   add(slot: AssembledSlot) {
@@ -29,6 +34,14 @@ export class SlotRecorder {
     this.slots.push(slot);
     this.slots.sort((a, b) => a.startUtcMs - b.startUtcMs);
     if (this.slots.length > this.capacity) this.slots.splice(0, this.slots.length - this.capacity);
+    const cap = this.perMode[slot.mode];
+    if (cap !== undefined) {
+      const mine = this.slots.filter((s) => s.mode === slot.mode);
+      if (mine.length > cap) {
+        const drop = new Set(mine.slice(0, mine.length - cap));
+        this.slots = this.slots.filter((s) => !drop.has(s));
+      }
+    }
   }
 
   /** Slots held, newest first. */

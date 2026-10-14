@@ -31,6 +31,17 @@ export interface RecordOptions {
   reference?: Reference;
 }
 
+/**
+ * STX and SRX are ADIF integers: a serial number goes there without its leading zeros ("042"
+ * gives 42), and anything else goes to STX_STRING or SRX_STRING.
+ */
+function serial(field: 'STX' | 'SRX', v: string): Record<string, string> {
+  const t = v.trim();
+  if (!t) return {};
+  if (/^\d{1,9}$/.test(t)) return { [field]: String(Number(t)) };
+  return { [`${field}_STRING`]: t };
+}
+
 /** The ADIF record for a QSO, in a stable field order. Empty fields are left out by the writer. */
 export function qsoToRecord(q: Qso, opts: RecordOptions = {}): AdifRecord {
   let { mySig, mySigInfo, myPotaRef, myWwffRef } = q;
@@ -66,6 +77,11 @@ export function qsoToRecord(q: Qso, opts: RecordOptions = {}): AdifRecord {
     SOTA_REF: q.sotaRef,
     WWFF_REF: q.wwffRef,
     IOTA: q.iota,
+    NAME: q.name ?? '',
+    QTH: q.qth ?? '',
+    ...serial('STX', q.stx ?? ''),
+    ...serial('SRX', q.srx ?? ''),
+    CONTEST_ID: q.contestId ?? '',
   };
   for (const [k, v] of Object.entries(q.extra)) if (!(k in r)) r[k] = v;
   if (opts.rr73Id) r.APP_RR73_ID = q.id;
@@ -77,7 +93,8 @@ export function qsoToRecord(q: Qso, opts: RecordOptions = {}): AdifRecord {
 const KNOWN = new Set([
   'CALL', 'QSO_DATE', 'TIME_ON', 'QSO_DATE_OFF', 'TIME_OFF', 'BAND', 'FREQ', 'MODE', 'SUBMODE', 'RST_SENT', 'RST_RCVD', 'GRIDSQUARE',
   'STATION_CALLSIGN', 'OPERATOR', 'MY_GRIDSQUARE', 'TX_PWR', 'MY_SIG', 'MY_SIG_INFO', 'MY_POTA_REF', 'MY_SOTA_REF', 'MY_WWFF_REF',
-  'MY_IOTA', 'SIG', 'SIG_INFO', 'POTA_REF', 'SOTA_REF', 'WWFF_REF', 'IOTA', 'COMMENT', 'APP_RR73_ID',
+  'MY_IOTA', 'SIG', 'SIG_INFO', 'POTA_REF', 'SOTA_REF', 'WWFF_REF', 'IOTA', 'COMMENT', 'APP_RR73_ID', 'NAME', 'QTH', 'STX', 'SRX',
+  'STX_STRING', 'SRX_STRING', 'CONTEST_ID',
 ]);
 
 /** UTC ms for an ADIF date (YYYYMMDD) and time (HHMM or HHMMSS), or null. */
@@ -111,7 +128,7 @@ export function recordToQso(rec: AdifRecord, ctx: ReadContext): ReadResult {
   let end = start;
   if (get('TIME_OFF')) {
     const off = parseDateTime(get('QSO_DATE_OFF') || get('QSO_DATE'), get('TIME_OFF'));
-    if (off === null) warnings.push(`The QSO with ${call} has an unreadable TIME_OFF; it ends at its start.`);
+    if (off === null) warnings.push(`The QSO with ${call} has an unreadable TIME_OFF. RR73 ends it at its start time.`);
     // A TIME_OFF before TIME_ON without QSO_DATE_OFF crossed midnight UTC.
     else end = off < start && !get('QSO_DATE_OFF') ? off + 86_400_000 : Math.max(off, start);
   }
@@ -164,6 +181,11 @@ export function recordToQso(rec: AdifRecord, ctx: ReadContext): ReadResult {
       wwffRef: get('WWFF_REF').toUpperCase(),
       iota: get('IOTA').toUpperCase(),
       comment: get('COMMENT'),
+      name: get('NAME'),
+      qth: get('QTH'),
+      stx: get('STX') || get('STX_STRING'),
+      srx: get('SRX') || get('SRX_STRING'),
+      contestId: get('CONTEST_ID').toUpperCase(),
       extra,
       id,
       createdAt: ctx.now,

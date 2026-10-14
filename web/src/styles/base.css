@@ -6,8 +6,15 @@
   box-sizing: border-box;
 }
 
+/*
+ * The document never scrolls: only the panes inside the app do. iOS scrolls the document from
+ * a touch even with overflow hidden on body alone, so html holds it too, and body is pinned to
+ * the viewport (the standalone app had slid up by 470 pt under a drag).
+ */
 html {
   height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   touch-action: manipulation;
@@ -15,6 +22,8 @@ html {
 }
 
 body {
+  position: fixed;
+  inset: 0;
   height: 100%;
   margin: 0;
   overflow: hidden;
@@ -28,6 +37,23 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+
+  /*
+   * An app, not a page: a tap or a touch and hold never selects text or opens the copy menu.
+   * iOS Safari needs the prefixed property; the unprefixed one alone does nothing there.
+   */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text that is typed or copied keeps selection: fields, the message editor, the timing report. */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 h1,
@@ -93,10 +119,50 @@ a {
   letter-spacing: 0;
 }
 
-/* Screens that scroll: a large title, then inset grouped sections, as in iOS Settings. */
+/*
+ * Screens that scroll: a 44 pt navigation bar (LargeTitleHeader on tab roots, BackLink on
+ * sub-screens) right under the status bar, then inset grouped sections, as in iOS Settings.
+ */
 .screen {
   min-height: 100%;
-  padding: calc(var(--rr-safe-top) + var(--rr-space-2)) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+  padding: var(--rr-safe-top) calc(var(--rr-safe-right)) var(--rr-space-8) calc(var(--rr-safe-left));
+}
+
+/* Content scrolled into view stops under the pinned 44 pt bar (BackLink). */
+.screen * {
+  scroll-margin-top: var(--rr-tap);
+}
+
+/*
+ * Navigation bar buttons: 44 pt targets side by side, as UIKit places bar items, around 24 px
+ * glyphs whose ink is 18 px wide, in the tint: about 26 pt between glyphs. The last button runs
+ * into the margin so its glyph's ink ends 16 pt from the screen edge. Disabled: the tint at
+ * reduced opacity, as iOS. Focus: a rounded ring that follows the button.
+ */
+.bar-buttons {
+  display: flex;
+  align-items: center;
+  padding-right: calc(var(--rr-space-half) + var(--rr-space-px));
+}
+
+.bar-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: var(--rr-tap);
+  height: var(--rr-tap);
+  border-radius: var(--rr-radius-l);
+  color: var(--rr-accent);
+}
+
+.bar-button:focus-visible {
+  outline: 2px solid var(--rr-accent);
+  outline-offset: -2px;
+}
+
+.bar-button:disabled {
+  opacity: 0.35;
 }
 
 .large-title {
@@ -152,9 +218,19 @@ a {
   right: 0;
   left: var(--rr-space-4);
   height: var(--rr-hairline);
-  background: var(--rr-sep-strong);
+  background: var(--rr-sep);
   transform: scaleY(0.5);
   transform-origin: 0 0;
+}
+
+/* A row holding a 44 pt text field or picker is 44 pt, as an iOS form row. */
+.row:has(> input:not([type='checkbox'], [type='radio'], [type='range']), > select) {
+  padding-block: 0;
+}
+
+/* After a row with a leading 30 pt icon, the separator starts at the text, as iOS insets it. */
+.row:has(> .ic) + .row::before {
+  left: calc(var(--rr-space-4) + var(--rr-row-icon) + var(--rr-space-3));
 }
 
 .row-main {
@@ -191,7 +267,7 @@ a {
   color: var(--rr-chev);
 }
 
-/* Buttons */
+/* Buttons: capsules, alone or in a row (HIG Buttons). */
 .btn {
   display: inline-flex;
   flex: 1;
@@ -199,7 +275,7 @@ a {
   justify-content: center;
   min-height: var(--rr-button);
   padding: 0 var(--rr-space-3);
-  border-radius: var(--rr-radius-xl);
+  border-radius: var(--rr-radius-pill);
   background: var(--rr-fill);
   color: var(--rr-label);
   font-size: var(--rr-text-callout);
@@ -228,21 +304,25 @@ a {
   color: var(--rr-on-fill);
 }
 
-/* Halt: the largest control wherever output can play. Outlined in transmit red. */
+/* Halt: the largest control wherever output can play. A red tint with red text in every state. */
 .btn.halt {
   min-height: var(--rr-button-large);
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--rr-tx);
+  background: var(--rr-tx-soft);
   color: var(--rr-tx-text);
   font-size: var(--rr-text-body);
   font-weight: var(--rr-weight-bold);
 }
 
+/*
+ * A small button in a row: a 28 pt capsule inside its 44 pt target. The transparent borders keep
+ * the target and leave the fill to the padding box.
+ */
 .btn.compact {
   flex: none;
   min-height: var(--rr-tap);
-  padding: 0 var(--rr-space-4);
-  border-radius: var(--rr-radius-l);
+  padding: 0 var(--rr-space-3);
+  border-block: calc((var(--rr-tap) - var(--rr-chip)) / 2) solid transparent;
+  background-clip: padding-box;
   font-size: var(--rr-text-sub);
 }
 
@@ -284,7 +364,7 @@ a {
   height: calc(var(--rr-tap) + 2 * var(--rr-space-half));
   padding: var(--rr-space-half);
   border-radius: var(--rr-radius-l);
-  background: var(--rr-fill-bg);
+  background: var(--rr-fill3);
 }
 
 .seg-i {
@@ -309,7 +389,10 @@ a {
   outline-offset: 2px;
 }
 
-/* Switch: a native checkbox with role="switch", drawn as an iOS toggle. Its row is the tap target. */
+/*
+ * Switch: a native checkbox with role="switch", drawn as the iOS 18 toggle: 51 x 31 pt, a 27 pt
+ * thumb, systemGreen when on. Its row is the tap target.
+ */
 .switch {
   position: relative;
   flex: none;
@@ -337,7 +420,7 @@ a {
 }
 
 .switch:checked {
-  background: var(--rr-accent-fill);
+  background: var(--rr-switch-on);
 }
 
 .switch:checked::before {

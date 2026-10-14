@@ -284,6 +284,51 @@ fn snr_estimate_is_calibrated_for_gfsk_signals() {
 }
 
 #[test]
+fn partly_silent_slots_report_the_snr_of_the_audio_they_hold() {
+    // The app zero-fills a slot up to the moment audio arrived and decodes it once half is
+    // filled. Every decode keeps the SNR of the full slot within 1.5 dB. Counting the zeros
+    // as noise read 8 to 10 dB high with 2 s (FT8) or 1 s (FT4) silent, and 44 to 50 dB high
+    // from 3 s (FT8) or 2 s (FT4).
+    let cases = [
+        (Mode::Ft8, vec![2.0, 4.0, 7.0], 41),
+        (Mode::Ft4, vec![1.0, 2.0, 3.5], 42),
+    ];
+    for (mode, silent, seed) in cases {
+        let dt = if mode == Mode::Ft8 { 2.2 } else { 1.0 };
+        let signals = vec![
+            SimSignal::new("CQ K1ABC FN42", 1000.0, dt, 0.0),
+            SimSignal::new("W9XYZ K1ABC -15", 1800.0, dt - 0.2, -8.0),
+        ];
+        let (audio, _) = rr73_chansim::render(&scene(mode, signals), seed).expect("render");
+        for preset in ["baseline", "subtract-3-osd2"] {
+            let config = DecoderConfig::preset(preset).expect("preset");
+            let full = decode(&SlotAudio::new(&audio, mode), &config, &mut DecodeContext::new());
+            assert_eq!(full.decodes.len(), 2, "{mode:?} {preset}: {:?}", full.decodes);
+            for &s in &silent {
+                let mut part = audio.clone();
+                part[..(s * 12_000.0) as usize].fill(0.0);
+                let r = decode(&SlotAudio::new(&part, mode), &config, &mut DecodeContext::new());
+                assert!(
+                    r.decodes.iter().any(|d| d.text == "CQ K1ABC FN42"),
+                    "{mode:?} {preset}, first {s} s silent: {:?}",
+                    r.decodes
+                );
+                for d in &r.decodes {
+                    let f = full.decodes.iter().find(|f| f.text == d.text).expect(&d.text);
+                    assert!(
+                        (d.snr_db - f.snr_db).abs() <= 1.5,
+                        "{mode:?} {preset}, first {s} s silent, {}: full slot {} dB, now {} dB",
+                        d.text,
+                        f.snr_db,
+                        d.snr_db
+                    );
+                }
+            }
+        }
+    }
+}
+
+#[test]
 fn subtraction_uncovers_an_overlapped_signal() {
     let signals = vec![
         SimSignal::new("CQ K1ABC FN42", 1000.0, 0.0, 5.0),
@@ -344,6 +389,7 @@ fn bp_osd_recovers_codewords_belief_propagation_misses() {
             source: OsdSource::Channel,
             max_hard_errors: 30,
             max_distance: 0.07,
+            erasures_as_errors: false,
         },
     };
     let mut rng = ChaCha8Rng::seed_from_u64(31);

@@ -12,6 +12,7 @@ rr73-ft8.workspace = true
 rr73-decode.workspace = true
 rr73-chansim.workspace = true
 rr73-corpus.workspace = true
+rr73-rtty.workspace = true
 clap.workspace = true
 rand.workspace = true
 rand_chacha.workspace = true

@@ -3,7 +3,9 @@
 mod compare;
 mod gate;
 mod import;
+mod loop_fixture;
 mod results;
+mod rtty;
 mod run;
 mod synth;
 mod util;
@@ -12,7 +14,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use rr73_decode::{DecoderConfig, PRESETS};
+use rr73_decode::PRESETS;
+use rr73_decode::wspr::WSPR_PRESETS;
 
 #[derive(Parser)]
 #[command(
@@ -27,7 +30,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded) into the corpus.
+    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded, wspr-smoke,
+    /// wspr-noise, wspr-snr-sweep, wspr-band) into the corpus.
     Synth {
         /// Set to write; repeat for several.
         #[arg(long = "set", required = true, value_name = "NAME")]
@@ -63,8 +67,37 @@ enum Command {
         /// else jt9-d3, else the first key).
         #[arg(long)]
         reference: Option<String>,
+        /// Decode only the first this many seconds of each slot (early decoding).
+        #[arg(long, value_name = "SECONDS")]
+        audio_s: Option<f64>,
+        /// With --audio-s: `absent` ends the audio there (a partial slot), `zero` pads the
+        /// slot with silence.
+        #[arg(long, value_enum, default_value_t = run::AudioFill::Absent)]
+        audio_fill: run::AudioFill,
+        /// Set a span of each slot to digital silence before decoding: START:END in seconds
+        /// from the slot start, such as 0:2.5. Repeat for more spans.
+        #[arg(long = "silent-s", value_name = "START:END", value_parser = run::silent_span)]
+        silent_s: Vec<(f64, f64)>,
+        /// A later stage run on the residual: a preset name and `key=value` overrides in
+        /// one argument, such as "subtract-3-osd2 search.max_candidates=300". Repeat for
+        /// more stages.
+        #[arg(long, value_name = "STAGE")]
+        then: Vec<String>,
+        /// Synthetic set to render in memory and decode, as `synth` would write it; repeat
+        /// for several.
+        #[arg(long = "synth", value_name = "SET")]
+        synth: Vec<String>,
+        /// Slots in noise sets rendered with --synth.
+        #[arg(long, default_value_t = 1000)]
+        noise_count: usize,
+        /// Slots per SNR step and channel in sweeps rendered with --synth.
+        #[arg(long, default_value_t = 40)]
+        per_step: usize,
+        /// Slots per subset in crowded sets rendered with --synth.
+        #[arg(long, default_value_t = 20)]
+        crowded_count: usize,
         /// Corpus files or directories.
-        #[arg(required = true)]
+        #[arg(required_unless_present = "synth")]
         paths: Vec<PathBuf>,
     },
     /// Show decodes gained and lost, false decodes, SNR50 and time per slot between two runs.
@@ -117,10 +150,95 @@ enum Command {
         #[arg(long)]
         out: PathBuf,
     },
+    /// Write the end-to-end decode fixture (a 15 s FT8 loop holding 4 messages 4 times each),
+    /// then decode it from start offsets across the loop and check every message comes out.
+    LoopFixture {
+        /// Fixture path without extension: writes `<out>.wav` and `<out>.json`.
+        #[arg(long, default_value = "web/e2e/fixtures/ft8-loop")]
+        out: PathBuf,
+        /// Check the existing files without writing them.
+        #[arg(long)]
+        check_only: bool,
+        /// Preset to decode with; repeat for several.
+        #[arg(long = "preset", default_value = "subtract-3-osd2", value_name = "NAME")]
+        presets: Vec<String>,
+        /// Time between the start offsets checked, in seconds.
+        #[arg(long, default_value_t = 0.05)]
+        step_s: f64,
+    },
     /// Print a preset's configuration as JSON, or list the presets.
     Presets {
         /// Preset to print.
         name: Option<String>,
+    },
+    /// RTTY: synthesise transmissions, decode them, score minimodem's output and report.
+    Rtty {
+        #[command(subcommand)]
+        command: RttyCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum RttyCommand {
+    /// Write synthetic RTTY sets (awgn, ccir-good, ccir-moderate, ccir-poor, noise).
+    Synth {
+        /// Set to write; repeat for several.
+        #[arg(long = "set", required = true, value_name = "NAME")]
+        sets: Vec<String>,
+        /// Directory the sets go in.
+        #[arg(long, default_value = "corpus/rtty/synthetic")]
+        out: PathBuf,
+        /// Transmissions per SNR step.
+        #[arg(long, default_value_t = 3)]
+        per_step: usize,
+        /// Keying time of each transmission, in seconds.
+        #[arg(long, default_value_t = 60.0)]
+        seconds: f64,
+        /// Files in the noise set.
+        #[arg(long, default_value_t = 10)]
+        noise_files: usize,
+    },
+    /// Decode RTTY files with rr73-rtty and write a results file.
+    Run {
+        /// Name in reports.
+        #[arg(long, default_value = "rr73")]
+        label: String,
+        /// Decoder configuration override; repeat for several.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        overrides: Vec<String>,
+        /// Decoder threads (default: all CPUs).
+        #[arg(long)]
+        threads: Option<usize>,
+        /// Results file.
+        #[arg(long)]
+        out: PathBuf,
+        /// Files or directories.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Score another decoder's text output (tools/minimodem/decode.sh) as a results file.
+    Import {
+        /// Name in reports.
+        #[arg(long)]
+        label: String,
+        /// Directory holding `<set>/<stem>.txt` and `<set>/<stem>.time`.
+        #[arg(long)]
+        texts: PathBuf,
+        /// Command line that produced the texts, recorded in the results.
+        #[arg(long, default_value = "")]
+        command: String,
+        /// Results file.
+        #[arg(long)]
+        out: PathBuf,
+        /// Files or directories the texts cover.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
+    },
+    /// Print CER against SNR, false characters on noise and CPU time for results files.
+    Report {
+        /// Results files, one column each.
+        #[arg(required = true)]
+        results: Vec<PathBuf>,
     },
 }
 
@@ -165,18 +283,39 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             out,
             threads,
             reference,
+            audio_s,
+            audio_fill,
+            silent_s,
+            then,
+            synth,
+            noise_count,
+            per_step,
+            crowded_count,
             paths,
         } => {
             let opts = run::RunOptions {
                 preset,
                 overrides,
                 paths,
+                synth,
+                synth_options: synth::SynthOptions {
+                    noise_count,
+                    per_step,
+                    crowded_count,
+                },
                 out,
                 threads,
                 reference,
+                audio_s,
+                audio_fill,
+                silent_s,
+                then,
             };
             let (results, path) = run::run(&opts)?;
             print!("{}", run::summary_table(&results));
+            if !results.then.is_empty() {
+                print!("{}", run::stage_table(&results));
+            }
             println!(
                 "{} slots in {:.1} s on {} thread(s). Results: {}",
                 results.slots.len(),
@@ -244,14 +383,33 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             );
             Ok(ExitCode::SUCCESS)
         }
+        Command::LoopFixture {
+            out,
+            check_only,
+            presets,
+            step_s,
+        } => {
+            if !check_only {
+                let files = loop_fixture::write(&out)?;
+                println!("Wrote {} and {}", files.wav.display(), files.json.display());
+            }
+            let (report, pass) = loop_fixture::check(&out, &presets, step_s)?;
+            print!("{report}");
+            Ok(if pass {
+                ExitCode::SUCCESS
+            } else {
+                ExitCode::from(1)
+            })
+        }
+        Command::Rtty { command } => run_rtty(command),
         Command::Presets { name } => {
             match name {
                 Some(n) => {
-                    let c = DecoderConfig::preset(&n).map_err(|e| e.to_string())?;
+                    let c = run::Decoder::new(&n, &[])?.config_json()?;
                     println!("{}", serde_json::to_string_pretty(&c).map_err(|e| e.to_string())?);
                 }
                 None => {
-                    for p in PRESETS {
+                    for p in PRESETS.iter().chain(WSPR_PRESETS) {
                         println!("{p}");
                     }
                 }
@@ -259,4 +417,67 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
     }
+}
+
+fn run_rtty(command: RttyCommand) -> Result<ExitCode, String> {
+    match command {
+        RttyCommand::Synth {
+            sets,
+            out,
+            per_step,
+            seconds,
+            noise_files,
+        } => {
+            let started = std::time::Instant::now();
+            let n = rtty::synth(&rtty::SynthOptions {
+                out: out.clone(),
+                sets,
+                per_step,
+                seconds,
+                noise_files,
+            })?;
+            println!(
+                "{n} files in {} ({:.1} s)",
+                out.display(),
+                started.elapsed().as_secs_f64()
+            );
+        }
+        RttyCommand::Run {
+            label,
+            overrides,
+            threads,
+            out,
+            paths,
+        } => {
+            let r = rtty::run(&rtty::RunOptions {
+                label,
+                overrides,
+                threads,
+                paths,
+            })?;
+            rtty::save(&r, &out)?;
+            print!("{}", rtty::report(std::slice::from_ref(&r)));
+            println!("{} files. Results: {}", r.files.len(), out.display());
+        }
+        RttyCommand::Import {
+            label,
+            texts,
+            command,
+            out,
+            paths,
+        } => {
+            let r = rtty::import(&label, &texts, &command, &paths)?;
+            rtty::save(&r, &out)?;
+            print!("{}", rtty::report(std::slice::from_ref(&r)));
+            println!("{} files scored. Results: {}", r.files.len(), out.display());
+        }
+        RttyCommand::Report { results } => {
+            let runs = results
+                .iter()
+                .map(|p| rtty::load(p))
+                .collect::<Result<Vec<_>, _>>()?;
+            print!("{}", rtty::report(&runs));
+        }
+    }
+    Ok(ExitCode::SUCCESS)
 }

@@ -10,6 +10,9 @@
  *   missing station location): then every waiting QSO there is refused for the same reason, and
  *   none is sent until the operator acts.
  *
+ * - With Send automatically off the store never starts it and no entry is waiting, so it sends
+ *   only what the operator queues with Send to Wavelog (sendNow).
+ *
  * Time comes from an injected clock and storage from injected callbacks, so the tests drive it
  * with a fake clock.
  */
@@ -66,7 +69,8 @@ export class Outbox {
   private timer: unknown = null;
   private started = false;
   private status = new Map<DestinationId, DestinationStatus>();
-  private forced = new Set<DestinationId>();
+  /** The run in progress per destination: one request at a time. */
+  private active = new Map<DestinationId, Promise<void>>();
 
   constructor(private readonly deps: OutboxDeps) {}
 
@@ -98,7 +102,10 @@ export class Outbox {
     if (this.started) void this.run();
   }
 
-  /** Send now: everything waiting, held and backed-off QSOs too, whether or not the outbox runs by itself. */
+  /**
+   * Send now: everything waiting, held and backed-off QSOs too, whether or not the outbox runs by
+   * itself. Resolves when every destination has finished.
+   */
   sendNow(): Promise<void> {
     return this.run(true);
   }
@@ -117,19 +124,30 @@ export class Outbox {
     this.schedule();
   }
 
-  private async drain(d: SendingDestination, force: boolean): Promise<void> {
-    if (this.statusOf(d.id).sending) {
-      if (force) this.forced.add(d.id);
-      return;
-    }
+  /**
+   * One run per destination at a time. A forced run that arrives during another waits for it and
+   * then runs, so what the operator queued is never skipped.
+   */
+  private drain(d: SendingDestination, force: boolean): Promise<void> {
+    const running = this.active.get(d.id);
+    if (running) return force ? running.then(() => this.drain(d, true)) : running;
+    const p = this.drainLoop(d, force).finally(() => this.active.delete(d.id));
+    this.active.set(d.id, p);
+    return p;
+  }
+
+  private async drainLoop(d: SendingDestination, force: boolean): Promise<void> {
     this.update(d.id, { ...this.statusOf(d.id), sending: true });
     try {
       for (;;) {
         if (!this.deps.online()) break;
         const now = this.deps.clock.now();
-        const all = force || this.forced.has(d.id);
-        if (!all && this.statusOf(d.id).pausedUntil > now) break;
-        const entry = pickNext(this.deps.entries(), d.id, now, (id) => this.deps.qso(id)?.start ?? Infinity, all);
+        if (!force && this.statusOf(d.id).pausedUntil > now) break;
+        const order = (id: string) => {
+          const q = this.deps.qso(id);
+          return q ? ([q.start, q.createdAt] as const) : ([Infinity, Infinity] as const);
+        };
+        const entry = pickNext(this.deps.entries(), d.id, now, order, force);
         if (!entry) break;
         const qso = this.deps.qso(entry.qsoId);
         if (!qso) {
@@ -150,8 +168,6 @@ export class Outbox {
           const failures = s.failures + 1;
           retryAt = at + Math.max(backoffMs(failures), receipt.retryAfterMs ?? 0);
           this.update(d.id, { ...s, failures, pausedUntil: retryAt, lastError: receipt.message });
-          this.forced.delete(d.id);
-          force = false;
         } else {
           this.update(d.id, { ...s, failures: 0, pausedUntil: 0, lastError: null });
         }
@@ -166,7 +182,6 @@ export class Outbox {
         if (receipt.outcome === 'retry' || (receipt.outcome === 'refused' && receipt.refusal.scope === 'destination')) break;
       }
     } finally {
-      this.forced.delete(d.id);
       this.update(d.id, { ...this.statusOf(d.id), sending: false });
     }
   }

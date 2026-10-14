@@ -3,7 +3,7 @@ resolver = "3"
 members = ["crates/*"]
 
 [workspace.package]
-version = "0.6.0"
+version = "0.14.2"
 edition = "2024"
 rust-version = "1.98"
 license = "MIT OR Apache-2.0"
@@ -11,10 +11,12 @@ repository = "https://github.com/nnamon/RR73"
 
 [workspace.dependencies]
 rr73-ft8 = { path = "crates/rr73-ft8" }
+rr73-wspr = { path = "crates/rr73-wspr" }
 rr73-dsp = { path = "crates/rr73-dsp" }
 rr73-decode = { path = "crates/rr73-decode" }
 rr73-chansim = { path = "crates/rr73-chansim" }
 rr73-corpus = { path = "crates/rr73-corpus" }
+rr73-rtty = { path = "crates/rr73-rtty" }
 clap = { version = "4", features = ["derive"] }
 hound = "3"
 rand = "0.9"

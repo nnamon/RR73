@@ -1,0 +1,2678 @@
+{
+  "format": "rr73-bench-results/1",
+  "created_utc": "2026-10-13T19:16:59Z",
+  "git_sha": "final",
+  "preset": "wspr",
+  "overrides": [],
+  "config": {
+    "demod": {
+      "blocks": [
+        7,
+        1
+      ],
+      "kind": "block",
+      "llr_scale": 1.0
+    },
+    "fano": {
+      "bias": 0.4,
+      "delta": 1.0,
+      "kind": "fano",
+      "max_cycles_per_bit": 10000
+    },
+    "passes": 2,
+    "refine": {
+      "block": 5,
+      "kind": "coherent"
+    },
+    "search": {
+      "drift_max_hz": 4.0,
+      "drift_step_hz": 0.5,
+      "dt_max_s": 6.0,
+      "dt_min_s": -2.0,
+      "freq_max_hz": 1600.0,
+      "freq_min_hz": 1400.0,
+      "guard_hz": 4.5,
+      "kind": "sync",
+      "max_candidates": 60,
+      "min_score": 4.0
+    },
+    "validate": {
+      "kind": "unpack",
+      "max_hard_errors": 162,
+      "min_snr_db": -40.0
+    }
+  },
+  "reference_key": null,
+  "environment": {
+    "os": "linux",
+    "arch": "aarch64",
+    "cpus": 10,
+    "threads": 10,
+    "profile": "release",
+    "bench_version": "0.8.1"
+  },
+  "wall_s": 3.70008796,
+  "slim": true,
+  "sets": {
+    "synthetic/wspr-noise": {
+      "slots": 50,
+      "errors": 0,
+      "expected": 0,
+      "decodes": 0,
+      "matched": 0,
+      "recall": null,
+      "false_decodes": 0,
+      "unique_real": 0,
+      "snr50": null,
+      "time": {
+        "mean_ms": 292.5726501799999,
+        "p50_ms": 270.650042,
+        "p90_ms": 463.454625,
+        "p99_ms": 642.170667,
+        "max_ms": 642.170667
+      },
+      "stage_mean_ms": {
+        "spectrogram": 55.51444924000001,
+        "search": 50.58658495999999,
+        "refine": 52.747755959999985,
+        "demod": 6.629212599999999,
+        "ldpc": 127.08437288,
+        "validate": 0.0,
+        "subtract": 0.0,
+        "total": 292.56899926000006
+      }
+    },
+    "synthetic/wspr-smoke": {
+      "slots": 25,
+      "errors": 0,
+      "expected": 51,
+      "decodes": 51,
+      "matched": 51,
+      "recall": 1.0,
+      "false_decodes": 0,
+      "unique_real": 0,
+      "snr50": null,
+      "steps": [
+        {
+          "snr_db": -26.0,
+          "signals": 2,
+          "decoded": 2
+        },
+        {
+          "snr_db": -25.8,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -25.3,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -25.2,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -24.5,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -24.0,
+          "signals": 2,
+          "decoded": 2
+        },
+        {
+          "snr_db": -23.8,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -23.4,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -23.3,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -22.0,
+          "signals": 2,
+          "decoded": 2
+        },
+        {
+          "snr_db": -21.6,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -21.3,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -20.7,
+          "signals": 2,
+          "decoded": 2
+        },
+        {
+          "snr_db": -20.5,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -20.1,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -20.0,
+          "signals": 11,
+          "decoded": 11
+        },
+        {
+          "snr_db": -18.9,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -18.4,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -18.2,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -18.0,
+          "signals": 3,
+          "decoded": 3
+        },
+        {
+          "snr_db": -17.4,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -15.8,
+          "signals": 3,
+          "decoded": 3
+        },
+        {
+          "snr_db": -15.0,
+          "signals": 2,
+          "decoded": 2
+        },
+        {
+          "snr_db": -14.9,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -14.8,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -14.6,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -14.5,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -14.4,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -13.7,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -13.6,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -13.2,
+          "signals": 1,
+          "decoded": 1
+        },
+        {
+          "snr_db": -12.3,
+          "signals": 1,
+          "decoded": 1
+        }
+      ],
+      "time": {
+        "mean_ms": 654.8648154400001,
+        "p50_ms": 678.432292,
+        "p90_ms": 915.415042,
+        "p99_ms": 1270.840209,
+        "max_ms": 1270.840209
+      },
+      "stage_mean_ms": {
+        "spectrogram": 62.577558200000006,
+        "search": 102.51278504,
+        "refine": 161.02411168,
+        "demod": 17.83307368,
+        "ldpc": 308.48115356,
+        "validate": 0.01588676,
+        "subtract": 2.24717004,
+        "total": 654.8600718800002
+      }
+    }
+  },
+  "slots": [
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_000000_s0000.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.214603208,
+      "stages": {
+        "spectrogram_s": 0.054509834,
+        "search_s": 0.0572415,
+        "refine_s": 0.026753,
+        "demod_s": 0.004824583,
+        "ldpc_s": 0.071266334,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.214599292
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_000200_s0001.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.207930542,
+      "stages": {
+        "spectrogram_s": 0.048112709,
+        "search_s": 0.050304209,
+        "refine_s": 0.0346445,
+        "demod_s": 0.0020902510000000004,
+        "ldpc_s": 0.072770708,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.207925542
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_000400_s0002.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.253116209,
+      "stages": {
+        "spectrogram_s": 0.032513874,
+        "search_s": 0.033482292,
+        "refine_s": 0.044729541,
+        "demod_s": 0.006024876000000001,
+        "ldpc_s": 0.136355207,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.253111792
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_000600_s0003.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.271190667,
+      "stages": {
+        "spectrogram_s": 0.045349375,
+        "search_s": 0.033997626,
+        "refine_s": 0.054343166,
+        "demod_s": 0.005773542,
+        "ldpc_s": 0.131718084,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.271189333
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_000800_s0004.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.305044375,
+      "stages": {
+        "spectrogram_s": 0.035073625000000004,
+        "search_s": 0.041176,
+        "refine_s": 0.072016541,
+        "demod_s": 0.009042292,
+        "ldpc_s": 0.147726712,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.305042208
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_001000_s0005.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.125528875,
+      "stages": {
+        "spectrogram_s": 0.042084084,
+        "search_s": 0.037069834,
+        "refine_s": 0.011682458,
+        "demod_s": 0.001611042,
+        "ldpc_s": 0.033076542,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.125525375
+      },
+      "stats": {
+        "candidates": 1,
+        "ldpc_attempts": 2,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_001200_s0006.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.284758376,
+      "stages": {
+        "spectrogram_s": 0.029420834,
+        "search_s": 0.056874083,
+        "refine_s": 0.053883626,
+        "demod_s": 0.013870585,
+        "ldpc_s": 0.13070075,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.284755959
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_001400_s0007.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.188624083,
+      "stages": {
+        "spectrogram_s": 0.052474708,
+        "search_s": 0.03334925,
+        "refine_s": 0.025793584,
+        "demod_s": 0.0030199579999999997,
+        "ldpc_s": 0.07398208399999999,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.188621875
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_001600_s0008.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.104910167,
+      "stages": {
+        "spectrogram_s": 0.051823542,
+        "search_s": 0.053082417,
+        "refine_s": 0.0,
+        "demod_s": 0.0,
+        "ldpc_s": 0.0,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.104906625
+      },
+      "stats": {
+        "candidates": 0,
+        "ldpc_attempts": 0,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_001800_s0009.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.323354876,
+      "stages": {
+        "spectrogram_s": 0.04450625,
+        "search_s": 0.039821875,
+        "refine_s": 0.06938412699999999,
+        "demod_s": 0.008628874,
+        "ldpc_s": 0.16100395999999997,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.323352626
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_002000_s0010.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.333787292,
+      "stages": {
+        "spectrogram_s": 0.047440667,
+        "search_s": 0.03247375,
+        "refine_s": 0.06757104200000001,
+        "demod_s": 0.007387375,
+        "ldpc_s": 0.178903459,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.333784458
+      },
+      "stats": {
+        "candidates": 8,
+        "ldpc_attempts": 16,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_002200_s0011.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.269675625,
+      "stages": {
+        "spectrogram_s": 0.049745042,
+        "search_s": 0.0343965,
+        "refine_s": 0.052257793,
+        "demod_s": 0.007462290000000001,
+        "ldpc_s": 0.125801627,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.269669083
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_002400_s0012.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.251272958,
+      "stages": {
+        "spectrogram_s": 0.091372916,
+        "search_s": 0.071207,
+        "refine_s": 0.022463875,
+        "demod_s": 0.003429169,
+        "ldpc_s": 0.062792916,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.251269375
+      },
+      "stats": {
+        "candidates": 2,
+        "ldpc_attempts": 4,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_002600_s0013.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.416654876,
+      "stages": {
+        "spectrogram_s": 0.042897501000000005,
+        "search_s": 0.0976715,
+        "refine_s": 0.076426335,
+        "demod_s": 0.007307296,
+        "ldpc_s": 0.19233762600000004,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.416650209
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_002800_s0014.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.500518417,
+      "stages": {
+        "spectrogram_s": 0.070151084,
+        "search_s": 0.064448791,
+        "refine_s": 0.113941457,
+        "demod_s": 0.007356707,
+        "ldpc_s": 0.244602415,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.500513875
+      },
+      "stats": {
+        "candidates": 9,
+        "ldpc_attempts": 18,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_003000_s0015.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.115075376,
+      "stages": {
+        "spectrogram_s": 0.027186083,
+        "search_s": 0.04693175,
+        "refine_s": 0.014639958,
+        "demod_s": 0.001828333,
+        "ldpc_s": 0.024483126,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.115071
+      },
+      "stats": {
+        "candidates": 1,
+        "ldpc_attempts": 2,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_003200_s0016.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.463454625,
+      "stages": {
+        "spectrogram_s": 0.023512958,
+        "search_s": 0.038413916,
+        "refine_s": 0.131233501,
+        "demod_s": 0.015011705000000002,
+        "ldpc_s": 0.255265834,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.463452375
+      },
+      "stats": {
+        "candidates": 9,
+        "ldpc_attempts": 18,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_003400_s0017.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.468289626,
+      "stages": {
+        "spectrogram_s": 0.045523167,
+        "search_s": 0.033690708,
+        "refine_s": 0.114467748,
+        "demod_s": 0.018317249999999993,
+        "ldpc_s": 0.25627149999999993,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.468286583
+      },
+      "stats": {
+        "candidates": 10,
+        "ldpc_attempts": 20,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_003600_s0018.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.276253,
+      "stages": {
+        "spectrogram_s": 0.057003249,
+        "search_s": 0.051391875,
+        "refine_s": 0.04595721,
+        "demod_s": 0.007059957999999999,
+        "ldpc_s": 0.114831167,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.276250917
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_003800_s0019.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.238553167,
+      "stages": {
+        "spectrogram_s": 0.048546875,
+        "search_s": 0.042342375,
+        "refine_s": 0.041409209,
+        "demod_s": 0.004662998999999999,
+        "ldpc_s": 0.101581123,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.238547875
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_004000_s0020.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.245880208,
+      "stages": {
+        "spectrogram_s": 0.036526874,
+        "search_s": 0.040044375,
+        "refine_s": 0.05167925,
+        "demod_s": 0.004169915000000001,
+        "ldpc_s": 0.113450375,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.245876333
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_004200_s0021.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.350425,
+      "stages": {
+        "spectrogram_s": 0.104013333,
+        "search_s": 0.085233458,
+        "refine_s": 0.035746084000000004,
+        "demod_s": 0.0025624579999999997,
+        "ldpc_s": 0.122858707,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.350418875
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_004400_s0022.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.634913417,
+      "stages": {
+        "spectrogram_s": 0.172852792,
+        "search_s": 0.106675041,
+        "refine_s": 0.120294832,
+        "demod_s": 0.01569429,
+        "ldpc_s": 0.219380084,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.634908209
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_004600_s0023.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.154887541,
+      "stages": {
+        "spectrogram_s": 0.037792958,
+        "search_s": 0.05753875,
+        "refine_s": 0.011042792,
+        "demod_s": 0.001401667,
+        "ldpc_s": 0.047099584,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.154878292
+      },
+      "stats": {
+        "candidates": 2,
+        "ldpc_attempts": 4,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_004800_s0024.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.408768792,
+      "stages": {
+        "spectrogram_s": 0.051720625000000006,
+        "search_s": 0.056891083,
+        "refine_s": 0.086293667,
+        "demod_s": 0.009281418,
+        "ldpc_s": 0.204554793,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.408765417
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_005000_s0025.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.217688083,
+      "stages": {
+        "spectrogram_s": 0.032998,
+        "search_s": 0.035594666,
+        "refine_s": 0.034934706999999995,
+        "demod_s": 0.0047224580000000006,
+        "ldpc_s": 0.109429043,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.217683875
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_005200_s0026.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.270650042,
+      "stages": {
+        "spectrogram_s": 0.053045500999999995,
+        "search_s": 0.052190083,
+        "refine_s": 0.045463667,
+        "demod_s": 0.004507042,
+        "ldpc_s": 0.115437208,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.270648167
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_005400_s0027.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.116875375,
+      "stages": {
+        "spectrogram_s": 0.039964042000000005,
+        "search_s": 0.040115416,
+        "refine_s": 0.014409,
+        "demod_s": 0.000725875,
+        "ldpc_s": 0.021653709,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.116870333
+      },
+      "stats": {
+        "candidates": 1,
+        "ldpc_attempts": 2,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_005600_s0028.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.300939084,
+      "stages": {
+        "spectrogram_s": 0.036496167,
+        "search_s": 0.050061,
+        "refine_s": 0.059432041,
+        "demod_s": 0.005434373999999999,
+        "ldpc_s": 0.14950591800000002,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.300936667
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_005800_s0029.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.384615917,
+      "stages": {
+        "spectrogram_s": 0.058797542,
+        "search_s": 0.035280542,
+        "refine_s": 0.101002999,
+        "demod_s": 0.012753624999999998,
+        "ldpc_s": 0.176766791,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.384612375
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_010000_s0030.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.266029583,
+      "stages": {
+        "spectrogram_s": 0.034241957999999996,
+        "search_s": 0.053481042,
+        "refine_s": 0.040185917,
+        "demod_s": 0.006094875999999998,
+        "ldpc_s": 0.132016583,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.266026167
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_010200_s0031.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.297463542,
+      "stages": {
+        "spectrogram_s": 0.104529291,
+        "search_s": 0.0509515,
+        "refine_s": 0.04426571,
+        "demod_s": 0.004832831999999999,
+        "ldpc_s": 0.092874333,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.297460083
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_010400_s0032.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.278669042,
+      "stages": {
+        "spectrogram_s": 0.084724583,
+        "search_s": 0.078207708,
+        "refine_s": 0.027529416,
+        "demod_s": 0.008903458000000001,
+        "ldpc_s": 0.07929625,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.278665042
+      },
+      "stats": {
+        "candidates": 2,
+        "ldpc_attempts": 4,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_010600_s0033.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.324035,
+      "stages": {
+        "spectrogram_s": 0.076395959,
+        "search_s": 0.04195075,
+        "refine_s": 0.095982292,
+        "demod_s": 0.0030801669999999995,
+        "ldpc_s": 0.106616125,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.324030542
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_010800_s0034.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.224087292,
+      "stages": {
+        "spectrogram_s": 0.075647459,
+        "search_s": 0.034272625,
+        "refine_s": 0.025252083,
+        "demod_s": 0.004168082,
+        "ldpc_s": 0.084737667,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.2240845
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_011000_s0035.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.221918417,
+      "stages": {
+        "spectrogram_s": 0.031837625,
+        "search_s": 0.026928583,
+        "refine_s": 0.04385312599999999,
+        "demod_s": 0.005283334,
+        "ldpc_s": 0.11400575,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.221914458
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_011200_s0036.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.25976325,
+      "stages": {
+        "spectrogram_s": 0.046163375,
+        "search_s": 0.030308,
+        "refine_s": 0.053747584,
+        "demod_s": 0.006279792,
+        "ldpc_s": 0.123256459,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.259761292
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_011400_s0037.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.162424125,
+      "stages": {
+        "spectrogram_s": 0.047918333,
+        "search_s": 0.038455875,
+        "refine_s": 0.021359542,
+        "demod_s": 0.003349583,
+        "ldpc_s": 0.051330542,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.162417875
+      },
+      "stats": {
+        "candidates": 2,
+        "ldpc_attempts": 4,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_011600_s0038.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.266873583,
+      "stages": {
+        "spectrogram_s": 0.051058417,
+        "search_s": 0.053396792,
+        "refine_s": 0.044665917000000006,
+        "demod_s": 0.010351754,
+        "ldpc_s": 0.107393419,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.266870459
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_011800_s0039.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.289659334,
+      "stages": {
+        "spectrogram_s": 0.047007042,
+        "search_s": 0.054727833,
+        "refine_s": 0.049840709,
+        "demod_s": 0.006511790999999999,
+        "ldpc_s": 0.1315635,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.28965675
+      },
+      "stats": {
+        "candidates": 6,
+        "ldpc_attempts": 12,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_012000_s0040.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.412295625,
+      "stages": {
+        "spectrogram_s": 0.0858155,
+        "search_s": 0.082822417,
+        "refine_s": 0.055408624,
+        "demod_s": 0.011448584,
+        "ldpc_s": 0.176786292,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.412291166
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_012200_s0041.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.642170667,
+      "stages": {
+        "spectrogram_s": 0.062555125,
+        "search_s": 0.07479075,
+        "refine_s": 0.115940168,
+        "demod_s": 0.019376541999999997,
+        "ldpc_s": 0.369492293,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.642168042
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_012400_s0042.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.275987417,
+      "stages": {
+        "spectrogram_s": 0.095953791,
+        "search_s": 0.05614375,
+        "refine_s": 0.032148585,
+        "demod_s": 0.0030779990000000005,
+        "ldpc_s": 0.088651833,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.275981542
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_012600_s0043.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.497313458,
+      "stages": {
+        "spectrogram_s": 0.040286792,
+        "search_s": 0.074984792,
+        "refine_s": 0.109276291,
+        "demod_s": 0.014713915000000004,
+        "ldpc_s": 0.258038374,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.497310625
+      },
+      "stats": {
+        "candidates": 10,
+        "ldpc_attempts": 20,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_012800_s0044.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.27094725,
+      "stages": {
+        "spectrogram_s": 0.111190375,
+        "search_s": 0.04844775,
+        "refine_s": 0.029393833,
+        "demod_s": 0.003072378,
+        "ldpc_s": 0.078835541,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.270943625
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_013000_s0045.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.219861125,
+      "stages": {
+        "spectrogram_s": 0.039237291,
+        "search_s": 0.039663125,
+        "refine_s": 0.043449917,
+        "demod_s": 0.007681623999999999,
+        "ldpc_s": 0.08982345700000001,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.219859333
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_013200_s0046.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.307316833,
+      "stages": {
+        "spectrogram_s": 0.034926751,
+        "search_s": 0.023569125,
+        "refine_s": 0.060504749,
+        "demod_s": 0.007004669999999999,
+        "ldpc_s": 0.181299127,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.307313792
+      },
+      "stats": {
+        "candidates": 7,
+        "ldpc_attempts": 14,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_013400_s0047.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.230116584,
+      "stages": {
+        "spectrogram_s": 0.055542292,
+        "search_s": 0.043933292,
+        "refine_s": 0.046978000000000006,
+        "demod_s": 0.002085791,
+        "ldpc_s": 0.081571376,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.230114542
+      },
+      "stats": {
+        "candidates": 3,
+        "ldpc_attempts": 6,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_013600_s0048.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.237411708,
+      "stages": {
+        "spectrogram_s": 0.038902209,
+        "search_s": 0.054496333,
+        "refine_s": 0.032267624,
+        "demod_s": 0.004420417,
+        "ldpc_s": 0.107319167,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.237409625
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-noise/260101_013800_s0049.wav",
+      "set": "synthetic/wspr-noise",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.246048875,
+      "stages": {
+        "spectrogram_s": 0.048332083,
+        "search_s": 0.058805541,
+        "refine_s": 0.031440000999999995,
+        "demod_s": 0.003760834,
+        "ldpc_s": 0.10370317,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.246045583
+      },
+      "stats": {
+        "candidates": 4,
+        "ldpc_attempts": 8,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_000000_s0000.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.844106959,
+      "stages": {
+        "spectrogram_s": 0.116468917,
+        "search_s": 0.134712709,
+        "refine_s": 0.186622041,
+        "demod_s": 0.014597288999999998,
+        "ldpc_s": 0.39006791399999985,
+        "validate_s": 2.292e-6,
+        "subtract_s": 0.00160925,
+        "total_s": 0.844100625
+      },
+      "stats": {
+        "candidates": 18,
+        "ldpc_attempts": 25,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 5,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_000200_s0001.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.759559917,
+      "stages": {
+        "spectrogram_s": 0.043923793,
+        "search_s": 0.093296251,
+        "refine_s": 0.19286224900000004,
+        "demod_s": 0.02416763,
+        "ldpc_s": 0.403533665,
+        "validate_s": 0.000012708,
+        "subtract_s": 0.001729292,
+        "total_s": 0.759554001
+      },
+      "stats": {
+        "candidates": 21,
+        "ldpc_attempts": 31,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 5,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_000400_s0002.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.501005459,
+      "stages": {
+        "spectrogram_s": 0.028310874,
+        "search_s": 0.08033879099999999,
+        "refine_s": 0.121149544,
+        "demod_s": 0.012783295000000002,
+        "ldpc_s": 0.256706879,
+        "validate_s": 4.917e-6,
+        "subtract_s": 0.001694167,
+        "total_s": 0.501002917
+      },
+      "stats": {
+        "candidates": 15,
+        "ldpc_attempts": 21,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 4,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_000600_s0003.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.193508208,
+      "stages": {
+        "spectrogram_s": 0.021727541,
+        "search_s": 0.080274833,
+        "refine_s": 0.032830291,
+        "demod_s": 0.008162334,
+        "ldpc_s": 0.04884675100000001,
+        "validate_s": 8.959e-6,
+        "subtract_s": 0.00164525,
+        "total_s": 0.193505916
+      },
+      "stats": {
+        "candidates": 11,
+        "ldpc_attempts": 5,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 8,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_000800_s0004.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.49659425,
+      "stages": {
+        "spectrogram_s": 0.103831625,
+        "search_s": 0.125197,
+        "refine_s": 0.096354499,
+        "demod_s": 0.007016043,
+        "ldpc_s": 0.163659666,
+        "validate_s": 2.166e-6,
+        "subtract_s": 0.000517834,
+        "total_s": 0.496588375
+      },
+      "stats": {
+        "candidates": 21,
+        "ldpc_attempts": 13,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 14,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_001000_s0005.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 1.016693959,
+      "stages": {
+        "spectrogram_s": 0.07363883300000001,
+        "search_s": 0.110879958,
+        "refine_s": 0.259241206,
+        "demod_s": 0.026253373000000003,
+        "ldpc_s": 0.541200958,
+        "validate_s": 8.042e-6,
+        "subtract_s": 0.001693167,
+        "total_s": 1.016690084
+      },
+      "stats": {
+        "candidates": 29,
+        "ldpc_attempts": 33,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 12,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_001200_s0006.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.656023876,
+      "stages": {
+        "spectrogram_s": 0.049737458,
+        "search_s": 0.07614283399999999,
+        "refine_s": 0.17112441700000003,
+        "demod_s": 0.019726415999999997,
+        "ldpc_s": 0.337564793,
+        "validate_s": 4.792e-6,
+        "subtract_s": 0.0016995,
+        "total_s": 0.65601975
+      },
+      "stats": {
+        "candidates": 33,
+        "ldpc_attempts": 31,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 17,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_001400_s0007.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.585081876,
+      "stages": {
+        "spectrogram_s": 0.031982959,
+        "search_s": 0.112495459,
+        "refine_s": 0.12484687499999998,
+        "demod_s": 0.014532334,
+        "ldpc_s": 0.299083752,
+        "validate_s": 5.792e-6,
+        "subtract_s": 0.00210125,
+        "total_s": 0.585068209
+      },
+      "stats": {
+        "candidates": 28,
+        "ldpc_attempts": 25,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 15,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_001600_s0008.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.718839083,
+      "stages": {
+        "spectrogram_s": 0.021762665999999996,
+        "search_s": 0.076318208,
+        "refine_s": 0.21606575,
+        "demod_s": 0.023446587,
+        "ldpc_s": 0.378023291,
+        "validate_s": 4.458e-6,
+        "subtract_s": 0.003192042,
+        "total_s": 0.71883325
+      },
+      "stats": {
+        "candidates": 38,
+        "ldpc_attempts": 33,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 21,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_001800_s0009.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.794866417,
+      "stages": {
+        "spectrogram_s": 0.105205208,
+        "search_s": 0.107295916,
+        "refine_s": 0.17655174899999995,
+        "demod_s": 0.01708921,
+        "ldpc_s": 0.388007417,
+        "validate_s": 9.25e-6,
+        "subtract_s": 0.000678875,
+        "total_s": 0.794860583
+      },
+      "stats": {
+        "candidates": 33,
+        "ldpc_attempts": 29,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 18,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_002000_s0010.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.826536501,
+      "stages": {
+        "spectrogram_s": 0.180467708,
+        "search_s": 0.139938333,
+        "refine_s": 0.144604834,
+        "demod_s": 0.015770751000000003,
+        "ldpc_s": 0.34378400099999995,
+        "validate_s": 6.875e-6,
+        "subtract_s": 0.001940416,
+        "total_s": 0.826533625
+      },
+      "stats": {
+        "candidates": 46,
+        "ldpc_attempts": 25,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 33,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_002200_s0011.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 1.270840209,
+      "stages": {
+        "spectrogram_s": 0.092327584,
+        "search_s": 0.13975041700000002,
+        "refine_s": 0.281113332,
+        "demod_s": 0.029099994000000004,
+        "ldpc_s": 0.7279699580000001,
+        "validate_s": 6.541e-6,
+        "subtract_s": 0.0005405,
+        "total_s": 1.270835084
+      },
+      "stats": {
+        "candidates": 41,
+        "ldpc_attempts": 35,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 23,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_002400_s0012.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.575211083,
+      "stages": {
+        "spectrogram_s": 0.041852625,
+        "search_s": 0.085218958,
+        "refine_s": 0.142781415,
+        "demod_s": 0.013876751,
+        "ldpc_s": 0.290899332,
+        "validate_s": 0.000012292,
+        "subtract_s": 0.000552292,
+        "total_s": 0.575208667
+      },
+      "stats": {
+        "candidates": 38,
+        "ldpc_attempts": 23,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 26,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_002600_s0013.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.896502834,
+      "stages": {
+        "spectrogram_s": 0.092212458,
+        "search_s": 0.125125709,
+        "refine_s": 0.262763292,
+        "demod_s": 0.024322577999999997,
+        "ldpc_s": 0.3897785410000001,
+        "validate_s": 0.000039,
+        "subtract_s": 0.002227125,
+        "total_s": 0.896495333
+      },
+      "stats": {
+        "candidates": 28,
+        "ldpc_attempts": 27,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 14,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_002800_s0014.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.367120834,
+      "stages": {
+        "spectrogram_s": 0.050588374,
+        "search_s": 0.100263542,
+        "refine_s": 0.07836646,
+        "demod_s": 0.012053877,
+        "ldpc_s": 0.12420783300000002,
+        "validate_s": 0.000022875,
+        "subtract_s": 0.001603916,
+        "total_s": 0.3671165
+      },
+      "stats": {
+        "candidates": 21,
+        "ldpc_attempts": 9,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 16,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_003000_s0015.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.679271542,
+      "stages": {
+        "spectrogram_s": 0.049937666,
+        "search_s": 0.10710508400000002,
+        "refine_s": 0.150543416,
+        "demod_s": 0.015870207,
+        "ldpc_s": 0.35462862799999995,
+        "validate_s": 9.25e-6,
+        "subtract_s": 0.001152708,
+        "total_s": 0.679266375
+      },
+      "stats": {
+        "candidates": 36,
+        "ldpc_attempts": 29,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 21,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_003200_s0016.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.627336292,
+      "stages": {
+        "spectrogram_s": 0.027808875000000004,
+        "search_s": 0.107662458,
+        "refine_s": 0.126595293,
+        "demod_s": 0.018413042,
+        "ldpc_s": 0.345139127,
+        "validate_s": 0.000014416,
+        "subtract_s": 0.001678792,
+        "total_s": 0.627333042
+      },
+      "stats": {
+        "candidates": 31,
+        "ldpc_attempts": 27,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 17,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_003400_s0017.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.678432292,
+      "stages": {
+        "spectrogram_s": 0.047280958,
+        "search_s": 0.198173624,
+        "refine_s": 0.14258487599999997,
+        "demod_s": 0.015619451999999995,
+        "ldpc_s": 0.274198501,
+        "validate_s": 7.833e-6,
+        "subtract_s": 0.000544542,
+        "total_s": 0.678429334
+      },
+      "stats": {
+        "candidates": 29,
+        "ldpc_attempts": 25,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 16,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_003600_s0018.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.915415042,
+      "stages": {
+        "spectrogram_s": 0.077304751,
+        "search_s": 0.143097333,
+        "refine_s": 0.24490525,
+        "demod_s": 0.021748414999999993,
+        "ldpc_s": 0.4277514579999999,
+        "validate_s": 6.542e-6,
+        "subtract_s": 0.000573,
+        "total_s": 0.915409083
+      },
+      "stats": {
+        "candidates": 33,
+        "ldpc_attempts": 27,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 19,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_003800_s0019.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.395574333,
+      "stages": {
+        "spectrogram_s": 0.055179,
+        "search_s": 0.102920375,
+        "refine_s": 0.07533141600000001,
+        "demod_s": 0.011124668,
+        "ldpc_s": 0.149364418,
+        "validate_s": 0.00001175,
+        "subtract_s": 0.001624166,
+        "total_s": 0.395570292
+      },
+      "stats": {
+        "candidates": 31,
+        "ldpc_attempts": 13,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 24,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_004000_s0020.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 1,
+      "decoded": 1,
+      "matched": 1,
+      "unique": 0,
+      "time_s": 0.499230459,
+      "stages": {
+        "spectrogram_s": 0.041718666999999994,
+        "search_s": 0.081274083,
+        "refine_s": 0.112664961,
+        "demod_s": 0.012294923000000004,
+        "ldpc_s": 0.25044253899999996,
+        "validate_s": 9.583e-6,
+        "subtract_s": 0.000808708,
+        "total_s": 0.499227042
+      },
+      "stats": {
+        "candidates": 44,
+        "ldpc_attempts": 21,
+        "ldpc_converged": 1,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 33,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_004200_s0021.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 15,
+      "decoded": 15,
+      "matched": 15,
+      "unique": 0,
+      "time_s": 0.843405626,
+      "stages": {
+        "spectrogram_s": 0.045636916,
+        "search_s": 0.058729084,
+        "refine_s": 0.315394961,
+        "demod_s": 0.04181133900000003,
+        "ldpc_s": 0.372095624,
+        "validate_s": 0.00008354200000000001,
+        "subtract_s": 0.009623917,
+        "total_s": 0.8434015
+      },
+      "stats": {
+        "candidates": 101,
+        "ldpc_attempts": 55,
+        "ldpc_converged": 15,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 66,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_004400_s0022.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "synthetic",
+      "expected": 15,
+      "decoded": 15,
+      "matched": 15,
+      "unique": 0,
+      "time_s": 0.767881125,
+      "stages": {
+        "spectrogram_s": 0.078679458,
+        "search_s": 0.093544208,
+        "refine_s": 0.271948915,
+        "demod_s": 0.038649542999999995,
+        "ldpc_s": 0.26817825000000006,
+        "validate_s": 0.00010329400000000002,
+        "subtract_s": 0.016748542,
+        "total_s": 0.767877625
+      },
+      "stats": {
+        "candidates": 90,
+        "ldpc_attempts": 41,
+        "ldpc_converged": 15,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 62,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_004600_s0023.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.285705834,
+      "stages": {
+        "spectrogram_s": 0.033471707999999996,
+        "search_s": 0.033825917,
+        "refine_s": 0.080768208,
+        "demod_s": 0.005088291,
+        "ldpc_s": 0.132543417,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.285703334
+      },
+      "stats": {
+        "candidates": 5,
+        "ldpc_attempts": 10,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    },
+    {
+      "path": "corpus/synthetic/wspr-smoke/260101_004800_s0024.wav",
+      "set": "synthetic/wspr-smoke",
+      "mode": "WSPR",
+      "kind": "noise",
+      "expected": 0,
+      "decoded": 0,
+      "matched": 0,
+      "unique": 0,
+      "time_s": 0.176876376,
+      "stages": {
+        "spectrogram_s": 0.053382333,
+        "search_s": 0.049238542,
+        "refine_s": 0.017587542,
+        "demod_s": 0.0023085,
+        "ldpc_s": 0.054352126,
+        "validate_s": 0.0,
+        "subtract_s": 0.0,
+        "total_s": 0.176871251
+      },
+      "stats": {
+        "candidates": 2,
+        "ldpc_attempts": 4,
+        "ldpc_converged": 0,
+        "osd_codewords": 0,
+        "crc_failures": 0,
+        "zero_payloads": 0,
+        "unpack_failures": 0,
+        "duplicates": 0,
+        "implausible": 0
+      }
+    }
+  ]
+}

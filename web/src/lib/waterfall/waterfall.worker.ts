@@ -35,6 +35,10 @@ scope.onmessage = (e) => {
   }
   if (m.type === 'resize') renderer.resize(m.width, m.height);
   else if (m.type === 'mode') renderer.setMode(m.mode);
+  else if (m.type === 'span') renderer.setSpan(m.seconds);
   else if (m.type === 'clear') renderer.clear();
+  else if (m.type === 'contrast') renderer.setContrast(m.contrast);
+  else if (m.type === 'txSlots') renderer.setTxSlots(m.starts);
+  else if (m.type === 'txWave') renderer.setTxWave(m.wave);
   scope.postMessage({ type: 'frame', info: renderer.info() });
 };

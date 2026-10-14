@@ -105,6 +105,9 @@ pub struct OsdParams {
     pub max_hard_errors: u32,
     /// Largest reliability-weighted distance allowed, as a fraction of the total reliability.
     pub max_distance: f32,
+    /// Count every erased bit (channel LLR exactly 0: its symbol lies outside the audio) as a
+    /// hard error, so a codeword resting on fewer received bits needs fewer disagreements.
+    pub erasures_as_errors: bool,
 }
 
 /// Buffers reused across OSD runs.
@@ -155,6 +158,7 @@ pub fn osd(
     s.reliability.clear();
     let mut hard: Bits = [0; 3];
     let mut channel_hard: Bits = [0; 3];
+    let mut erased: Bits = [0; 3];
     let mut total = 0.0f32;
     for (i, &c) in channel.iter().enumerate().take(N) {
         let v = source(i);
@@ -164,6 +168,9 @@ pub fn osd(
         }
         if c > 0.0 {
             set(&mut channel_hard, i);
+        }
+        if c == 0.0 || !c.is_finite() {
+            set(&mut erased, i);
         }
         s.reliability.push(v.abs());
         total += v.abs();
@@ -266,7 +273,16 @@ pub fn osd(
         }
         let mut errors = c;
         xor(&mut errors, &channel_hard);
-        let hard_errors = popcount(&errors);
+        let hard_errors = if params.erasures_as_errors {
+            let received = [
+                errors[0] & !erased[0],
+                errors[1] & !erased[1],
+                errors[2] & !erased[2],
+            ];
+            popcount(&received) + popcount(&erased)
+        } else {
+            popcount(&errors)
+        };
         if hard_errors > params.max_hard_errors {
             continue;
         }
@@ -353,6 +369,7 @@ mod tests {
             source: OsdSource::Channel,
             max_hard_errors: N as u32,
             max_distance: 1.0,
+            erasures_as_errors: false,
         }
     }
 
@@ -431,6 +448,31 @@ mod tests {
         assert!(osd(&p, |i| llr[i], &llr, &mut s).is_none());
         let mut p = params(1);
         p.max_distance = 1e-4;
+        assert!(osd(&p, |i| llr[i], &llr, &mut s).is_none());
+    }
+
+    #[test]
+    fn erased_bits_count_as_hard_errors_when_asked() {
+        let cw = codeword(4);
+        // Two weak errors and six erased bits, as when the last symbols of a slot are cut.
+        let mut llr = llrs(&cw, &[3, 50]);
+        for v in &mut llr[160..166] {
+            *v = 0.0;
+        }
+        let mut s = OsdScratch::default();
+        let mut out = [0u8; N];
+        let plain = osd(&params(0), |i| llr[i], &llr, &mut s).expect("plain");
+        plain.unpack(&mut out);
+        assert_eq!(out, cw);
+        // Without the rule an erased bit counts only when the codeword has a 1 there.
+        let ones = cw[160..166].iter().filter(|&&b| b == 1).count() as u32;
+        assert_eq!(plain.hard_errors, 2 + ones);
+
+        let mut p = params(0);
+        p.erasures_as_errors = true;
+        let counted = osd(&p, |i| llr[i], &llr, &mut s).expect("counted");
+        assert_eq!(counted.hard_errors, 8);
+        p.max_hard_errors = 7;
         assert!(osd(&p, |i| llr[i], &llr, &mut s).is_none());
     }
 

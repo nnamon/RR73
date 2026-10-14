@@ -37,14 +37,26 @@ services:
       - CI=1
 
   e2e:
-    image: mcr.microsoft.com/playwright:v1.63.0-noble
+    build: { context: tools/e2e }
+    image: rr73-e2e:latest
     <<: *workspace
     environment:
       - CI=1
+      # RR73_REVIEW=1 docker compose run ... adds the review projects (docs/testing.md).
+      - RR73_REVIEW
 
   wsjtx:
     build: { context: tools/wsjtx }
     image: rr73-wsjtx:latest
+    network_mode: bridge
+    working_dir: /work
+    volumes:
+      - .:/work
+      - ${RR73_CORPUS:-./corpus}:/work/corpus
+
+  minimodem:
+    build: { context: tools/minimodem }
+    image: rr73-minimodem:latest
     network_mode: bridge
     working_dir: /work
     volumes:

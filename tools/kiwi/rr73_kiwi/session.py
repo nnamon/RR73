@@ -13,7 +13,7 @@ from pathlib import Path
 import numpy as np
 
 from rr73_kiwi import IDENT
-from rr73_kiwi.bands import dial_hz
+from rr73_kiwi.bands import dial_hz, mode_of, slot_seconds
 from rr73_kiwi.config import Receiver
 from rr73_kiwi.corpus import slot_stem, write_slot
 from rr73_kiwi.kiwi import IqConnection, StreamEnded
@@ -126,11 +126,12 @@ def run_session(
     record["correction_s"] = correction_s
 
     dial = dial_hz(band)
+    mode = mode_of(band)
     written: list[str] = []
     clipped = [0]
 
     def on_slot(slot: Slot) -> None:
-        path = write_slot(ctx.corpus_root, receiver, dial, slot)
+        path = write_slot(ctx.corpus_root, receiver, dial, slot, mode)
         if path is None:
             log.warning("%s: slot %s already exists; kept the existing files", receiver.id, slot_stem(slot.start_unix))
             return
@@ -145,7 +146,11 @@ def run_session(
             holder["assembler"].set_rate(rate_hz)
         else:
             holder["assembler"] = SlotAssembler(
-                rate_hz, on_slot, correction_s=correction_s, host_offset_s=host_offset_s
+                rate_hz,
+                on_slot,
+                correction_s=correction_s,
+                host_offset_s=host_offset_s,
+                slot_s=slot_seconds(mode),
             )
 
     def on_frame(seq: int, samples: np.ndarray, gps: dict[str, int] | None, arrival: float) -> None:

@@ -2,8 +2,8 @@
 //! compared with `rr73-bench compare`.
 //!
 //! Input is one text file holding, for each slot, a line `== <name>` followed by decodes in
-//! the WSJT-X layout `HHMMSS SNR DT FREQ ~ MESSAGE`, as printed by `jt9` and by ft8_lib's
-//! `decode_ft8`. The name is the slot's path below the corpus without extension
+//! the WSJT-X layout `HHMMSS SNR DT FREQ ~ MESSAGE` (`+` in place of `~` for FT4), as printed
+//! by `jt9` and by ft8_lib's `decode_ft8`. The name is the slot's path below the corpus without extension
 //! (`synthetic/noise/260101_000000_s0001`), any trailing part of it, or the stem when that
 //! is unique. Text after the message that is separated by two or more spaces (country
 //! names, AP markers) is dropped.
@@ -37,9 +37,17 @@ pub struct ImportOptions {
     pub out: PathBuf,
 }
 
+/// Byte index of the mode marker between the frequency and the message: `~` (FT8) or `+`
+/// (FT4) with a space on each side, so a `+` in an SNR or a message never counts.
+fn marker(line: &str) -> Option<usize> {
+    let b = line.as_bytes();
+    (1..b.len().saturating_sub(1))
+        .find(|&i| matches!(b[i], b'~' | b'+') && b[i - 1] == b' ' && b[i + 1] == b' ')
+}
+
 /// Parses one decode line, or `None` for anything else.
 pub fn parse_line(line: &str) -> Option<Entry> {
-    let tilde = line.find('~')?;
+    let tilde = marker(line)?;
     let fields: Vec<&str> = line[..tilde].split_whitespace().collect();
     if fields.len() < 4 {
         return None;
@@ -143,6 +151,9 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
             time_s: 0.0,
             stages: Default::default(),
             stats: Default::default(),
+            stage_s: Vec::new(),
+            step_max_s: 0.0,
+            step_max_by_kind: Default::default(),
             decodes: decoded
                 .iter()
                 .zip(&score.decode_match)
@@ -158,6 +169,8 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
                     matched: m.is_some(),
                     osd: false,
                     osd_distance: 0.0,
+                    stage: 0,
+                    drift_hz_per_s: None,
                 })
                 .collect(),
             entries: expected
@@ -195,6 +208,10 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
             "dt_offset_s": opts.dt_offset_s,
         }),
         reference_key: opts.reference.clone(),
+        audio_s: None,
+        audio_fill: None,
+        silent_s: Vec::new(),
+        then: Vec::new(),
         environment: util::environment(0),
         wall_s: 0.0,
         slim: false,
@@ -224,6 +241,17 @@ mod tests {
         assert!(parse_line("== 191111_110130").is_none());
         assert!(parse_line("Decoded 4 messages").is_none());
         assert!(parse_line("000000 x 1 2 ~  CQ").is_none());
+    }
+
+    #[test]
+    fn parses_ft4_lines() {
+        let e = parse_line("000000  -8  0.0 1052 +  LN4HLS N7BPE R+05").expect("jt9 FT4 line");
+        assert_eq!(
+            (e.text.as_str(), e.freq_hz, e.dt_s, e.snr_db),
+            ("LN4HLS N7BPE R+05", 1052.0, 0.0, -8.0)
+        );
+        let e = parse_line("000000 +13.0 +1.60 1291 +  CQ R7IW LN35").expect("signed SNR and DT");
+        assert_eq!((e.snr_db, e.dt_s), (13.0, 1.6));
     }
 
     #[test]

@@ -48,6 +48,10 @@ pub struct SymbolView<'a> {
     pub time_osr: usize,
     /// Bins per tone spacing.
     pub freq_osr: usize,
+    /// Frames that hold audio throughout, from [`crate::silence::live_frames`]. The search
+    /// and the demodulator skip frames marked `false`; frames past the end of the slice
+    /// count as live, so an empty slice reads every frame.
+    pub live: &'a [bool],
 }
 
 impl<'a> SymbolView<'a> {
@@ -61,6 +65,15 @@ impl<'a> SymbolView<'a> {
     #[inline]
     pub fn tone_bin(&self, bin: i32, tone: usize) -> isize {
         bin as isize + (tone * self.freq_osr) as isize
+    }
+
+    /// `false` when `live` marks frame `frame` as overlapping digital silence.
+    #[inline]
+    pub fn is_live(&self, frame: isize) -> bool {
+        usize::try_from(frame)
+            .ok()
+            .and_then(|f| self.live.get(f))
+            .is_none_or(|&l| l)
     }
 
     /// The values of frame `frame`, or `None` outside the spectrogram.

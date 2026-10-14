@@ -4,6 +4,7 @@
    * location, sending on or off, and removing Wavelog from this phone.
    */
   import BackLink from '../ui/BackLink.svelte';
+  import Icon from '../ui/Icon.svelte';
   import Sheet from '../ui/Sheet.svelte';
   import { href } from '../lib/app/router.svelte';
   import { utcHm } from '../lib/clock/format';
@@ -93,16 +94,14 @@
     {#if addressError}
       <p class="section-foot bad" role="alert">{addressError}</p>
     {:else}
-      <p class="section-foot">Create a read-write API key on the API page in Wavelog. The key stays on this phone.</p>
+      <p class="section-foot">Create a read-write API key on the API page in Wavelog.</p>
     {/if}
   </div>
 
   <div class="section">
     <button class="btn primary wide" disabled={testing} onclick={() => void runTest()}>{testing ? 'Testing connection' : 'Test connection'}</button>
     <p class="result" class:ok={test?.ok} class:bad={test && !test.ok} role="status">
-      {#if testing}
-        Checking the key, the station locations and a test QSO that Wavelog does not store.
-      {:else if test}
+      {#if !testing && test}
         {test.ok ? `Connected${test.version ? ` to Wavelog ${test.version}` : ''} at ${utcHm(test.at)} UTC. The key can read and write.` : test.message}
       {/if}
     </p>
@@ -114,15 +113,16 @@
       <div class="group" role="radiogroup" aria-labelledby="station-head">
         {#each w.stations as s (s.id)}
           <label class="row pick">
-            <input type="radio" name="station" value={s.id} checked={w.stationId === s.id} onchange={() => void setWavelog({ stationId: s.id })} />
+            <input class="visually-hidden" type="radio" name="station" value={s.id} checked={w.stationId === s.id} onchange={() => void setWavelog({ stationId: s.id })} />
             <span class="row-main">
               <span class="row-title">{s.name}</span>
               <span class="row-sub">{s.callsign}{s.grid ? ` · ${s.grid}` : ''}{s.active ? ' · active in Wavelog' : ''}</span>
             </span>
+            {#if w.stationId === s.id}<span class="tick" aria-hidden="true"><Icon name="check" size={20} /></span>{/if}
           </label>
         {/each}
       </div>
-      <p class="section-foot">For QSOs outside an activation, and the default for new activations. Wavelog refuses a QSO whose callsign on air differs from its station location’s callsign, so each activation can choose its own.</p>
+      <p class="section-foot">The callsign on air must match the station location’s callsign.</p>
     </div>
   {/if}
 
@@ -130,8 +130,7 @@
     <div class="group">
       <label class="row">
         <span class="row-main">
-          <span class="row-title">Send QSOs to Wavelog</span>
-          <span class="row-sub">Off keeps them on this phone only</span>
+          <span class="row-title">Use Wavelog</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={w.enabled} onchange={(e) => void setWavelog({ enabled: e.currentTarget.checked })} />
       </label>
@@ -146,7 +145,7 @@
 </section>
 
 <Sheet bind:open={removing} title="Remove Wavelog?">
-  <p class="confirm-text">The address and API key are deleted from this phone. QSOs stay in the log with their delivery history.</p>
+  <p class="confirm-text">Deletes the address and API key. QSOs stay in the log.</p>
   <button class="btn tx full" onclick={() => void remove()}>Remove Wavelog</button>
   <button class="btn full keep" onclick={() => (removing = false)}>Keep Wavelog</button>
 </Sheet>
@@ -185,12 +184,13 @@
     cursor: pointer;
   }
 
-  .pick input {
+  .pick:has(:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  .tick {
     flex: none;
-    width: 22px;
-    height: 22px;
-    margin: 0;
-    accent-color: var(--rr-accent-fill);
+    color: var(--rr-accent);
   }
 
   .center {

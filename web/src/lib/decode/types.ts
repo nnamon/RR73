@@ -1,5 +1,6 @@
 import type { Mode } from '../clock/slots';
 import type { DecoderFailure, Packed } from './protocol';
+import type { WsprDecode } from '../wspr/spots';
 
 /** One message recovered from a slot. Field names match the corpus JSON and rr73-decode. */
 export interface Decode {
@@ -36,8 +37,14 @@ export interface DecoderClient {
   onStatus(fn: (s: DecoderStatus) => void): () => void;
   /** Starts loading the decoder. Safe to call more than once. */
   load(): void;
-  /** Decodes one slot. The samples may be transferred to a worker; callers keep a copy if needed. */
-  decodeSlot(slot: SlotAudio): Promise<Decode[]>;
+  /**
+   * Decodes one slot. The samples may be transferred to a worker; callers keep a copy if
+   * needed. With `more`, later decoder stages may run after the returned decodes, and `more`
+   * receives the decodes they add.
+   */
+  decodeSlot(slot: SlotAudio, more?: (d: Decode[]) => void): Promise<Decode[]>;
+  /** Decodes one WSPR slot: 120 s at 12 kHz from an even minute. The samples may be transferred. `ms` is the time in the decoder. */
+  decodeWspr(samples: Float32Array): Promise<{ decodes: WsprDecode[]; ms: number }>;
   /** Checks text for transmission. */
   pack(text: string, mode: Mode): Promise<Packed>;
   /** Synthesises a transmission at `sampleRate`, peak 1. */

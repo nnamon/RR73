@@ -27,7 +27,7 @@
   const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
-  const ord = (p: 'even' | 'odd') => (p === 'even' ? '1st' : '2nd');
+  const ord = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
 
   function doCall() {
     if (!item) return;
@@ -46,7 +46,7 @@
     </button>
     <ul class="group facts">
       <li class="row">
-        <span class="row-main"><span class="row-title">Last decode</span><span class="row-sub">{utcTime(item.slotStartMs)} · {signed(Math.round(item.decode.snr_db))} dB · DT {dt(item.decode.dt_s)} · {Math.round(item.decode.freq_hz)} Hz</span></span>
+        <span class="row-main"><span class="row-title">Last decode</span><span class="row-sub">{utcTime(item.slotStartMs)} · {signed(Math.round(item.decode.snr_db))} dB · DT {dt(item.decode.dt_s)} s · {Math.round(item.decode.freq_hz)} Hz</span></span>
       </li>
       <li class="row">
         <span class="row-main"><span class="row-title">Message</span><span class="row-sub mono">{item.decode.text}</span></span>

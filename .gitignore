@@ -16,3 +16,7 @@
 /.env
 # OS
 .DS_Store
+
+# Reference data, built by tools/refdata/build.mjs
+/web/public/data/
+/.refdata-cache/

@@ -1,50 +1,62 @@
 <script lang="ts">
   /**
-   * The log: every QSO on this phone by UTC day, the To do list (waiting, refused and changed
+   * The log: every QSO on this phone by UTC day, the To do list (not sent, waiting, refused and changed
    * QSOs and files not yet submitted) and the activations with their files. Export ADIF shares
    * what is shown.
+   *
+   * Beside the list (compact height and regular width) a QSO opens in the detail pane on the
+   * right (QsoEditor) instead of the sheet; in regular width the list column carries the large
+   * title and its bar buttons, as the tabs replace the way back to Operate.
    */
+  import QsoEditor from '../ui/QsoEditor.svelte';
+  import { layout, split } from '../lib/app/layout.svelte';
+  import { qsoPane } from '../lib/log/editor-pane.svelte';
   import ActivationCard from '../ui/ActivationCard.svelte';
   import Icon from '../ui/Icon.svelte';
+  import { practice } from '../lib/state/practice.svelte';
+  import BackLink from '../ui/BackLink.svelte';
   import QsoRow from '../ui/QsoRow.svelte';
   import StationSheet from '../ui/StationSheet.svelte';
-  import { go, route } from '../lib/app/router.svelte';
-  import { utcHm } from '../lib/clock/format';
+  import { go, href, route } from '../lib/app/router.svelte';
   import { buildExport, shareFile } from '../lib/log/files';
-  import { log, markQsoHandled, openEditor, retryQso, sendNow } from '../lib/log/log.svelte';
+  import SendBar from '../ui/SendBar.svelte';
+  import { closeEditor, log, markQsoHandled, openEditor, retryQso } from '../lib/log/log.svelte';
   import { activationFiles, groupByDay, matches, todoQsos } from '../lib/log/view';
   import type { LedgerEntry, Qso } from '../lib/log/types';
+  import { features } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
+  import { storageWaiting } from '../lib/state/storage.svelte';
 
   type View = 'all' | 'todo' | 'activations';
   const PAGE = 100;
 
-  let view = $state<View>(route.path[1] === 'todo' || route.path[1] === 'activations' ? route.path[1] : 'all');
+  let view = $state<View>(route.path[1] === 'todo' || (route.path[1] === 'activations' && features.activations) ? route.path[1] : 'all');
   let query = $state('');
   let shown = $state(PAGE);
   let stationOpen = $state(false);
   let stationQso = $state<Qso | null>(null);
   let status = $state('');
-  let sending = $state(false);
 
   const found = $derived(log.live.filter((q) => matches(q, query)));
   const groups = $derived(groupByDay(found.slice(0, shown), clock.ms));
   const todo = $derived(todoQsos(log.qsos, log.index, log.facts).filter((q) => matches(q, query)));
-  const fileActivations = $derived(log.activations.filter((a) => activationFiles(a, log.qsos, log.index, log.facts).some((f) => f.state !== 'submitted')));
+  // Activation files are part of Activations (Settings › Optional features).
+  const fileActivations = $derived(features.activations ? log.activations.filter((a) => activationFiles(a, log.qsos, log.index, log.facts).some((f) => f.state !== 'submitted')) : []);
   const todoCount = $derived(todo.length + fileActivations.reduce((n, a) => n + activationFiles(a, log.qsos, log.index, log.facts).filter((f) => f.state !== 'submitted').length, 0));
   const activations = $derived(
     log.activations.filter((a) => !query.trim() || a.refs.some((r) => r.ref.includes(query.trim().toUpperCase())) || log.live.some((q) => q.activationId === a.id && matches(q, query))),
   );
-  const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
-  const waiting = $derived(wavelogOn ? log.ledger.filter((e) => e.destinationId === 'wavelog' && e.state === 'waiting').length : 0);
-  const wavelogStatus = $derived(log.outbox.wavelog);
 
-  const views: { id: View; label: string }[] = [
+  const views = $derived<{ id: View; label: string }[]>([
     { id: 'all', label: 'All' },
     { id: 'todo', label: 'To do' },
-    { id: 'activations', label: 'Activations' },
-  ];
+    ...(features.activations ? [{ id: 'activations' as const, label: 'Activations' }] : []),
+  ]);
+  // Turning Activations off while its view shows goes back to All.
+  $effect(() => {
+    if (view === 'activations' && !features.activations) view = 'all';
+  });
 
   function fix(qso: Qso, e: LedgerEntry) {
     if (e.state === 'changed') return void markQsoHandled(qso.id, e.destinationId);
@@ -67,31 +79,61 @@
     status = r.kind === 'downloaded' ? `Downloaded ${file.name}` : r.kind === 'shared' ? `Shared ${file.name}` : '';
   }
 
-  async function send() {
-    sending = true;
-    try {
-      await sendNow();
-    } finally {
-      sending = false;
-    }
-  }
 
-  const waitingText = $derived.by(() => {
-    if (!waiting) return '';
-    const n = `${waiting} ${waiting === 1 ? 'QSO is' : 'QSOs are'} waiting for Wavelog.`;
-    if (!log.online) return `No connection. ${n}`;
-    if (wavelogStatus?.lastError && wavelogStatus.pausedUntil > clock.ms) return `${wavelogStatus.lastError.replace(/ RR73 tries again (later|then)\.$/, '')} ${n} Next try ${utcHm(wavelogStatus.pausedUntil)} UTC.`;
-    if (!log.settings.sendAutomatically) return `${n} Sending automatically is off.`;
-    return n;
+  // Beside the list, the QSO opens in the pane: the sheet stays closed while the Log shows. The
+  // QSO in the pane closes with it, so the sheet does not open in its place on another screen.
+  $effect(() => {
+    if (!split()) return;
+    qsoPane.shown = true;
+    return () => {
+      if (log.editor.open) closeEditor();
+      qsoPane.shown = false;
+    };
   });
+  const opened = $derived(split() && log.editor.open ? log.editor.qsoId : undefined);
+  const title = $derived(practice.on ? 'Practice log' : 'Log');
 </script>
 
-<section class="screen" aria-labelledby="log-title">
-  <div class="topbar">
-    <button class="icon-btn" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
-    <button class="icon-btn" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
-  </div>
-  <h1 id="log-title" class="large-title">Log</h1>
+{#snippet actions()}
+  <button class="bar-button" aria-label="Add QSO" onclick={() => openEditor(null)}><Icon name="plus" size={24} /></button>
+  <button class="bar-button" aria-label="Export ADIF" disabled={!log.live.length} onclick={() => void exportAdif()}><Icon name="share" size={24} /></button>
+{/snippet}
+
+{#if split()}
+  <section class="split" aria-labelledby="log-title">
+    {#if layout.size === 'compact-height'}
+      <BackLink to={href('operate')} label="Operate" {title} id="log-title" trailing={actions} />
+    {/if}
+    <div class="cols">
+      <div class="list-col">
+        {#if layout.size === 'regular'}
+          <div class="nb"><div class="bar-buttons">{@render actions()}</div></div>
+          <h1 class="large-title" id="log-title">{title}</h1>
+        {/if}
+        {@render list()}
+      </div>
+      <div class="detail-col">
+        {#if log.editor.open && opened !== undefined}
+          {#key log.editor}
+            <QsoEditor inline qsoId={opened} onclose={closeEditor} />
+          {/key}
+        {:else}
+          <div class="empty">
+            <h2>No QSO open</h2>
+            <p>Pick a QSO in the list to see and edit it here.</p>
+          </div>
+        {/if}
+      </div>
+    </div>
+  </section>
+{:else}
+  <section class="screen" aria-labelledby="log-title">
+    <BackLink to={href('operate')} label="Operate" {title} id="log-title" trailing={actions} />
+    {@render list()}
+  </section>
+{/if}
+
+{#snippet list()}
 
   {#if log.storageError}
     <p class="banner" role="alert">{log.storageError}</p>
@@ -117,54 +159,50 @@
   </div>
 
   {#if !log.ready}
-    <p class="loading">Loading the log</p>
+    <p class="loading">{storageWaiting() ? 'The log opens when other copies of RR73 close.' : 'Loading the log'}</p>
   {:else if view === 'all'}
     {#if !log.live.length}
       <div class="empty">
         <h2>No QSOs yet</h2>
         <p>QSOs you log on Operate appear here, newest first. Add one by hand with Add QSO.</p>
       </div>
-    {:else if !found.length}
-      <div class="empty"><h2>No QSOs match “{query.trim()}”</h2><p>Search by callsign, grid, park or summit.</p></div>
     {:else}
-      {#each groups as g (g.key)}
-        <div class="section">
-          <h2 class="section-head">{g.label}</h2>
-          <ul class="group">
-            {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
-          </ul>
-        </div>
-      {/each}
-      {#if found.length > shown}
-        <div class="section more"><button class="btn" onclick={() => (shown += PAGE)}>Show {Math.min(PAGE, found.length - shown)} older QSOs</button></div>
-      {/if}
-      {#if activations.length && !query.trim()}
-        <div class="section">
-          <h2 class="section-head">Activations</h2>
-          {#each activations.slice(0, 3) as a (a.id)}<div class="group card"><ActivationCard activation={a} /></div>{/each}
-        </div>
+      <SendBar />
+      {#if !found.length}
+        <div class="empty"><h2>No QSOs match “{query.trim()}”</h2><p>Search by callsign, grid, park or summit.</p></div>
+      {:else}
+        {#each groups as g (g.key)}
+          <div class="section">
+            <h2 class="section-head">{g.label}</h2>
+            <ul class="group">
+              {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
+            </ul>
+          </div>
+        {/each}
+        {#if found.length > shown}
+          <div class="section more"><button class="btn" onclick={() => (shown += PAGE)}>Show {Math.min(PAGE, found.length - shown)} older QSOs</button></div>
+        {/if}
+        {#if features.activations && activations.length && !query.trim()}
+          <div class="section">
+            <h2 class="section-head">Activations</h2>
+            {#each activations.slice(0, 3) as a (a.id)}<div class="group card"><ActivationCard activation={a} /></div>{/each}
+          </div>
+        {/if}
       {/if}
     {/if}
   {:else if view === 'todo'}
-    {#if waitingText}
-      <div class="section">
-        <div class="sendbar">
-          <p class="sendtext" role="status">{waitingText}</p>
-          <button class="btn compact primary" disabled={sending || !log.online} onclick={() => void send()}>{sending ? 'Sending' : 'Send now'}</button>
-        </div>
-      </div>
-    {/if}
+    <SendBar />
     {#if !todo.length && !fileActivations.length}
       <div class="empty">
         <h2>Nothing to do</h2>
-        <p>QSOs waiting to send, refused or changed, and activation files not yet submitted, appear here.</p>
+        <p>QSOs not sent to Wavelog, refused or changed, and activation files not yet submitted, appear here.</p>
       </div>
     {:else}
       {#if todo.length}
         <div class="section">
           <h2 class="section-head">QSOs</h2>
           <ul class="group">
-            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
+            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
           </ul>
         </div>
       {/if}
@@ -187,36 +225,58 @@
         <div class="group card"><ActivationCard activation={a} /></div>
         {#if qsos.length}
           <ul class="group sub">
-            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} />{/each}
+            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
           </ul>
         {/if}
       </div>
     {/each}
   {/if}
   <p class="visually-hidden" role="status">{status}</p>
-</section>
+{/snippet}
 
 <StationSheet bind:open={stationOpen} qso={stationQso} />
 
 <style>
-  .topbar {
+  /* List and detail: each column scrolls on its own. */
+  .split {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    padding-top: var(--rr-safe-top);
+    background: var(--rr-bg);
+  }
+
+  :global([data-size='regular']) .split {
+    padding-top: 0;
+  }
+
+  .cols {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+  }
+
+  .list-col {
+    flex: none;
+    width: clamp(var(--rr-list-column-narrow), 30vw, var(--rr-list-column));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 0 var(--rr-space-8) var(--rr-safe-left);
+    box-shadow: inset calc(-1 * var(--rr-hairline)) 0 0 var(--rr-sep-strong);
+  }
+
+  .nb {
     display: flex;
     justify-content: flex-end;
-    gap: var(--rr-space-1);
-    padding: 0 var(--rr-space-2);
-  }
-
-  .icon-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: var(--rr-tap);
     height: var(--rr-tap);
-    color: var(--rr-accent);
+    padding-right: var(--rr-space-2);
   }
 
-  .icon-btn:disabled {
-    color: var(--rr-label3);
+  .detail-col {
+    flex: 1;
+    min-width: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .search {
@@ -226,7 +286,7 @@
     height: var(--rr-tap);
     padding: 0 var(--rr-space-2);
     border-radius: var(--rr-radius-l);
-    background: var(--rr-fill-bg);
+    background: var(--rr-fill3);
     color: var(--rr-label3);
   }
 
@@ -278,21 +338,6 @@
     line-height: var(--rr-leading-sub);
   }
 
-  .sendbar {
-    display: flex;
-    gap: var(--rr-space-3);
-    align-items: center;
-    padding: var(--rr-space-2) var(--rr-space-2) var(--rr-space-2) var(--rr-space-4);
-    border-radius: var(--rr-radius-xl);
-    background: var(--rr-warn-soft);
-  }
-
-  .sendtext {
-    flex: 1;
-    min-width: 0;
-    font-size: var(--rr-text-foot);
-    line-height: var(--rr-leading-foot);
-  }
 
   .loading {
     padding: var(--rr-space-8) var(--rr-space-4);

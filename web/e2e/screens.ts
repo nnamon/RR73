@@ -1,7 +1,8 @@
 // The app's screens, for the layout, accessibility and screenshot checks. Screens with a seed show
 // a log written into IndexedDB first (e2e/log-data.ts).
 import type { Page } from '@playwright/test';
-import { mockupLog, seed } from './log-data';
+import type { Features } from '../src/lib/state/settings.svelte';
+import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
 import { FIXED_TIME } from './time';
 
 export { FIXED_TIME };
@@ -13,32 +14,56 @@ export interface Screen {
   path: string;
   heading: string;
   seed?: SeedName;
+  /** Optional features to turn on first; all are off on a new install. */
+  features?: Partial<Features>;
+  /** Practice band on (Settings › Practice band), stored before the screen opens. */
+  practice?: boolean;
 }
+
+const ACTIVATIONS = { activations: true };
 
 export const SCREENS: readonly Screen[] = [
   { name: 'operate', path: '#/operate', heading: 'Operate' },
   { name: 'log', path: '#/log', heading: 'Log' },
-  { name: 'spots', path: '#/spots', heading: 'Spots' },
+  { name: 'spots', path: '#/spots', heading: 'Spots', features: ACTIVATIONS },
+  { name: 'spots-sources', path: '#/spots', heading: 'Spots', features: { potaSpots: true, clusterSpots: true } },
   { name: 'settings', path: '#/settings', heading: 'Settings' },
+  { name: 'settings-features', path: '#/spots', heading: 'Settings' },
   { name: 'radio', path: '#/settings/radio', heading: 'Radio and audio' },
+  { name: 'ft8-settings', path: '#/settings/ft8', heading: 'FT8 and FT4' },
+  { name: 'wspr-settings', path: '#/settings/wspr', heading: 'WSPR' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
   { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
+  { name: 'colours', path: '#/settings/colours', heading: 'Decode colours' },
   { name: 'wavelog', path: '#/settings/logging/wavelog', heading: 'Wavelog' },
   { name: 'log-all', path: '#/log', heading: 'Log', seed: 'log' },
   { name: 'log-todo', path: '#/log/todo', heading: 'Log', seed: 'log' },
-  { name: 'log-activations', path: '#/log/activations', heading: 'Log', seed: 'log' },
-  { name: 'spots-running', path: '#/spots', heading: 'Spots', seed: 'running' },
-  { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running' },
-  { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log' },
+  { name: 'log-activations', path: '#/log/activations', heading: 'Log', seed: 'log', features: ACTIVATIONS },
+  { name: 'spots-running', path: '#/spots', heading: 'Spots', seed: 'running', features: ACTIVATIONS },
+  { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running', features: ACTIVATIONS },
+  { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log', features: ACTIVATIONS },
   { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
+  { name: 'practice', path: '#/settings/practice', heading: 'Practice band' },
+  { name: 'practice-on', path: '#/settings/practice', heading: 'Practice band', practice: true },
+  { name: 'operate-practice', path: '#/operate', heading: 'Operate', practice: true },
+  { name: 'log-practice', path: '#/log', heading: 'Practice log', practice: true },
 ];
 
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName) {
+/**
+ * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
+ * in first: a path such as Spots leads elsewhere while its features are off.
+ */
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
+  if (withSeed || features || practice) {
+    await page.goto('./');
+    const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
+    const all = features ? withFeatures(data, features) : data;
+    await seed(page, practice ? { ...all, kv: [...all.kv, { key: 'practice', value: { on: true } }] } : all);
+  }
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
-  if (withSeed) await seed(page, mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }));
   await page.waitForTimeout(300);
 }
 
@@ -46,6 +71,7 @@ export interface SheetCase {
   name: string;
   path: string;
   seed?: SeedName;
+  features?: Partial<Features>;
   title: string;
   /** Opens the sheet from the screen at `path`. */
   open(page: Page): Promise<void>;
@@ -55,9 +81,10 @@ export interface SheetCase {
 export const LOG_SHEETS: readonly SheetCase[] = [
   { name: 'add-qso', path: '#/log', title: 'Add QSO', open: (page) => page.getByRole('button', { name: 'Add QSO' }).click() },
   { name: 'edit-qso', path: '#/log', seed: 'log', title: 'Edit QSO', open: (page) => page.getByRole('button', { name: /^VK2ESN/ }).first().click() },
-  { name: 'start-activation', path: '#/spots', title: 'Start activation', open: (page) => page.getByRole('button', { name: /^Start activation/ }).click() },
-  { name: 'edit-activation', path: '#/spots', seed: 'running', title: 'Edit activation', open: (page) => page.getByRole('button', { name: 'Edit activation' }).click() },
-  { name: 'end-activation', path: '#/spots', seed: 'running', title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
+  { name: 'start-activation', path: '#/spots', features: ACTIVATIONS, title: 'Start activation', open: (page) => page.getByRole('button', { name: /^Start activation/ }).click() },
+  { name: 'edit-activation', path: '#/spots', seed: 'running', features: ACTIVATIONS, title: 'Edit activation', open: (page) => page.getByRole('button', { name: 'Edit activation' }).click() },
+  { name: 'end-activation', path: '#/spots', seed: 'running', features: ACTIVATIONS, title: 'End activation?', open: (page) => page.getByRole('button', { name: 'End activation…' }).click() },
   { name: 'station', path: '#/log', seed: 'station', title: 'Choose a station location', open: (page) => page.getByRole('button', { name: 'Fix the QSO with YB0AZK' }).click() },
+  { name: 'colour', path: '#/settings/colours', title: 'New call', open: (page) => page.getByRole('button', { name: 'Change colour: New call', exact: true }).click() },
   { name: 'remove-wavelog', path: '#/settings/logging/wavelog', seed: 'log', title: 'Remove Wavelog?', open: (page) => page.getByRole('button', { name: 'Remove Wavelog…' }).click() },
 ];

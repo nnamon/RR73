@@ -4,7 +4,7 @@
  * carries audio, so the bench can skip or weight slots with holes.
  */
 
-import { SLOT_RATE, type Mode } from '../clock/slots';
+import { SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
 import { isoUtc } from '../clock/format';
 
 export interface SlotSidecar {
@@ -41,7 +41,7 @@ export interface SidecarInput {
   input: string;
   captureRateHz: number;
   appVersion: string;
-  /** Correction applied to the phone's clock, s (AudioClockMapper.offsetS). */
+  /** Receive calibration applied to captured audio, s (AudioClockMapper.inputOffsetS). */
   offsetS: number;
   filled: number;
   lateStart: boolean;

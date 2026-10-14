@@ -16,7 +16,9 @@ pub const PRESETS: &[&str] = &["baseline", "subtract-3", "subtract-3-osd1", "sub
 #[derive(Debug, Clone, PartialEq, thiserror::Error)]
 pub enum ConfigError {
     /// No preset has this name.
-    #[error("unknown preset {0:?}; known presets: baseline, subtract-3, subtract-3-osd1, subtract-3-osd2")]
+    #[error(
+        "unknown preset {0:?}; known presets: baseline, subtract-3, subtract-3-osd1, subtract-3-osd2, wspr, wspr-deep"
+    )]
     UnknownPreset(String),
     /// An override is not `key=value`.
     #[error("override {0:?} is not key=value")]
@@ -65,6 +67,10 @@ pub struct SpectrogramParams {
     pub freq_min_hz: f32,
     /// Highest frequency analysed, in Hz. Candidates keep all tones at or below it.
     pub freq_max_hz: f32,
+    /// Window length in symbols (1 to `freq_osr`), centred in the FFT with zero padding
+    /// around it. `None` spans the whole FFT (`freq_osr` symbols), as ft8_lib does.
+    #[serde(default)]
+    pub window_symbols: Option<usize>,
 }
 
 /// Candidate search implementations.
@@ -94,6 +100,10 @@ pub struct SearchParams {
     pub ft4_dt_min_s: f32,
     /// FT4 DT search range end, in seconds from the nominal start.
     pub ft4_dt_max_s: f32,
+    /// Leave spectrogram frames that overlap digital silence out of the sync score
+    /// (`crate::silence`).
+    #[serde(default)]
+    pub skip_silent_frames: bool,
 }
 
 /// Refinement implementations.
@@ -129,6 +139,10 @@ pub struct DemodParams {
     pub kind: DemodKind,
     /// Variance the 174 LLRs are scaled to (ft8_lib uses 24).
     pub llr_variance: f32,
+    /// Erase symbols in spectrogram frames that overlap digital silence and leave them out
+    /// of the variance (`crate::silence`).
+    #[serde(default)]
+    pub skip_silent_frames: bool,
 }
 
 /// LDPC decoder implementations.
@@ -164,6 +178,9 @@ pub struct LdpcParams {
     /// Largest reliability-weighted distance of an OSD codeword, as a fraction of the total
     /// reliability.
     pub osd_max_distance: f32,
+    /// Count erased bits (symbols outside the audio) as hard errors of OSD codewords.
+    #[serde(default)]
+    pub osd_erasures_as_errors: bool,
 }
 
 /// Validator implementations.
@@ -238,6 +255,7 @@ impl DecoderConfig {
                 window: WindowKind::Hann,
                 freq_min_hz: 200.0,
                 freq_max_hz: 3000.0,
+                window_symbols: None,
             },
             search: SearchParams {
                 kind: SearchKind::Costas,
@@ -247,6 +265,7 @@ impl DecoderConfig {
                 ft8_dt_max_s: 2.5,
                 ft4_dt_min_s: -1.0,
                 ft4_dt_max_s: 1.0,
+                skip_silent_frames: false,
             },
             refine: RefineParams {
                 kind: RefineKind::None,
@@ -254,6 +273,7 @@ impl DecoderConfig {
             demod: DemodParams {
                 kind: DemodKind::MaxLog,
                 llr_variance: 24.0,
+                skip_silent_frames: false,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,
@@ -264,6 +284,7 @@ impl DecoderConfig {
                 osd_source: OsdSource::Channel,
                 osd_max_hard_errors: 174,
                 osd_max_distance: 1.0,
+                osd_erasures_as_errors: false,
             },
             validate: ValidateParams {
                 kind: ValidateKind::CrcUnpack,
@@ -296,8 +317,9 @@ impl DecoderConfig {
     /// `subtract-3` with ordered-statistics decoding of `order` (1 or 2) after failed belief
     /// propagation: reliabilities from the channel LLRs, flips among the `window` least
     /// reliable information positions, at most 30 hard errors, a weighted distance of at
-    /// most 0.07, an SNR of at least -24 dB, and OSD messages limited to plausible standard
-    /// messages. The limits come from `docs/experiments/0002-osd.md`.
+    /// most 0.07 (erased bits of a partial slot count as hard errors), an SNR of at least
+    /// -24 dB, and OSD messages limited to plausible standard messages. The limits come from
+    /// `docs/experiments/0002-osd.md` and `docs/experiments/0003-anytime.md`.
     fn subtract_3_osd(order: u8, window: usize) -> Self {
         let mut c = Self::subtract_3();
         c.ldpc.kind = LdpcKind::BpOsd;
@@ -306,6 +328,7 @@ impl DecoderConfig {
         c.ldpc.osd_source = OsdSource::Channel;
         c.ldpc.osd_max_hard_errors = 30;
         c.ldpc.osd_max_distance = 0.07;
+        c.ldpc.osd_erasures_as_errors = true;
         c.validate.osd_messages = OsdMessages::Standard;
         c
     }
@@ -325,27 +348,8 @@ impl DecoderConfig {
     /// the configuration. Values parse as JSON when they can (numbers, booleans) and as
     /// strings otherwise (`ldpc.kind=min-sum`).
     pub fn with_overrides<S: AsRef<str>>(&self, overrides: &[S]) -> Result<Self, ConfigError> {
-        let mut value = serde_json::to_value(self).map_err(|e| ConfigError::Invalid(e.to_string()))?;
-        for item in overrides {
-            let item = item.as_ref();
-            let (key, raw) = item
-                .split_once('=')
-                .ok_or_else(|| ConfigError::BadOverride(item.to_string()))?;
-            let key = key.trim();
-            let raw = raw.trim();
-            let parsed = serde_json::from_str::<serde_json::Value>(raw)
-                .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()));
-            let slot = key
-                .split('.')
-                .try_fold(&mut value, |v, part| v.get_mut(part))
-                .ok_or_else(|| ConfigError::UnknownKey(key.to_string()))?;
-            if slot.is_object() {
-                return Err(ConfigError::UnknownKey(format!(
-                    "{key} (a section, set one of its fields)"
-                )));
-            }
-            *slot = parsed;
-        }
+        let value = serde_json::to_value(self).map_err(|e| ConfigError::Invalid(e.to_string()))?;
+        let value = apply_overrides(value, overrides)?;
         let config: Self = serde_json::from_value(value).map_err(|e| ConfigError::Invalid(e.to_string()))?;
         config.check()?;
         Ok(config)
@@ -357,6 +361,9 @@ impl DecoderConfig {
         let sp = &self.spectrogram;
         if !(1..=16).contains(&sp.time_osr) || !(1..=16).contains(&sp.freq_osr) {
             return bad("time_osr and freq_osr must be 1 to 16");
+        }
+        if sp.window_symbols.is_some_and(|w| w == 0 || w > sp.freq_osr) {
+            return bad("window_symbols must be 1 to freq_osr");
         }
         if !(sp.freq_min_hz >= 0.0 && sp.freq_max_hz > sp.freq_min_hz && sp.freq_max_hz <= 6000.0) {
             return bad("frequency range must satisfy 0 <= min < max <= 6000 Hz");
@@ -392,6 +399,35 @@ impl DecoderConfig {
         }
         Ok(())
     }
+}
+
+/// Applies `key=value` overrides to the JSON form of a configuration. Keys are dotted paths;
+/// values parse as JSON when they can and as strings otherwise.
+pub(crate) fn apply_overrides<S: AsRef<str>>(
+    mut value: serde_json::Value,
+    overrides: &[S],
+) -> Result<serde_json::Value, ConfigError> {
+    for item in overrides {
+        let item = item.as_ref();
+        let (key, raw) = item
+            .split_once('=')
+            .ok_or_else(|| ConfigError::BadOverride(item.to_string()))?;
+        let key = key.trim();
+        let raw = raw.trim();
+        let parsed = serde_json::from_str::<serde_json::Value>(raw)
+            .unwrap_or_else(|_| serde_json::Value::String(raw.to_string()));
+        let slot = key
+            .split('.')
+            .try_fold(&mut value, |v, part| v.get_mut(part))
+            .ok_or_else(|| ConfigError::UnknownKey(key.to_string()))?;
+        if slot.is_object() {
+            return Err(ConfigError::UnknownKey(format!(
+                "{key} (a section, set one of its fields)"
+            )));
+        }
+        *slot = parsed;
+    }
+    Ok(value)
 }
 
 impl Default for DecoderConfig {
@@ -455,5 +491,15 @@ mod tests {
             base.with_overrides(&["spectrogram.freq_osr=-1"]),
             Err(ConfigError::Invalid(_))
         ));
+        let padded = base
+            .with_overrides(&["spectrogram.freq_osr=4", "spectrogram.window_symbols=2"])
+            .expect("padded window");
+        assert_eq!(padded.spectrogram.window_symbols, Some(2));
+        for bad in ["spectrogram.window_symbols=0", "spectrogram.window_symbols=3"] {
+            assert!(
+                matches!(base.with_overrides(&[bad]), Err(ConfigError::Invalid(_))),
+                "{bad}"
+            );
+        }
     }
 }

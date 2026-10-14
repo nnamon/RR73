@@ -238,6 +238,8 @@ mod tests {
             matched,
             osd: false,
             osd_distance: 0.0,
+            stage: 0,
+            drift_hz_per_s: None,
         }
     }
 
@@ -254,6 +256,9 @@ mod tests {
             time_s: 0.01,
             stages: Default::default(),
             stats: Default::default(),
+            stage_s: Vec::new(),
+            step_max_s: 0.0,
+            step_max_by_kind: Default::default(),
             decodes,
             entries: Vec::new(),
             error: None,
@@ -267,6 +272,10 @@ mod tests {
             overrides: Vec::new(),
             config: serde_json::Value::Null,
             reference_key: None,
+            audio_s: None,
+            audio_fill: None,
+            silent_s: Vec::new(),
+            then: Vec::new(),
             environment: Environment {
                 os: "linux".into(),
                 arch: "x86_64".into(),

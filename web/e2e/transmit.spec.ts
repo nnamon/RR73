@@ -1,7 +1,8 @@
 // A QSO end to end in Chromium. The fake microphone plays the other station (qso-script.ts):
 // CQ, then a report, then RR73, one slot each with our slots silent. The app's output is recorded
 // in the page (tap.ts) and decoded in Node with the app's own wasm decoder. The QSO lands in the
-// Log, waits for a mock Wavelog (route interception; no real server) and goes on Send now.
+// Log as not sent to a mock Wavelog (route interception; no real server) and goes when the operator
+// taps Send.
 import { expect, test } from '@playwright/test';
 import { captured, decodeCaptured, slotOf, SLOT_MS, type Captured } from './tap';
 import { loadWasm } from './wasm';
@@ -12,7 +13,7 @@ import { mockWavelog, seed, wavelogOnly } from './log-data';
 test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent to Wavelog', async ({ page }) => {
   test.setTimeout(300_000);
   const wavelog = await mockWavelog(page);
-  // Wavelog set up, sending by hand, so the QSO stays waiting until Send now.
+  // Wavelog set up, sending by hand, so the QSO stays not sent until the operator sends it.
   const dock = await prepare(page, (p) => seed(p, wavelogOnly({ sendAutomatically: false })));
   await startAudioAtBoundary(page);
   const list = page.getByTestId('decode-list');
@@ -24,7 +25,7 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
   await expect(cq).toBeVisible({ timeout: 115_000 });
   const tappedAt = await page.evaluate(() => Date.now());
   await cq.dblclick();
-  await expect(dock.getByText(DX.call, { exact: true })).toBeVisible();
+  await expect(dock.getByText(new RegExp(`${DX.call} 9V1NE OJ11`))).toBeVisible();
   let rpt = '';
 
   const wasm = (await loadWasm())!;
@@ -43,13 +44,13 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
     const notice = page.getByRole('status').filter({ hasText: `Logged ${DX.call}` });
     await expect(notice).toBeVisible({ timeout: 150_000 });
     const report = row(`9V1NE ${DX.call} -12`);
-    const snr = Number((await report.locator('.c-db').textContent())!.replace('−', '-'));
+    const snr = parseInt((await report.locator('.c-db').textContent())!.replace('−', '-'));
     rpt = `${snr < 0 ? '-' : '+'}${String(Math.abs(snr)).padStart(2, '0')}`;
     await expect(notice).toContainText(`Logged ${DX.call} 20m FT8 −${rpt.slice(1)} / −12`);
     await expect(notice.getByRole('button', { name: `Undo the QSO with ${DX.call}` })).toBeVisible();
     // Then 73 goes out, and the QSO is over.
     await expect.poll(async () => { const t = (await captured(page)).at(-1); return t ? textOf(t) : ''; }, { timeout: 40_000, intervals: [1000] }).toBe(`${DX.call} 9V1NE 73`);
-    await expect(dock.getByRole('button', { name: 'Call CQ' })).toBeVisible();
+    await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
   } finally {
     test.info().annotations.push({ type: 'qso', description: JSON.stringify({ tappedAt: new Date(tappedAt).toISOString().slice(11, 23), sent: await describe() }) });
   }
@@ -71,16 +72,15 @@ test('a QSO from a double-tap on a CQ: Tx1, Tx3 and Tx5 on time, logged and sent
 
   // What we sent shows in the list as amber rows.
   for (const t of [`${DX.call} 9V1NE OJ11`, `${DX.call} 9V1NE R${rpt}`, `${DX.call} 9V1NE 73`]) await expect(row(t)).toHaveClass(/k-sent/);
-  // In the Log with the band, grid and reports, waiting for Wavelog.
-  await page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Log' }).click();
+  // In the Log with the band, grid and reports, not sent until the operator sends it.
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Log' }).click();
   const entry = page.locator('li.lr', { has: page.getByText(DX.call, { exact: true }) });
   await expect(entry).toHaveCount(1);
   await expect(entry).toContainText(`20m FT8 · 14.076 · ${DX.grid} · −${rpt.slice(1)} / −12`);
-  await expect(entry).toContainText('Wavelog · waiting');
+  await expect(entry).toContainText('Wavelog · not sent');
   expect(wavelog.requests.filter((r) => r.path === '/api/qso')).toHaveLength(0);
-  await page.locator('label.seg-i', { hasText: 'To do' }).click();
-  await page.getByRole('button', { name: 'Send now' }).click();
-  await expect(page.getByText('Nothing to do')).toBeVisible();
+  await page.getByRole('button', { name: 'Send 1 QSO to Wavelog' }).click();
+  await expect(entry.getByText('Wavelog: delivered')).toBeAttached();
   const posted = wavelog.requests.filter((r) => r.path === '/api/qso');
   expect(posted).toHaveLength(1);
   const adif = String(posted[0].body?.string);

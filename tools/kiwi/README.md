@@ -1,6 +1,6 @@
 # rr73-kiwi
 
-`rr73-kiwi` records FT8 slots from KiwiSDR receivers into the RR73 corpus, holding one channel per receiver and leaving channels free for other listeners.
+`rr73-kiwi` records FT8 and WSPR slots from KiwiSDR receivers into the RR73 corpus, holding one channel per receiver and leaving channels free for other listeners.
 
 ## Setup
 
@@ -27,7 +27,7 @@ Every slot gets `reference.jt9-d3` in a second step, because jt9 lives in the `w
 | Option | Meaning |
 | --- | --- |
 | `--receiver ID` | Receiver from `receivers.toml`; repeat for more. Default: all. |
-| `--band 40m` | Band to record; repeat to rotate per session. Default: the receiver's plan for the UTC time. |
+| `--band 40m` | Band to record; repeat to rotate per session. Default: the receiver's plan for the UTC time. Bands named with `-wspr` (`20m-wspr`, dial 14.0956 MHz; also 40m, 30m, 17m, 15m and 10m) record WSPR. |
 | `--minutes N` | Session length, 1 to 15 minutes. Default: the receiver's `session_minutes`. |
 | `--sessions N` | Sessions to record before exiting; 0 for no limit. Default: 1. |
 | `--hours H` | Start no session after H hours. |
@@ -70,6 +70,15 @@ The rules are in `rr73_kiwi/politeness.py` and apply to every receiver. A receiv
 - The receiver's own limits come from its configuration after connecting (`inactivity_timeout_mins`, `ip_limit_mins`). Sessions end 1 minute before the inactivity timeout. With a per-address daily limit, the recorder counts its connected time over 24 hours and stops starting sessions when less than 2 minutes would remain. The SARTS receiver reports a 90-minute inactivity timeout and no daily limit.
 - A receiver that closes a running session counts as an error. Any message from the receiver whose name or value mentions a limit, timeout, inactivity or kick (configuration messages aside), or kiwiclient's time-limit error, marks the session as time-limited and gives a 6-hour wait. The messages a real receiver sends at its limits have not been observed, so this match is broad on purpose. `too_busy`, a redirect or a password refusal counts as busy. The WebSocket opens with one HTTP handshake: a redirect ends the attempt, and rr73-kiwi never follows it to another host.
 - The next allowed attempt is saved before every connection in `corpus/kiwi/<receiver>/.rr73-kiwi-state`, so restarts keep the waits. An exclusive `flock` on `.rr73-kiwi-lock` in the same directory, held for the whole session, keeps a second process off the receiver. The kernel releases it when the holder exits, so a crash leaves no stale lock. Tested across two containers on a Docker Desktop bind mount; on a file system without `flock` the recorder stops with exit status 1.
+
+## WSPR
+
+A `-wspr` band tunes the WSPR dial frequency (USB; signals sit 1400 to 1600 Hz above it) and cuts the stream into 120 s slots starting in even UTC minutes: 1 440 000 samples, sidecar mode `WSPR`. Everything else (passband, resampling, timing, politeness) is as for FT8. A 12-minute session gives 5 slots. Reference decodes come from `wsprd`:
+
+```sh
+docker compose run --rm kiwi record --receiver sarts-web888 --band 20m-wspr --minutes 12
+docker compose run --rm wsjtx python3 tools/wsjtx/wspr_reference.py corpus/kiwi
+```
 
 ## Audio and timing
 
