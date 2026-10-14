@@ -14,6 +14,19 @@ allowed_origins = ["https://nnamon.github.io"]
 # Requests one key, or one address on an open instance, may make per minute.
 requests_per_minute = 120
 
+[pskreporter]
+# Reports the app's decodes to PSK Reporter over UDP, by its developer page's rules.
+enabled = false
+host = "report.pskreporter.info"
+# 4739 for reports. Port 14739 on the same host is PSK Reporter's test listener: its analysis
+# page, https://pskreporter.info/cgi-bin/psk-analysis.pl, lists the last packets from the address
+# that opens it, so open it over IPv4 from QSP's network.
+port = 4739
+# Marks every record as a test, as the developer page asks while developing.
+test = false
+# Shortest time between one station's datagrams, s: 300 at least.
+interval_s = 300
+
 [sdr]
 # Whether users may name receivers of their own, by kind and address.
 user_receivers = false

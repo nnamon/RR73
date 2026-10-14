@@ -74,7 +74,7 @@ Time comes from QSP's clock, which its host keeps by NTP. A receiver's GPS time 
 Each part is built against the real service and tested against a small stand-in. QSP has no mock mode.
 
 1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app. Shipped in 0.16.0.
-2. PSK Reporter: reports through QSP, who heard you from the MQTT feed.
+2. PSK Reporter: reports through QSP (built), who heard you from the MQTT feed.
 3. WSPRnet uploads.
 
 ## PSK Reporter
@@ -92,7 +92,11 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 - Frequency is the RF frequency: dial plus audio, in Hz. Mode is the ADIF mode or submode: FT8, FT4.
 - A datagram stays under 1400 bytes.
 
-The phone sends its decodes to QSP at most once a minute. It sends each station once per band and slot and keeps what QSP has not acknowledged.
+- Port 14739 on the same host is a test listener. Its analysis page (https://pskreporter.info/cgi-bin/psk-analysis.pl) lists the last packets from the address that opens it. `pskreporter.info` itself is behind Cloudflare and takes no UDP.
+
+QSP keeps one report stream per receiving station: its own observation domain, sequence number and timer. All streams send from one UDP socket. `POST /v1/pskreporter/receptions` takes a station and up to 500 spots and answers what was taken, what repeated a recent report, and what was refused. `GET /v1/pskreporter/status?callsign=` shows what waits and what went.
+
+The app reports only what the operator's radio hears. Decodes from the practice band or a web SDR are left out: their signals or antenna belong to someone else. It reports FT8 and FT4, the sender of each message once per band and slot, with the grid the message carried. Hashed callsigns are left out. It sends to QSP at most once a minute, 500 spots at most, and keeps up to 1000 while the relay is unreachable. A refusal from the relay drops them. Settings › PSK Reporter turns reports on, off by default, and takes the antenna.
 
 ## WSPRnet
 

@@ -14,6 +14,7 @@
   import PracticeSettings from './views/PracticeSettings.svelte';
   import RelaySettings from './views/RelaySettings.svelte';
   import WebSdrSettings from './views/WebSdrSettings.svelte';
+  import PskReporterSettings from './views/PskReporterSettings.svelte';
   import FtSettings from './views/FtSettings.svelte';
   import WsprSettings from './views/WsprSettings.svelte';
   import RttySettings from './views/RttySettings.svelte';
@@ -188,6 +189,8 @@
     <RelaySettings />
   {:else if sub === 'sdr'}
     <WebSdrSettings />
+  {:else if sub === 'pskreporter'}
+    <PskReporterSettings />
   {:else if sub === 'ft8'}
     <FtSettings />
   {:else if sub === 'wspr'}

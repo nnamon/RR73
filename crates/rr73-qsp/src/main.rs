@@ -7,7 +7,7 @@ use std::process::ExitCode;
 use std::time::Duration;
 use tracing_subscriber::EnvFilter;
 
-/// QSP, the relay RR73 uses to receive from web SDRs.
+/// QSP, the relay RR73 uses for the services a web page cannot reach directly.
 #[derive(Parser)]
 #[command(version)]
 struct Args {
@@ -30,7 +30,17 @@ async fn main() -> ExitCode {
         }
     };
     let listen = config.listen;
+    let psk = config.pskreporter.clone();
     let state = AppState::new(config);
+    if psk.enabled {
+        tracing::info!(
+            "PSK Reporter: reports to {}:{}{}",
+            psk.host,
+            psk.port,
+            if psk.test { ", marked as tests" } else { "" }
+        );
+        tokio::spawn(rr73_qsp::pskreporter::run(state.reporter(), psk.host, psk.port));
+    }
     let sweeper = state.clone();
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(15));

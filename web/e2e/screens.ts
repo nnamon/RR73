@@ -21,6 +21,8 @@ export interface Screen {
   practice?: boolean;
   /** A relay added with Web SDR on (relay-stand-in.ts), stored before the screen opens. */
   relay?: boolean;
+  /** PSK Reporter reports on, with an antenna, stored before the screen opens. */
+  psk?: boolean;
 }
 
 const ACTIVATIONS = { activations: true };
@@ -55,21 +57,23 @@ export const SCREENS: readonly Screen[] = [
   { name: 'web-sdr', path: '#/settings/sdr', heading: 'Web SDR' },
   { name: 'web-sdr-set-up', path: '#/settings/sdr', heading: 'Web SDR', relay: true },
   { name: 'operate-web-sdr', path: '#/operate', heading: 'Operate', relay: true },
+  { name: 'psk-reporter', path: '#/settings/pskreporter', heading: 'PSK Reporter' },
+  { name: 'psk-reporter-on', path: '#/settings/pskreporter', heading: 'PSK Reporter', relay: true, psk: true },
 ];
 
 /**
  * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false) {
+export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false, psk = false) {
   await page.emulateMedia({ colorScheme: theme });
   await page.clock.setFixedTime(FIXED_TIME);
   if (relay) await routeRelay(page);
-  if (withSeed || features || practice || relay) {
+  if (withSeed || features || practice || relay || psk) {
     await page.goto('./');
     const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
     const all = features ? withFeatures(data, features) : data;
-    const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: RELAY_SET_UP }] : [])];
+    const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: RELAY_SET_UP }] : []), ...(psk ? [{ key: 'pskreporter', value: { on: true, antenna: 'Vertical, 10 m up' } }] : [])];
     await seed(page, { ...all, kv });
   }
   await page.goto(`./${path}`);

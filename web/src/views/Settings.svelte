@@ -12,6 +12,7 @@
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { relay, relayName } from '../lib/state/relay.svelte';
+  import { pskReporter } from '../lib/state/pskreporter.svelte';
   import { presetLabel, presetOf } from '../lib/decode/highlight';
   import { loggingSummary as logging, radioSummary as radio } from '../lib/state/summaries';
 
@@ -245,6 +246,11 @@
       <a class="row link" href={href('settings', 'sdr')}>
         <span class="row-main"><span class="row-title">Web SDR</span></span>
         <span class="row-value">{relay.sdrOn ? relay.receiverName || 'On' : 'Off'}</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'pskreporter')}>
+        <span class="row-main"><span class="row-title">PSK Reporter</span></span>
+        <span class="row-value">{pskReporter.on ? 'On' : 'Off'}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
       <a class="row link" href={href('settings', 'relay')}>

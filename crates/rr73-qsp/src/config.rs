@@ -24,6 +24,54 @@ pub struct Config {
     /// Web SDR receive.
     #[serde(default)]
     pub sdr: SdrConfig,
+    /// Reports to PSK Reporter.
+    #[serde(default)]
+    pub pskreporter: PskReporterConfig,
+}
+
+/// Reports to PSK Reporter (docs/design/qsp.md, PSK Reporter).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PskReporterConfig {
+    /// Whether the instance reports. Off by default.
+    #[serde(default)]
+    pub enabled: bool,
+    /// Where datagrams go: `report.pskreporter.info`.
+    #[serde(default = "default_psk_host")]
+    pub host: String,
+    /// UDP port: 4739; 14739 is PSK Reporter's test listener on the same host.
+    #[serde(default = "default_psk_port")]
+    pub port: u16,
+    /// Sets the test bit in every record, as the developer page asks while developing.
+    #[serde(default)]
+    pub test: bool,
+    /// Shortest time between one station's datagrams, s: 300 at least.
+    #[serde(default = "default_psk_interval")]
+    pub interval_s: u64,
+}
+
+impl Default for PskReporterConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            host: default_psk_host(),
+            port: default_psk_port(),
+            test: false,
+            interval_s: default_psk_interval(),
+        }
+    }
+}
+
+fn default_psk_host() -> String {
+    "report.pskreporter.info".into()
+}
+
+fn default_psk_port() -> u16 {
+    4739
+}
+
+fn default_psk_interval() -> u64 {
+    300
 }
 
 /// Web SDR receive.
@@ -178,6 +226,11 @@ impl Config {
                 "access key {}…: use at least 16 characters",
                 k.chars().take(4).collect::<String>()
             )));
+        }
+        if self.pskreporter.interval_s < 300 {
+            return Err(ConfigError::Invalid(
+                "pskreporter.interval_s must be at least 300, PSK Reporter's limit".into(),
+            ));
         }
         if self.requests_per_minute == 0 {
             return Err(ConfigError::Invalid(

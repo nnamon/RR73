@@ -1,6 +1,6 @@
 // A stand-in QSP relay (docs/design/qsp.md) for the e2e tests and the review screenshots: its HTTP
 // API on page.route at RELAY_BASE, on the reserved .test domain, so no request reaches a server.
-// web-sdr.spec.ts adds its stream.
+// It offers web SDR receive and PSK Reporter reports. web-sdr.spec.ts adds its stream.
 import type { Page } from '@playwright/test';
 
 export const RELAY_BASE = 'https://relay.test/qsp';
@@ -31,11 +31,15 @@ export async function routeRelay(page: Page): Promise<RelayCall[]> {
     const body = r.postData() ? (r.postDataJSON() as Record<string, unknown>) : null;
     calls.push({ method: r.method(), path, auth: (await r.headerValue('authorization')) ?? null, body });
     const json = (status: number, b: unknown) => route.fulfill({ status, headers: cors, contentType: 'application/json', body: JSON.stringify(b) });
-    if (path === '/about') return json(200, { name: 'QSP', version: '0.16.0', api: ['v1'], auth: true, services: ['sdr'], userReceivers: false });
+    if (path === '/about') return json(200, { name: 'QSP', version: '0.16.0', api: ['v1'], auth: true, services: ['sdr', 'pskreporter'], userReceivers: false });
     if (path === '/v1/sdr/receivers') return json(200, { receivers: RECEIVERS });
     if (path === '/v1/sdr/sessions' && r.method() === 'POST') {
       const id = `s${calls.filter((c) => c.method === 'POST').length}`;
       return json(201, { id, receiver: body?.receiver, dialHz: body?.dialHz, encoding: 'ima-adpcm', state: 'waiting', stream: `/v1/sdr/sessions/${id}/stream?ticket=t-${id}` });
+    }
+    if (path === '/v1/pskreporter/receptions' && r.method() === 'POST') {
+      const n = Array.isArray(body?.spots) ? body.spots.length : 0;
+      return json(200, { taken: n, repeats: 0, rejected: 0, nextReport: Math.floor(Date.now() / 1000) + 240 });
     }
     if (r.method() === 'PATCH') return json(200, { id: path.split('/').pop(), receiver: RECEIVERS[0].id, dialHz: body?.dialHz, encoding: 'ima-adpcm', state: 'streaming' });
     if (r.method() === 'DELETE') return route.fulfill({ status: 204, headers: cors });

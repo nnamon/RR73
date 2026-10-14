@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › PSK Reporter reports the stations your radio decodes in FT8 and FT4, through a QSP relay. Off by default. Decodes from the practice band or a web SDR are not reported.
+- QSP reports to PSK Reporter by its developer page's rules: one datagram every 5 min at most per station, each callsign once per 5 min.
+
 ## 0.16.1 · 2026-10-14
 
 - New wording for Settings › Relay, Settings › Web SDR and the relay's error messages. Settings › Relay describes the relay as a server for any service a web page cannot reach directly.

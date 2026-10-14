@@ -1,6 +1,8 @@
 // QSP's API as RR73 uses it (docs/design/qsp.md, The API). Every path joins onto the relay's API
 // base, such as https://relay.example.org/qsp; requests carry the access key when one is set.
 
+import type { PskSpot } from '../pskreporter/spots';
+
 export interface QspAbout {
   name: string;
   version: string;
@@ -36,7 +38,7 @@ export type QspErrorKind = 'network' | 'timeout' | 'unauthorised' | 'refused' | 
 export class QspError extends Error {
   constructor(
     readonly kind: QspErrorKind,
-    /** QSP's error code for kind refused: not-found, forbidden, receiver-busy, rate-limited, invalid. */
+    /** QSP's error code for kind refused: not-found, not-offered, forbidden, receiver-busy, rate-limited, invalid. */
     readonly code: string | null = null,
     message = `Relay request failed: ${kind}`,
   ) {
@@ -145,6 +147,31 @@ export function qspTune(base: string, key: string, id: string, dialHz: number, f
 
 export function qspStop(base: string, key: string, id: string, fetchFn: FetchFn = pageFetch): Promise<void> {
   return call(base, key, 'DELETE', `/v1/sdr/sessions/${encodeURIComponent(id)}`, undefined, fetchFn);
+}
+
+/** The station that heard the spots, as PSK Reporter shows it. */
+export interface QspStation {
+  callsign: string;
+  locator: string;
+  /** Decoding software and version: "RR73 0.16.2". */
+  software: string;
+  antenna: string;
+}
+
+/** What a batch of spots came to at the relay. */
+export interface QspReportResult {
+  taken: number;
+  repeats: number;
+  rejected: number;
+  /** Earliest time the relay's next datagram to PSK Reporter goes, s since 1970. */
+  nextReport: number;
+}
+
+/** Sends a batch of stations heard; the relay reports them to PSK Reporter by its rules. */
+export async function qspReport(base: string, key: string, station: QspStation, spots: readonly PskSpot[], fetchFn: FetchFn = pageFetch): Promise<QspReportResult> {
+  const r = await call<QspReportResult>(base, key, 'POST', '/v1/pskreporter/receptions', { station, spots }, fetchFn);
+  if (typeof r?.taken !== 'number') throw new QspError('format');
+  return r;
 }
 
 /** The error in words for Settings: what happened and what to do. */

@@ -41,7 +41,7 @@ const SCREENSHOT_ONLY = new Set(['operate', 'operate-running', 'settings-feature
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, SCREENSHOT_ONLY.has(s.name) ? ci(theme) : ci(theme, 375), async ({ page }, info) => {
-      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay);
+      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
       await shot(page, info, SHOTS, `${theme}-${s.name}`);
@@ -50,7 +50,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, ci(theme, 375), async ({ page }) => {
     const titles: { path: string; top: number; fontSize: string }[] = [];
-    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/ft8', '#/settings/wspr', '#/settings/versions', '#/settings/colours', '#/settings/practice', '#/settings/relay', '#/settings/sdr']) {
+    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/ft8', '#/settings/wspr', '#/settings/versions', '#/settings/colours', '#/settings/practice', '#/settings/relay', '#/settings/sdr', '#/settings/pskreporter']) {
       await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
       const pane = page.locator('main .pane:not([hidden])');
       const back = (await pane.locator('.bar').first().boundingBox())!;

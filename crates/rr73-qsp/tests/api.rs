@@ -360,3 +360,108 @@ async fn leaves_a_full_receiver_alone() {
     assert_eq!(last["reason"], "busy");
     assert!(heard.lock().unwrap().is_empty());
 }
+
+fn unix_now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs()
+}
+
+/// Reports go to a UDP socket on the loopback interface standing in for PSK Reporter.
+#[tokio::test]
+async fn reports_to_pskreporter_by_its_rules() {
+    let (port, _) = stand_in(0).await;
+    let off = router(AppState::new(config(port)));
+    let (s, err) = call(
+        &off,
+        "POST",
+        "/v1/pskreporter/receptions",
+        Some(serde_json::json!({ "station": {}, "spots": [] })),
+        true,
+    )
+    .await;
+    assert!(
+        s == StatusCode::NOT_FOUND || s == StatusCode::UNPROCESSABLE_ENTITY,
+        "{s} {err}"
+    );
+    let (s, err) = call(&off, "GET", "/v1/pskreporter/status?callsign=9V1NE", None, true).await;
+    assert_eq!(
+        (s, err["error"]["code"].as_str()),
+        (StatusCode::NOT_FOUND, Some("not-offered"))
+    );
+
+    let mut c = config(port);
+    c.pskreporter.enabled = true;
+    c.pskreporter.test = true;
+    let state = AppState::new(c);
+    let app = router(state.clone());
+    let (_, about) = call(&app, "GET", "/about", None, false).await;
+    assert_eq!(about["services"], serde_json::json!(["sdr", "pskreporter"]));
+
+    let now = unix_now();
+    let station = serde_json::json!({ "callsign": "9v1ne", "locator": "oj11", "software": "RR73 0.16.2" });
+    let heard = |call: &str, loc: &str, mode: &str, time: u64| serde_json::json!({ "callsign": call, "locator": loc, "frequencyHz": 14_075_022, "snrDb": -12, "mode": mode, "time": time });
+    let body = serde_json::json!({
+        "station": station,
+        "spots": [
+            heard("K1ABC", "FN42", "FT8", now - 20),
+            heard("JA1XYZ", "", "FT8", now - 20),
+            heard("K1ABC", "FN42", "FT8", now - 5),
+            heard("VK3QRP", "QF22", "WSPR", now - 20),
+            heard("W1AW", "FN31", "FT8", now - 7200),
+            heard("<...>", "", "FT8", now - 20),
+        ],
+    });
+    let (s, t) = call(&app, "POST", "/v1/pskreporter/receptions", Some(body), true).await;
+    assert_eq!(s, StatusCode::OK, "{t}");
+    assert_eq!(
+        (t["taken"].as_u64(), t["repeats"].as_u64(), t["rejected"].as_u64()),
+        (Some(2), Some(1), Some(3))
+    );
+    let next = t["nextReport"].as_u64().unwrap();
+    assert!((now + 150..=now + 300).contains(&next), "{next}");
+    let (s, err) = call(&app, "POST", "/v1/pskreporter/receptions", Some(serde_json::json!({ "station": { "callsign": "9V1NE", "locator": "nowhere", "software": "RR73" }, "spots": [] })), true).await;
+    assert_eq!(
+        (s, err["error"]["code"].as_str()),
+        (StatusCode::BAD_REQUEST, Some("invalid"))
+    );
+    let (_, st) = call(&app, "GET", "/v1/pskreporter/status?callsign=9V1NE", None, true).await;
+    assert_eq!((st["waiting"].as_u64(), st["sent"].as_u64()), (Some(2), Some(0)));
+
+    // Nothing goes before the timer; then one datagram, from one socket.
+    let listener = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let target = listener.local_addr().unwrap();
+    let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
+    let reporter = state.reporter();
+    assert_eq!(
+        rr73_qsp::pskreporter::send_due(&reporter, &socket, target, next - 1).await,
+        0
+    );
+    assert_eq!(
+        rr73_qsp::pskreporter::send_due(&reporter, &socket, target, next).await,
+        1
+    );
+    let mut buf = [0u8; 2048];
+    let (n, from) = tokio::time::timeout(Duration::from_secs(2), listener.recv_from(&mut buf))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(from, socket.local_addr().unwrap());
+    let d = &buf[..n];
+    assert_eq!(&d[..2], &[0, 10]);
+    assert_eq!(usize::from(u16::from_be_bytes([d[2], d[3]])), n);
+    let has = |s: &[u8]| d.windows(s.len()).any(|w| w == s);
+    assert!(has(b"\x059V1NE\x04OJ11\x0bRR73 0.16.2\x00"), "receiver record");
+    assert!(has(b"\x05K1ABC") && has(b"\x06JA1XYZ") && has(b"\x04FN42"));
+    assert!(!has(b"VK3QRP") && !has(b"W1AW"));
+    let (_, st) = call(&app, "GET", "/v1/pskreporter/status?callsign=9V1NE", None, true).await;
+    assert_eq!(
+        (
+            st["waiting"].as_u64(),
+            st["sent"].as_u64(),
+            st["datagrams"].as_u64()
+        ),
+        (Some(0), Some(2), Some(1))
+    );
+}
