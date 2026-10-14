@@ -40,6 +40,11 @@ describe('macro expansion', () => {
     expect(expand('{NOPE} {CALL}', V).text).toBe('{NOPE} JA1XYZ');
   });
 
+  it('reads a field in any case', () => {
+    expect(expand('ur rst {rst} {Rst}', V).text).toBe('ur rst 599 599');
+    expect(fieldsIn('{call} {CALL}')).toEqual(['CALL']);
+  });
+
   it('lists the fields a macro holds, once each', () => {
     expect(fieldsIn('{CALL} {CALL} DE {MYCALL} {X}')).toEqual(['CALL', 'MYCALL']);
   });

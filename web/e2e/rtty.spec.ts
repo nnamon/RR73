@@ -308,6 +308,21 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('macro-sends')).toHaveText('TNX FER CALL. UR RST 599 599. NAME AMON AMON QTH SINGAPORE SINGAPORE');
     await checkLayout(page);
     await shot(page, info, SHOTS, `${theme}-macroedit`, 200);
+
+    // An edit shows in Sends now; Delete macro offers Undo; Restore defaults names what it replaces.
+    const macroText = page.getByRole('textbox', { name: 'Text' });
+    await macroText.fill('ur rst {rst} {rst}');
+    await expect(page.getByTestId('macro-sends')).toHaveText('UR RST 599 599');
+    await page.getByRole('button', { name: 'Delete macro' }).click();
+    await expect(page.getByRole('heading', { name: 'Macros' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Report/ })).toHaveCount(0);
+    await page.getByTestId('log-notice').getByRole('button', { name: 'Undo' }).click();
+    await expect(page.getByRole('link', { name: /^Report/ })).toHaveText(/UR RST \{RST\} \{RST\}/);
+    await page.getByRole('button', { name: 'Restore defaults' }).click();
+    const restore = page.getByRole('dialog', { name: 'Restore 8 default macros?' });
+    await expect(restore).toContainText('Your 1 edited macro is replaced.');
+    await restore.getByRole('button', { name: 'Restore defaults' }).click();
+    await expect(page.getByRole('link', { name: /^Report/ })).toHaveText(/TNX FER CALL/);
     if (!reviewing(info)) expect(size).toBe('375');
   });
 }

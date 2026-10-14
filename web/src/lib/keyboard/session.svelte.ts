@@ -185,7 +185,8 @@ export class KeyboardSession {
 
   /** The text a macro would send now, for Settings › Macros' Sends now. */
   preview(text: string): string {
-    return expand(text, this.fieldValues()).text;
+    const t = expand(text, this.fieldValues()).text;
+    return this.ports.config().upperCaseOnly ? t.toUpperCase() : t;
   }
 
   /** True when the stream being sent is at the start of a line. */

@@ -193,6 +193,12 @@ describe('macros', () => {
     expect(r.finished).toBe(1);
   });
 
+  it('previews a macro as RTTY sends it, in capitals', () => {
+    const r = rig();
+    r.s.setCall('JA1XYZ', false);
+    expect(r.s.preview('tnx {call} 73')).toBe('TNX JA1XYZ 73');
+  });
+
   it('adds nothing without a callsign to call, and says so', () => {
     const r = rig();
     r.s.tapMacro(macro('Answer'));

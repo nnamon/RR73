@@ -61,12 +61,16 @@ export function utc4(ms: number): string {
   return `${String(d.getUTCHours()).padStart(2, '0')}${String(d.getUTCMinutes()).padStart(2, '0')}`;
 }
 
-const FIELD_RE = /\{([A-Z]+)\}/g;
+/** A field, in any case: {CALL} and {call} are the same field. */
+const FIELD_RE = /\{([A-Za-z]+)\}/g;
 
 /** Fields in `text`, each once, in order of appearance. */
 export function fieldsIn(text: string): Field[] {
   const out: Field[] = [];
-  for (const [, name] of text.matchAll(FIELD_RE)) if ((FIELDS as readonly string[]).includes(name) && !out.includes(name as Field)) out.push(name as Field);
+  for (const [, raw] of text.matchAll(FIELD_RE)) {
+    const name = raw.toUpperCase();
+    if ((FIELDS as readonly string[]).includes(name) && !out.includes(name as Field)) out.push(name as Field);
+  }
   return out;
 }
 
@@ -78,7 +82,8 @@ export function fieldsIn(text: string): Field[] {
 export function expand(text: string, v: FieldValues): { text: string; missing: Field[] } {
   const missing: Field[] = [];
   const one = (src: string, inner: boolean): string =>
-    src.replace(FIELD_RE, (all, name: string) => {
+    src.replace(FIELD_RE, (all, raw: string) => {
+      const name = raw.toUpperCase();
       if (!(FIELDS as readonly string[]).includes(name)) return all;
       const f = name as Field;
       const value = f === 'EXCH' ? (inner ? '' : one(v.EXCH, true)) : v[f];
