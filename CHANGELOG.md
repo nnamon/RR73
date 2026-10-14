@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.1 · 2026-10-14
 
 - With no relay chosen, the web SDR's error points to Settings › Relay. It pointed to Settings › Web SDR, which has no relay field.
 - Settings › Relay, PSK Reporter, Web SDR and WSPR, Spots and the activation form have shorter text.
