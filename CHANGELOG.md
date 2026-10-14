@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.0 · 2026-10-14
 
 - Settings › WSPR uploads your spots to WSPRnet, straight from this phone, as WSJT-X does. Off by default. A slot without spots reports your station as listening.
 
