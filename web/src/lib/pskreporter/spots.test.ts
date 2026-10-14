@@ -2,22 +2,25 @@ import { describe, expect, it } from 'vitest';
 import { spotsOf } from './spots';
 
 const SLOT = Date.UTC(2026, 9, 15, 1, 0, 15);
+/** The decodes arrive 13.4 s into the slot. */
+const DECODED = SLOT + 13_400;
+const T = Math.floor(DECODED / 1000);
 const d = (text: string, freq_hz = 1000, snr_db = -10.4) => ({ text, freq_hz, dt_s: 0.1, snr_db });
 
 describe('spots from a slot', () => {
-  it('name each sender once, at dial plus audio, with the grid its messages carried', () => {
+  it('name each sender once, at dial plus audio, with the grid its messages carried and the time it was decoded', () => {
     const spots = spotsOf(
       [d('CQ 9M2TRX OJ02', 1022.4), d('9V1NE JA1KXM PM95', 1418), d('JH1RRT YB0AZK RR73', 2210, -16.6), d('CQ DX VK3QRP QF22', 1846), d('VK3QRP K1ABC -12', 500)],
-      SLOT,
+      DECODED,
       14_074_000,
       'FT8',
     );
     expect(spots).toEqual([
-      { callsign: '9M2TRX', locator: 'OJ02', frequencyHz: 14_075_022, snrDb: -10, mode: 'FT8', time: SLOT / 1000 },
-      { callsign: 'JA1KXM', locator: 'PM95', frequencyHz: 14_075_418, snrDb: -10, mode: 'FT8', time: SLOT / 1000 },
-      { callsign: 'YB0AZK', locator: '', frequencyHz: 14_076_210, snrDb: -17, mode: 'FT8', time: SLOT / 1000 },
-      { callsign: 'VK3QRP', locator: 'QF22', frequencyHz: 14_075_846, snrDb: -10, mode: 'FT8', time: SLOT / 1000 },
-      { callsign: 'K1ABC', locator: '', frequencyHz: 14_074_500, snrDb: -10, mode: 'FT8', time: SLOT / 1000 },
+      { callsign: '9M2TRX', locator: 'OJ02', frequencyHz: 14_075_022, snrDb: -10, mode: 'FT8', time: T },
+      { callsign: 'JA1KXM', locator: 'PM95', frequencyHz: 14_075_418, snrDb: -10, mode: 'FT8', time: T },
+      { callsign: 'YB0AZK', locator: '', frequencyHz: 14_076_210, snrDb: -17, mode: 'FT8', time: T },
+      { callsign: 'VK3QRP', locator: 'QF22', frequencyHz: 14_075_846, snrDb: -10, mode: 'FT8', time: T },
+      { callsign: 'K1ABC', locator: '', frequencyHz: 14_074_500, snrDb: -10, mode: 'FT8', time: T },
     ]);
   });
 

@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- PSK Reporter reports carry the time each station was decoded. They carried the slot's start, which PSK Reporter and its MQTT feed read as a decode time one slot early.
+
 ## 0.17.0 · 2026-10-14
 
 - Settings › PSK Reporter reports the stations your radio decodes in FT8 and FT4, through a QSP relay. Off by default. Decodes from the practice band or a web SDR are not reported.

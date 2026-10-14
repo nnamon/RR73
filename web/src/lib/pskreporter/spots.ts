@@ -1,6 +1,8 @@
 // What RR73 reports to PSK Reporter from a slot's decodes (docs/design/qsp.md, PSK Reporter):
 // the sending station of each message, once per slot, with its locator when the message carries
-// one. Hashed callsigns (<...>) are left out: the decoder has not heard them in full.
+// one. Hashed callsigns (<...>) are left out: the decoder has not heard them in full. The time is
+// when the decode arrived: the developer page defines flowStartSeconds as the time the callsign
+// was recognised, and PSK Reporter reads it so for software not on its list of exceptions.
 
 import type { FtMode } from '../clock/slots';
 import type { Decode } from '../decode/types';
@@ -17,12 +19,12 @@ export interface PskSpot {
   /** SNR in 2500 Hz, dB. */
   snrDb: number;
   mode: FtMode;
-  /** The slot's start, s since 1970. */
+  /** When the decode arrived, s since 1970. */
   time: number;
 }
 
-/** The senders in one slot's decodes, each once, at `dialHz` in `mode`. */
-export function spotsOf(decodes: readonly Decode[], slotStartMs: number, dialHz: number, mode: FtMode): PskSpot[] {
+/** The senders in one slot's decodes, each once, at `dialHz` in `mode`, decoded at `decodedMs`. */
+export function spotsOf(decodes: readonly Decode[], decodedMs: number, dialHz: number, mode: FtMode): PskSpot[] {
   const out = new Map<string, PskSpot>();
   for (const d of decodes) {
     for (const part of parseParts(d.text)) {
@@ -40,7 +42,7 @@ export function spotsOf(decodes: readonly Decode[], slotStartMs: number, dialHz:
         frequencyHz: Math.round(dialHz + d.freq_hz),
         snrDb: Math.round(d.snr_db),
         mode,
-        time: Math.floor(slotStartMs / 1000),
+        time: Math.floor(decodedMs / 1000),
       });
     }
   }

@@ -119,7 +119,7 @@ export function initPskReporter() {
   started = true;
   onSlotDecoded((slotStartMs, decodes) => {
     if (pskHold() !== null || !isFt(settings.mode)) return;
-    queue.add(spotsOf(decodes, slotStartMs, currentDialHz(), settings.mode));
+    queue.add(spotsOf(decodes, Date.now(), currentDialHz(), settings.mode), slotStartMs);
     pskStatus.waiting = queue.waiting;
   });
 }

@@ -26,7 +26,7 @@ export interface QueueEvents {
 
 export class PskQueue {
   private spots: PskSpot[] = [];
-  /** `${frequency MHz}|${time}|${callsign}` of the spots queued or sent lately: each station once per band and slot. */
+  /** `${frequency MHz}|${slot start}|${callsign}` of the spots queued or sent lately: each station once per band and slot. */
   private seen = new Map<string, number>();
   private lastSendMs = -Infinity;
   private timer: ReturnType<typeof setTimeout> | null = null;
@@ -42,12 +42,12 @@ export class PskQueue {
     return this.spots.length;
   }
 
-  /** Queues spots, each station once per band and slot, and sends when the minute allows. */
-  add(spots: readonly PskSpot[]) {
+  /** Queues one slot's spots, each station once per band and slot, and sends when the minute allows. */
+  add(spots: readonly PskSpot[], slotStartMs: number) {
     const now = this.now();
     for (const [k, at] of this.seen) if (now - at > 10 * 60_000) this.seen.delete(k);
     for (const s of spots) {
-      const key = `${Math.floor(s.frequencyHz / 1e6)}|${s.time}|${s.callsign}`;
+      const key = `${Math.floor(s.frequencyHz / 1e6)}|${slotStartMs}|${s.callsign}`;
       if (this.seen.has(key)) continue;
       this.seen.set(key, now);
       this.spots.push(s);

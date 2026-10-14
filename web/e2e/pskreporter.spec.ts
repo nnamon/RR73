@@ -61,7 +61,9 @@ test('reports the senders of each slot through the relay', async ({ page }) => {
   const post = calls.find((c) => c.path === '/v1/pskreporter/receptions')!;
   const body = post.body as { station: Record<string, string>; spots: unknown[] };
   expect(body.station).toEqual({ callsign: '9V1NE', locator: 'OJ11', software: expect.stringMatching(/^RR73 \d+\.\d+\.\d+/), antenna: 'Vertical, 10 m up' });
-  const time = slot / 1000;
+  // The time is when the decodes arrived: the developer page's flowStartSeconds.
+  const time = expect.any(Number);
+  expect((body.spots as { time: number }[]).every((s) => Math.abs(s.time - Date.now() / 1000) < 30)).toBe(true);
   expect(body.spots).toEqual([
     { callsign: '9M2TRX', locator: 'OJ02', frequencyHz: 14_075_022, snrDb: -10, mode: 'FT8', time },
     { callsign: 'JA1KXM', locator: 'PM95', frequencyHz: 14_075_418, snrDb: -12, mode: 'FT8', time },
