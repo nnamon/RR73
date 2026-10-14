@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.4 · 2026-10-14
 
 - Settings › Web SDR adds a KiwiSDR or Web-888 by its address, on a relay that allows it. Each relay keeps its own list.
 - When the relay refuses a web SDR session, Operate says so. It said the relay was unreachable.
