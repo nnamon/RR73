@@ -92,3 +92,13 @@ def test_slot_files_are_readable_by_everyone(tmp_path: Path) -> None:
     written = write_slot(tmp_path, SARTS, 14_074_000, slot())
     assert written.stat().st_mode & 0o777 == 0o644
     assert written.with_suffix(".json").stat().st_mode & 0o777 == 0o644
+
+
+def test_wspr_slots_are_120_s_with_mode_wspr(tmp_path: Path) -> None:
+    samples = np.zeros(120 * 12000, dtype=np.int16)
+    written = write_slot(tmp_path, SARTS, 14_095_600, slot(samples=samples), "WSPR")
+    assert written is not None
+    meta = json.loads(written.with_suffix(".json").read_text(encoding="utf-8"))
+    assert meta["mode"] == "WSPR" and meta["dial_hz"] == 14_095_600
+    with pytest.raises(ValueError, match="WSPR slots have 1440000"):
+        write_slot(tmp_path, SARTS, 14_095_600, slot(), "WSPR")

@@ -13,7 +13,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use rr73_decode::{DecoderConfig, PRESETS};
+use rr73_decode::PRESETS;
+use rr73_decode::wspr::WSPR_PRESETS;
 
 #[derive(Parser)]
 #[command(
@@ -28,7 +29,8 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded) into the corpus.
+    /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded, wspr-smoke,
+    /// wspr-noise, wspr-snr-sweep, wspr-band) into the corpus.
     Synth {
         /// Set to write; repeat for several.
         #[arg(long = "set", required = true, value_name = "NAME")]
@@ -64,8 +66,21 @@ enum Command {
         /// else jt9-d3, else the first key).
         #[arg(long)]
         reference: Option<String>,
+        /// Synthetic set to render in memory and decode, as `synth` would write it; repeat
+        /// for several.
+        #[arg(long = "synth", value_name = "SET")]
+        synth: Vec<String>,
+        /// Slots in noise sets rendered with --synth.
+        #[arg(long, default_value_t = 1000)]
+        noise_count: usize,
+        /// Slots per SNR step and channel in sweeps rendered with --synth.
+        #[arg(long, default_value_t = 40)]
+        per_step: usize,
+        /// Slots per subset in crowded sets rendered with --synth.
+        #[arg(long, default_value_t = 20)]
+        crowded_count: usize,
         /// Corpus files or directories.
-        #[arg(required = true)]
+        #[arg(required_unless_present = "synth")]
         paths: Vec<PathBuf>,
     },
     /// Show decodes gained and lost, false decodes, SNR50 and time per slot between two runs.
@@ -182,12 +197,22 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             out,
             threads,
             reference,
+            synth,
+            noise_count,
+            per_step,
+            crowded_count,
             paths,
         } => {
             let opts = run::RunOptions {
                 preset,
                 overrides,
                 paths,
+                synth,
+                synth_options: synth::SynthOptions {
+                    noise_count,
+                    per_step,
+                    crowded_count,
+                },
                 out,
                 threads,
                 reference,
@@ -282,11 +307,11 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
         Command::Presets { name } => {
             match name {
                 Some(n) => {
-                    let c = DecoderConfig::preset(&n).map_err(|e| e.to_string())?;
+                    let c = run::Decoder::new(&n, &[])?.config_json()?;
                     println!("{}", serde_json::to_string_pretty(&c).map_err(|e| e.to_string())?);
                 }
                 None => {
-                    for p in PRESETS {
+                    for p in PRESETS.iter().chain(WSPR_PRESETS) {
                         println!("{p}");
                     }
                 }

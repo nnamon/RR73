@@ -238,6 +238,7 @@ mod tests {
             matched,
             osd: false,
             osd_distance: 0.0,
+            drift_hz_per_s: None,
         }
     }
 

@@ -17,7 +17,7 @@ Stems follow WSJT-X naming, `YYMMDD_HHMMSS`, with the slot start time in UTC. Sy
 ## Audio
 
 - WAV, PCM 16-bit, mono, 12000 Hz.
-- Exactly one slot: 180000 samples for FT8 (15 s), 90000 for FT4 (7.5 s).
+- Exactly one slot: 180000 samples for FT8 (15 s), 90000 for FT4 (7.5 s), 1440000 for WSPR (120 s, starting in an even UTC minute).
 - Sample 0 is the slot start in UTC. Recordings whose source clock is off are corrected before writing, and the correction is recorded in `timing`.
 
 ## Sidecar
@@ -53,13 +53,13 @@ Stems follow WSJT-X naming, `YYMMDD_HHMMSS`, with the slot start time in UTC. Sy
 | Field | Meaning |
 | --- | --- |
 | `format` | Schema version. Readers reject versions they don't know. |
-| `mode` | `FT8` or `FT4`. |
+| `mode` | `FT8`, `FT4` or `WSPR`. |
 | `start_utc` | Slot start, ISO 8601 UTC. |
 | `dial_hz` | Radio dial frequency, USB. Audio frequency plus dial gives RF. |
 | `source.kind` | `kiwisdr`, `kx2`, `synthetic` or `public`. |
 | `timing.reference` | `gps`, `ntp`, `phone` or `synthetic`. `offset_s` is the correction applied. |
 | `noise_only` | `true` for slots used to count false decodes. |
-| `truth` | Synthetic slots only: the exact signals, `{ text, freq_hz, dt_s, snr_db }`. |
+| `truth` | Synthetic slots only: the exact signals, `{ text, freq_hz, dt_s, snr_db }`. For WSPR, `freq_hz` is the signal's centre (midway between tones 1 and 2) and DT counts from 1 s into the slot. |
 | `reference` | Decodes from reference tools, keyed by tool and depth. |
 | `source.input`, `source.capture_rate_hz`, `source.app` | App recordings only: the input device label, the capture sample rate before resampling, and the app version and build. |
 | `capture` | App recordings only: `filled_samples` (zero-filled after a gap), `late_start` and `gap` flags. |

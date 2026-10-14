@@ -390,6 +390,7 @@ dependencies = [
  "rand_distr",
  "rr73-dsp",
  "rr73-ft8",
+ "rr73-wspr",
  "serde",
  "thiserror",
 ]
@@ -414,6 +415,7 @@ dependencies = [
  "rr73-chansim",
  "rr73-dsp",
  "rr73-ft8",
+ "rr73-wspr",
  "serde",
  "serde_json",
  "thiserror",
@@ -445,9 +447,19 @@ dependencies = [
  "rr73-decode",
  "rr73-dsp",
  "rr73-ft8",
+ "rr73-wspr",
  "serde",
  "serde_json",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "rr73-wspr"
+version = "0.8.1"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
 ]
 
 [[package]]

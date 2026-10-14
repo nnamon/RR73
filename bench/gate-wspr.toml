@@ -1,0 +1,18 @@
+# Thresholds for the WSPR gate: `rr73-bench gate results/ci-wspr.json --baseline
+# bench/wspr.json --thresholds bench/gate-wspr.toml`. docs/bench.md describes every check.
+#
+# CI decodes wspr-smoke and 50 wspr-noise slots with the wspr preset, rendered in memory.
+
+required_sets = ["synthetic/wspr-smoke", "synthetic/wspr-noise"]
+
+[default]
+max_recall_drop = 0.0
+max_false_increase = 0
+max_snr50_rise_db = 0.3
+max_time_ratio = 0
+
+# One of the 51 signals in wspr-smoke: FFT rounding differs between aarch64, where the
+# baseline was recorded, and the x86_64 runners.
+[sets."synthetic/wspr-smoke"]
+max_recall_drop = 0.02
+max_snr50_rise_db = 1.5
