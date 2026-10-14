@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.16.1 · 2026-10-14
 
 - New wording for Settings › Relay, Settings › Web SDR and the relay's error messages. Settings › Relay describes the relay as a server for any service a web page cannot reach directly.
 
