@@ -351,7 +351,7 @@ describe('several sources', () => {
 
   it('refuses two sources with one id', () => {
     const a = scripted('pota', [K1]);
-    expect(() => new SpotFeed({ sources: [a.source, a.source], env: fakePage().env, cache: null })).toThrow('Two sources named pota.');
+    expect(() => new SpotFeed({ sources: [a.source, a.source], env: fakePage().env, cache: null })).toThrow('2 sources named pota.');
   });
 });
 

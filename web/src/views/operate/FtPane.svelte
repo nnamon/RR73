@@ -25,6 +25,7 @@
   import { TouchFreeze } from '../../lib/decode/freeze';
   import { RX_PANE_HZ, buildList, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
   import { queueMarks, type QueueMark } from '../../lib/decode/queue';
+  import { CHASE_MS, chaseMark, spots } from '../../lib/state/spots.svelte';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
   import { highlightDecode } from '../../lib/decode/highlight';
   import { log } from '../../lib/log/log.svelte';
@@ -192,6 +193,9 @@
     return JSON.stringify(queueMarks(orderQueue(st.queue, st.config.order), settings.workDupes));
   });
   const queue = $derived<QueueMark[]>(queueKey ? JSON.parse(queueKey) : []);
+  // Recomputed when the chase changes or lapses, not on every clock tick.
+  const chaseLive = $derived(spots.chase !== null && clock.ms - spots.chase.atMs <= CHASE_MS);
+  const chase = $derived(chaseLive ? chaseMark(spots.chase, spots.chase?.atMs ?? 0) : null);
   // Our transmission at the top of the list: planned while Tx is on, then on air. Kept to plain
   // values first, so the sequencer's 1 s tick does not rebuild the list.
   const planSlot = $derived(qso.st.txEnabled && qso.st.next && !qso.onAir ? qso.st.next.slotStartMs : null);
@@ -288,7 +292,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label={label} data-testid="decode-list" data-keys="list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {chase} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}
@@ -325,7 +329,7 @@
         </div>
         <div class="list" role="region" aria-label="Rx frequency, newest slot first" data-testid="rx-list" data-keys="list">
           {#if rxItems.length}
-            <DecodeList items={rxItems} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {onselect} {oncall} {ondetail} />
+            <DecodeList items={rxItems} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} lost={qso.lostTo} {queue} {chase} {onselect} {oncall} {ondetail} />
           {:else if band.decoder.state !== 'failed'}
             <div class="empty">
               <h2>Nothing near Rx yet</h2>

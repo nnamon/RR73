@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
    * Spots, with the parts turned on in Settings › Optional features. The activation sits at the
-   * top: a Start activation row when none runs, else the running activation. Spots follow below;
-   * they arrive in a later version.
+   * top: a Start activation row when none runs, else the running activation. Spots from POTA and
+   * the DX cluster follow below, polled while this screen is shown. Go on a spot chases its
+   * station (lib/state/spots.svelte.ts). The practice band pauses spots.
    *
    * Beside the list (compact height and regular width) Spots follows the Log: the list on the
    * left, the running activation in the detail pane on the right.
@@ -16,9 +17,29 @@
   import { href } from '../lib/app/router.svelte';
   import { log } from '../lib/log/log.svelte';
   import { features } from '../lib/state/features.svelte';
+  import SpotList from '../ui/SpotList.svelte';
+  import { spotFeed } from '../lib/spots/feed.svelte';
+  import { isNewSpot, spotBadge, spotLog } from '../lib/spots/log';
+  import { goTarget, goToSpot, spots } from '../lib/state/spots.svelte';
+  import { clock } from '../lib/state/now.svelte';
+  import { practice } from '../lib/state/practice.svelte';
+  import { settings } from '../lib/state/settings.svelte';
+  import type { Spot } from '../lib/spots/types';
 
   let starting = $state(false);
-  const sources = $derived([features.potaSpots && 'POTA', features.clusterSpots && 'DX cluster'].filter(Boolean).join(' and '));
+  const spotsOn = $derived(features.potaSpots || features.clusterSpots);
+
+  // The feed polls while this screen is shown.
+  $effect(() => spotFeed.start());
+
+  // Ages count whole minutes and Worked today the UTC day: the list follows the clock once a second.
+  const secondMs = $derived(Math.floor(clock.ms / 1000) * 1000);
+  const dayMs = $derived(Math.floor(clock.ms / 86_400_000) * 86_400_000);
+  const book = $derived(spotLog(log.live, dayMs, settings.band));
+  const isNew = (s: Spot) => isNewSpot(s, book);
+  const badge = (s: Spot) => spotBadge(s, book);
+  const canGo = (s: Spot) => goTarget(s) !== null;
+  const onGo = (s: Spot) => void goToSpot(s);
 </script>
 
 {#snippet startRow()}
@@ -37,13 +58,28 @@
   </div>
 {/snippet}
 
-{#snippet sourcesNote()}
-  {#if sources}
+{#snippet spotSection()}
+  {#if spotsOn}
     <div class="section">
       <h2 class="section-head">Spots</h2>
-      <div class="group">
-        <p class="none">No spots yet. {sources} spots on your bands will appear here in a later version, refreshed every minute while online.</p>
-      </div>
+      {#if practice.on}
+        <div class="group">
+          <p class="none">Spots pause while the practice band is on. Turn it off in Settings › Practice band.</p>
+        </div>
+      {:else}
+        <SpotList
+          spots={spotFeed.spots}
+          feed={spotFeed.view}
+          now={secondMs}
+          bind:filter={spots.filter}
+          bind:selected={spots.selected}
+          myBands={book.bands}
+          {isNew}
+          {badge}
+          {canGo}
+          {onGo}
+        />
+      {/if}
     </div>
   {/if}
 {/snippet}
@@ -72,7 +108,7 @@
         {:else if features.activations && log.ready}
           {@render startRow()}
         {/if}
-        {@render sourcesNote()}
+        {@render spotSection()}
       </div>
       <div class="detail-col">
         {#if features.activations && log.ready && log.current}
@@ -96,7 +132,7 @@
       {@render startRow()}
     {/if}
 
-    {@render sourcesNote()}
+    {@render spotSection()}
   </section>
 {/if}
 

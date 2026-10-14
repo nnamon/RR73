@@ -23,7 +23,8 @@
    *
    * A CQ row names the caller's country before the numbers ("Australia"), once the country file
    * has loaded. The country gives way to the message: it ends in an ellipsis when short of room
-   * and drops out when there is none.
+   * and drops out when there is none. Rows from the station chased from Spots show its reference
+   * there instead ("K-0817").
    *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
    * with a red progress line while on air, then Sent in its slot.
@@ -38,6 +39,8 @@
   import { cqCountry } from '../lib/decode/country';
   import { isLost, type LostMark } from '../lib/decode/lost';
   import { queueSpoken, queueTag, type QueueMark } from '../lib/decode/queue';
+  import { parseExchange, sameCall } from '../lib/qso/messages';
+  import type { ChaseMark } from '../lib/state/spots.svelte';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
   import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
   import { outText, type RowItem } from '../lib/decode/list';
@@ -54,6 +57,7 @@
     countries = null,
     lost = [],
     queue = [],
+    chase = null,
     onselect,
     oncall,
     ondetail,
@@ -72,6 +76,8 @@
     lost?: readonly LostMark[];
     /** Callers waiting while we call CQ with Repeat CQ on: their latest message to us reads Next, 2nd or Dupe there too. */
     queue?: readonly QueueMark[];
+    /** The station chased from Spots: its rows show its reference there. */
+    chase?: ChaseMark | null;
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
@@ -86,7 +92,7 @@
 
   type Out = ReturnType<typeof outText>;
 
-  function spoken(item: RowItem, o: Out | null, country: string | null = null, lostRow = false, queued: string | null = null): string {
+  function spoken(item: RowItem, o: Out | null, country: string | null = null, lostRow = false, queued: string | null = null, chased: ChaseMark | null = null): string {
     const r = item.row;
     const parts = [
       o ? o.tag.replace(' · :', ', :') : '',
@@ -98,6 +104,7 @@
       country ?? '',
       lostRow ? 'lost, answered another station' : '',
       queued ? queueSpoken(queued) : '',
+      chased?.spoken ?? '',
       r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
       r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
@@ -187,7 +194,7 @@
   }
 </script>
 
-{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null, lostRow = false, queued: string | null = null)}
+{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null, lostRow = false, queued: string | null = null, chased: ChaseMark | null = null)}
   {#if o}<span class="c-tag" aria-hidden="true">{o.tag}</span>{/if}
   <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
   {#if r.badge}
@@ -199,7 +206,7 @@
     <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
     {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
   {:else}
-    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{:else if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{:else if queued}<span class="c-queue" class:next={queued === 'Next'} class:dupe={queued === 'Dupe'} aria-hidden="true">{queued}</span>{/if}
+    {#if lostRow}<span class="c-lost" aria-hidden="true">Lost</span>{:else if queued}<span class="c-queue" class:next={queued === 'Next'} class:dupe={queued === 'Dupe'} aria-hidden="true">{queued}</span>{:else if chased}<span class="c-queue next" aria-hidden="true" data-testid="chase-tag">{chased.text}</span>{:else if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{/if}
     <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
@@ -226,7 +233,8 @@
       {@const ink = inkOf(item)}
       {@const o = item.out ? outText(item.out, item.slotStartMs, r.decode.freq_hz, nowMs) : null}
       {@const next = item.out?.stage === 'next'}
-      {@const country = item.out ? null : cqCountry(r, countries)}
+      {@const chased = !item.out && chase && sameCall(parseExchange(r.decode.text).from, chase.call) ? chase : null}
+      {@const country = item.out || chased ? null : cqCountry(r, countries)}
       {@const lostRow = !item.out && isLost(r.decode.text, item.slotStartMs, lost)}
       {@const queued = !item.out && r.mark === 'me' ? queueTag(r.decode.text, item.slotStartMs, queue) : null}
       <li class="dr-item">
@@ -241,7 +249,7 @@
             data-testid={next ? 'next-row' : undefined}
           >
             <span class="visually-hidden">{spoken(item, o)}</span>
-            {@render cells(r, t, o, next, country, lostRow, queued)}
+            {@render cells(r, t, o, next, country, lostRow, queued, chased)}
           </div>
         {:else}
           <button
@@ -252,7 +260,7 @@
             style:--rr-ink-dark={ink?.dark}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
-            aria-label={spoken(item, o, country, lostRow, queued)}
+            aria-label={spoken(item, o, country, lostRow, queued, chased)}
             aria-pressed={selectedId === item.id}
             onpointerdown={(e) => down(e, item)}
             onpointermove={move}
@@ -264,7 +272,7 @@
             }}
             onclick={(e) => click(e, item)}
           >
-            {@render cells(r, t, o, false, country, lostRow, queued)}
+            {@render cells(r, t, o, false, country, lostRow, queued, chased)}
           </button>
         {/if}
       </li>
@@ -634,7 +642,10 @@
     color: var(--rr-tx-text);
   }
 
-  /* A caller waiting while we call CQ: Next in the tint, later places and Dupe in grey, where a CQ row has its country. */
+  /*
+   * A caller waiting while we call CQ: Next in the tint, later places and Dupe in grey, where a CQ
+   * row has its country. The chased station's reference takes the tint too.
+   */
   .c-queue {
     flex: none;
     font-size: var(--rr-text-caption);

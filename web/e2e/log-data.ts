@@ -8,6 +8,7 @@ import { createQso } from '../src/lib/log/qso';
 import type { Activation, DestinationConfig, LedgerEntry, LogQsoRecord, Qso, WavelogConfig } from '../src/lib/log/types';
 import type { Features } from '../src/lib/state/settings.svelte';
 import { FIXED_TIME } from './time';
+import { stubSpotSources } from './spot-sources';
 
 export const WAVELOG_URL = 'https://wavelog.example.test';
 export const API_KEY = 'test-key-rw';
@@ -176,8 +177,12 @@ export function withFeatures(data: Seed, on: Partial<Features>): Seed {
   return { ...data, kv: [...data.kv.filter((k) => k.key !== 'settings'), { key: 'settings', value: { ...prev, features, schema: 2 } }] };
 }
 
-/** Writes a seed into the app's IndexedDB, then reloads so the app reads it. */
+/**
+ * Writes a seed into the app's IndexedDB, then reloads so the app reads it. The spot sources get
+ * their stand-ins first, since a seed may turn them on.
+ */
 export async function seed(page: Page, data: Seed) {
+  await stubSpotSources(page);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
   await page.evaluate(async (d) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {

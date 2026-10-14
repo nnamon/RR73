@@ -2,7 +2,7 @@
   /**
    * Spots: filter chips, rows of at least 56 px (callsign, references, frequency and mode, age),
    * the status line and the sources' credits. Tapping a row opens it with who spotted it and Go,
-   * which hands the spot to `onGo`.
+   * which hands the spot to `onGo`. Spots `canGo` refuses open without Go.
    */
   import { ageText, emptyText, freqModeText, noteText, referenceText, rowSpoken, spottedText, statusText } from '../lib/spots/copy';
   import type { SpotFeedView } from '../lib/spots/feed.svelte';
@@ -28,9 +28,11 @@
     selected?: string | null;
     /** Go on the open row. */
     onGo: (spot: Spot) => void;
+    /** False for a spot Go cannot take, such as CW or a band RR73 has no dial for. Left out, every spot has Go. */
+    canGo?: ((spot: Spot) => boolean) | null;
   }
 
-  let { spots, feed, now, filter = $bindable(defaultFilter()), myBands = [], isNew = null, badge = null, selected = $bindable(null), onGo }: Props = $props();
+  let { spots, feed, now, filter = $bindable(defaultFilter()), myBands = [], isNew = null, badge = null, selected = $bindable(null), onGo, canGo = null }: Props = $props();
 
   type ChipId = SpotClass | 'digital' | 'bands' | 'new';
 
@@ -98,7 +100,9 @@
                 {spottedText(s)}
                 {#if note}<span class="note">{note}</span>{/if}
               </p>
-              <button type="button" class="btn primary compact go" aria-label="Go to {s.activator}" onclick={() => onGo(s)}>Go</button>
+              {#if !canGo || canGo(s)}
+                <button type="button" class="btn primary compact go" aria-label="Go to {s.activator}" onclick={() => onGo(s)}>Go</button>
+              {/if}
             </div>
           {/if}
         </li>
@@ -241,6 +245,11 @@
   .badge.muted {
     background: var(--rr-fill2);
     color: var(--rr-label2);
+  }
+
+  /* On the open row's tint the grey text takes the label colour, as on a selected decode row. */
+  .spot.open .badge.muted {
+    color: var(--rr-label);
   }
 
   .freq {

@@ -34,6 +34,7 @@ interface Props {
   isNew?: ((s: Spot) => boolean) | null;
   badge?: ((s: Spot) => SpotBadge | null) | null;
   onGo?: (s: Spot) => void;
+  canGo?: ((s: Spot) => boolean) | null;
 }
 
 let app: ReturnType<typeof mount> | null = null;
@@ -106,6 +107,15 @@ describe('SpotList rows', () => {
     click(row(el, 'JL1VNI/P').querySelector('button.pick'));
     expect(el.querySelectorAll('li.spot.open')).toHaveLength(1);
     expect(row(el, 'JL1VNI/P').querySelector('.note')?.textContent).toBe('QRT');
+  });
+
+  it('leaves Go out of a spot canGo refuses', () => {
+    const el = render({ canGo: (s) => s.activator !== 'KC5JEC' });
+    click(row(el, 'KC5JEC').querySelector('button.pick'));
+    expect(row(el, 'KC5JEC').querySelector('.by')).not.toBeNull();
+    expect(el.querySelectorAll('button.go')).toHaveLength(0);
+    click(row(el, 'JE1QEV').querySelector('button.pick'));
+    expect(el.querySelectorAll('button.go')).toHaveLength(1);
   });
 
   it('hands the spot to onGo', () => {

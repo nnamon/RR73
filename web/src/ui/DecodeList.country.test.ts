@@ -60,6 +60,24 @@ describe('the country on CQ rows', () => {
     expect(rows[1].querySelector('.c-num')?.textContent).toBe('−11 dB · 763 Hz');
   });
 
+  it('gives way to the reference of the station chased from Spots, on every row from it, and says it', () => {
+    const chased: DecodeListItem[] = [
+      { kind: 'row', id: 'c1', slotStartMs, row: row(d('CQ POTA JA1KXM PM95', -12, 0.1, 1418)) },
+      { kind: 'row', id: 'c2', slotStartMs, row: row(d('W1AW JA1KXM/P RR73', -11, 0.1, 1418)) },
+      { kind: 'row', id: 'c3', slotStartMs, row: row(d('CQ VK2LAW QF56', -11, 0.1, 763)) },
+    ];
+    const chase = { call: 'JA1KXM/P', text: 'JA-1234', spoken: 'spotted, POTA JA-1234' };
+    const target = document.createElement('div');
+    document.body.append(target);
+    app = mount(DecodeList, { target, props: { items: chased, countries, chase } });
+    flushSync();
+    const rows = [...target.querySelectorAll<HTMLElement>('button.dr')];
+    expect(rows.map((r) => r.querySelector('[data-testid="chase-tag"]')?.textContent ?? null)).toEqual(['JA-1234', 'JA-1234', null]);
+    expect(rows.map((r) => r.querySelector('.c-country')?.textContent ?? null)).toEqual([null, null, 'Australia']);
+    expect(rows[0].getAttribute('aria-label')).toBe('−12 dB, DT 0.1 s, 1418 Hz, CQ POTA JA1KXM PM95, calling CQ, spotted, POTA JA-1234');
+    expect(rows[2].getAttribute('aria-label')).not.toContain('spotted');
+  });
+
   it('reads the country after the CQ, on faded rows too', () => {
     const rows = renderWith({ countries });
     expect(rows[1].getAttribute('aria-label')).toBe('−11 dB, DT 0.1 s, 763 Hz, CQ VK2LAW QF56, calling CQ, Australia');

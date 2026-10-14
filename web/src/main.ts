@@ -7,9 +7,12 @@ import { loadSettings } from './lib/state/settings.svelte';
 import { loadPractice, practice } from './lib/state/practice.svelte';
 import { initPractice } from './lib/practice/runtime.svelte';
 import { installNetworkGuard } from './lib/practice/guard';
+import { linkSpotFeed } from './lib/state/spots.svelte';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
+// The Optional features switches turn the spot sources on and off.
+linkSpotFeed();
 
 /** Longest wait for stored settings before the first render, ms. They take a few ms when storage answers. */
 const SETTINGS_WAIT_MS = 500;

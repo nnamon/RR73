@@ -2,6 +2,7 @@
 // Log and Settings in Operate's top bar; each one brings back only its own part of the app.
 import { expect, test, type Page } from '@playwright/test';
 import { mockupLog, seed, withFeatures } from './log-data';
+import { stubSpotSources } from './spot-sources';
 import { FIXED_TIME } from './time';
 
 const nav = (page: Page) => page.getByRole('navigation', { name: 'Screens' });
@@ -99,10 +100,12 @@ test('turning Activations on brings Spots back with the activation, and turning 
 });
 
 test('a spot source alone shows Spots with spots and no activation', async ({ page }) => {
+  await stubSpotSources(page);
   await page.goto('./#/settings');
   await feature(page, 'Cluster spots').check();
   await openScreen(page, 'Spots');
-  await expect(page.getByText(/^No spots yet\. DX cluster spots on your bands/)).toBeVisible();
+  // The recorded cluster spots hold no FT8 or FT4 activation spot.
+  await expect(page.getByText('No FT8 or FT4 activation spots.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Start activation/ })).toHaveCount(0);
   // LoTW users alone does not bring Spots back.
   await page.goto('./#/settings');

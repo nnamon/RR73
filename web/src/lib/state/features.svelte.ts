@@ -5,7 +5,7 @@
  *
  *   import { features, watchFeatures } from '../state/features.svelte';
  *   if (features.lotw) void lotw.get();
- *   const stop = watchFeatures((f) => spotFeed.enable({ pota: f.potaSpots, hamqth: f.clusterSpots }));
+ *   const stop = watchFeatures((f) => loader.setEnabled(f.lotw));
  *
  * Every read is reactive in components and effects. The values come from the stored settings,
  * which load before the first screen; until then every feature reads off.

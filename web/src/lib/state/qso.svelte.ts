@@ -21,6 +21,7 @@ import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
 import { log, logQso } from '../log/log.svelte';
 import { features } from './features.svelte';
+import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
@@ -152,7 +153,7 @@ export function dispatch(e: SeqEvent) {
         else scheduler.cancel();
         break;
       case 'logQso':
-        void logQso(f.record);
+        void logQso(withChaseRefs(f.record));
         break;
       case 'notice':
         qso.notice = { kind: f.kind, text: f.text, atMs: e.nowMs };

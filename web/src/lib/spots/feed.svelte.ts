@@ -154,7 +154,7 @@ export class SpotFeed {
     this.#maxNetworkBackoffMs = opts.maxNetworkBackoffMs ?? 4 * MINUTE;
     this.#maxCacheAgeMs = opts.maxCacheAgeMs ?? 60 * MINUTE;
     for (const source of opts.sources) {
-      if (this.#runtime.has(source.id)) throw new Error(`Two sources named ${source.id}.`);
+      if (this.#runtime.has(source.id)) throw new Error(`2 sources named ${source.id}.`);
       this.#runtime.set(source.id, { source, timer: null, inFlight: null });
     }
     this.status = opts.sources.map((s) => ({

@@ -32,8 +32,8 @@
 
   const optional: { id: FeatureId; title: string; sub?: string }[] = [
     { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
-    { id: 'potaSpots', title: 'POTA spots' },
-    { id: 'clusterSpots', title: 'Cluster spots' },
+    { id: 'potaSpots', title: 'POTA spots', sub: 'Activators from pota.app' },
+    { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster from HamQTH' },
     { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW' },
   ];
 

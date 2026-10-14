@@ -1,8 +1,9 @@
 // Spots from the POTA API and the DX cluster, normalised to one shape whatever the source.
 
-/** Programmes a spot can name a reference of. */
-export const PROGRAMMES = ['POTA', 'SOTA', 'WWFF', 'IOTA'] as const;
-export type Programme = (typeof PROGRAMMES)[number];
+import { PROGRAMMES, type Programme } from '../log/types';
+
+/** Programmes a spot can name a reference of: the log's. */
+export { PROGRAMMES, type Programme };
 
 /** What a spot is for the filters: a programme, or DX for a spot without a reference. */
 export type SpotClass = Programme | 'DX';
