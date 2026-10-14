@@ -25,6 +25,7 @@ pub mod osd;
 pub mod pipeline;
 pub mod report;
 pub mod search;
+pub mod silence;
 pub mod snr;
 pub mod stages;
 pub mod subtract;
