@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.14.0 · 2026-10-14
 
 - RTTY is a fourth mode in the band sheet. Set the radio to 14.0830 MHz USB on 20m: the pair sits at 1585 and 1415 Hz, and QSOs log the mark frequency.
 - In RTTY the band sheet takes the radio's dial, in MHz or kHz, and keeps it per band.
