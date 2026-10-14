@@ -11,7 +11,7 @@
   import MessagesSheet from '../../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../../ui/StationDetailSheet.svelte';
   import type { PaneProps } from './panes';
-  import { callStation, qso, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
+  import { callStation, clearDecodeList, qso, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
   import type { ListItem } from '../../lib/decode/list';
   import { SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
@@ -67,6 +67,13 @@
     }
     setFrequencies({ txHz: hz });
     showNotice(STATUS.txSet(hz));
+  }
+
+  /** Clear decodes in •••: the list empties at once, even while a touch holds new slots back. */
+  function clearList() {
+    clearDecodeList();
+    shown = band.slots;
+    unseen = 0;
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
@@ -245,7 +252,7 @@
       {/if}
     </div>
   </div>
-  <TxBar onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} />
+  <TxBar onmessages={() => (messagesOpen = true)} onfindclear={() => void findClear()} onclear={clearList} />
 
 <svelte:window onpointerup={up} onpointercancel={up} />
 

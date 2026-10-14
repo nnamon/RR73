@@ -16,7 +16,7 @@ import { STATUS } from '../qso/status';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
 import { webAudioOut } from '../tx/web-audio';
 import { beaconMessages } from '../wspr/message';
-import { durationText, firstTxSlot, nextStopAfter, nextTxSlot, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS } from '../wspr/schedule';
+import { durationText, firstTxSlot, nextStopAfter, nextTxSlot, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
 import { SORT_LABELS, SPOT_SORTS, learnGrids, toSpots, type Spot } from '../wspr/spots';
 import { log } from '../log/log.svelte';
 import { features } from './features.svelte';
@@ -306,6 +306,17 @@ export function addSlot(r: WsprSlotResult) {
   learnGrids(spots, grids);
   const entry: WsprSlot = { startUtcMs: r.startUtcMs, band: settings.band, dialHz: dial, spots, ms: r.ms, skipped: !!r.skipped };
   wspr.slots = [entry, ...wspr.slots.filter((x) => x.startUtcMs !== r.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
+}
+
+/**
+ * Clear spots from the ••• menu: empties the spot list and its selection, and drops the Sent rows
+ * of slots that have ended. The beacon, its Next row and a transmission on air stay.
+ */
+export function clearSpots(nowMs = Date.now()) {
+  wspr.slots = [];
+  wspr.sent = wspr.sent.filter((s) => s.slotStartMs + WSPR_SLOT_MS > nowMs);
+  wspr.selected = null;
+  notice(STATUS.spotsCleared, nowMs);
 }
 
 /** Spots of `call` in the slots kept, and the start of the oldest slot kept (UTC ms). */

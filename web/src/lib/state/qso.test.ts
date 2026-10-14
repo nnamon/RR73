@@ -16,7 +16,9 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 import { silentClipUri } from '../audio/unlock';
 import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
-import { callCq, callStation, configNow, dispatch, haltTx, qso, setFrequencies, setHound, setHoundDial, setHunt, setTxEnabled } from './qso.svelte';
+import { callCq, callStation, clearDecodeList, configNow, dispatch, haltTx, qso, setFrequencies, setHound, setHoundDial, setHunt, setTxEnabled } from './qso.svelte';
+import { band, deliverDecodes } from './station.svelte';
+import { filterCounts } from '../decode/list';
 import { settings, updateSettings } from './settings.svelte';
 import type { Activation } from '../log/types';
 
@@ -138,6 +140,41 @@ describe('the sequencer’s notices', () => {
       vi.setSystemTime(t + 30_100);
       dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('DV5CEL VK2LAW -05', -8, 1200)], nowMs: Date.now() });
       expect(qso.notice).toMatchObject({ kind: 'lost', text: 'VK2LAW answered DV5CEL' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('Clear decodes', () => {
+  it('empties the list, its selection and the Sent rows of ended slots, and leaves the QSO as it is', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // We called VK2LAW from 13:15:00 and are sending again at 13:15:30.
+      const t = Date.UTC(2026, 9, 13, 13, 15, 0);
+      vi.setSystemTime(t + 1000);
+      const cq = decode('CQ VK2LAW QF56', -8, 1200);
+      deliverDecodes({ startUtcMs: t - 15_000, mode: 'FT8', decodes: [cq, decode('CQ JA1KXM PM95', -12, 900)], ms: 80 });
+      callStation(cq, t - 15_000);
+      vi.setSystemTime(t + 30_100);
+      dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('CQ K1ABC FN42', -3, 600)], nowMs: Date.now() });
+      qso.sent = [
+        { slotStartMs: t + 30_000, text: 'VK2LAW 9V1NE OJ11', freqHz: 1500 },
+        { slotStartMs: t, text: 'VK2LAW 9V1NE OJ11', freqHz: 1500 },
+      ];
+      qso.selected = { decode: cq, slotStartMs: t - 15_000, id: `${t - 15_000}-0` };
+      const st = qso.st;
+      expect(st.partner?.call).toBe('VK2LAW');
+
+      clearDecodeList(Date.now());
+      expect(band.slots).toEqual([]);
+      expect(filterCounts(band.slots, '9V1NE', 1500)).toEqual({ all: 0, cq: 0, me: 0, rx: 0 });
+      expect(qso.selected).toBeNull();
+      // The transmission of the slot under way stays; the one before goes.
+      expect(qso.sent.map((x) => x.slotStartMs)).toEqual([t + 30_000]);
+      // The sequencer saw nothing: partner, plan, Hunt's CQs and ignore list are as they were.
+      expect(qso.st).toBe(st);
+      expect(qso.notice).toMatchObject({ kind: 'info', text: 'Decodes cleared' });
     } finally {
       vi.useRealTimers();
     }

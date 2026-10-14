@@ -365,6 +365,19 @@ function keepSlot(entry: DecodedSlot) {
   band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
 }
 
+/** The newest slot Clear decodes took out of the list, while later decoder stages may still add to it. */
+let clearedSlot: DecodedSlot | null = null;
+
+/**
+ * Clear decodes: empties the decode list. Slots decoded after this appear as usual. What later
+ * decoder stages find in a cleared slot still reaches the sequencer, and stays out of the list.
+ * Saved slots, Your Tx heard back and the receive calibration keep their data.
+ */
+export function clearDecodes() {
+  clearedSlot = band.slots[0] ?? null;
+  band.slots = [];
+}
+
 /**
  * A slot's decodes: into the decode list, then to the listeners (the sequencer). The decoder's
  * path, and the screen-review build's (lib/testing/e2e-hooks.ts).
@@ -382,11 +395,14 @@ export function deliverDecodes(entry: DecodedSlot) {
  * started. The receive calibration keeps to the slot's first decodes, which carry its timing.
  */
 export function addDecodes(startUtcMs: number, decodes: Decode[]) {
-  const entry = band.slots.find((s) => s.startUtcMs === startUtcMs);
+  const listed = band.slots.find((s) => s.startUtcMs === startUtcMs);
+  const entry = listed ?? (clearedSlot?.startUtcMs === startUtcMs ? clearedSlot : null);
   if (!entry || transmitted.has(startUtcMs)) return;
   const fresh = decodes.filter((d) => !entry.decodes.some((e) => e.text === d.text));
   if (!fresh.length) return;
-  keepSlot({ ...entry, decodes: [...entry.decodes, ...fresh] });
+  const grown = { ...entry, decodes: [...entry.decodes, ...fresh] };
+  if (listed) keepSlot(grown);
+  else clearedSlot = grown;
   for (const l of decodeListeners) l(startUtcMs, fresh, 'late');
 }
 

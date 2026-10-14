@@ -14,7 +14,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 });
 
 import { silentClipUri } from '../audio/unlock';
-import { addSlot, haltWspr, resetWspr, setBeacon, setTxPct, stepSort, stepStopAfter, tick, transmitNextSlot, wspr } from './wspr.svelte';
+import { addSlot, clearSpots, haltWspr, resetWspr, setBeacon, setTxPct, stepSort, stepStopAfter, tick, transmitNextSlot, wspr } from './wspr.svelte';
 import { WSPR_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { audio } from './station.svelte';
 
@@ -142,6 +142,29 @@ describe('spots', () => {
     for (let i = 0; i < 70; i++) addSlot({ startUtcMs: at(12, 0) + i * 120_000, ms: 0, decodes: [] });
     expect(wspr.slots).toHaveLength(60);
     expect(wspr.slots[0].startUtcMs).toBe(at(12, 0) + 69 * 120_000);
+  });
+
+  it('clear from the ••• menu with their selection and past Sent rows; the beacon goes on', () => {
+    setBeacon(true, at(14, 5, 28));
+    addSlot({ startUtcMs: at(14, 2), ms: 400, decodes: [{ text: '<PJ4/K1ABC> FK52UD 33', freq_hz: 1500, dt_s: 0, drift_hz_per_s: 0, snr_db: -20 }] });
+    wspr.sent = [
+      { slotStartMs: at(14, 4), text: '9V1NE OJ11 37', freqHz: 1500, complete: true },
+      { slotStartMs: at(14, 0), text: '9V1NE OJ11 37', freqHz: 1500, complete: true },
+    ];
+    wspr.selected = wspr.slots[0].spots[0].id;
+    const next = wspr.next;
+    clearSpots(at(14, 5, 30));
+    expect(wspr.slots).toEqual([]);
+    expect(wspr.selected).toBeNull();
+    // The transmission of the slot under way stays.
+    expect(wspr.sent.map((x) => x.slotStartMs)).toEqual([at(14, 4)]);
+    expect(wspr.beacon.on).toBe(true);
+    expect(wspr.next).toEqual(next);
+    expect(wspr.notice?.text).toBe('Spots cleared');
+    // Spots after the clear list as usual, with the grids heard before it.
+    addSlot({ startUtcMs: at(14, 6), ms: 400, decodes: [{ text: 'PJ4/K1ABC 33', freq_hz: 1500, dt_s: 0, drift_hz_per_s: 0, snr_db: -20 }] });
+    expect(wspr.slots).toHaveLength(1);
+    expect(wspr.slots[0].spots[0]).toMatchObject({ call: 'PJ4/K1ABC', grid: 'FK52ud' });
   });
 
   it('change order from the ••• menu: distance, SNR, callsign, then distance', () => {
