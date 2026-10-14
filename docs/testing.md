@@ -28,6 +28,8 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 
 `e2e/operate.spec.ts` keeps the checks from `states.spec.ts` that CI needs, with decodes injected and no transmission: one bottom bar height in every state, the decode rows on screen, messages to you leading their slot, the dimming of unrelated rows while calling or in a QSO (and none while calling CQ, after End QSO or with Tx off), and a run of empty slots as one bar. The review projects also run it, which saves the empty-slot run in both themes at both sizes.
 
+`e2e/hound.spec.ts` runs Hound with injected decodes: the band sheet's dial frequency (refused outside the band, then set), calling the Fox, the report read from a multi-call message, and the Hound item in •••. CI runs it in light at 375 x 667; the review projects run it in both themes at both sizes and save its 4 screenshots.
+
 ## Audio tests on a loaded host
 
 Tests that need received audio play a WAV as Chromium's fake microphone (`--use-file-for-fake-audio-capture` in `web/playwright.config.ts`). Chromium loops the file from the moment capture starts and feeds it in real time. When the Docker VM runs short of CPU, that feed falls behind: the missing audio comes back as runs of zeros, which the app mostly records as ordinary samples, and the audio after each run sits later than it should. A transmission cut that way decodes badly: slots that lost 0.3 s or more decoded at most 1 of 4 messages.
