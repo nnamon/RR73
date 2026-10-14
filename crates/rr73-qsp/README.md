@@ -1,6 +1,6 @@
 # rr73-qsp
 
-QSP is the relay server for RR73. It handles the services a web page on an iPhone cannot reach directly. The first is web SDR receive: KiwiSDRs serve only plain `ws://`, which Safari blocks from the https app. Reports to PSK Reporter and uploads to WSPRnet are planned. The design is in `docs/design/qsp.md`.
+QSP is the relay server for RR73. It handles the services a web page on an iPhone cannot reach directly. It carries web SDR receive, since KiwiSDRs serve only plain `ws://`, which Safari blocks from the https app, and reports to PSK Reporter, which take UDP. The design is in `docs/design/qsp.md`.
 
 RR73 works without a relay, and anyone can run one. QSP never receives credentials for other services, and it connects only to the receivers its settings list.
 

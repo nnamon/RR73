@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Settings › WSPR (ADR 0006, docs/design/wspr.md): the beacon's Tx percentage, reported power,
-   * Tx frequency and Stop beacon after, the message it sends, and the order of the spots.
+   * Tx frequency and Stop beacon after, the message it sends, the order of the spots, and uploads
+   * to WSPRnet (lib/state/wsprnet.svelte.ts).
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -13,6 +14,8 @@
   import { settings, updateSettings, type WsprSettings } from '../lib/state/settings.svelte';
   import { codec } from '../lib/state/station.svelte';
   import { beaconTexts, setPowerDbm, setTxPct, setWsprTxHz, wspr } from '../lib/state/wspr.svelte';
+  import { setWsprnet, wsprnet, wsprnetHold, wsprnetStatus } from '../lib/state/wsprnet.svelte';
+  import { utcHm } from '../lib/clock/format';
 
   const w = $derived(settings.wspr);
   const limits = FREQ_LIMITS.WSPR;
@@ -86,6 +89,18 @@
     };
   });
   const compoundNoGrid = $derived(message.ok && message.texts.length === 1 && message.texts[0].split(' ').length === 2);
+
+  const uploadText = $derived.by(() => {
+    const hold = wsprnetHold();
+    if (hold === 'off') return '';
+    if (hold === 'station') return 'Needs your callsign and grid';
+    if (hold === 'practice') return 'Paused while the practice band is on';
+    if (hold === 'web-sdr') return 'Paused while receiving from a web SDR';
+    if (hold === 'mode') return 'Paused outside WSPR';
+    if (wsprnetStatus.error) return wsprnetStatus.error;
+    if (wsprnetStatus.atMs !== null) return `Sent ${wsprnetStatus.spots} ${wsprnetStatus.spots === 1 ? 'spot' : 'spots'}, last at ${utcHm(wsprnetStatus.atMs)} UTC`;
+    return 'Waiting for the next slot';
+  });
 </script>
 
 <section class="screen sub" aria-labelledby="wspr-title">
@@ -177,6 +192,23 @@
         </label>
       {/each}
     </div>
+  </div>
+
+  <div class="section">
+    <div class="group">
+      <label class="row">
+        <span class="row-main">
+          <span class="row-title">Upload spots to WSPRnet</span>
+          <span class="row-sub">Straight from this phone</span>
+        </span>
+        <input type="checkbox" role="switch" class="switch" checked={wsprnet.on} onchange={(e) => void setWsprnet(e.currentTarget.checked)} />
+      </label>
+    </div>
+    {#if uploadText}
+      <p class="section-foot" role="status" data-testid="wsprnet-status">{uploadText}</p>
+    {:else}
+      <p class="section-foot">Uploads the spots your radio decodes, as WSJT-X does.</p>
+    {/if}
   </div>
 </section>
 

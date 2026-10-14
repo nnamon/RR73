@@ -1,5 +1,5 @@
 //! QSP, the relay RR73 uses for the services a web page on an iPhone cannot reach directly: web
-//! SDR receive and reports to PSK Reporter; WSPRnet uploads are planned (docs/design/qsp.md). It
+//! SDR receive and reports to PSK Reporter (docs/design/qsp.md). It
 //! carries no credentials for other services and reaches only the receivers its settings list.
 
 pub mod api;

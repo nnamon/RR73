@@ -82,6 +82,10 @@ let scheduledFor: number | null = null;
 const grids = new Map<string, string>();
 
 /** The station's call and grid: the running activation's (with Activations on), else Settings. */
+export function wsprStation(): { call: string; grid: string } {
+  return station();
+}
+
 function station(): { call: string; grid: string } {
   const a = features.activations ? log.current : null;
   return { call: a?.callsign || settings.callsign, grid: a?.grid || settings.grid };

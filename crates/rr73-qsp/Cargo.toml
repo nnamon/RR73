@@ -1,6 +1,6 @@
 [package]
 name = "rr73-qsp"
-description = "QSP, the relay RR73 uses for the services a web page cannot reach directly: web SDRs, PSK Reporter, WSPRnet"
+description = "QSP, the relay RR73 uses for the services a web page cannot reach directly: web SDRs and PSK Reporter"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

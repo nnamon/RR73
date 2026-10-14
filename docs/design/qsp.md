@@ -1,6 +1,6 @@
 # QSP
 
-QSP, named after the Q-code for relaying, is a server for the services a web page on an iPhone cannot reach directly. Web SDR receive shipped in 0.16.0. Reports to PSK Reporter and WSPR uploads are planned. RR73 works without a relay, and anyone can run one from this repository. The design was approved on 15 October 2026.
+QSP, named after the Q-code for relaying, is a server for the services a web page on an iPhone cannot reach directly. Web SDR receive shipped in 0.16.0 and reports to PSK Reporter in 0.17.0. WSPRnet uploads go from the phone directly. RR73 works without a relay, and anyone can run one from this repository. The design was approved on 15 October 2026.
 
 ## Principles
 
@@ -19,7 +19,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 | KiwiSDR receivers, other web SDR kinds later | QSP | KiwiSDRs serve plain `ws://`; Safari refuses it from the https app. |
 | PSK Reporter, reports | QSP | IPFIX over UDP to port 4739; a web page cannot send UDP. |
 | PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). The feed pushes reports to the page. |
-| WSPRnet | QSP | An upload can go out from the page, but its answer cannot be read. |
+| WSPRnet | Direct | `https://wsprnet.org/post/` takes the form-encoded POST as a simple request; it sends no CORS headers, so its answer cannot be read (checked 15 October). |
 | Wavelog, Cloudlog | Direct | The operator's own server. Cloudlog is not scheduled. |
 | QRZ XML, HamQTH | Direct | Open to browsers. Not scheduled. |
 
@@ -47,8 +47,6 @@ Versioned under `/v1`; `/docs`, `/openapi.json`, `/about` and `/health` are not.
 | `GET /v1/sdr/sessions/{id}/stream?ticket=` | The audio as a WebSocket. A browser cannot set headers on a WebSocket, so the ticket from the session stands in for the key, once. |
 | `POST /v1/pskreporter/receptions` | A batch of decodes and the receiving station. Answers taken, repeats and when the next report goes. |
 | `GET /v1/pskreporter/status` | Waiting, sent and the next report. |
-| `POST /v1/wsprnet/uploads` | One or more WSPR slots of spots. |
-| `GET /v1/wsprnet/uploads/{id}` | Waiting, sent or refused, tries made, next try. |
 
 ### The audio stream
 
@@ -75,7 +73,7 @@ Each part is built against the real service and tested against a small stand-in.
 
 1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app. Shipped in 0.16.0.
 2. PSK Reporter: reports through QSP, and who heard you from the MQTT feed. Built.
-3. WSPRnet uploads.
+3. WSPRnet uploads, straight from the phone. Built.
 
 ## PSK Reporter
 
@@ -110,7 +108,15 @@ The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https:
 
 ## WSPRnet
 
-One upload per 2-minute slot with spots, none for an empty slot; slots that waited go together. After a failure the wait doubles to 30 min at most, and Retry-After is honoured. WSPRnet's upload interface is checked against its own documentation before the live side is built: Unverified.
+The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once WSPRnet was found to take the upload over HTTPS. The interface follows the owner's description of what WSJT-X sends, read from its traffic; WSPRnet publishes none, and wsprnet.org answered 403 to every page fetched.
+
+- One record per `POST https://wsprnet.org/post/`, form-encoded, with no batching, credentials or cookies. `/` stays as it is; a space is `%20`. An empty POST answers "Nothing to do." (checked 15 October).
+- A slot with spots sends one `function=wspr` record per spot within 10 kHz of the reporter's frequency (dial + 1500 Hz): date and time of the slot, SNR, DT to one decimal, drift in Hz, the spot's frequency in MHz to 6 decimals, callsign, grid, power, version, the reporter's callsign, grid and frequency, and mode 2. Type 2 messages go with an empty grid, Type 3 without the hash brackets; an unresolved hash does not go.
+- A slot without spots sends one `function=wsprstat` record: the reporter, its frequency, its Tx percentage (0 while the beacon is off), Tx frequency and power.
+- A slot's records go a random 0 to 20 s after it is decoded, one every 200 ms.
+- WSPRnet sends no CORS headers, so the page cannot read "spot(s) added". A record counts as sent once the request goes out. One that never left the phone goes again after 2, 4, 8, 16 and 30 min; one that went out is not sent twice, since WSPRnet may have stored it.
+- Only what the operator's radio hears goes, as for PSK Reporter; a slot the decoder skipped sends nothing. The version is `RR73 x.y.z`, which WSPRnet takes in a field where WSJT-X sends `3.0.2`: Unverified, since the answer cannot be read.
+- Settings › WSPR turns uploads on, off by default.
 
 ## Web SDRs
 
@@ -143,5 +149,5 @@ One upload per 2-minute slot with spots, none for an empty slot; slots that wait
 
 - The SARTS receiver's session limits and channels in use by others.
 - PSK Reporter's MQTT feed: its topic names and terms of use, checked before building who heard you.
-- WSPRnet's upload interface and its load.
+- WSPRnet's upload interface is undocumented, and its answers cannot be read from the page: a change on its side would go unnoticed.
 - A server needs looking after: updates, renewals and a check that it is up. A self-hosted instance puts that on its operator.

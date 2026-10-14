@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › WSPR uploads your spots to WSPRnet, straight from this phone, as WSJT-X does. Off by default. A slot without spots reports your station as listening.
+
 ## 0.18.0 · 2026-10-14
 
 - Spots lists the stations that heard you in the last 30 min, live from PSK Reporter's MQTT feed: callsign, grid, distance, band, SNR and time. Turn it on in Settings › PSK Reporter. No relay is needed.
