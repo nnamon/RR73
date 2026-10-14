@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildMessages, formatReport, isGrid, parseExchange, sameCall } from './messages';
-import { gridCentre, pathBetween } from './grid';
+import { gridCentre, gridPath } from '../reference/grid';
 
 describe('parseExchange', () => {
   it('reads CQ calls with and without a modifier or grid', () => {
@@ -74,11 +74,11 @@ describe('callsigns and grids', () => {
     expect(gridCentre('OJ11')).toEqual({ lat: 1.5, lon: 103 });
     expect(gridCentre('JJ00aa')!.lat).toBeCloseTo(0.0208, 3);
     // Singapore to Tokyo, about 5300 km north-east.
-    const p = pathBetween('OJ11', 'PM95')!;
+    const p = gridPath('OJ11', 'PM95')!;
     expect(p.km).toBeGreaterThan(5100);
     expect(p.km).toBeLessThan(5500);
-    expect(p.bearing).toBeGreaterThan(20);
-    expect(p.bearing).toBeLessThan(50);
-    expect(pathBetween('OJ11', 'nope')).toBeNull();
+    expect(p.bearingDeg).toBeGreaterThan(20);
+    expect(p.bearingDeg).toBeLessThan(50);
+    expect(gridPath('OJ11', 'nope')).toBeNull();
   });
 });

@@ -7,7 +7,7 @@
  * sent in a Type 1 or Type 3 message heard earlier, when there is one.
  */
 
-import { pathBetween } from '../qso/grid';
+import { gridPath } from '../reference/grid';
 import { readMessage, type WsprMessage } from './message';
 import { TX_SECONDS } from './schedule';
 
@@ -92,7 +92,7 @@ export function toSpots(decodes: readonly WsprDecode[], slotStartMs: number, ctx
     const m = readMessage(d.text);
     const heard = !m.grid && m.call ? (ctx.grids.get(m.call) ?? null) : null;
     const grid = m.grid ?? heard;
-    const path = grid && ctx.myGrid ? pathBetween(ctx.myGrid, grid) : null;
+    const path = grid && ctx.myGrid ? gridPath(ctx.myGrid, grid) : null;
     return {
       ...m,
       grid,
@@ -105,7 +105,7 @@ export function toSpots(decodes: readonly WsprDecode[], slotStartMs: number, ctx
       freqHz: ctx.dialHz + d.freq_hz,
       driftHz: driftHz(d.drift_hz_per_s),
       km: path ? path.km : null,
-      bearingDeg: path ? path.bearing : null,
+      bearingDeg: path ? path.bearingDeg : null,
       gridHeard: heard !== null,
       mine: !!me && m.call !== null && sameStation(m.call, me),
     };

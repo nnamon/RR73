@@ -14,7 +14,7 @@
 import { SLOT_MS, parity as parityOf, slotStart, type FtMode as Mode, type Parity } from '../clock/slots';
 import { PAUSED, STATUS } from './status';
 import type { Decode } from '../decode/types';
-import { pathBetween } from './grid';
+import { gridPath } from '../reference/grid';
 import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
 
@@ -394,7 +394,7 @@ function dupeOf(worked: Worked[], call: string, c: SeqConfig, nowMs: number): bo
 /** Plain CQs in Hunt's order. */
 export function orderHunt(cqs: HeardCq[], order: HuntOrder, worked: Worked[], config: SeqConfig): HeardCq[] {
   const strongest = (a: HeardCq, b: HeardCq) => b.snrDb - a.snrDb || a.seq - b.seq;
-  const km = (q: HeardCq) => (q.grid ? (pathBetween(config.myGrid, q.grid)?.km ?? -1) : -1);
+  const km = (q: HeardCq) => (q.grid ? (gridPath(config.myGrid, q.grid)?.km ?? -1) : -1);
   const fresh = (q: HeardCq) => Number(!workedHere(worked, q.call, config));
   const newCall = (q: HeardCq) => Number(!worked.some((w) => sameCall(w.call, q.call)));
   const by: Record<HuntOrder, (a: HeardCq, b: HeardCq) => number> = {
@@ -829,7 +829,7 @@ class Machine {
         seq: found?.seq ?? st.seq++,
         dupe: this.isDupe(ex.from, nowMs),
         isNew: !st.worked.some((w) => sameCall(w.call, ex.from)),
-        distanceKm: grid ? (pathBetween(this.cfg.myGrid, grid)?.km ?? null) : null,
+        distanceKm: grid ? (gridPath(this.cfg.myGrid, grid)?.km ?? null) : null,
       };
       if (found) Object.assign(found, entry);
       else st.queue.push(entry);
