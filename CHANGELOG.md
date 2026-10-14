@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.12.5 · 2026-10-14
 
 - The first step of a QSO you answer shows the grid your call sends, "OJ11", where it said Grid. Every step now shows what went out or came in.
 - When the station you call answers another station, its messages to that station show a small red Lost where a CQ row has its country, for a minute after.
