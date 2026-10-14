@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.13.0 · 2026-10-14
 
 - iPad, desktop and a phone on its side get layouts of their own, chosen by the window's size. Below 700 pt wide the phone layout stays as it is.
 - On iPad and desktop, tabs in the bar at the top open Operate, Log, Spots and Settings. While Tx is on, Log, Spots and Settings show On air and Halt in that bar.
