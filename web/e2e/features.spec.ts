@@ -49,6 +49,17 @@ test('a new install shows three tabs, every feature off, and Spots opens Optiona
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
   for (const name of ['Activations', 'POTA spots', 'Cluster spots', 'LoTW users']) await expect(feature(page, name)).not.toBeChecked();
+
+  // The Activate tab of earlier versions leads there too, on a fresh page.
+  await page.goto('./#/operate');
+  await page.reload();
+  await page.goto('./#/activate');
+  await expect(page).toHaveURL(/#\/settings\/features$/);
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(nav(page).getByRole('link')).toHaveCount(2);
+  await expect(nav(page).getByRole('link', { name: 'Spots' })).toHaveCount(0);
 });
 
 test('turning Activations on brings Spots back with the activation, and turning it off hides it again', async ({ page }) => {
@@ -66,6 +77,11 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await expect(views(page)).toHaveText(['All', 'To do', 'Activations']);
   await page.goto('./#/settings/logging');
   await expect(page.getByText('File to upload at pota.app')).toBeVisible();
+  // The Activate tab of earlier versions opens Spots.
+  await page.goto('./#/activate');
+  await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(nav(page).getByRole('link', { name: 'Spots' })).toBeVisible();
 
   // It survives a reload, then turns off again.
   await page.goto('./#/settings');

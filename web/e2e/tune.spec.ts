@@ -89,13 +89,18 @@ test('a tap outside the Tune sheet closes it and halts', async ({ page }) => {
 });
 
 test('Tune stops by itself after 10 s', async ({ page }) => {
-  test.setTimeout(30_000);
+  // The page clock runs the wall-clock stop, 10 s and 320 ms after the start
+  // (lib/audio/output.ts), without waiting for it.
+  await page.clock.install();
   await instrument(page);
   await page.goto('./#/settings/radio');
   await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toBeVisible();
-  await expect(sheet).toBeHidden({ timeout: 13_000 });
+  await page.clock.runFor(9_500);
+  await expect(sheet).toBeVisible();
+  await page.clock.runFor(1_000);
+  await expect(sheet).toBeHidden();
   await expect(page.getByText(/Not checked at \d\d:\d\d: receive audio was off\./)).toBeVisible();
 });
 

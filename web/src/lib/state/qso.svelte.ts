@@ -181,7 +181,7 @@ function onTxReport(r: TxReport) {
     dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
   } else {
     qso.notice = { kind: 'refused', text: r.reason, atMs: now };
-    dispatch({ type: 'txMissed', slotStartMs: r.slotStartMs, nowMs: now });
+    dispatch({ type: 'txRefused', slotStartMs: r.slotStartMs, nowMs: now });
   }
 }
 

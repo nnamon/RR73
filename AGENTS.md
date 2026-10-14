@@ -53,6 +53,8 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 
 Check every UI change against these before it ships, and compare the screen side by side with its neighbours in both themes at 375 x 667 and 393 x 852.
 
+`RR73_REVIEW=1 docker compose run --rm e2e npx --prefix web playwright test --project review-375x667 --project review-393x852` saves every screen, sheet and Operate state in both themes at both sizes to `web/test-results/screens` (docs/testing.md).
+
 - Operate is the main screen and starts with its 44 pt top bar. Log, Spots, Settings and their sub-screens open over it and start with `BackLink`: one 44 pt bar, so titles and content line up across screens.
 - Content sits 16 pt from the screen edges; text in groups, section headers and footers sits 32 pt in.
 - Bar buttons are 44 pt targets side by side, never overlapping, with glyphs of equal size and stroke weight; the last glyph ends 16 pt from the edge, and focus shows a rounded ring.

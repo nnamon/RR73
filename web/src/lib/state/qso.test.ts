@@ -113,6 +113,37 @@ describe('the call on air', () => {
   });
 });
 
+describe('Call CQ while audio is not running', () => {
+  it('is refused for its slot and stays planned no more than 2 slots ahead', () => {
+    const now = Date.now();
+    callCq();
+    expect(qso.notice?.text).toBe('Audio off');
+    // Each refusal used to plan the next slot inside the same call, slot after slot, until the
+    // stack overflowed hundreds of slots ahead.
+    expect(qso.st.next!.slotStartMs).toBeLessThanOrEqual(slotStart(now, 'FT8') + 30_000);
+    expect(qso.st.next!.scheduled).toBe(false);
+  });
+});
+
+describe('the sequencer’s notices', () => {
+  it('reach the status line: a station called answers another station', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      // VK2LAW calls CQ in the odd slot before 13:15:00; we call in even slots.
+      const t = Date.UTC(2026, 9, 13, 13, 15, 0);
+      vi.setSystemTime(t + 1000);
+      callStation(decode('CQ VK2LAW QF56', -8, 1200), t - 15_000);
+      expect(qso.st.phase).toBe('answering');
+      // In its next slot VK2LAW answers DV5CEL.
+      vi.setSystemTime(t + 30_100);
+      dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('DV5CEL VK2LAW -05', -8, 1200)], nowMs: Date.now() });
+      expect(qso.notice).toMatchObject({ kind: 'lost', text: 'VK2LAW answered DV5CEL' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('Hound dial frequency', () => {
   it('is the dial the sequencer logs with Hound on, and the usual one with Hound off', async () => {
     await updateSettings({ band: '20m', mode: 'FT8', houndBands: [], houndDialHz: {} });

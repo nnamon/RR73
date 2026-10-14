@@ -29,25 +29,6 @@ test('the empty tabs say what will appear', async ({ page }) => {
   await expect(page.getByText(/^No spots yet\. POTA spots on your bands/)).toBeVisible();
 });
 
-test('Log and Settings on a new install, and an old Activate link opens Optional features', async ({ page }) => {
-  await page.goto('./#/activate');
-  await expect(page).toHaveURL(/#\/settings\/features$/);
-  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
-  await page.getByRole('link', { name: 'Operate' }).click();
-  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link')).toHaveCount(2);
-  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toHaveCount(0);
-});
-
-test('with Activations on, an old Activate link opens Spots', async ({ page }) => {
-  await page.goto('./');
-  await seed(page, withFeatures(emptySeed(), { activations: true }));
-  await page.goto('./#/activate');
-  await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
-  await page.getByRole('link', { name: 'Operate' }).click();
-  await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toBeVisible();
-});
-
 test('Operate shows the band, the frequency and the empty decode list', async ({ page }) => {
   await page.goto('./');
   const band = page.getByRole('button', { name: /^Change band/ });
@@ -72,7 +53,7 @@ test('a tap on a band applies it at once', async ({ page }) => {
   await expect(band).toContainText('7.0475');
 });
 
-test('the callsign is stored on the phone and marks nothing until set', async ({ page }) => {
+test('the callsign is stored on the phone in capitals and kept over a reload', async ({ page }) => {
   await page.goto('./#/settings');
   const field = page.getByRole('textbox', { name: 'Callsign' });
   await expect(field).toHaveValue('');

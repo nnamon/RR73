@@ -30,6 +30,7 @@
   import { settings } from '../lib/state/settings.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { audio, band, recent, resumeAudio, startAudio, tx, type DecodedSlot } from '../lib/state/station.svelte';
+  import { reference } from '../lib/reference';
 
   /** False while another screen is pushed over Operate: the list keeps its place for the return. */
   let { active = true }: { active?: boolean } = $props();
@@ -55,6 +56,10 @@
     detailOpen = true;
   }
   let filter = $state<Filter>('all');
+
+  // CQ rows name the caller's country once the country file has loaded, when the page is idle.
+  let countries = $state.raw(reference.loadedCountries());
+  if (!reference.loadedCountries()) void reference.warm({ lotwUsers: false }).then(() => (countries = reference.loadedCountries()));
 
   const live = $derived(audio.status === 'running');
   const transmitting = $derived(!!qso.onAir || tx.tuning);
@@ -282,7 +287,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {countries} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}

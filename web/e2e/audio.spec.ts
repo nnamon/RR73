@@ -1,4 +1,5 @@
 // Audio from a tap to a saved slot, with Chromium's fake microphone playing e2e/.fixtures/tones.wav.
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -31,6 +32,8 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   const meter = page.getByRole('meter', { name: 'Input level' });
   await expect(meter).toHaveAttribute('aria-valuetext', 'No audio');
   await expect(page.getByText('Audio is off')).toBeVisible();
+  // No slot is kept before audio starts.
+  await expect(page.getByRole('button', { name: 'Save slot' })).toBeDisabled();
 
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
@@ -117,6 +120,13 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   levels.forEach((db, i) => expect(Math.abs(db), `${TONES_HZ[i]} Hz in the WAV, dB from its input level`).toBeLessThan(1));
   expect(alias).toBeLessThan(0.05 / 100);
   await page.screenshot({ path: `${SHOTS}/mic-chromium-light-save-slot.png` });
+
+  // The sheet passes axe (WCAG 2.2 AA) in both themes, with its slots and download links.
+  for (const colorScheme of ['light', 'dark'] as const) {
+    await page.emulateMedia({ colorScheme });
+    const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(r.violations.map((v) => `${colorScheme} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
+  }
 });
 
 test('a hidden page stops audio, says when, and a tap resumes it', async ({ page }) => {

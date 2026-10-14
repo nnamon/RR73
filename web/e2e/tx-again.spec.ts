@@ -1,7 +1,9 @@
-// Transmit, Halt, then call a station: the second call goes on air too. Runs in Chromium and in
-// WebKit, whose output timestamps are wrong in Playwright on Linux (performanceTime advances 2 s
-// per second). The CQ to answer arrives through the test hooks (src/lib/testing/e2e-hooks.ts).
-// Along the way the clock mapping that stamps receive audio and schedules Tx must stay on UTC.
+// Transmit, Halt, then call a station: the second call goes on air too. Runs in WebKit, the
+// engine on the iPhone, whose output timestamps are wrong in Playwright on Linux (performanceTime
+// advances 2 s per second; engine.test.ts replays recorded readings). Chromium's transmissions
+// are measured in tx-cq.spec.ts and transmit.spec.ts. The CQ to answer arrives through the test
+// hooks (src/lib/testing/e2e-hooks.ts). Along the way the clock mapping that stamps receive audio
+// and schedules Tx must stay on UTC.
 import { expect, test, type Page } from '@playwright/test';
 import { prepare, waitForSlotPhase } from './txhelp';
 
@@ -39,5 +41,14 @@ test('after a CQ and Halt, calling a station goes on air', async ({ page }) => {
   await expect(dock.getByText(/JA1ABC 9V1NE OJ11/)).toBeVisible();
   await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
   await expectOnUtc(page, 'on air again');
+
+  // The radio hands our own signal back in the slot we transmit in, at +45 dB: that slot's decodes
+  // are not shown, and the one row for the call is the one going out, marked Sending.
+  const ours = await page.evaluate(() => Math.floor(Date.now() / 15_000) * 15_000);
+  await page.evaluate((s) => window.__rr73!.decoded(s, [{ text: 'JA1ABC 9V1NE OJ11', freq_hz: 1500, dt_s: -0.7, snr_db: 45 }]), ours);
+  await page.waitForTimeout(300);
+  const list = page.getByTestId('decode-list');
+  await expect(list.locator('button.dr', { has: page.locator('.c-msg', { hasText: /^JA1ABC 9V1NE OJ11$/ }) })).toHaveCount(1);
+  await expect(list.locator('button.dr.sending .c-tag')).toHaveText('Sending');
   await dock.getByRole('button', { name: 'Halt' }).click();
 });

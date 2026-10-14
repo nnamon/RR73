@@ -45,7 +45,7 @@ async function decoded(page: Page, texts: [string, number][]) {
 
 const row = (page: Page, text: string) => page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) });
 
-test('CQ, Tx on and Run each play the silent clip inside the tap', async ({ page }) => {
+test('CQ, Tx on and Hunt each play the silent clip inside the tap', async ({ page }) => {
   await page.addInitScript(() => {
     const w = window as unknown as { __clips: number };
     w.__clips = 0;
@@ -87,7 +87,7 @@ test('CQ, Tx on and Run each play the silent clip inside the tap', async ({ page
   expect(await clips()).toBe(4);
 });
 
-test('a double-tap on a decode calls the station with Tx on at once', async ({ page }) => {
+test('a double-tap on a decode calls the station with Tx on at once, and ends CQ', async ({ page }) => {
   const bar = await setUp(page);
   const idle = await haltLook(bar);
   await decoded(page, [
@@ -118,6 +118,21 @@ test('a double-tap on a decode calls the station with Tx on at once', async ({ p
   expect(r).toBeGreaterThan(Math.max(g, b) + 100);
   const [tr, tg, tb] = channels(idle.text);
   expect(tr).toBeGreaterThan(Math.max(tg, tb) + 100);
+
+  // While calling CQ, a double-tap on another station's CQ turns CQ off and takes the answering
+  // steps; the sequencer's tests check that CQ does not come back (qso/sequencer.test.ts).
+  await bar.getByRole('button', { name: 'Halt' }).click();
+  await bar.getByRole('button', { name: 'CQ', exact: true }).click();
+  await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/CQ.*Report.*R-report.*RR73.*Logged/);
+  await decoded(page, [
+    ['CQ VJ6X OF78', 506],
+    ['CQ A41ZZ LL93', 956],
+  ]);
+  await row(page, 'CQ A41ZZ LL93').dblclick();
+  await expect(bar.getByRole('button', { name: 'CQ', exact: true })).toHaveAttribute('aria-pressed', 'false');
+  await expect(bar.getByRole('button', { name: 'Tx on' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/Grid.*Report.*R-report.*RR73.*73/);
 });
 
 test('the ••• menu holds the rest, acts on the first tap and closes with Escape', async ({ page }) => {

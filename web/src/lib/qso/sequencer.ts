@@ -237,6 +237,8 @@ export type SeqEvent =
   | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
   | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
+  /** The output refused the transmission (audio not running, not set up): tick plans again once its slot has passed. */
+  | { type: 'txRefused'; slotStartMs: number; nowMs: number }
   | { type: 'audioStopped'; nowMs: number }
   | { type: 'audioResumed'; nowMs: number }
   | { type: 'touch'; nowMs: number }
@@ -1241,6 +1243,10 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         const len = SLOT_MS[st.config.mode];
         m.plan(st.current, Math.max(e.nowMs, e.slotStartMs + len + 1));
       }
+      break;
+    case 'txRefused':
+      // Planning again at once would be refused again in the same call stack, slot after slot.
+      if (st.next?.slotStartMs === e.slotStartMs) st.next.scheduled = false;
       break;
     case 'audioStopped':
       if (st.txEnabled || st.hunt) m.notice('audio', STATUS.audioStopped);

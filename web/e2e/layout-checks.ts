@@ -1,5 +1,29 @@
-// Layout checks shared by the layout and screen-state tests.
-import { expect, type Page } from '@playwright/test';
+// Layout checks shared by the layout and screen-state tests, and the tags and screenshots that
+// split them between CI and the visual review.
+import { expect, type Page, type TestInfo } from '@playwright/test';
+
+/**
+ * Tags a WebKit layout test for the CI projects (playwright.config.ts). CI runs the light theme
+ * only, as dark changes colours and nothing else (tokens.css): at 375 x 667, where checks that do
+ * not depend on the screen size are strictest, and at 393 x 852 as well where the size matters.
+ * No widths leaves the test to the review projects.
+ */
+export function ci(theme: 'light' | 'dark', ...widths: (375 | 393)[]) {
+  return { tag: theme === 'light' ? widths.map((w) => `@ci-${w}`) : [] };
+}
+
+/** True in the review projects, which save the screenshots (RR73_REVIEW=1, docs/testing.md). */
+export const reviewing = (info: TestInfo) => info.project.name.startsWith('review-');
+
+/**
+ * Saves a screenshot for the visual review, after `settleMs` for animations, as
+ * `<dir>/webkit-375x667-light-<name>.png`. Does nothing outside the review projects.
+ */
+export async function shot(page: Page, info: TestInfo, dir: string, name: string, settleMs = 0) {
+  if (!reviewing(info)) return;
+  if (settleMs) await page.waitForTimeout(settleMs);
+  await page.screenshot({ path: `${dir}/${info.project.name.replace(/^review-/, 'webkit-')}-${name}.png` });
+}
 
 /** Nothing wider than the screen, in the page or in any element, and every control at least 44 by 44 px. */
 export async function checkLayout(page: Page) {

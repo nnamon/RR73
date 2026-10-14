@@ -1,9 +1,11 @@
 // Layout on iPhone viewports in WebKit, light and dark: nothing overflows sideways, Operate fits
 // with its top bar, waterfall, filters, list and bottom bar, every control is at least 44 px,
-// pushed screens start with a 44 pt back bar, and each screen is captured.
+// pushed screens start with a 44 pt back bar, and each screen is captured for the visual review.
+// CI runs the light theme, at 375 x 667 unless the check depends on the screen size (ci() in
+// layout-checks.ts); the review projects run both themes at both sizes and save the screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
-import { checkLayout, smallTargets } from './layout-checks';
+import { checkLayout, ci, shot, smallTargets } from './layout-checks';
 import { LOG_SHEETS, SCREENS, open } from './screens';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens', import.meta.url));
@@ -29,17 +31,24 @@ function barInks(page: Page) {
   );
 }
 
+/**
+ * Screens whose layout checks another test makes, kept for their screenshots: Operate and Operate
+ * with an activation (the operate fits tests), and Settings scrolled to Optional features (the
+ * same page as settings).
+ */
+const SCREENSHOT_ONLY = new Set(['operate', 'operate-running', 'settings-features']);
+
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
-    test(`${s.name} in ${theme}`, async ({ page }, info) => {
+    test(`${s.name} in ${theme}`, SCREENSHOT_ONLY.has(s.name) ? ci(theme) : ci(theme, 375), async ({ page }, info) => {
       await open(page, s.path, theme, s.seed, s.features, s.practice);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
-      await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${s.name}.png` });
+      await shot(page, info, SHOTS, `${theme}-${s.name}`);
     });
   }
 
-  test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, async ({ page }) => {
+  test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, ci(theme, 375), async ({ page }) => {
     const titles: { path: string; top: number; fontSize: string }[] = [];
     for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/versions', '#/settings/colours', '#/settings/practice']) {
       await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
@@ -82,7 +91,7 @@ for (const theme of ['light', 'dark'] as const) {
   });
 
   for (const running of [false, true]) {
-    test(`operate fits without scrolling, one bar at each end${running ? ' with an activation running' : ''} in ${theme}`, async ({ page }) => {
+    test(`operate fits without scrolling, one bar at each end${running ? ' with an activation running' : ''} in ${theme}`, ci(theme, 375, 393), async ({ page }) => {
       await open(page, '#/operate', theme, running ? 'running' : undefined, running ? { activations: true } : undefined);
       if (running) await expect(page.getByRole('link', { name: /^Activation POTA VK-0921 \+1, 7 of 10\./ })).toBeVisible();
       const { vw, vh } = await page.evaluate(() => ({ vw: window.innerWidth, vh: window.innerHeight }));
@@ -99,7 +108,7 @@ for (const theme of ['light', 'dark'] as const) {
       expect(list.y + list.height).toBeLessThanOrEqual(bar.y + 0.5);
       // The bottom bar sits at the bottom, with Halt in it; no tab bar.
       expect(bar.y + bar.height).toBeCloseTo(vh, 0);
-      // Status line, step row and buttons: one height in every state (states.spec.ts).
+      // Status line, step row and buttons: one height in every state (operate.spec.ts).
       expect(bar.height).toBeCloseTo(86, 0);
       await expect(page.getByRole('navigation', { name: 'Main' })).toHaveCount(0);
       const halt = (await page.getByRole('button', { name: 'Halt' }).boundingBox())!;
@@ -111,7 +120,8 @@ for (const theme of ['light', 'dark'] as const) {
   }
 
   for (const practice of [false, true]) {
-    test(`the top bar fits its buttons with Spots shown${practice ? ' and practice on' : ''} in ${theme}`, async ({ page }) => {
+    // The test sets its own widths, so CI runs it in one project.
+    test(`the top bar fits its buttons with Spots shown${practice ? ' and practice on' : ''} in ${theme}`, ci(theme, 393), async ({ page }) => {
       await open(page, '#/operate', theme, undefined, { activations: true }, practice);
       const height = page.viewportSize()!.height;
       // iOS fonts run wider than the test browser's, so the bar is checked down to 350 pt as well.
@@ -144,7 +154,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
   }
 
-  test(`practice scenarios in the ••• menu in ${theme}`, async ({ page }, info) => {
+  test(`practice scenarios in the ••• menu in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/operate', theme, undefined, undefined, true);
     const bar = page.getByRole('region', { name: 'Transmit' });
     await bar.getByRole('button', { name: 'More' }).click();
@@ -159,16 +169,14 @@ for (const theme of ['light', 'dark'] as const) {
     const m = (await menu.boundingBox())!;
     expect(m.y).toBeGreaterThanOrEqual(0);
     expect(m.y + m.height).toBeLessThanOrEqual(halt.y);
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu.png` });
+    await shot(page, info, SHOTS, `${theme}-practice-menu`, 200);
     await items.last().scrollIntoViewIfNeeded();
     const last = (await items.last().boundingBox())!;
     expect(last.y + last.height).toBeLessThanOrEqual(m.y + m.height + 0.5);
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-practice-menu-end.png` });
+    await shot(page, info, SHOTS, `${theme}-practice-menu-end`, 200);
   });
 
-  test(`a drag on the waterfall never scrolls the screen in ${theme}`, async ({ page }) => {
+  test(`a drag on the waterfall never scrolls the screen in ${theme}`, ci(theme, 375), async ({ page }) => {
     await open(page, '#/operate', theme);
     // 0.9.1 left vertical pans to the browser (touch-action: pan-y) and only body hid its
     // overflow: on an iPhone a drag on the waterfall slid Operate up by 470 pt.
@@ -189,7 +197,7 @@ for (const theme of ['light', 'dark'] as const) {
     expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
   });
 
-  test(`band sheet in ${theme}`, async ({ page }, info) => {
+  test(`band sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/operate', theme);
     await page.getByRole('button', { name: /^Change band/ }).click();
     const sheet = page.getByRole('dialog', { name: 'Change band' });
@@ -200,12 +208,11 @@ for (const theme of ['light', 'dark'] as const) {
     const box = (await sheet.boundingBox())!;
     expect(box.y).toBeGreaterThanOrEqual(0);
     expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-band.png` });
+    await shot(page, info, SHOTS, `${theme}-band`, 200);
   });
 
   for (const c of LOG_SHEETS) {
-    test(`${c.name} sheet in ${theme}`, async ({ page }, info) => {
+    test(`${c.name} sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
       await open(page, c.path, theme, c.seed, c.features);
       await c.open(page);
       const sheet = page.getByRole('dialog', { name: c.title });
@@ -216,12 +223,11 @@ for (const theme of ['light', 'dark'] as const) {
       const vw = await page.evaluate(() => document.documentElement.clientWidth);
       const wide = await page.evaluate((w) => [...document.querySelectorAll<HTMLElement>('dialog[open] *')].filter((el) => el.getBoundingClientRect().right > w + 0.5 && !el.closest('.visually-hidden')).map((el) => el.className), vw);
       expect(wide).toEqual([]);
-      await page.waitForTimeout(200);
-      await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-sheet-${c.name}.png` });
+      await shot(page, info, SHOTS, `${theme}-sheet-${c.name}`, 200);
     });
   }
 
-  test(`logged notice sits inside the screen in ${theme}`, async ({ page }, info) => {
+  test(`logged notice sits inside the screen in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/log', theme);
     await page.getByRole('button', { name: 'Add QSO' }).click();
     const sheet = page.getByRole('dialog', { name: 'Add QSO' });
@@ -234,10 +240,10 @@ for (const theme of ['light', 'dark'] as const) {
     expect(n.x).toBeGreaterThanOrEqual(0);
     expect(n.x + n.width).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
     expect(await smallTargets(page, '[data-testid=log-notice]')).toEqual([]);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-logged-notice.png` });
+    await shot(page, info, SHOTS, `${theme}-logged-notice`);
   });
 
-  test(`logged notice floats above Operate's buttons without moving them in ${theme}`, async ({ page }, info) => {
+  test(`logged notice floats above Operate's buttons without moving them in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/operate', theme);
     const bar = page.getByRole('region', { name: 'Transmit' });
     const before = (await bar.boundingBox())!;
@@ -253,22 +259,21 @@ for (const theme of ['light', 'dark'] as const) {
     expect((await bar.boundingBox())!).toEqual(before);
     const n = (await notice.boundingBox())!;
     expect(n.y + n.height).toBeLessThanOrEqual(before.y);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-logged-notice-operate.png` });
+    await shot(page, info, SHOTS, `${theme}-logged-notice-operate`);
   });
 
-  test(`tune sheet in ${theme}`, async ({ page }, info) => {
+  test(`tune sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/settings/radio', theme);
     await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
     const sheet = page.getByRole('dialog', { name: 'Tuning' });
     await expect(sheet).toBeVisible();
     expect(await smallTargets(page, 'dialog[open]')).toEqual([]);
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-tune.png` });
+    await shot(page, info, SHOTS, `${theme}-tune`, 200);
     await sheet.getByRole('button', { name: 'Halt' }).click();
     await expect(sheet).toBeHidden();
   });
 
-  test(`bottom bar controls in one row in ${theme}`, async ({ page }, info) => {
+  test(`bottom bar controls in one row in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/operate', theme);
     const bar = page.getByRole('region', { name: 'Transmit' });
     const buttons = await bar.getByRole('button').all();
@@ -309,7 +314,6 @@ for (const theme of ['light', 'dark'] as const) {
     expect(m.y).toBeGreaterThanOrEqual(0);
     expect(m.y + m.height).toBeLessThanOrEqual(halt.y);
     expect(m.x + m.width).toBeLessThanOrEqual(await page.evaluate(() => document.documentElement.clientWidth));
-    await page.waitForTimeout(200);
-    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-menu.png` });
+    await shot(page, info, SHOTS, `${theme}-menu`, 200);
   });
 }

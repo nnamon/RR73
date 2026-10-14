@@ -5,7 +5,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { smallTargets } from './layout-checks';
+import { ci, shot, smallTargets } from './layout-checks';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/hound', import.meta.url));
 const SLOT = 15_000;
@@ -32,14 +32,15 @@ async function afterFoxSlot(page: Page): Promise<number> {
 }
 
 for (const theme of ['light', 'dark'] as const) {
-  test(`Hound in ${theme}`, async ({ page }, info) => {
+  test(`Hound in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     test.setTimeout(120_000);
     mkdirSync(SHOTS, { recursive: true });
-    const shot = async (name: string) => {
+    // Targets and width are checked in every run; the screenshot is taken in the review projects.
+    const check = async (name: string) => {
       await page.waitForTimeout(300);
       expect(await smallTargets(page, 'main .pane:not([hidden])')).toEqual([]);
       expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
-      await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${name}.png` });
+      await shot(page, info, SHOTS, `${theme}-${name}`);
     };
     await page.addInitScript((i) => {
       document.addEventListener('DOMContentLoaded', () => {
@@ -77,7 +78,7 @@ for (const theme of ['light', 'dark'] as const) {
     await dial.press('Enter');
     await expect(page.getByRole('alert')).toBeHidden();
     await expect(page.getByText('14.090 MHz', { exact: true })).toBeVisible();
-    await shot('1-band-sheet');
+    await check('1-band-sheet');
     await page.keyboard.press('Escape');
     await expect(top.locator('.mode')).toHaveText('FT8 Hound');
 
@@ -95,17 +96,17 @@ for (const theme of ['light', 'dark'] as const) {
       await cq.dblclick();
       await expect(bar.getByRole('status')).toContainText('Calling the Fox · VP8PJ', { timeout: 2000 });
     }).toPass({ timeout: 15_000 });
-    await shot('2-calling');
+    await check('2-calling');
 
     // The Fox's report to us inside a multi-call message, among its other streams.
     await inject(page, fox, FOX_WORKING);
     await expect(bar.getByRole('status')).toContainText('Report received · −12 dB from VP8PJ');
     await expect(bar.getByRole('list', { name: 'QSO progress' })).toContainText('Logged');
-    await shot('3-report');
+    await check('3-report');
 
     await bar.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('menuitemcheckbox', { name: /^Hound/ })).toHaveAttribute('aria-checked', 'true');
-    await shot('4-menu');
+    await check('4-menu');
     await page.keyboard.press('Escape');
     await bar.getByRole('button', { name: 'Halt' }).click();
     await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();

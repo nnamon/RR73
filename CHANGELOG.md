@@ -2,6 +2,14 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## 0.11.1 · 2026-10-14
+
+- The dB and Hz numbers on decode rows start at one position on every row. A 4-digit frequency pushed them 2 pt left.
+- CQ rows name the calling station's country before the numbers, in the short form operators use: "Australia", "Germany", "South Korea". When the row is short of room, the country ends in "…" or drops out, and the message stays whole.
+- Practice band stations get callsigns of their own country. In 0.10.5 an Australian station could get a VK9 call, which belongs to Norfolk Island, and a Russian one a UA9 call, from Asiatic Russia.
+- CQ tapped before audio runs shows Audio off and tries once a slot. Before, the refusals planned slot after slot until the browser ran out of stack, which left the CQ about 26 hours ahead, so it never went out.
+- Decodes from a slot that audio joined partway through report their real SNR. They read up to 50 dB high before, so a QSO started from one sent the wrong report.
+
 ## 0.11.0 · 2026-10-14
 
 - Hound mode works DXpeditions in FT8 DXpedition mode. Turn it on per band in the band sheet or •••. Operate shows FT8 Hound next to the band.
