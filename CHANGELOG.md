@@ -4,9 +4,14 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- Messages to your callsign lead their slot, with a solid red edge and bold text over their decode colour. 9V1NE matches VK3/9V1NE and 9V1NE/P.
-- While calling a station or in a QSO, from a double-tap, a CQ or Hunt, decodes unrelated to that station dim to 40% (60% with Increase Contrast). That station's messages, messages to you, the Next, Sending and Sent rows and the slot bars keep full contrast. Calling CQ with no caller dims nothing, and the dimming ends with the QSO or when Tx goes off.
-- Consecutive slots with no decodes share one grey bar that gives the span, such as 22:15:00 to 22:16:15. A single empty slot keeps its own bar.
+- Messages to your callsign lead their slot, with a solid red edge and bold text. 9V1NE matches VK3/9V1NE and 9V1NE/P.
+- While calling a station or in a QSO, unrelated decodes dim to 40 % (60 % with Increase Contrast). That station's messages, messages to you, your own rows and the slot bars keep full contrast.
+- Consecutive slots with no decodes share one bar with the span: "22:15:00 to 22:16:15 no decodes".
+
+## 0.10.3 · 2026-10-13
+
+- Hunt moves on to the next CQ as soon as the station it calls answers another station. It used to wait for that QSO to end and call once more, as Tail-end does for a call by hand.
+- The frequency ruler lies over the bottom edge of the waterfall, with its ticks on the edge and the numbers above them, so the picture is 22 pt taller. The Tx and Rx markers pass behind the numbers.
 
 ## 0.10.2 · 2026-10-13
 

@@ -206,8 +206,8 @@
   --rr-wf-tx: #FF5A4E;
   --rr-wf-rx-band: rgb(52 199 123 / 20%);
   --rr-wf-tx-band: rgb(255 90 78 / 18%);
-  --rr-wf-ruler: #0B1020;
-  --rr-wf-ruler-rule: rgb(255 255 255 / 25%);
+  /* The ruler over the bottom of the picture: the waterfall's background, so signals show through dimmed. */
+  --rr-wf-ruler-veil: rgb(4 6 10 / 70%);
   --rr-wf-ruler-text: rgb(255 255 255 / 90%);
   --rr-wf-tick: rgb(255 255 255 / 55%);
   --rr-wf-tick-major: rgb(255 255 255 / 90%);
