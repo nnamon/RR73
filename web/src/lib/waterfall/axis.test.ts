@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SIGNAL_WIDTH_HZ, bracket, ruler, rulerLabels, ticks } from './axis';
+import { SIGNAL_WIDTH_HZ, bracket, denseRuler, ruler, rulerLabels, ticks } from './axis';
 
 describe('waterfall ruler', () => {
   it('has a tick every 100 Hz and a taller one every 500 Hz', () => {
@@ -54,3 +54,34 @@ describe('the WSPR ruler', () => {
   });
 });
 
+
+describe('the ruler in regular width', () => {
+  const hz = (widthPx: number, mode: 'FT8' | 'WSPR' = 'FT8') => denseRuler(mode, widthPx).labels.map((l) => l.hz);
+
+  it('labels every 100 Hz on a desktop or an iPad on its side, without the ends', () => {
+    for (const w of [1440, 1180]) {
+      const l = hz(w);
+      expect(l[0]).toBe(100);
+      expect(l.at(-1)).toBe(2900);
+      expect(l).toHaveLength(29);
+    }
+  });
+
+  it('labels every 200 Hz on an iPad upright and every 500 Hz when narrower', () => {
+    expect(hz(820)).toEqual([200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800]);
+    expect(hz(700)).toEqual([200, 400, 600, 800, 1000, 1200, 1400, 1600, 1800, 2000, 2200, 2400, 2600, 2800]);
+    expect(hz(500)).toEqual([500, 1000, 1500, 2000, 2500]);
+  });
+
+  it('labels WSPR every 10 Hz on a desktop', () => {
+    const l = hz(1440, 'WSPR');
+    expect(l[0]).toBe(1410);
+    expect(l.at(-1)).toBe(1590);
+    expect(l).toHaveLength(19);
+  });
+
+  it('keeps the phone ruler’s ticks', () => {
+    expect(denseRuler('FT8', 1440).ticks).toEqual(ruler('FT8').ticks);
+    expect(denseRuler('WSPR', 1440).ticks).toEqual(ruler('WSPR').ticks);
+  });
+});

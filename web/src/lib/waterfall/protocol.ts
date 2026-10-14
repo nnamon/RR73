@@ -8,6 +8,7 @@ export type ToWaterfall =
   | { type: 'resize'; width: number; height: number }
   | { type: 'samples'; samples: Float32Array; utcMs: number; index: number }
   | { type: 'mode'; mode: Mode }
+  | { type: 'span'; seconds: number | null }
   | { type: 'contrast'; contrast: Contrast }
   | { type: 'txSlots'; starts: number[] }
   | { type: 'txWave'; wave: TxWave }

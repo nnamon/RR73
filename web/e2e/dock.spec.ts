@@ -94,11 +94,12 @@ test('a double-tap on a decode calls the station with Tx on at once, and ends CQ
     ['CQ VJ6X OF78', 506],
     ['BH1LKO VK4SHG 73', 1641],
   ]);
-  // A tap selects and says how to call; a second tap on the selected row clears it.
+  // A tap selects and says how to call (with a mouse, as here: a double-click); a second tap on
+  // the selected row clears it.
   await row(page, 'CQ VJ6X OF78').click();
   await expect(row(page, 'CQ VJ6X OF78')).toHaveAttribute('aria-pressed', 'true');
   await expect(bar.getByRole('status')).toContainText('VJ6X · OF78');
-  await expect(bar.getByRole('status')).toContainText('Double-tap to call');
+  await expect(bar.getByRole('status')).toContainText('Double-click to call');
   await page.waitForTimeout(500);
   await row(page, 'CQ VJ6X OF78').click();
   await expect(row(page, 'CQ VJ6X OF78')).toHaveAttribute('aria-pressed', 'false');

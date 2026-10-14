@@ -276,3 +276,32 @@ describe('callerItems', () => {
     expect(callerItems([], '9V1NE', 'FT8', null, [], false)).toEqual([]);
   });
 });
+
+describe('buildList for the panes of regular width', () => {
+  const rows = (items: ListItem[]) => items.filter((i): i is RowItem => i.kind === 'row');
+  const sent = [{ slotStartMs: T + 15000, text: 'JA1KXM 9V1NE R-10', freqHz: 1500 }];
+  const next = { slotStartMs: T + 30000, startMs: T + 30500, text: 'JA1KXM 9V1NE RR73', freqHz: 1500 };
+
+  it('gives Band activity every decode and a grey Tx slot bar for each slot we sent in', () => {
+    const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent, 'FT8', undefined, { next }, { own: 'bar' });
+    expect(rows(items).some((r) => r.out)).toBe(false);
+    expect(rows(items)).toHaveLength(4);
+    expect(items[0]).toEqual({ kind: 'header', id: `ht${T + 15000}`, time: '13:14:30', detail: 'Tx slot', parity: null, text: '13:14:30 UTC · Tx slot' });
+    // The slot on air gets no bar until it is over.
+    const onAir = { slotStartMs: T + 15000, startMs: T + 15500, endMs: T + 28140 };
+    expect(buildList([NEWER], '9V1NE', 'all', 1500, sent, 'FT8', undefined, { onAir }, { own: 'bar' })[0]).toMatchObject({ id: `h${T}` });
+    // With a filter, the bar stays: the slot still went out.
+    expect(buildList([OLDER, NEWER], '9V1NE', 'cq', 1500, sent, 'FT8', undefined, {}, { own: 'bar' })[0]).toMatchObject({ detail: 'Tx slot' });
+  });
+
+  it('gives Rx frequency the decodes within 50 Hz of Rx, messages to you and our own rows, counted per slot', () => {
+    const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1460, sent, 'FT8', undefined, { next }, { rxPane: true });
+    const texts = rows(items).map((r) => r.row.decode.text);
+    // 1505 Hz is 45 Hz from Rx; 9V1NE JA1KXM is to you at 1418 Hz; 1022 and 700 Hz are out.
+    expect(texts).toEqual(['JA1KXM 9V1NE RR73', 'JA1KXM 9V1NE R-10', '9V1NE JA1KXM PM95', 'JH1RRT YB0AZK RR73']);
+    expect(items.find((i) => i.kind === 'header' && i.id === `h${T}`)).toMatchObject({ detail: '2 decodes', parity: 'odd' });
+    // A slot with nothing near Rx leaves no bar.
+    expect(items.some((i) => i.kind === 'header' && i.id === `h${T - 15000}`)).toBe(false);
+    expect(rows(items)[0].out?.stage).toBe('next');
+  });
+});

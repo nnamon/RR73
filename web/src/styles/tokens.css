@@ -111,6 +111,34 @@
   --rr-level-line: 2px;
   --rr-reading: 640px;
 
+  /*
+   * Regular width and compact height (lib/app/layout.svelte.ts): iPad, desktop and a phone on its
+   * side. Type keeps the phone's sizes; the ruler's labels go up to 12 pt in regular width.
+   */
+  --rr-top-regular: 52px;
+  --rr-tab: 30px;
+  --rr-panel: 336px;
+  /* The transmit panel's height with Tx1 to Tx6 and Halt in full. */
+  --rr-panel-tall: 532px;
+  --rr-halt-wide: 240px;
+  --rr-halt-small: 32px;
+  --rr-side: 334px;
+  --rr-side-waterfall: 128px;
+  --rr-ruler-regular: 26px;
+  --rr-text-ruler-regular: 12px;
+  --rr-text-halt: 20px;
+  --rr-message-row: 34px;
+  --rr-steps-tall: 34px;
+  --rr-steps-wide: 520px;
+  --rr-list-column: 380px;
+  --rr-list-column-narrow: 320px;
+  --rr-sections: 340px;
+  --rr-form: 680px;
+  --rr-form-sheet: 540px;
+  --rr-hero: 28px;
+  --rr-kbd: 26px;
+  --rr-table-head: 30px;
+
   /* Notch and home indicator. */
   --rr-safe-top: env(safe-area-inset-top, 0px);
   --rr-safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -201,6 +229,8 @@
   --rr-hl-base-light: #FFF;
   --rr-hl-base-dark: #000000;
   --rr-sel-tint: light-dark(rgb(0 136 255 / 16%), rgb(0 145 255 / 28%));
+  /* A row under the pointer (regular width and compact height). */
+  --rr-hover: light-dark(rgb(0 0 0 / 6%), rgb(255 255 255 / 10%));
 
   /*
    * Colour: slot bars in the decode list. Even slots (:00, :30) grey, odd slots (:15, :45) blue:

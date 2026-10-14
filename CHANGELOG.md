@@ -2,6 +2,19 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- iPad, desktop and a phone on its side get layouts of their own, chosen by the window's size. Below 700 pt wide the phone layout stays as it is.
+- On iPad and desktop, tabs in the bar at the top open Operate, Log, Spots and Settings. While Tx is on, Log, Spots and Settings show On air and Halt in that bar.
+- Operate on iPad and desktop: the waterfall across a third of the height with the ruler labelled every 100 Hz, Band activity and Rx frequency side by side, and a transmit panel on the right with Tx1 to Tx6 and Halt. Upright, the controls run along the bottom.
+- Band activity marks the slots you sent in with a grey Tx slot bar. Rx frequency shows decodes within 50 Hz of Rx, messages to you and your own Next, Sending and Sent rows.
+- On a phone on its side, the decodes fill the left and the waterfall sits above the controls on the right.
+- Log, Spots and Settings show the list and the detail side by side on iPad, desktop and a phone on its side. A QSO opens beside the list, and Save QSO enables after an edit. Settings lists its sections on the left.
+- Sheets open as 540 pt form sheets with Done on iPad, desktop and a phone on its side.
+- WSPR on iPad and desktop lists spots in named columns, with the sort and Save slot above them.
+- Keyboard: Esc halts on every screen and closes an open sheet. Return calls the selected station, ↑ and ↓ move the selection, ⌥T, ⌥C and ⌥H turn Tx on, call CQ and hunt, B changes band, ⌥1 to ⌥3 open Operate, Log and Settings, and ? lists the shortcuts.
+- With a mouse, a double-click calls a station and a right-click opens its details. The status line says Double-click to call.
+
 ## 0.12.3 · 2026-10-14
 
 - CQ rows show the caller's country again. Since 0.11.1 the app shipped without its country file, because the country file's download page changed. The build now follows the new page, and when the download fails it ships the 15 September 2026 release.

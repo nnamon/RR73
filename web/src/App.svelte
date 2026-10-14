@@ -2,6 +2,9 @@
   import { onMount, tick } from 'svelte';
   import LogNotice from './ui/LogNotice.svelte';
   import QsoSheet from './ui/QsoSheet.svelte';
+  import SettingsSplit from './ui/SettingsSplit.svelte';
+  import ShortcutsSheet from './ui/ShortcutsSheet.svelte';
+  import StationBar from './ui/StationBar.svelte';
   import StatusNotice from './ui/StatusNotice.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
   import Log from './views/Log.svelte';
@@ -16,14 +19,17 @@
   import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
   import WavelogSettings from './views/WavelogSettings.svelte';
-  import { redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
+  import { go, redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
+  import { layout, split } from './lib/app/layout.svelte';
+  import { currentListKeys, focusKind, shortcutOf } from './lib/app/shortcuts';
+  import { sheetOpen, sheets } from './lib/app/sheets.svelte';
   import { reloadIfIdle, update } from './lib/app/update.svelte';
   import { spotsShown } from './lib/state/features.svelte';
   import { startClock } from './lib/state/now.svelte';
   import { settings, settingsStatus } from './lib/state/settings.svelte';
-  import { busy } from './lib/state/station.svelte';
-  import { startQso } from './lib/state/qso.svelte';
-  import { startWspr } from './lib/state/wspr.svelte';
+  import { busy, halt } from './lib/state/station.svelte';
+  import { callCq, qso, setHunt, setTxEnabled, startQso } from './lib/state/qso.svelte';
+  import { setBeacon, startWspr, wspr } from './lib/state/wspr.svelte';
 
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
@@ -90,37 +96,104 @@
     startQso();
     startWspr();
   });
+
+  /**
+   * Keyboard shortcuts (lib/app/shortcuts.ts). Esc halts on every screen; the open sheet or menu
+   * closes on the same press, by its own handling of Esc. The rest wait while a sheet is open.
+   */
+  function onkey(e: KeyboardEvent) {
+    const s = shortcutOf(e, focusKind(document.activeElement));
+    if (!s) return;
+    if (s === 'halt') {
+      halt();
+      return;
+    }
+    if (sheetOpen()) return;
+    const ft = settings.mode !== 'WSPR';
+    const list = tab === 'operate' ? currentListKeys() : null;
+    switch (s) {
+      case 'tx':
+        if (ft) setTxEnabled(!qso.st.txEnabled);
+        else setBeacon(!wspr.beacon.on);
+        break;
+      case 'cq':
+        if (!ft) return;
+        callCq();
+        break;
+      case 'hunt':
+        if (!ft) return;
+        setHunt(!qso.st.hunt);
+        break;
+      case 'band':
+        sheets.band = true;
+        break;
+      case 'help':
+        sheets.shortcuts = true;
+        break;
+      case 'operate':
+      case 'log':
+      case 'settings':
+        go(s);
+        break;
+      case 'call':
+        if (!list || !qso.selected) return;
+        list.call();
+        break;
+      case 'next':
+      case 'previous':
+        if (!list) return;
+        list.move(s === 'next' ? 1 : -1);
+        break;
+    }
+    e.preventDefault();
+  }
 </script>
+
+<svelte:window onkeydown={onkey} />
+
+<!-- The detail of a Settings path: the whole list in compact width, one section or sub-screen beside the sections otherwise. -->
+{#snippet settingsScreen()}
+  {#if sub === 'radio'}
+    <RadioAudio />
+  {:else if sub === 'logging' && route.path[2] === 'wavelog'}
+    <WavelogSettings />
+  {:else if sub === 'logging'}
+    <Logging />
+  {:else if sub === 'practice'}
+    <PracticeSettings />
+  {:else if sub === 'ft8'}
+    <FtSettings />
+  {:else if sub === 'wspr'}
+    <WsprSettings />
+  {:else if sub === 'colours'}
+    <DecodeColours />
+  {:else if sub === 'versions'}
+    <VersionHistory focus={route.path[2] ?? null} />
+  {:else}
+    <Settings section={sub} />
+  {/if}
+{/snippet}
 
 <!-- Operate is the main screen. Log, Spots and Settings open over it with a back link to it. -->
 <div class="app" class:on-operate={tab === 'operate'}>
+  {#if layout.size === 'regular'}
+    <!-- Regular width: one top bar above every screen, with the tabs. -->
+    <div class="top"><StationBar regular {tab} /></div>
+  {/if}
   <main class="main" id="main">
     <!-- Operate stays mounted so the waterfall keeps its history while another screen is open. -->
     <div class="pane" hidden={tab !== 'operate'}><Operate active={tab === 'operate'} /></div>
+    <!-- List and detail side by side scroll on their own: the pane itself does not. -->
     {#if tab === 'log'}
-      <div class="pane scroll" onscroll={track}><Log /></div>
+      <div class="pane" class:scroll={!split()} onscroll={track}><Log /></div>
     {:else if tab === 'spots'}
-      <div class="pane scroll" onscroll={track}><Spots /></div>
+      <div class="pane" class:scroll={!split()} onscroll={track}><Spots /></div>
     {:else if tab === 'settings'}
-      <div class="pane scroll" onscroll={track}>
-        {#if sub === 'radio'}
-          <RadioAudio />
-        {:else if sub === 'logging' && route.path[2] === 'wavelog'}
-          <WavelogSettings />
-        {:else if sub === 'logging'}
-          <Logging />
-        {:else if sub === 'practice'}
-          <PracticeSettings />
-        {:else if sub === 'ft8'}
-          <FtSettings />
-        {:else if sub === 'wspr'}
-          <WsprSettings />
-        {:else if sub === 'colours'}
-          <DecodeColours />
-        {:else if sub === 'versions'}
-          <VersionHistory focus={route.path[2] ?? null} />
+      <div class="pane" class:scroll={!split()} onscroll={track}>
+        {#if split()}
+          <SettingsSplit>{@render settingsScreen()}</SettingsSplit>
         {:else}
-          <Settings section={sub} />
+          {@render settingsScreen()}
         {/if}
       </div>
     {/if}
@@ -133,6 +206,7 @@
 </div>
 
 <QsoSheet />
+<ShortcutsSheet bind:open={sheets.shortcuts} />
 
 <style>
   /* Border-box (base.css): the safe-area padding is inside the 100dvh, so the app is never taller than the screen. */
@@ -172,6 +246,15 @@
     position: relative;
     flex: 1;
     min-height: 0;
+  }
+
+  /* Regular width: the top bar under the status bar, in the bar's material. */
+  .top {
+    position: relative;
+    z-index: 5;
+    flex: none;
+    padding-top: var(--rr-safe-top);
+    background: var(--rr-dock);
   }
 
   .pane {

@@ -99,6 +99,15 @@ describe('WaterfallRenderer', () => {
     expect((r.rowMs * 540) / 1000).toBeCloseTo(VISIBLE_S, 0);
   });
 
+  it('scrolls four slots through the height in regular width, and back to 45 s', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 1440, 870);
+    r.setSpan(60);
+    expect((r.rowMs * 870) / 1000).toBeCloseTo(60, 0);
+    r.setSpan(null);
+    expect((r.rowMs * 870) / 1000).toBeCloseTo(VISIBLE_S, 0);
+  });
+
   it('shows tones as bright columns at their frequencies', () => {
     const ctx = new FakeContext();
     const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 600, 200);

@@ -9,7 +9,12 @@
    * blinking dot. The percentage opens a menu of percentages; a choice applies at once. ••• holds
    * Transmit next slot, Tune for 10 s, Save slot, Sort by and Stop beacon after. Halt ends a
    * transmission and turns the beacon off in one tap.
+   *
+   * Larger windows place the same parts as TxBar does: `panel` on the right in regular width,
+   * `bottom` along the bottom of a window taller than wide, `side` under the waterfall on a phone
+   * on its side.
    */
+  import { layout } from '../lib/app/layout.svelte';
   import BarButtons, { type BarButton } from './BarButtons.svelte';
   import BarMenu, { type BarMenuItem } from './BarMenu.svelte';
   import { utcHm } from '../lib/clock/format';
@@ -20,7 +25,7 @@
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { beaconTexts, nextText, setBeacon, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
 
-  let { onsave }: { onsave: () => void } = $props();
+  let { onsave, variant = 'phone' }: { onsave: () => void; variant?: 'phone' | 'panel' | 'bottom' | 'side' } = $props();
 
   const w = $derived(settings.wspr);
   const onAir = $derived(wspr.onAir);
@@ -46,7 +51,7 @@
   // The floating notices (App.svelte) sit above this bar; 0 while Operate is hidden.
   let barH = $state(0);
   $effect(() => {
-    document.documentElement.style.setProperty('--rr-bar-h', `${barH}px`);
+    document.documentElement.style.setProperty('--rr-bar-h', `${variant === 'phone' || variant === 'bottom' ? barH : 0}px`);
     return () => document.documentElement.style.removeProperty('--rr-bar-h');
   });
 
@@ -69,7 +74,7 @@
     { id: 'beacon', ...beaconButton, pressed: wspr.beacon.on, onclick: () => setBeacon(!wspr.beacon.on) },
     { id: 'pct', label: `${w.txPct}%`, trail: 'updown', menu: { open: open === 'pct' }, onclick: () => (open = open === 'pct' ? null : 'pct') },
     { id: 'more', label: 'More', icon: 'more', menu: { open: open === 'more' }, onclick: () => (open = open === 'more' ? null : 'more') },
-    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, onclick: () => halt() },
+    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, kbd: variant === 'panel' && layout.pointer === 'mouse' ? 'esc' : undefined, onclick: () => halt() },
   ]);
 
   const pctItems: BarMenuItem[] = $derived(TX_PCTS.map((p) => ({ id: `p${p}`, label: `${p}%`, checked: p === w.txPct, onclick: () => setTxPct(p) })));
@@ -83,17 +88,21 @@
   ]);
 </script>
 
-<section class="bar" aria-label="Beacon" bind:this={barEl} bind:offsetHeight={barH}>
+<section class="bar {variant}" aria-label="Beacon" bind:this={barEl} bind:offsetHeight={barH}>
+  {#if variant === 'panel'}<h2 class="head">Transmit</h2>{/if}
   <div class="status" role="status">
     <span class="msg">{line.text}</span>
     {#if line.aside}<span class="aside">{line.aside}</span>{/if}
   </div>
-  <BarButtons {buttons} />
-  {#if open === 'pct'}
-    <BarMenu label="Tx percentage" align="left" items={pctItems} onclose={close} />
-  {:else if open === 'more'}
-    <BarMenu label="More" items={moreItems} onclose={close} />
-  {/if}
+  {#if variant === 'panel'}<span class="grow"></span>{/if}
+  <div class="dock">
+    <BarButtons {buttons} {variant} />
+    {#if open === 'pct'}
+      <BarMenu label="Tx percentage" align="left" items={pctItems} onclose={close} />
+    {:else if open === 'more'}
+      <BarMenu label="More" items={moreItems} onclose={close} />
+    {/if}
+  </div>
 </section>
 
 <style>
@@ -128,5 +137,91 @@
     font-size: var(--rr-text-caption);
     color: var(--rr-label2);
     font-variant-numeric: tabular-nums;
+  }
+
+  .dock {
+    display: contents;
+  }
+
+  .panel .dock,
+  .bottom .dock,
+  .side .dock {
+    position: relative;
+    display: block;
+  }
+
+  .panel .status,
+  .bottom .status,
+  .side .status {
+    height: auto;
+    min-height: var(--rr-leading-row);
+  }
+
+  .panel .msg,
+  .bottom .msg,
+  .side .msg {
+    font-family: var(--rr-mono);
+    font-weight: var(--rr-weight-medium);
+    line-height: var(--rr-leading-row);
+    letter-spacing: 0;
+  }
+
+  .panel .aside,
+  .bottom .aside {
+    font-size: var(--rr-text-foot);
+  }
+
+  .head {
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-foot);
+    color: var(--rr-label2);
+  }
+
+  .grow {
+    flex: 1;
+  }
+
+  /* Regular width: the transmit panel on the right, Halt at its foot. */
+  .panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-3);
+    min-height: 0;
+    padding: var(--rr-space-3) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-4) + var(--rr-safe-bottom)) var(--rr-space-4);
+    background: var(--rr-bg);
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
+  }
+
+  .panel .status {
+    flex-direction: column;
+    gap: var(--rr-space-1);
+    align-items: flex-start;
+  }
+
+  .panel .msg {
+    max-width: 100%;
+  }
+
+  .panel .aside {
+    margin-left: 0;
+  }
+
+  .bottom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    padding: var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-3) + var(--rr-safe-bottom)) calc(var(--rr-space-4) + var(--rr-safe-left));
+  }
+
+  .side {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    justify-content: flex-end;
+    padding: var(--rr-space-2) calc(var(--rr-space-3) + var(--rr-safe-right)) calc(var(--rr-space-2) + var(--rr-safe-bottom)) var(--rr-space-3);
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
   }
 </style>

@@ -70,6 +70,15 @@ export class WaterfallClient {
     }
   }
 
+  /** The time the picture covers, s, or null for the view's own (45 s in FT8 and FT4, 240 s in WSPR). */
+  setSpan(seconds: number | null) {
+    if (this.worker) this.send({ type: 'span', seconds });
+    else if (this.local) {
+      this.local.setSpan(seconds);
+      this.onFrame(this.local.info());
+    }
+  }
+
   setContrast(contrast: Contrast) {
     if (this.worker) this.send({ type: 'contrast', contrast });
     else this.local?.setContrast(contrast);

@@ -142,9 +142,9 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
-| `lib/app` | Routing, updates (the service worker, stale builds) and the version history. |
+| `lib/app` | Routing, updates (the service worker, stale builds), the version history, the size classes (`layout.svelte.ts`: compact, compact height, regular) and the keyboard shortcuts (`shortcuts.ts`). See `docs/decisions/0008-large-screens.md`. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
-| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`). |
+| `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`), as two parts the frame places by size class. |
 
 The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
 

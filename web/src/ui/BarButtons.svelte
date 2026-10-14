@@ -19,6 +19,8 @@
     grow?: boolean;
     /** Opens a menu: aria-haspopup, and whether it is open. */
     menu?: { open: boolean };
+    /** A key that does the same, shown on the button with a keyboard and a pointer ("esc"). */
+    kbd?: string;
     onclick: () => void;
   }
 </script>
@@ -27,13 +29,17 @@
   /**
    * The bottom bar's row of buttons: 36 pt capsules inside 44 pt targets, side by side. A button
    * with `grow` takes the rest of the row.
+   *
+   * Larger windows: `panel` and `side` put the growing button (Halt) on a line of its own across
+   * the column, 64 and 54 pt high; `bottom` gives it 240 x 64 pt at the end of the row. The other
+   * buttons keep their own width.
    */
   import Icon from './Icon.svelte';
 
-  let { buttons }: { buttons: BarButton[] } = $props();
+  let { buttons, variant = 'phone' }: { buttons: BarButton[]; variant?: 'phone' | 'panel' | 'bottom' | 'side' } = $props();
 </script>
 
-<div class="ctl">
+<div class="ctl {variant}">
   {#each buttons as b (b.id)}
     <button
       type="button"
@@ -51,6 +57,7 @@
         {#if b.dot}<span class="dot" class:blink={b.dot === 'blink'} aria-hidden="true"></span>{/if}
         {#if b.icon}<Icon name={b.icon} size={20} />{:else}{b.label}{/if}
         {#if b.trail}<Icon name={b.trail} size={12} class="trail" />{/if}
+        {#if b.kbd}<kbd aria-hidden="true">{b.kbd}</kbd>{/if}
       </span>
     </button>
   {/each}
@@ -162,6 +169,82 @@
 
   .air .dot {
     background: var(--rr-on-fill);
+  }
+
+  /* Larger windows: 46 pt faces at body size, Halt on a line of its own or at the end of the row. */
+  .ctl:not(.phone) {
+    flex-wrap: wrap;
+    gap: var(--rr-space-2);
+    height: auto;
+  }
+
+  .panel .b,
+  .bottom .b {
+    height: var(--rr-button);
+  }
+
+  .panel .face,
+  .bottom .face {
+    height: var(--rr-button);
+    padding: 0 var(--rr-space-4);
+    font-size: var(--rr-text-body);
+  }
+
+  .side .face {
+    height: var(--rr-tap);
+    padding: 0 var(--rr-space-3);
+  }
+
+  .panel .b.grow,
+  .side .b.grow {
+    flex: 1 0 100%;
+  }
+
+  .panel .b.grow,
+  .bottom .b.grow,
+  .panel .b.grow .face,
+  .bottom .b.grow .face {
+    height: var(--rr-button-halt);
+  }
+
+  .side .b.grow,
+  .side .b.grow .face {
+    height: var(--rr-button-large);
+  }
+
+  .bottom .b.grow {
+    flex: none;
+    width: var(--rr-halt-wide);
+    margin-left: auto;
+  }
+
+  .panel .halt .face,
+  .bottom .halt .face {
+    position: relative;
+    font-size: var(--rr-text-halt);
+  }
+
+  .side .halt .face {
+    font-size: var(--rr-text-body);
+  }
+
+  kbd {
+    position: absolute;
+    right: var(--rr-space-4);
+    padding: var(--rr-space-px) var(--rr-space-1-5);
+    border: var(--rr-hairline) solid currentcolor;
+    border-radius: var(--rr-radius-s);
+    font-family: var(--rr-sans);
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-medium);
+    line-height: var(--rr-leading-tag);
+    opacity: 0.8;
+  }
+
+  @media (hover: hover) {
+    .ctl:not(.phone) .b:hover .face {
+      filter: brightness(0.94);
+    }
   }
 
   @media (prefers-reduced-motion: no-preference) {

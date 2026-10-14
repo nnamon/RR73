@@ -30,6 +30,21 @@ export type Filter = 'all' | 'cq' | 'me' | 'rx';
 /** Decodes within this distance of the receive frequency pass the Rx freq filter, Hz. */
 export const RX_WINDOW_HZ = 10;
 
+/** Decodes within this distance of the receive frequency show in the Rx frequency pane (regular width), Hz. */
+export const RX_PANE_HZ = 50;
+
+/**
+ * The two panes of regular width. Band activity has every decode and marks the slots we
+ * transmitted in with a grey Tx slot bar; Rx frequency has the decodes near Rx, the messages to
+ * us and our own Next, Sending and Sent rows, under bars that count what it shows.
+ */
+export interface ListOptions {
+  /** rows: our transmissions as rows (the phone's list); bar: a Tx slot bar for each sent slot. */
+  own?: 'rows' | 'bar';
+  /** The Rx frequency pane: decodes within RX_PANE_HZ of Rx or to us, whatever the filter. */
+  rxPane?: boolean;
+}
+
 export interface SlotDecodes {
   startUtcMs: number;
   mode: Mode;
@@ -131,6 +146,11 @@ export function slotHeader(s: SlotDecodes): HeaderItem {
   return s.skipped ? h : { ...h, ms: s.ms };
 }
 
+/** The slot bar for `s` in the Rx frequency pane: it counts the `n` decodes the pane shows. */
+function countedHeader(s: SlotDecodes, n: number): HeaderItem {
+  return header(`h${s.startUtcMs}`, s.startUtcMs, s.mode, `${n} ${n === 1 ? 'decode' : 'decodes'}`);
+}
+
 /** One bar for a run of slots with no decodes, from the oldest slot's start to the newest's. */
 export function quietHeader(oldestMs: number, newestMs: number): HeaderItem {
   const time = utcTime(oldestMs);
@@ -151,11 +171,23 @@ function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
  * with no decodes share one. Within a slot, messages to `myCall` come first, the rest in the
  * decoder's order. Transmissions show with All and To me; `mode` gives their slot parity.
  */
-export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, rxHz: number, sent: SentItem[] = [], mode: Mode = 'FT8', classify?: Classify, outgoing: Outgoing = {}): ListItem[] {
+export function buildList(
+  slots: SlotDecodes[],
+  myCall: string,
+  filter: Filter,
+  rxHz: number,
+  sent: SentItem[] = [],
+  mode: Mode = 'FT8',
+  classify?: Classify,
+  outgoing: Outgoing = {},
+  options: ListOptions = {},
+): ListItem[] {
   /** `quiet`: a decoded slot with no decodes and none of our rows, which can join a run. */
   type Group = { at: number; items: ListItem[]; quiet?: { startMs: number; mode: Mode } };
   const groups: Group[] = [];
-  const showOut = filter === 'all' || filter === 'me';
+  const rxPane = !!options.rxPane;
+  const showOut = options.own !== 'bar' && (rxPane || filter === 'all' || filter === 'me');
+  const keep = (r: { row: DecodeRowData; toYou: boolean }) => (rxPane ? r.toYou || Math.abs(r.row.decode.freq_hz - rxHz) <= RX_PANE_HZ : passes(r.row, filter, rxHz));
   // A slot holding one of our rows is never empty.
   const ours = new Set<number>();
   if (showOut) {
@@ -171,10 +203,10 @@ export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, 
     // Ids follow the decoder's order, so a row keeps its id when it moves up.
     const rows = s.decodes
       .map((d, i) => ({ i, toYou: toYou(d.text, myCall), row: { decode: d, ...markDecode(d, myCall) } }))
-      .filter((r) => passes(r.row, filter, rxHz))
+      .filter(keep)
       .map((r) => ({ ...r, row: { ...r.row, ...colours(classify, r.row.decode, false) } }));
-    if (!rows.length && filter !== 'all') continue;
-    const items: ListItem[] = [slotHeader(s)];
+    if (!rows.length && (filter !== 'all' || rxPane)) continue;
+    const items: ListItem[] = [rxPane ? countedHeader(s, rows.length) : slotHeader(s)];
     for (const r of [...rows.filter((x) => x.toYou), ...rows.filter((x) => !x.toYou)]) {
       const item: RowItem = { kind: 'row', id: `${s.startUtcMs}-${r.i}`, row: r.row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) };
       items.push(r.toYou ? { ...item, toYou: true } : item);
@@ -197,6 +229,15 @@ export function buildList(slots: SlotDecodes[], myCall: string, filter: Filter, 
       const row: DecodeRowData = { decode: d, ...markDecode(d, myCall, true), time: utcTime(n.slotStartMs), hl: null, ink: null };
       const item: RowItem = { kind: 'row', id: `n${n.slotStartMs}`, row, slotStartMs: n.slotStartMs, out: { stage: 'next', startMs: n.startMs } };
       groups.push({ at: n.slotStartMs + 500, items: [header(`hn${n.slotStartMs}`, n.slotStartMs, mode, 'next'), item] });
+    }
+  }
+  if (options.own === 'bar') {
+    // A slot we transmitted in has no decodes of its own: a grey bar says why.
+    const air = outgoing.onAir?.slotStartMs ?? null;
+    for (const t of sent) {
+      if (t.slotStartMs === air) continue;
+      const time = utcTime(t.slotStartMs);
+      groups.push({ at: t.slotStartMs + 500, items: [{ kind: 'header', id: `ht${t.slotStartMs}`, time, detail: 'Tx slot', parity: null, text: `${time} UTC · Tx slot` }] });
     }
   }
   groups.sort((a, b) => b.at - a.at);

@@ -18,13 +18,15 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 | `chromium` | Chromium | Screens, the log, colours, the bar, Tune, updates and accessibility (axe, light and dark) |
 | `webkit` | WebKit | Updating beside an older copy of RR73 |
 | `webkit-375x667`, `webkit-393x852` | WebKit, iPhone viewports | Layout in the light theme. Theme changes colours only (`tokens.css`), so geometry is checked once. Tests tagged `@ci-375` run at 375 x 667; those that depend on the screen size are also tagged `@ci-393` |
+| `webkit-1180x820`, `webkit-852x393`, `chromium-1440x900` | WebKit on an iPad and a phone on its side, Chromium on a desktop | Large screens (`large.spec.ts`) in the light theme: one geometry test per size class, regular width on an iPad on its side and upright (`@ci-regular`) and compact height (`@ci-compact-height`), and the keyboard shortcuts (`@ci-keys`) |
 | `transmit`, `tx-cq`, `webkit-tx` | Chromium, WebKit | Transmit timing, Halt and a QSO through the decoder, after the projects above |
 | `practice` | Chromium | The practice band in real time, after the transmit projects |
 
-`RR73_REVIEW=1` adds three projects that CI leaves out:
+`RR73_REVIEW=1` adds the projects that CI leaves out:
 
 - `review-375x667` and `review-393x852` run every layout test in both themes and `states.spec.ts`, which walks Operate through receiving, CQ, calling, a QSO and Repeat CQ with real transmissions. They save the screens to `web/test-results/screens` (Operate states in `screens/states`, decode colours in `screens/colours`), named by size, theme and screen, such as `webkit-375x667-dark-log.png`. A run took 4.9 min with 5 workers on a 10-core machine (186 tests, 204 screens), most of it the 4 runs of `states.spec.ts`, 2.3 to 2.6 min each, which wait for real slots.
 - `slot-record` checks the lost-audio measure behind the decode test's skip (below).
+- `review-820x1180`, `review-1180x820`, `review-1440x900` (WebKit), `review-1440x900-chromium` and `review-852x393` run `large.spec.ts` in both themes and save Operate receiving and in a QSO, the Log with a QSO open, Settings, the station details, band and keyboard shortcuts sheets, WSPR and Spots to `web/test-results/screens/large`, for the side-by-side review with the approved mockup (docs/decisions/0008-large-screens.md). A run took about 2 min with 5 workers.
 
 `e2e/operate.spec.ts` keeps the checks from `states.spec.ts` that CI needs, with decodes injected and no transmission: one bottom bar height in every state, the decode rows on screen, messages to you leading their slot, the dimming of unrelated rows while calling or in a QSO (and none while calling CQ, after End QSO or with Tx off), and a run of empty slots as one bar. The review projects also run it, which saves the empty-slot run in both themes at both sizes.
 

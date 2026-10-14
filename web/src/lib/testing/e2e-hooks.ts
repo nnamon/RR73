@@ -7,6 +7,7 @@
 import { logQso } from '../log/log.svelte';
 import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
+import type { TxNum } from '../qso/messages';
 import { qso } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
 import { audioOut, deliverDecodes, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
@@ -34,6 +35,8 @@ export interface E2eHooks {
   wsprDecoded(slotStartMs: number, decodes: WsprDecode[]): void;
   /** Shows the beacon on air with `text` in the slot starting at `slotStartMs`, or nothing on air with null. No audio plays. */
   wsprOnAir(slotStartMs: number, text: string | null): void;
+  /** Shows an FT8 transmission as on air (TxN, from 0.5 s into the slot), or none: nothing transmits. */
+  ftOnAir(slotStartMs: number, text: string | null, tx: number): void;
   /** Shows `text` as sent by the beacon in the slot starting at `slotStartMs`. */
   wsprSent(slotStartMs: number, text: string): void;
   /** The beacon now: on air (UTC ms), the next Tx slot, and the slots with spots. */
@@ -70,6 +73,12 @@ export function installE2eHooks() {
     wsprOnAir: (slotStartMs, text) => {
       const start = slotStartMs + 1000;
       wspr.onAir = text === null ? null : { text, slotStartMs, startMs: start, endMs: start + TX_SECONDS * 1000 };
+    },
+    ftOnAir: (slotStartMs, text, txn) => {
+      const start = slotStartMs + 500;
+      qso.onAir = text === null ? null : { text, tx: txn as TxNum, startMs: start, endMs: start + 12_640 };
+      // As a transmission that starts: its row goes into the slot, Sending while on air.
+      if (text !== null) qso.sent = [{ slotStartMs, text, freqHz: settings.txHz }, ...qso.sent.filter((s) => s.slotStartMs !== slotStartMs)];
     },
     wsprSent: (slotStartMs, text) => {
       wspr.sent = [{ slotStartMs, text, freqHz: settings.wspr.txHz, complete: true }, ...wspr.sent];

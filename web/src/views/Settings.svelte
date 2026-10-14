@@ -4,21 +4,30 @@
   import LocateButton from '../ui/LocateButton.svelte';
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
+  import { split } from '../lib/app/layout.svelte';
   import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
-  import { audio, busy } from '../lib/state/station.svelte';
+  import { busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
-  import { log } from '../lib/log/log.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { presetLabel, presetOf } from '../lib/decode/highlight';
+  import { loggingSummary as logging, radioSummary as radio } from '../lib/state/summaries';
 
-  /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
+  /**
+   * "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings.
+   * Beside the sections (compact height and regular width) the path names the one section shown:
+   * station (the default), features, appearance or about.
+   */
   let { section = null }: { section?: string | null } = $props();
+
+  type One = 'station' | 'features' | 'appearance' | 'about';
+  const ONE_TITLES: Record<One, string> = { station: 'Station', features: 'Optional features', appearance: 'Appearance', about: 'About' };
+  const one = $derived<One | null>(split() ? (section && section in ONE_TITLES ? (section as One) : 'station') : null);
 
   let featuresHead = $state<HTMLElement | null>(null);
   $effect(() => {
-    if (section === 'features') featuresHead?.scrollIntoView({ block: 'start' });
+    if (section === 'features' && !one) featuresHead?.scrollIntoView({ block: 'start' });
   });
 
   const optional: { id: FeatureId; title: string; sub?: string }[] = [
@@ -68,19 +77,8 @@
     if (v !== settings.callsign) void updateSettings({ callsign: v });
   }
 
-  const radioSummary = $derived.by(() => {
-    const r = audio.report;
-    if (audio.status !== 'running' || !r) return 'Audio off';
-    const ch = r.channelUsed === 'mono' || !r.channelUsed ? 'mono' : `${r.channelUsed} channel`;
-    return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
-  });
-
-  const loggingSummary = $derived.by(() => {
-    // Activation files count only while Activations is on.
-    const on = log.facts.filter((f) => f.active && (features.activations || f.transport !== 'file')).map((f) => f.name);
-    if (!on.length) return 'Only on this phone';
-    return on.length > 2 ? `${on.length} destinations` : on.join(' and ');
-  });
+  const radioSummary = $derived(radio());
+  const loggingSummary = $derived(logging());
 
   type ReloadKind = 'reload' | 'clear';
   /** A reload stops audio; it starts on the first tap. */
@@ -120,11 +118,9 @@
   ];
 </script>
 
-<section class="screen" aria-labelledby="settings-title">
-  <BackLink to={href('operate')} label="Operate" title="Settings" id="settings-title" />
-
+{#snippet stationSection()}
   <div class="section">
-    <h2 class="section-head">Station</h2>
+    {#if !one}<h2 class="section-head">Station</h2>{/if}
     <div class="group">
       <label class="row">
         <span class="row-title">Callsign</span>
@@ -164,6 +160,8 @@
     <p class="section-foot">Needed to transmit.</p>
   </div>
 
+{/snippet}
+{#snippet modesSection()}
   <div class="section">
     <h2 class="section-head">Modes</h2>
     <div class="group">
@@ -179,6 +177,8 @@
     </div>
   </div>
 
+{/snippet}
+{#snippet radioSection()}
   <div class="section">
     <h2 class="section-head">Radio</h2>
     <div class="group">
@@ -190,6 +190,8 @@
     </div>
   </div>
 
+{/snippet}
+{#snippet logSection()}
   <div class="section">
     <h2 class="section-head">Log</h2>
     <div class="group">
@@ -201,6 +203,8 @@
     </div>
   </div>
 
+{/snippet}
+{#snippet practiceSection()}
   <div class="section">
     <h2 class="section-head">Practice</h2>
     <div class="group">
@@ -212,8 +216,10 @@
     </div>
   </div>
 
+{/snippet}
+{#snippet featuresSection()}
   <div class="section">
-    <h2 class="section-head" id="features" bind:this={featuresHead}>Optional features</h2>
+    <h2 class="section-head" class:visually-hidden={one} id="features" bind:this={featuresHead}>Optional features</h2>
     <div class="group">
       {#each optional as f (f.id)}
         <label class="row">
@@ -227,8 +233,10 @@
     </div>
   </div>
 
+{/snippet}
+{#snippet appearanceSection()}
   <div class="section">
-    <h2 class="section-head" id="appearance">Appearance</h2>
+    <h2 class="section-head" class:visually-hidden={one} id="appearance">Appearance</h2>
     <div class="seg" role="radiogroup" aria-labelledby="appearance">
       {#each themes as t (t.id)}
         <label class="seg-i" class:on={settings.theme === t.id}>
@@ -237,17 +245,19 @@
         </label>
       {/each}
     </div>
-    <div class="group colours">
+    {#if !one}<div class="group colours">
       <a class="row link" href={href('settings', 'colours')}>
         <span class="row-main"><span class="row-title">Decode colours</span></span>
         <span class="row-value">{presetLabel(presetOf(settings.highlights))}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
-    </div>
+    </div>{/if}
   </div>
 
+{/snippet}
+{#snippet aboutSection()}
   <div class="section">
-    <h2 class="section-head">About</h2>
+    {#if !one}<h2 class="section-head">About</h2>{/if}
     <div class="group">
       <a class="row link" href={href('settings', 'versions')}>
         <span class="row-main"><span class="row-title">Version history</span></span>
@@ -262,7 +272,43 @@
       </button>
     </div>
   </div>
-</section>
+{/snippet}
+
+{#if one}
+  <!-- Beside the sections (SettingsSplit): one section, titled in its bar. -->
+  <section class="screen" aria-labelledby="settings-title">
+    <BackLink to={href('settings')} label="Settings" title={ONE_TITLES[one]} id="settings-title" />
+    {#if one === 'features'}
+      {@render featuresSection()}
+    {:else if one === 'appearance'}
+      {@render appearanceSection()}
+    {:else if one === 'about'}
+      {@render aboutSection()}
+    {:else}
+      {@render stationSection()}
+    {/if}
+  </section>
+{:else}
+  <section class="screen" aria-labelledby="settings-title">
+    <BackLink to={href('operate')} label="Operate" title="Settings" id="settings-title" />
+
+    {@render stationSection()}
+
+    {@render modesSection()}
+
+    {@render radioSection()}
+
+    {@render logSection()}
+
+    {@render practiceSection()}
+
+    {@render featuresSection()}
+
+    {@render appearanceSection()}
+
+    {@render aboutSection()}
+  </section>
+{/if}
 
 <style>
   .link {

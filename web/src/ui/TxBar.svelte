@@ -7,6 +7,13 @@
    * carries the state: Tx off in grey, Tx on in a light accent tint, and On air in solid red with a
    * blinking dot; solid fills mean an active CQ (blue), Hunt (green) or a transmission (red). Every
    * button acts on the first tap. Halt is always there, always enabled, a red outline.
+   *
+   * Larger windows (lib/app/layout.svelte.ts) place the same parts differently. `panel`, regular
+   * width: a 336 pt column on the right with the status, the steps, Tx1 to Tx6 (a click sends one
+   * next; Edit opens the messages sheet, which leaves •••), the buttons at their own widths and
+   * Halt, 304 x 64 pt, the largest control. `bottom`, regular width taller than wide: a bar along
+   * the bottom with Halt 240 x 64 pt on the right. `side`, a phone on its side: the column under
+   * the waterfall, with Halt across it.
    */
   import { tick } from 'svelte';
   import BarButtons, { type BarButton } from './BarButtons.svelte';
@@ -16,16 +23,24 @@
   import { pathBetween } from '../lib/qso/grid';
   import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
   import { barText, houndText, huntText, runTally, watchdogText } from '../lib/qso/view';
+  import { TX_NUMS } from '../lib/qso/messages';
+  import { messages } from '../lib/qso/sequencer';
+  import { layout } from '../lib/app/layout.svelte';
   import { active, barSteps, txButton } from '../lib/operate/bar';
   import { clock } from '../lib/state/now.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
-  import { callCq, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
+  import { callCq, chooseNext, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { chooseScenario } from '../lib/practice/runtime.svelte';
   import { SCENARIOS } from '../lib/practice/scenarios';
 
-  let { onmessages, onfindclear }: { onmessages: () => void; onfindclear: () => void } = $props();
+  type Variant = 'phone' | 'panel' | 'bottom' | 'side';
+  let { onmessages, onfindclear, variant = 'phone' }: { onmessages: () => void; onfindclear: () => void; variant?: Variant } = $props();
+
+  /** The panel lists Tx1 to Tx6; elsewhere they are in the messages sheet, from •••. */
+  const listed = $derived(variant === 'panel');
+  const all = $derived(listed ? messages(qso.st) : null);
 
   const st = $derived(qso.st);
   const onAir = $derived(qso.onAir);
@@ -74,15 +89,16 @@
     if (hunting) return { text: hunting, aside };
     if (hounding && st.partner) return { text: hounding, aside };
     if (text) return { text, aside };
-    if (selLine) return { text: selLine, aside: 'Double-tap to call' };
+    if (selLine) return { text: selLine, aside: layout.pointer === 'mouse' ? 'Double-click to call' : 'Double-tap to call' };
     if (hounding) return { text: hounding, aside };
     return null;
   });
 
-  // The floating notices (App.svelte) sit above this bar; 0 while Operate is hidden.
+  // The floating notices (App.svelte) sit above this bar; 0 while Operate is hidden, and beside
+  // a panel or a column, which leave the bottom edge to the list.
   let barH = $state(0);
   $effect(() => {
-    document.documentElement.style.setProperty('--rr-bar-h', `${barH}px`);
+    document.documentElement.style.setProperty('--rr-bar-h', `${variant === 'phone' || variant === 'bottom' ? barH : 0}px`);
     return () => document.documentElement.style.removeProperty('--rr-bar-h');
   });
 
@@ -131,7 +147,7 @@
     { id: 'cq', label: 'CQ', tone: cqOn ? 'selected' : 'plain', pressed: cqOn, onclick: callCq },
     { id: 'hunt', label: 'Hunt', tone: st.hunt ? 'run' : 'plain', pressed: st.hunt, onclick: () => setHunt(!st.hunt) },
     { id: 'more', label: 'More', icon: 'more', menu: { open: menuOpen }, onclick: () => (menuOpen ? closeMenu() : void openMenu()) },
-    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, onclick: () => halt() },
+    { id: 'halt', label: 'Halt', tone: 'halt', grow: true, kbd: variant === 'panel' && layout.pointer === 'mouse' ? 'esc' : undefined, onclick: () => halt() },
   ]);
 
   function menuKey(e: KeyboardEvent) {
@@ -148,7 +164,8 @@
   }
 </script>
 
-<section class="bar" aria-label="Transmit" bind:this={barEl} bind:offsetHeight={barH}>
+<section class="bar {variant}" aria-label="Transmit" bind:this={barEl} bind:offsetHeight={barH}>
+  {#if variant === 'panel'}<h2 class="head">Transmit</h2>{/if}
   <div class="status" role="status">
     {#if line}
       <span class="msg">{line.text}</span>
@@ -164,7 +181,31 @@
   {:else}
     <div class="steps" aria-hidden="true"></div>
   {/if}
-  <BarButtons {buttons} />
+  {#if all}
+    <div class="head">
+      <h2 id="tx-messages">Messages</h2>
+      <button class="edit" onclick={onmessages}>Edit messages</button>
+    </div>
+    <div class="msgs" role="radiogroup" aria-labelledby="tx-messages">
+      {#each TX_NUMS as n (n)}
+        <button
+          class="m"
+          class:cur={st.current === n && (st.txEnabled || !!onAir)}
+          role="radio"
+          aria-checked={st.current === n}
+          aria-label="Tx{n}: {all[n] || 'needs a station'}"
+          disabled={!all[n]}
+          onclick={() => chooseNext(n)}
+        >
+          <small aria-hidden="true">Tx{n}</small>
+          {#if all[n]}<span class="t" aria-hidden="true">{all[n]}</span>{:else}<span class="ph" aria-hidden="true">Needs a station</span>{/if}
+        </button>
+      {/each}
+    </div>
+    <span class="grow"></span>
+  {/if}
+  <div class="dock">
+  <BarButtons {buttons} {variant} />
   {#if menuOpen}
     <div class="scrim" aria-hidden="true" onclick={() => closeMenu(false)}></div>
     <!-- svelte-ignore a11y_interactive_supports_focus -->
@@ -177,7 +218,7 @@
       {#if st.phase !== 'idle' || st.partner}
         <button class="mi" role="menuitem" onclick={act(endQso)}>End QSO</button>
       {/if}
-      <button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>
+      {#if !listed}<button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>{/if}
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
       <button class="mi gap" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
       <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
@@ -209,6 +250,7 @@
       {/if}
     </div>
   {/if}
+  </div>
 </section>
 
 <svelte:window onkeydown={(e) => menuOpen && e.key === 'Escape' && closeMenu()} />
@@ -351,5 +393,226 @@
 
   .mi :global(.chk) {
     color: var(--rr-accent);
+  }
+
+  /* The phone: the buttons and the menu belong to the bar itself. */
+  .dock {
+    display: contents;
+  }
+
+  /* Larger windows: the menu opens over the buttons. */
+  .panel .dock,
+  .bottom .dock,
+  .side .dock {
+    position: relative;
+    display: block;
+  }
+
+  .panel .menu,
+  .bottom .menu,
+  .side .menu {
+    right: 0;
+  }
+
+  .panel .status,
+  .bottom .status,
+  .side .status {
+    height: auto;
+    min-height: var(--rr-leading-row);
+  }
+
+  .panel .msg,
+  .bottom .msg,
+  .side .msg {
+    font-family: var(--rr-mono);
+    font-weight: var(--rr-weight-medium);
+    line-height: var(--rr-leading-row);
+    letter-spacing: 0;
+  }
+
+  .panel .aside,
+  .bottom .aside {
+    font-size: var(--rr-text-foot);
+  }
+
+  .panel .steps,
+  .bottom .steps,
+  .side .steps {
+    gap: var(--rr-space-1-5);
+    height: auto;
+    min-height: var(--rr-steps-tall);
+  }
+
+  .panel .step,
+  .bottom .step,
+  .side .step {
+    gap: var(--rr-space-1);
+    font-size: var(--rr-text-foot);
+    line-height: var(--rr-leading-foot);
+  }
+
+  .panel .step i,
+  .bottom .step i,
+  .side .step i {
+    height: var(--rr-mark-bar);
+  }
+
+  .panel .step.done,
+  .bottom .step.done,
+  .side .step.done {
+    color: var(--rr-label2);
+  }
+
+  /* Regular width: the transmit panel on the right, Halt at its foot. */
+  .panel {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-3);
+    min-height: 0;
+    overflow: hidden;
+    padding: var(--rr-space-3) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-4) + var(--rr-safe-bottom)) var(--rr-space-4);
+    background: var(--rr-bg);
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
+  }
+
+  .panel .status {
+    flex-direction: column;
+    gap: var(--rr-space-1);
+    align-items: flex-start;
+  }
+
+  .panel .msg {
+    max-width: 100%;
+  }
+
+  .panel .aside {
+    margin-left: 0;
+  }
+
+  .head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--rr-leading-foot);
+    font-size: var(--rr-text-foot);
+    font-weight: var(--rr-weight-semibold);
+    line-height: var(--rr-leading-foot);
+    color: var(--rr-label2);
+  }
+
+  .head h2 {
+    font: inherit;
+  }
+
+  /* A text button, 44 pt high, that reaches over the header's line. */
+  .edit {
+    min-height: var(--rr-tap);
+    margin: calc((var(--rr-leading-foot) - var(--rr-tap)) / 2) calc(-1 * var(--rr-space-2));
+    padding: 0 var(--rr-space-2);
+    color: var(--rr-accent);
+    font-size: var(--rr-text-sub);
+    font-weight: var(--rr-weight-regular);
+  }
+
+  /* In a short window the messages scroll, so the buttons and Halt stay whole. */
+  .msgs {
+    flex: 0 1 auto;
+    min-height: 0;
+    overflow: hidden auto;
+    border-radius: var(--rr-radius-l);
+    background: var(--rr-surface);
+  }
+
+  .m {
+    display: flex;
+    gap: var(--rr-space-3);
+    align-items: center;
+    width: 100%;
+    height: var(--rr-message-row);
+    padding: 0 var(--rr-space-3);
+    box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-row);
+    font-weight: var(--rr-weight-medium);
+    letter-spacing: 0;
+    text-align: left;
+    white-space: nowrap;
+  }
+
+  .m:last-child {
+    box-shadow: none;
+  }
+
+  .m small {
+    flex: none;
+    width: var(--rr-kbd);
+    font-family: var(--rr-sans);
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-semibold);
+    color: var(--rr-label2);
+  }
+
+  .m .t {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .m .ph {
+    font-family: var(--rr-sans);
+    font-weight: var(--rr-weight-regular);
+    color: var(--rr-label3);
+  }
+
+  .m[aria-checked='true'] small {
+    color: var(--rr-accent);
+  }
+
+  .m.cur {
+    background: var(--rr-tx-soft);
+    color: var(--rr-tx-text);
+  }
+
+  .m.cur small {
+    color: var(--rr-tx-text);
+  }
+
+  .m:focus-visible {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: -2px;
+  }
+
+  @media (hover: hover) {
+    .m:not(:disabled, .cur):hover {
+      background: var(--rr-fill3);
+    }
+  }
+
+  .grow {
+    flex: 1;
+  }
+
+  /* Regular width, taller than wide: a bar along the bottom. */
+  .bottom {
+    display: flex;
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    padding: var(--rr-space-2) calc(var(--rr-space-4) + var(--rr-safe-right)) calc(var(--rr-space-3) + var(--rr-safe-bottom)) calc(var(--rr-space-4) + var(--rr-safe-left));
+  }
+
+  .bottom .steps {
+    max-width: var(--rr-steps-wide);
+  }
+
+  /* A phone on its side: the column under the waterfall. */
+  .side {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    justify-content: flex-end;
+    padding: var(--rr-space-2) calc(var(--rr-space-3) + var(--rr-safe-right)) calc(var(--rr-space-2) + var(--rr-safe-bottom)) var(--rr-space-3);
+    box-shadow: inset var(--rr-hairline) 0 0 var(--rr-sep-strong);
   }
 </style>

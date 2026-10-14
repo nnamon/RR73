@@ -9,7 +9,7 @@
   import { qsoLine, rowProblem, rowTags, rowTime } from '../lib/log/view';
   import type { LedgerEntry, Qso } from '../lib/log/types';
 
-  let { qso, onfix }: { qso: Qso; onfix: (qso: Qso, entry: LedgerEntry) => void } = $props();
+  let { qso, onfix, selected = false }: { qso: Qso; onfix: (qso: Qso, entry: LedgerEntry) => void; /** Open in the Log's detail pane. */ selected?: boolean } = $props();
 
   const entries = $derived(log.index.get(qso.id));
   const tags = $derived(rowTags(entries, log.facts));
@@ -22,8 +22,8 @@
   });
 </script>
 
-<li class="lr" class:deleted={qso.deletedAt !== null}>
-  <button class="lr-main" onclick={() => openEditor(qso.id)}>
+<li class="lr" class:deleted={qso.deletedAt !== null} class:sel={selected}>
+  <button class="lr-main" aria-current={selected ? 'true' : undefined} onclick={() => openEditor(qso.id)}>
     <span class="lr-1">
       <span class="lr-call mono">{qso.call}</span>
       <span class="lr-r">
@@ -45,6 +45,16 @@
 <style>
   .lr {
     position: relative;
+  }
+
+  /* Open in the Log's detail pane. */
+  .lr.sel {
+    background: var(--rr-sel-tint);
+  }
+
+  .lr.sel::before,
+  .lr.sel + :global(.lr)::before {
+    display: none;
   }
 
   .lr + :global(.lr)::before {
