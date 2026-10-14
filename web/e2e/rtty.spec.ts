@@ -185,10 +185,11 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('strip-qth')).toHaveCSS('text-overflow', 'ellipsis');
     await expect(bar(page).getByRole('status')).toHaveText(/Call set to JA1XYZ/);
 
-    // The Report macro starts a transmission and leaves Tx on; a typed line follows on air.
+    // The Report macro starts a transmission that returns to Rx after its text; a line typed
+    // before then follows in the same over.
     await page.clock.setFixedTime(at(14, 6, 40));
     await page.getByRole('toolbar', { name: 'Macros' }).getByRole('button', { name: 'Report' }).click();
-    await expect(bar(page).getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 5000 });
+    await expect(bar(page).getByRole('button', { name: /^Rx in \d+ s$/ })).toBeVisible({ timeout: 5000 });
     const field = page.getByTestId('send-field');
     await field.evaluate((el: HTMLTextAreaElement) => {
       el.focus();
@@ -197,7 +198,7 @@ for (const theme of ['light', 'dark'] as const) {
     await field.pressSequentially(' RIG KX2 5W ES EFHW');
     await expect(field).toHaveValue(/RIG KX2 5W ES EFHW$/);
     await expect(text(page).locator('.k-t').last()).toBeVisible();
-    await expect(bar(page).getByRole('status')).toHaveText(/Tx · \d+\.\d s/);
+    await expect(bar(page).getByRole('status')).toHaveText(/Rx in \d+ s$/);
     await shot(page, info, SHOTS, `${theme}-qso`, 200);
 
     // The keyboard up: the waterfall as a 48 pt strip, no tuning row or status line.

@@ -31,7 +31,7 @@ export function defaultMacros(): MacroSets {
       m('q-cq', 'CQ', 'CQ CQ CQ DE {MYCALL} {MYCALL} {MYCALL} PSE K'),
       m('q-answer', 'Answer', '{CALL} {CALL} DE {MYCALL} {MYCALL} {MYCALL} K'),
       m('q-over', 'Over', '{CALL} DE {MYCALL}', false),
-      m('q-report', 'Report', 'TNX FER CALL. UR RST {RST} {RST}. NAME {MYNAME} {MYNAME} QTH {MYQTH} {MYQTH}', false),
+      m('q-report', 'Report', 'TNX FER CALL. UR RST {RST} {RST}. NAME {MYNAME} {MYNAME} QTH {MYQTH} {MYQTH}'),
       m('q-btu', 'BTU', 'BTU {CALL} DE {MYCALL} K'),
       m('q-73', '73', 'TNX {NAME} 73 ES GL. {CALL} DE {MYCALL} SK'),
       m('q-qrz', 'QRZ?', 'QRZ? DE {MYCALL} K'),
@@ -48,6 +48,20 @@ export function defaultMacros(): MacroSets {
       m('c-call', 'Call?', 'CL? CL?'),
     ],
   };
+}
+
+/** The station's name, QTH and grid, as the status line names them: a macro that needs one of them empty is not sent. */
+export const STATION_FIELDS: Partial<Record<Field, string>> = { MYNAME: 'name', MYQTH: 'QTH', MYGRID: 'grid' };
+
+/**
+ * Before 0.14.1 the default Report macro kept Tx on after its text, against the design, which
+ * ends every default macro but Over with Return to Rx. A stored Report still as it shipped then
+ * gets Return to Rx; one the operator edited stays as it is.
+ */
+export function fixShippedReport(sets: MacroSets): MacroSets {
+  const shipped = 'TNX FER CALL. UR RST {RST} {RST}. NAME {MYNAME} {MYNAME} QTH {MYQTH} {MYQTH}';
+  const qso = sets.qso.map((x) => (x.id === 'q-report' && x.label === 'Report' && x.text === shipped && !x.returnToRx && !x.logWhenSent ? { ...x, returnToRx: true } : x));
+  return { ...sets, qso };
 }
 
 /** The serial number as sent, with the digits set: 42 with 3 digits gives "042". */

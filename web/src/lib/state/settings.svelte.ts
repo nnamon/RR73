@@ -13,6 +13,7 @@ import { DEFAULT_STOP_AFTER_MIN, DEFAULT_TX_PCT, normalisePct, normaliseStopAfte
 import { SPOT_SORTS, type SpotSort } from '../wspr/spots';
 import { RTTY_DEFAULTS, validateRtty, type RttySettings } from '../rtty/settings';
 import { keyboardDefaults, validateKeyboard, type KeyboardSettings } from '../keyboard/settings';
+import { fixShippedReport, normaliseMacros } from '../keyboard/macros';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -176,8 +177,9 @@ const KEY = 'settings';
  *    distance. FT8 and FT4 keep their fields at the top level.
  * 8. RTTY's settings, the keyboard modes' macros and contest, and the operator's name and QTH,
  *    at their defaults. Every other value stays where it was.
+ * 9. The Report macro as 0.14.0 stored it gets Return to Rx (macros.ts fixShippedReport).
  */
-export const SETTINGS_SCHEMA = 8;
+export const SETTINGS_SCHEMA = 9;
 
 /** The sequencer settings schema 5 adds. */
 const SEQUENCER_DEFAULTS = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 } as const;
@@ -198,6 +200,13 @@ export function migration(raw: unknown): Record<string, unknown> {
   if (from < 6) patch.waterfallContrast = 'normal';
   if (from < 7) patch.wspr = { ...WSPR_DEFAULTS };
   if (from < 8) Object.assign(patch, { myName: '', myQth: '', rtty: { ...RTTY_DEFAULTS, dialHz: {} }, keyboard: keyboardDefaults() });
+  else if (from < 9) {
+    const k = (raw as Record<string, unknown>).keyboard;
+    if (k && typeof k === 'object') {
+      const kb = k as Record<string, unknown>;
+      patch.keyboard = { ...kb, macros: fixShippedReport(normaliseMacros(kb.macros)) };
+    }
+  }
   return patch;
 }
 

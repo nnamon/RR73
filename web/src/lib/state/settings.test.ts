@@ -251,6 +251,22 @@ describe('the RTTY settings migration', () => {
     expect(validate({ myName: '  amon ', myQth: 'singapore   city' })).toMatchObject({ myName: 'AMON', myQth: 'SINGAPORE CITY' });
   });
 
+  it('gives the Report macro 0.14.0 stored Return to Rx once, and keeps one the operator edited', async () => {
+    const shipped = keyboardDefaults().macros;
+    const old = { ...shipped, qso: shipped.qso.map((m) => (m.id === 'q-report' ? { ...m, returnToRx: false } : m)) };
+    const stored = { callsign: '9V1NE', keyboard: { ...keyboardDefaults(), macros: old, nextSerial: 42 }, schema: 8 };
+    await setKv('settings', stored);
+    await loadSettings();
+    expect(settings.keyboard.macros.qso.find((m) => m.id === 'q-report')?.returnToRx).toBe(true);
+    expect(settings.keyboard.nextSerial).toBe(42);
+    await expect.poll(async () => ((await getKv('settings')) as { schema: number }).schema).toBe(SETTINGS_SCHEMA);
+
+    const edited = { ...old, qso: old.qso.map((m) => (m.id === 'q-report' ? { ...m, text: 'UR RST {RST} {RST}' } : m)) };
+    expect(migration({ keyboard: { macros: edited }, schema: 8 })).toMatchObject({ keyboard: { macros: { qso: expect.arrayContaining([expect.objectContaining({ id: 'q-report', returnToRx: false })]) } } });
+    // Off by the operator's choice after the fix: schema 9 leaves it off.
+    expect(migration({ keyboard: { macros: old }, schema: SETTINGS_SCHEMA })).toEqual({});
+  });
+
   it('keeps the macro sets, contest and serial, and drops what is malformed', () => {
     const k = validate({ keyboard: { set: 'contest', contestId: 'cq-wpx-rtty!', nextSerial: 42, serialDigits: 4, exchange: '599 {NR}', macros: { qso: [{ id: 'a', label: 'Hi', text: 'HI {CALL}', returnToRx: false }, { id: 2 }] } } }).keyboard;
     expect(k).toMatchObject({ set: 'contest', contestId: 'CQ-WPX-RTTY', nextSerial: 42, serialDigits: 4 });

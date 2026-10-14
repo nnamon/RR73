@@ -34,6 +34,8 @@ export const STATUS = {
   noWsprCall: 'Callsign cannot be sent in WSPR',
   spotsCleared: 'Spots cleared',
   noMyCall: 'Set callsign in Settings',
+  /** A macro needs the station's name, QTH or grid: "Set name and QTH in Settings". */
+  noMine: (fields: string) => `Set ${fields} in Settings`,
   callSet: (call: string) => `Call set to ${call}`,
   tuned: (hz: number) => `Tuned to ${hz} Hz`,
   shiftFound: (hz: number) => `Shift ${hz} Hz found`,

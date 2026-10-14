@@ -242,6 +242,7 @@ export type ModemEvent =
 | {UTC} | UTC time, 4 digits: 1405. |
 
 - Fields expand when the macro is tapped. Each macro also has two switches: Return to Rx (ends the transmission after the macro) and Log QSO when sent.
+- A macro that needs the station's callsign, name, QTH or grid sends nothing while that field is empty, and the status line says which to set: "Set name and QTH in Settings". Without it Report went out as "NAME QTH". The other station's fields may be empty: the spaces around them close up ("TNX 73 ES GL").
 - Every macro starts on a new line unless its text starts with a space.
 
 Default QSO set:
@@ -252,7 +253,7 @@ Default QSO set:
 | CQ | CQ CQ CQ DE {MYCALL} {MYCALL} {MYCALL} PSE K | on | off |
 | Answer | {CALL} {CALL} DE {MYCALL} {MYCALL} {MYCALL} K | on | off |
 | Over | {CALL} DE {MYCALL} | off | off |
-| Report | TNX FER CALL. UR RST {RST} {RST}. NAME {MYNAME} {MYNAME} QTH {MYQTH} {MYQTH} | off | off |
+| Report | TNX FER CALL. UR RST {RST} {RST}. NAME {MYNAME} {MYNAME} QTH {MYQTH} {MYQTH} | on | off |
 | BTU | BTU {CALL} DE {MYCALL} K | on | off |
 | 73 | TNX {NAME} 73 ES GL. {CALL} DE {MYCALL} SK | on | off |
 | QRZ? | QRZ? DE {MYCALL} K | on | off |

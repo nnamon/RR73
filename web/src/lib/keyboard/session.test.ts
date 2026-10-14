@@ -193,6 +193,58 @@ describe('macros', () => {
     expect(r.finished).toBe(1);
   });
 
+  it('Report ends the transmission after its text, and a line typed before then follows in the same over', async () => {
+    const r = rig();
+    r.s.setCall('JA1XYZ', false);
+    r.s.tapMacro(macro('Report'));
+    await r.settle();
+    expect(r.s.tx).toBe('ending');
+    r.report(0);
+    r.s.typed(r.s.field + ' RIG KX2');
+    for (let i = 0; i < 40; i++) r.report(0);
+    expect(r.onAir).toBe('\nTNX FER CALL. UR RST 599 599. NAME AMON AMON QTH SINGAPORE SINGAPORE RIG KX2');
+    expect(r.finished).toBe(1);
+    r.drain();
+    expect(r.s.tx).toBe('off');
+  });
+
+  it('ends every default macro but Over after its text, with every field filled', async () => {
+    for (const [set, macros] of Object.entries(defaultMacros()) as ['qso' | 'contest', ReturnType<typeof defaultMacros>['qso']][]) {
+      for (const m of macros) {
+        const r = rig({ set, macros });
+        r.s.setCall('JA1XYZ', false);
+        r.s.editField('name', 'TARO');
+        r.s.tapMacro(m);
+        await r.settle();
+        for (let i = 0; i < 60; i++) r.report(0);
+        const label = `${set} ${m.label}`;
+        expect(r.finished, label).toBe(m.label === 'Over' ? 0 : 1);
+        expect(r.s.tx, label).toBe(m.label === 'Over' ? 'on' : 'ending');
+        expect(r.onAir, label).not.toMatch(/ {2}|\{|\}/);
+        expect(r.s.field, label).toBe('');
+      }
+    }
+  });
+
+  it('sends nothing that needs the station name, QTH or grid while it is empty, and says which', async () => {
+    const r = rig({ myName: '', myQth: '' });
+    r.s.setCall('JA1XYZ', false);
+    r.s.tapMacro(macro('Report'));
+    await r.settle();
+    expect(r.s).toMatchObject({ tx: 'off', field: '' });
+    expect(r.s.notice?.text).toBe('Set name and QTH in Settings');
+    const g = rig({ myName: '', myQth: '', myGrid: '', macros: [{ id: 'x', label: 'All', text: '{MYNAME} {MYQTH} {MYGRID}', returnToRx: true, logWhenSent: false }] });
+    g.s.tapMacro(g.config.macros[0]);
+    expect(g.s.notice?.text).toBe('Set name, QTH, grid in Settings');
+    // Their own fields may stay empty: the spaces close up.
+    const t = rig();
+    t.s.setCall('JA1XYZ', false);
+    t.s.tapMacro(macro('73'));
+    await t.settle();
+    for (let i = 0; i < 40; i++) t.report(0);
+    expect(t.onAir).toBe('\nTNX 73 ES GL. JA1XYZ DE 9V1NE SK');
+  });
+
   it('previews a macro as RTTY sends it, in capitals', () => {
     const r = rig();
     r.s.setCall('JA1XYZ', false);

@@ -15,7 +15,7 @@
 import { STATUS } from '../qso/status';
 import type { LogQsoRecord } from '../log/types';
 import { emptyDraft, editField, record, refill, setCall, FILL_WINDOW_MS, type Draft, type DraftKey } from './draft';
-import { expand, queued, serialText, utc4, type FieldValues, type Macro, type MacroSetId } from './macros';
+import { STATION_FIELDS, expand, queued, serialText, utc4, type FieldValues, type Macro, type MacroSetId } from './macros';
 import type { CharTables, ModemEvent } from './modem';
 import { otherCaseReader } from './modem';
 import { SendQueue } from './queue';
@@ -206,6 +206,12 @@ export class KeyboardSession {
     }
     if (missing.includes('MYCALL')) {
       this.say(STATUS.noMyCall);
+      return;
+    }
+    // The station's own name, QTH or grid left out would go on air as "NAME  QTH".
+    const mine = missing.flatMap((f) => (STATION_FIELDS[f] ? [STATION_FIELDS[f]] : []));
+    if (mine.length) {
+      this.say(STATUS.noMine(mine.length > 2 ? mine.join(', ') : mine.join(' and ')));
       return;
     }
     if (!fromRepeat) {
