@@ -93,7 +93,7 @@ async function listedSlots(page: Page): Promise<ListedSlot[]> {
         slots.push({ head: `${cell('.visually-hidden')}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, rows: [] });
       }
       else if (li.querySelector('button.dr') && slots.length) {
-        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: Number(cell('.c-hz')), db: Number(cell('.c-db').replace('\u2212', '-')) });
+        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: parseInt(cell('.c-hz')), db: parseInt(cell('.c-db').replace('\u2212', '-')) });
       }
     }
     return slots.reverse();
@@ -166,8 +166,8 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   await expect(row('JH1RRT YB0AZK RR73')).not.toHaveClass(/k-(cq|me)/);
   await expect(page.getByRole('button', { name: /9V1NE JA1KXM PM95, to you/ }).first()).toBeVisible();
 
-  // Rows are 30 px, and the list with decodes passes axe (WCAG 2.2 AA).
-  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(30, 0);
+  // Rows are 32 px, and the list with decodes passes axe (WCAG 2.2 AA).
+  for (const { text } of MESSAGES) expect((await row(text).boundingBox())!.height).toBeCloseTo(32, 0);
   const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
   expect(axe.violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   await page.screenshot({ path: fileURLToPath(new URL('../test-results/screens/decode-chromium-light-operate.png', import.meta.url)) });
@@ -199,9 +199,10 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await setCallsign(page);
   await tapStartAudio(page);
   const list = page.getByTestId('decode-list');
-  const heads = list.locator('.slot-bar .st');
-  await expect(heads.first()).toBeVisible({ timeout: 45_000 });
-  const firstSlot = (await heads.first().textContent())!.slice(0, 8);
+  // The top bar's whole line: a run of empty slots keeps its first time as it grows.
+  const heads = list.locator('.slot-bar .visually-hidden');
+  await expect(list.locator('.slot-bar').first()).toBeVisible({ timeout: 45_000 });
+  const firstSlot = (await heads.first().textContent())!;
 
   // Hold a finger on the list across the next slot's decode.
   const box = (await list.boundingBox())!;
@@ -209,10 +210,10 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await page.mouse.down();
   const held = Date.now();
   await page.waitForTimeout(17_000);
-  expect((await heads.first().textContent())!.slice(0, 8)).toBe(firstSlot);
+  expect(await heads.first().textContent()).toBe(firstSlot);
   await page.mouse.up();
   // Free again 0.5 s after the finger lifts: the newer slot goes in on top.
-  await expect.poll(async () => (await heads.first().textContent())!.slice(0, 8), { timeout: 3000 }).not.toBe(firstSlot);
+  await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).not.toBe(firstSlot);
   expect(Date.now() - held).toBeGreaterThan(17_000);
 });
 
@@ -226,5 +227,6 @@ test('without the decoder module, the list says so and receive carries on', asyn
   await expect(alert).toContainText('The waterfall and Save slot still work');
   await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /dBFS$/);
   await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Radio and audio/ }).click();
   await expect(page.getByTestId('decoder-status')).toHaveText('Did not load');
 });

@@ -46,7 +46,7 @@
     </button>
     <ul class="group facts">
       <li class="row">
-        <span class="row-main"><span class="row-title">Last decode</span><span class="row-sub">{utcTime(item.slotStartMs)} · {signed(Math.round(item.decode.snr_db))} dB · DT {dt(item.decode.dt_s)} · {Math.round(item.decode.freq_hz)} Hz</span></span>
+        <span class="row-main"><span class="row-title">Last decode</span><span class="row-sub">{utcTime(item.slotStartMs)} · {signed(Math.round(item.decode.snr_db))} dB · DT {dt(item.decode.dt_s)} s · {Math.round(item.decode.freq_hz)} Hz</span></span>
       </li>
       <li class="row">
         <span class="row-main"><span class="row-title">Message</span><span class="row-sub mono">{item.decode.text}</span></span>

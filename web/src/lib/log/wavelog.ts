@@ -88,7 +88,7 @@ export const say = {
   unreachable: (host: string, retrying = true) => `Could not reach Wavelog at ${host}. Check the address and that this phone is online.${retrying ? LATER : ''}`,
   timeout: (host: string, s: number, retrying = true) => `Wavelog at ${host} did not answer within ${s} s.${retrying ? LATER : ''}`,
   serverError: (host: string, status: number, retrying = true) => `Wavelog at ${host} had a server error (HTTP ${status}).${retrying ? LATER : ' Try again later.'}`,
-  unreadable: (host: string, retrying = true) => `Wavelog at ${host} sent a reply RR73 cannot read.${retrying ? LATER : ' Try again later.'}`,
+  unreadable: (host: string, retrying = true) => `Wavelog at ${host} sent an unreadable reply.${retrying ? LATER : ' Try again later.'}`,
   rateLimited: (s: number, retrying = true) => `Wavelog asked RR73 to wait ${s} s before sending more.${retrying ? ' RR73 tries again then.' : ''}`,
   keyMissing: 'Paste the API key from the API page in Wavelog.',
   keyInvalid: 'Wavelog refused the API key: it is wrong or switched off. Copy a read-write key from the API page in Wavelog.',

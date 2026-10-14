@@ -1,6 +1,6 @@
 # QSO sequencer
 
-The sequencer decides what RR73 transmits and when. It covers answering a station (search and pounce), calling CQ, and Run mode. It is a pure state machine in `web/src/lib/qso/`: events in, new state and effects out, no timers or audio inside, so every rule is unit-tested against slot timelines.
+The sequencer decides what RR73 transmits and when. It covers answering a station (search and pounce), calling CQ, Run and Hunt. It is a pure state machine in `web/src/lib/qso/`: events in, new state and effects out, no timers or audio inside, so every rule is unit-tested against slot timelines.
 
 ## Messages
 
@@ -19,9 +19,32 @@ Messages are built with `rr73-ft8` through `rr73-wasm`, which also validates ope
 
 **Answering a CQ.** Tx1 → their report → Tx3 → their RR73 or RRR → Tx5. If they send `R<report>` directly, we answer Tx4. If they send RR73 after our Tx1, the QSO is incomplete and is not logged.
 
-**Calling CQ.** Tx6 → a caller's grid → Tx2 → their `R<report>` → Tx4 → next caller or Tx6. A caller who sends a report first gets Tx3; a caller who sends `R<report>` first gets Tx4.
+A station the operator calls by hand always follows the answering path, also while calling CQ: the double-tap ends CQ until that QSO is done, and the CQ button shows off. On the air, calling VK2LAW from CQ stayed in the CQ flow and went back to CQ after the repeats ran out.
 
-**Run mode.** Calling CQ in a loop. Callers queue in the order the operator chose: First (decode order), Strongest, Farthest, New (new DXCC, grid or call first). After Tx4 the sequencer answers the next queued caller in the very next slot, or returns to Tx6 when the queue is empty. Dupes for the band and mode in the current activation, or in the UTC day outside an activation, are skipped unless the operator works dupes.
+**Calling CQ.** Tx6 → a caller's grid → Tx2 → their `R<report>` → Tx4 → their 73 or silence. A caller who sends a report first gets Tx3; a caller who sends `R<report>` first gets Tx4. CQ repeats while nobody calls. A caller who repeats `R<report>` after our RR73 gets RR73 again.
+
+**Run.** A switch in Operate's ••• menu, stored, off by default. It decides what follows a QSO from CQ:
+
+- On: the next queued caller is answered in the very next slot, or Tx6 when the queue is empty. Callers queue across slots in the order the operator chose: First (decode order), Strongest, Farthest, New (new DXCC, grid or call first). Dupes for the band and mode in the current activation, or in the UTC day outside an activation, are skipped unless the operator works dupes.
+- Off: Tx turns off once the QSO ends, as WSJT-X does with "Disable Tx after sending 73". Only callers of the latest slot are candidates.
+- A station called by hand from CQ returns to CQ after it is logged only with Run on. An unanswered or lost call never returns to CQ.
+
+Run was a button that started CQ. It became a setting because the CQ button already starts CQ, and the owner wants WSJT-X's choice between stopping after 73 and carrying on.
+
+**Hunt.** A main button. Hunt answers CQs one after another until the operator stops it:
+
+- At each final decoding pass with nobody in a QSO, it calls the first CQ in Hunt's order among the plain CQs heard in the slot just decoded, in the next slot of the opposite parity. Hunt started within the late-start window of a slot picks from the slot before at once.
+- It skips stations heard sending anything other than CQ in that slot (in a QSO), dupes (as for Run), and stations that ignored Hunt in the last 10 min: no reply after the repeats, or a second answer to another station while Hunt called them.
+- Orders, chosen in •••: Not worked (on this band and mode on any day, then strongest; the default), Strongest, Newest (the station whose run of CQs started most recently), Farthest, New call (never worked).
+- Plain CQ only. CQ DX, CQ NA, CQ POTA and other CQs with a modifier are skipped until reference data can say whether the operator is the station asked for.
+- Hunt and CQ stop each other. Starting Hunt during a QSO lets the QSO finish and picks after it. Stopping Hunt during a QSO lets it finish, then Tx goes off. Halt, End QSO, an audio stop and the watchdog stop Hunt.
+- The status line names the state: "Hunt · calling VJ6X (−12 dB) · 2 QSOs".
+
+**Hound.** A switch per band, in the band sheet and •••, for working a DXpedition in FT8 DXpedition mode (`docs/design/hound.md`). Tx1 goes to the Fox's base callsign at 1000 Hz or above and repeats until the Fox answers. The Fox's report to us, alone or inside its multi-call message (`K1ABC RR73; 9V1NE <KH1/KH7Z> -08`), gets Tx3 at the frequency the Fox sent it on; repeats move 300 Hz. The Fox's RR73 to us logs the QSO and Tx turns off, with no 73. Only parts addressed to us count, so the Fox working other Hounds never reads as a lost station or starts a tail-end call.
+
+**Lost station.** When the station we call, before it has answered us, sends a report, `R<report>`, RR73, RRR or 73 to another station, calling stops and a notice names it: "VK2LAW answered DV5CEL." A CQ or a call with a grid from that station is not a QSO under way, and calling continues.
+
+**Tail-end.** A setting, on by default. After a lost station sends RR73, RRR or 73 to the other station, or calls CQ, the sequencer calls it once more in the next slot of the opposite parity, with the late start allowed. One unanswered call ends the attempt. Nothing goes out while the station is in its QSO, Tx on included. Waiting ends after 8 slots. With tail-end off, the call pauses at once. Hunt never tail-ends: it moves on to the next CQ as soon as the station it calls answers another, whatever the setting, because another CQ is a quicker QSO than waiting out theirs.
 
 ## Timing
 
@@ -33,7 +56,7 @@ Messages are built with `rr73-ft8` through `rr73-wasm`, which also validates ope
 ## Retries
 
 - With no reply, the last message repeats in the next slot of our parity, up to 3 times (configurable).
-- In Run mode a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering mode stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does.
+- Calling CQ, a caller who stays silent after 3 repeats is dropped and the next caller or CQ follows. Answering stops after 3 repeats and leaves Tx enabled on the last message, as WSJT-X does; Hunt moves on to the next CQ.
 
 ## Logging
 
@@ -46,11 +69,11 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 
 ## Safety
 
-- **Tx on** and **Run** only start from an operator action: CQ, Run, Tx on, or a double-tap on a decode, which calls the station with Tx on.
-- **Halt** stops audio within the current audio render quantum, disables Tx and stops Run. It is red, always visible in the bottom bar, and takes one tap.
-- **End QSO**, in the ••• menu, stops Tx and Run and returns to idle without logging.
-- **Watchdog**, WSJT-X's rule: a counter of minutes since the operator last touched the screen or since the transmitted message last changed. At the limit (default 6 minutes) Tx and Run stop and a notice says why. WSPR beacon schedules are exempt; they are not QSOs.
-- **Audio interruption** (another app, a call, the screen locking): Tx and Run stop, the QSO keeps its state, and transmitting needs Resume audio first.
+- **Tx on** only starts from an operator action: CQ, Hunt, Tx on, or a double-tap on a decode, which calls the station with Tx on. Run starts nothing by itself.
+- **Halt** stops audio within the current audio render quantum, disables Tx and stops Hunt. It is red, always visible in the bottom bar, and takes one tap.
+- **End QSO**, in the ••• menu, stops Tx and Hunt and returns to idle without logging.
+- **Watchdog**, WSJT-X's rule: a counter of minutes since the operator last touched the screen or since the transmitted message last changed. At the limit Tx and Hunt stop and a notice says why. The limit is a setting: 6 min by default, any number of minutes, or off. WSPR beacon schedules are exempt; they are not QSOs.
+- **Audio interruption** (another app, a call, the screen locking): Tx and Hunt stop, the QSO keeps its state, and transmitting needs Resume audio first.
 - **Band change**: choosing a band in the band sheet applies it, and Tx and the QSO keep their state; QSOs record the band chosen. A mode change (FT8, FT4) changes the slot length, so it stops Tx and ends the QSO.
 - **Own transmissions**: the receive audio of a slot RR73 transmitted in is not decoded or shown. The radio feeds RR73's own signal back at +40 dB or more, which decoded as a strong station; the list shows what was sent in its place.
 - Nothing else plays through the output while audio runs.
@@ -58,11 +81,17 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 ## Events and effects
 
 ```text
-events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | enableTx(on)
-         | runMode(on) | halt | txStarted(slotStart) | txEnded(slotStart) | audioStopped
+events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | callCq | enableTx(on)
+         | hunt(on) | stopAfterQso(on) | halt | txStarted(slotStart) | txEnded(slotStart) | audioStopped
          | endQso | configure(band, mode, dialHz, ...) | touch(t) | tick(t) | editMessage(slot, text)
-effects: scheduleTx(text, slotStart, startOffsetS) | cancelTx | logQso(record)
+effects: scheduleTx(text, slotStart, startOffsetS, freqHz) | cancelTx | logQso(record)
          | notice(kind, text) | queueChanged(callers)
 ```
 
-`state` holds the mode (idle, answering, calling CQ, running), the current partner and their last decodes, the Tx1 to Tx6 texts, the queue, the retry count, the watchdog counter and the parity. The UI renders from state; the audio layer executes effects.
+`state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Hunt's order, Hound and the watchdog limit come in through `configure`. `freqHz` is null except where Hound sets the Tx frequency. The UI renders from state; the audio layer executes effects.
+
+## Open risks
+
+- Hunt's "in a QSO" test only sees the slot just decoded: a station that answered a caller we did not decode looks free. The lost-station check stops the call one slot later.
+- Hunt's pick uses the SNR of one decode; fading can make a weaker station look strongest for a slot. Not tested on a device.
+- Tail-end waits at most 8 slots. A long QSO with repeats outlasts it, and the call pauses.

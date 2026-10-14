@@ -30,7 +30,7 @@ export async function smallTargets(page: Page, scope: string): Promise<string[]>
       .join(', ');
     for (const el of document.querySelectorAll<HTMLElement>(targets)) {
       if (el.closest('[hidden]') || el.closest('dialog:not([open])') || el.classList.contains('visually-hidden')) continue;
-      // Decode rows are 30 pt, as in WSJT-X: dense rows, full width.
+      // Decode rows are 32 pt: dense rows, full width.
       if (el.matches('button.dr')) continue;
       const r = el.getBoundingClientRect();
       if (!r.width) continue;

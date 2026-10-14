@@ -11,18 +11,20 @@
   import Waterfall from '../ui/Waterfall.svelte';
   import MessagesSheet from '../ui/MessagesSheet.svelte';
   import StationDetailSheet from '../ui/StationDetailSheet.svelte';
-  import { callStation, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
+  import { callStation, houndOn, qso, setFrequencies, showNotice, tapRow, type Selected } from '../lib/state/qso.svelte';
   import type { ListItem } from '../lib/decode/list';
   import { utcTime } from '../lib/clock/format';
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
-  import { buildList, callerItems, filterCounts, type Classify, type Filter } from '../lib/decode/list';
+  import { buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../lib/decode/list';
+  import { applyFocus, focusCall } from '../lib/decode/focus';
   import { highlightDecode } from '../lib/decode/highlight';
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
   import { orderQueue } from '../lib/qso/sequencer';
-  import { dialHz } from '../lib/radio/bands';
-  import { SIGNAL_HZ } from '../lib/waterfall/pick';
+  import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { markedTxHz } from '../lib/qso/view';
+  import { STATUS } from '../lib/qso/status';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
@@ -74,11 +76,11 @@
   async function findClear() {
     const hz = (await wf?.quietest()) ?? null;
     if (hz === null) {
-      showNotice('Finding a clear Tx frequency needs 2 slots of audio.');
+      showNotice(STATUS.noClear);
       return;
     }
     setFrequencies({ txHz: hz });
-    showNotice(`Tx moved to ${hz} Hz, the quietest ${SIGNAL_HZ[settings.mode]} Hz in the last slots.`);
+    showNotice(STATUS.txSet(hz));
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
@@ -182,10 +184,26 @@
 
   const callers = $derived.by(() => {
     const st = qso.st;
-    if (!st.run || (filter !== 'all' && filter !== 'me')) return [];
+    if (!st.config.run || st.phase !== 'cq' || (filter !== 'all' && filter !== 'me')) return [];
     return callerItems(shown, settings.callsign, settings.mode, st.partner, orderQueue(st.queue, st.config.order), settings.workDupes, classify);
   });
-  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify)]);
+  // Our transmission at the top of the list: planned while Tx is on, then on air. Kept to plain
+  // values first, so the sequencer's 1 s tick does not rebuild the list.
+  const planSlot = $derived(qso.st.txEnabled && qso.st.next && !qso.onAir ? qso.st.next.slotStartMs : null);
+  const planStart = $derived(qso.st.next ? qso.st.next.slotStartMs + qso.st.next.offsetS * 1000 : 0);
+  const planText = $derived(qso.st.next?.text ?? '');
+  const outgoing: Outgoing = $derived.by(() => {
+    const air = qso.onAir;
+    const slot = SLOT_MS[settings.mode];
+    return {
+      next: planSlot === null ? null : { slotStartMs: planSlot, startMs: planStart, text: planText, freqHz: settings.txHz },
+      onAir: air ? { slotStartMs: Math.floor(air.startMs / slot) * slot, startMs: air.startMs, endMs: air.endMs } : null,
+    };
+  });
+  // While calling a station or in a QSO, rows unrelated to it dim. The focus is a callsign or
+  // null, so the sequencer's 1 s tick does not rebuild the list.
+  const focus = $derived(focusCall(qso.st));
+  const items = $derived(applyFocus([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)], focus));
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -206,8 +224,8 @@
   <h1 id="operate-title" class="visually-hidden">Operate</h1>
   <TopBar
     band={settings.band}
-    mode={settings.mode}
-    dialHz={dialHz(settings.band, settings.mode)}
+    mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
+    dialHz={operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
     utc={utcTime(clock.ms)}
     progress={slotProgress(clock.ms, settings.mode)}
     tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
@@ -234,8 +252,9 @@
     bind:this={wf}
     mode={settings.mode}
     rxHz={settings.rxHz}
-    txHz={settings.txHz}
+    txHz={markedTxHz(qso.st, settings.txHz)}
     txSlots={tx.slots}
+    contrast={settings.waterfallContrast}
     stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
     hint={!settings.freqPicked}
     onset={setFrequencies}
@@ -263,7 +282,7 @@
     {/if}
     <div class="list" bind:this={listEl} role="region" aria-label="Decodes, newest slot first" data-testid="decode-list">
       {#if items.length}
-        <DecodeList {items} highlights={settings.highlights} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
+        <DecodeList {items} highlights={settings.highlights} nowMs={clock.ms} selectedId={qso.selected?.id ?? null} {onselect} {oncall} {ondetail} />
       {:else if band.decoder.state !== 'failed'}
         <div class="empty">
           {#if band.decoder.state === 'loading'}
@@ -300,7 +319,9 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-top: var(--rr-safe-top);
-    background: var(--rr-dock);
+
+    /* The status bar's inset takes the top bar's material. */
+    background: linear-gradient(var(--rr-dock), var(--rr-dock)) top / 100% var(--rr-safe-top) no-repeat, var(--rr-plain);
   }
 
   .filters {
@@ -311,7 +332,7 @@
     align-items: center;
     height: var(--rr-filters);
     padding: 0 var(--rr-safe-right) 0 calc(var(--rr-space-2) + var(--rr-safe-left));
-    background: var(--rr-bg);
+    background: var(--rr-plain);
     box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
 
@@ -337,10 +358,10 @@
     display: flex;
     align-items: center;
     height: var(--rr-chip);
-    padding: 0 var(--rr-space-3);
-    border-radius: 14px;
+    padding: 0 calc(var(--rr-space-2) + var(--rr-space-half));
+    border-radius: var(--rr-radius-pill);
     background: var(--rr-fill-bg);
-    font-size: var(--rr-text-row);
+    font-size: var(--rr-text-sub);
     font-weight: var(--rr-weight-semibold);
     white-space: nowrap;
   }
@@ -352,13 +373,12 @@
   }
 
   .chip.on .pill {
-    background: var(--rr-label);
-    color: var(--rr-on-strong);
+    background: var(--rr-accent-fill);
+    color: var(--rr-on-fill);
   }
 
   .chip.on .n {
     color: inherit;
-    opacity: 0.75;
   }
 
   .chip:focus-visible {

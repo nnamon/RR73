@@ -2,8 +2,11 @@
 
 import { getKv, mergeKv, peekKv } from './db';
 import { isBand, type BandId } from '../radio/bands';
+import { inBand, type HoundDials } from '../radio/hound-dial';
 import type { Mode } from '../clock/slots';
 import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
+import type { Contrast } from '../waterfall/levels';
+import { HUNT_ORDERS, type HuntOrder } from '../qso/sequencer';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -65,9 +68,25 @@ export interface Settings {
   cqParity: 'even' | 'odd';
   /** Order Run mode answers callers in. */
   queueOrder: 'first' | 'strongest' | 'farthest' | 'new';
+  /** Run: after a QSO from CQ, answer the next caller or call CQ again. Off: Tx goes off after the QSO. */
+  run: boolean;
+  /** Call a station that answered someone else once more when that QSO ends. */
+  tailEnd: boolean;
+  /** Order Hunt picks CQs in. */
+  huntOrder: HuntOrder;
+  /** The watchdog stops Tx after `watchdogMin` without a touch or a new message. */
+  watchdog: boolean;
+  /** Watchdog limit, min: any positive number. */
+  watchdogMin: number;
+  /** Bands where FT8 runs in Hound mode (FT8 DXpedition mode). */
+  houndBands: BandId[];
+  /** The DXpedition's dial frequency entered for Hound mode, Hz, by band. */
+  houndDialHz: HoundDials;
   features: Features;
   /** Decode colours in priority order: the first enabled match colours a decode. */
   highlights: HighlightEntry[];
+  /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
+  waterfallContrast: Contrast;
 }
 
 export const DEFAULTS: Settings = {
@@ -88,8 +107,16 @@ export const DEFAULTS: Settings = {
   workDupes: false,
   cqParity: 'even',
   queueOrder: 'first',
+  run: false,
+  tailEnd: true,
+  huntOrder: 'unworked',
+  watchdog: true,
+  watchdogMin: 6,
+  houndBands: [],
+  houndDialHz: {},
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
+  waterfallContrast: 'normal',
 };
 
 const KEY = 'settings';
@@ -100,8 +127,15 @@ const KEY = 'settings';
  * 1. 0.5.0 and earlier, with no `schema` field and no optional features.
  * 2. Optional features. Every feature starts off, including activations, which 0.5.0 always showed.
  * 3. Decode colours. Every category starts on, in WSJT-X's order and colours.
+ * 4. Never released. It was set aside for the waterfall contrast, which arrived in 6.
+ * 5. Run, tail-ending, Hunt's order and the watchdog become settings, stored at their defaults:
+ *    Run off, tail-ending on, not worked first, the watchdog on at 6 min.
+ * 6. Waterfall contrast, starting at Normal.
  */
-export const SETTINGS_SCHEMA = 3;
+export const SETTINGS_SCHEMA = 6;
+
+/** The sequencer settings schema 5 adds. */
+const SEQUENCER_DEFAULTS = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 } as const;
 
 function schemaOf(raw: unknown): number {
   const v = raw && typeof raw === 'object' ? (raw as Record<string, unknown>).schema : undefined;
@@ -115,6 +149,8 @@ export function migration(raw: unknown): Record<string, unknown> {
   const patch: Record<string, unknown> = { schema: SETTINGS_SCHEMA };
   if (from < 2) patch.features = { ...FEATURES_OFF };
   if (from < 3) patch.highlights = defaultHighlights();
+  if (from < 5) Object.assign(patch, SEQUENCER_DEFAULTS);
+  if (from < 6) patch.waterfallContrast = 'normal';
   return patch;
 }
 
@@ -137,6 +173,13 @@ export function normaliseGrid(s: string): string {
   return g.slice(0, 4).toUpperCase() + g.slice(4, 6).toLowerCase();
 }
 
+/** A watchdog limit, min: positive, to 0.1 min, at most 9999; null when not one. */
+export function normaliseMinutes(v: number): number | null {
+  if (!Number.isFinite(v)) return null;
+  const m = Math.round(v * 10) / 10;
+  return m > 0 && m <= 9999 ? m : null;
+}
+
 /** Merges stored values over the defaults, keeping only values of the right type. */
 export function validate(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
@@ -157,6 +200,17 @@ export function validate(raw: unknown): Settings {
   if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
   if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
   if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
+  for (const k of ['run', 'tailEnd', 'watchdog'] as const) if (typeof r[k] === 'boolean') s[k] = r[k];
+  if (HUNT_ORDERS.includes(r.huntOrder as HuntOrder)) s.huntOrder = r.huntOrder as HuntOrder;
+  if (typeof r.watchdogMin === 'number') {
+    const m = normaliseMinutes(r.watchdogMin);
+    if (m !== null) s.watchdogMin = m;
+  }
+  if (Array.isArray(r.houndBands)) s.houndBands = [...new Set(r.houndBands.filter(isBand))];
+  const dials = r.houndDialHz as Record<string, unknown> | undefined;
+  if (dials && typeof dials === 'object') {
+    for (const [b, hz] of Object.entries(dials)) if (isBand(b) && typeof hz === 'number' && inBand(b, hz)) s.houndDialHz[b] = Math.round(hz);
+  }
   for (const k of ['rxHz', 'txHz'] as const) {
     const v = r[k];
     if (typeof v === 'number' && v >= 100 && v <= 2900) s[k] = Math.round(v);
@@ -164,6 +218,7 @@ export function validate(raw: unknown): Settings {
   const f = r.features as Partial<Features> | undefined;
   if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
+  if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
   return s;
 }
 

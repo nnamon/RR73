@@ -41,6 +41,10 @@ export default defineConfig({
   testDir: here('./e2e'),
   outputDir: here('./test-results/output'),
   timeout: 60_000,
+  // On CI, one retry: WebKit on the runner sometimes crashes a page ("Page crashed", 0.10.0's run
+  // on main). A test that passes on its retry is reported as flaky. Projects with their own
+  // retries keep them.
+  retries: process.env.CI ? 1 : 0,
   fullyParallel: true,
   reporter: [['list'], ['json', { outputFile: here('./test-results/report.json') }]],
   globalSetup: here('./e2e/global-setup.ts'),
@@ -65,8 +69,8 @@ export default defineConfig({
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
     // layout.spec also matches colours-layout.spec.
-    { name: 'webkit-375x667', testMatch: /(layout|states)\.spec/, use: iphone(375, 667, 2) },
-    { name: 'webkit-393x852', testMatch: /(layout|states)\.spec/, use: iphone(393, 852, 3) },
+    { name: 'webkit-375x667', testMatch: /(layout|states|hound)\.spec/, use: iphone(375, 667, 2) },
+    { name: 'webkit-393x852', testMatch: /(layout|states|hound)\.spec/, use: iphone(393, 852, 3) },
     // The transmit tests measure start times to 50 ms against UTC and, in the QSO simulation,
     // need the looped fake microphone to start near a slot boundary. On a loaded machine
     // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run

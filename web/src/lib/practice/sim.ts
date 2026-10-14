@@ -14,6 +14,7 @@ import { SLOT_MS, type Mode } from '../clock/slots';
 import { formatReport, parseExchange, sameCall, type Exchange } from '../qso/messages';
 import { Rng, continentOf, newCallsign, type Continent } from './calls';
 import type { ScenarioId } from './scenarios';
+import { FoxBand } from './fox';
 
 /** Slow fading (QSB): the level swings `depthDb` peak to peak with a period of `periodS`. */
 export interface Fading {
@@ -61,6 +62,9 @@ export const STATIONS_PER_SLOT = { normal: [8, 15], crowded: [25, 40] } as const
 export const SNR_RANGE = [-24, 5] as const;
 /** Stations that call the operator or call CQ: strong enough to decode, dB. */
 const CLEAR_SNR = [-16, 2] as const;
+/** Hunt: busy band: CQs on the band in each parity, and the level under which a station does not hear the operator, dB. */
+const HUNT_CQS = 6;
+const HUNT_DEAF_DB = -10;
 const LOW_HZ = 200;
 const HIGH_HZ = 2850;
 /** FT8 and FT4 signals are 50 and 83 Hz wide. */
@@ -104,6 +108,8 @@ interface Station {
   ends73: boolean;
   /** Kept on the band whatever the station count: it is working, or being worked by, the operator. */
   engaged: boolean;
+  /** Hears every message its partner sends: the two stations of the lost-station scenario. */
+  sure: boolean;
   say: string | null;
 }
 
@@ -121,6 +127,8 @@ export class PracticeBand {
   private lastHeard: Heard[] = [];
   private readonly target: [number, number];
   private readonly myContinent: Continent | null;
+  /** The Fox scenario's DXpedition and Hounds, which replace the band while it runs. */
+  private fox: FoxBand | null = null;
 
   constructor(options: BandOptions) {
     this.options = { ...options, myCall: options.myCall.toUpperCase() };
@@ -138,7 +146,7 @@ export class PracticeBand {
     if (o.crowded !== undefined) this.options.crowded = o.crowded;
     if (o.scenario === undefined || o.scenario === this.options.scenario) return;
     this.options.scenario = o.scenario;
-    const calledOften = o.scenario.startsWith('answer') || o.scenario === 'directed';
+    const calledOften = o.scenario.startsWith('answer') || o.scenario === 'directed' || o.scenario === 'hunt-busy';
     for (const s of this.stations) {
       if (s.partner !== this.options.myCall) s.policy = null;
       if (calledOften && s.state === 'cq') s.patience = Math.max(s.patience, s.idle + 40);
@@ -154,6 +162,10 @@ export class PracticeBand {
    * sent in the slot before it (null when nothing went out).
    */
   slot(slotStartMs: number, operator: OperatorTx | null): SimSignal[] {
+    if (this.options.scenario === 'fox') {
+      this.fox ??= new FoxBand(this.rng.fork(), this.options);
+      return this.fox.slot(slotStartMs, operator);
+    }
     const k = Math.round(slotStartMs / SLOT_MS[this.options.mode]);
     const parity = (((k % 2) + 2) % 2) as 0 | 1;
     const inbox: Heard[] = this.lastSlot === k - 1 ? [...this.lastHeard] : [];
@@ -184,7 +196,7 @@ export class PracticeBand {
 
   /** What a station hears of the slot before: every message from the operator, most from the band. */
   private hears(s: Station, inbox: Heard[]): Heard[] {
-    return inbox.filter((m) => m.fromOperator || s.rng.chance(0.94));
+    return inbox.filter((m) => m.fromOperator || (s.sure && s.partner !== null && sameCall(m.ex.from, s.partner)) || s.rng.chance(0.94));
   }
 
   private decide(s: Station, inbox: Heard[]) {
@@ -251,8 +263,12 @@ export class PracticeBand {
       const how = this.treatOperator(s);
       if (how === 'answer') return this.startQso(s, this.options.myCall, true);
       if (how === 'busy') {
-        // Another station called in the same slot as the operator, and gets the answer.
+        // Another station called in the same slot as the operator, and gets the answer. In the
+        // lost-station scenario the two always hear each other, so the QSO ends with RR73 or 73.
         const other = this.spawn(s.parity === 0 ? 1 : 0, { state: 'calling', partner: s.call, near: s.freqHz });
+        const scripted = this.options.scenario === 'answer-busy';
+        other.sure = scripted;
+        s.sure = scripted;
         s.policy = 'tail';
         return this.startQso(s, other.call, false);
       }
@@ -270,14 +286,17 @@ export class PracticeBand {
       const sc = this.options.scenario;
       if (sc === 'answer-busy') s.policy = 'busy';
       else if (sc === 'answer-deaf') s.policy = 'deaf';
+      // Weak stations do not hear the operator either.
+      else if (sc === 'hunt-busy') s.policy = s.snrDb < HUNT_DEAF_DB ? 'deaf' : 'answer';
       else if (sc === 'random') {
         const r = s.rng.next();
         s.policy = r < 0.6 ? 'answer' : r < 0.85 ? 'busy' : 'deaf';
       } else s.policy = 'answer';
     }
     if (s.policy === 'deaf') return 'ignore';
-    // After working the other station, a tail-ender gets an answer more often than not.
-    if (s.policy === 'tail') return s.rng.chance(0.6) ? 'answer' : 'ignore';
+    // After working the other station, a tail-ender gets an answer: always in the lost-station
+    // scenario, more often than not on the random band.
+    if (s.policy === 'tail') return this.options.scenario === 'answer-busy' || s.rng.chance(0.6) ? 'answer' : 'ignore';
     return s.policy;
   }
 
@@ -300,7 +319,7 @@ export class PracticeBand {
   private sendFinal(s: Station) {
     s.state = 'sentRR73';
     const toOperator = s.partner === this.options.myCall;
-    const word = !toOperator && s.ends73 ? '73' : s.rng.chance(0.1) ? 'RRR' : 'RR73';
+    const word = !toOperator && s.ends73 ? '73' : !s.sure && s.rng.chance(0.1) ? 'RRR' : 'RR73';
     s.say = `${s.partner} ${s.call} ${word}`;
   }
 
@@ -312,6 +331,7 @@ export class PracticeBand {
   private backToCq(s: Station, toMe: Heard[]) {
     s.partner = null;
     s.engaged = false;
+    s.sure = false;
     s.state = 'cq';
     s.tries = 0;
     s.idle = 0;
@@ -396,11 +416,13 @@ export class PracticeBand {
     const sending = () => this.stations.filter((s) => s.parity === parity && s.say);
     const cqs = () => this.stations.filter((s) => s.parity === parity && s.state === 'cq' && s.say);
     const directed = this.options.scenario === 'directed';
-    // Stations to call: at least 3 CQs, and in the directed scenario a CQ DX and a CQ NA.
+    // Stations to call: at least 3 CQs (6 on the Hunt band), and in the directed scenario a CQ DX
+    // and a CQ NA.
     const need: ('DX' | 'NA' | null)[] = [];
+    const least = this.options.scenario === 'hunt-busy' ? HUNT_CQS : 3;
     if (directed && !cqs().some((s) => s.modifier === 'DX')) need.push('DX');
     if (directed && !cqs().some((s) => s.modifier === 'NA')) need.push('NA');
-    for (let n = cqs().length + need.length; n < 3; n++) need.push(null);
+    for (let n = cqs().length + need.length; n < least; n++) need.push(null);
     for (const modifier of need) this.spawnCq(parity, modifier);
     while (sending().length < want) {
       const open = this.stations.filter((s) => s.parity !== parity && s.state === 'cq' && !s.engaged);
@@ -415,7 +437,7 @@ export class PracticeBand {
     let excess = sending().length - hi;
     while (excess > 0 && spare.length) {
       const s = spare.splice(this.rng.int(0, spare.length - 1), 1)[0];
-      if (s.state === 'cq' && cqs().length <= 3) continue;
+      if (s.state === 'cq' && cqs().length <= least) continue;
       this.leave(s);
       excess--;
     }
@@ -432,7 +454,7 @@ export class PracticeBand {
     const s = this.spawn(parity, { state: 'cq', clear: true, only });
     s.modifier = modifier;
     // Stations you are asked to call stay long enough to be called.
-    if (this.options.scenario.startsWith('answer') || this.options.scenario === 'directed') s.patience = 40;
+    if (this.options.scenario.startsWith('answer') || this.options.scenario === 'directed' || this.options.scenario === 'hunt-busy') s.patience = 40;
     s.say = `CQ ${modifier ? `${modifier} ` : ''}${s.call} ${s.grid}`;
     return s;
   }
@@ -468,6 +490,7 @@ export class PracticeBand {
       missed: false,
       ends73: r.chance(0.3),
       engaged: false,
+      sure: false,
       say: null,
     };
     this.stations.push(s);

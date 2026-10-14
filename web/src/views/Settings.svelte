@@ -4,14 +4,14 @@
   import LocateButton from '../ui/LocateButton.svelte';
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
-  import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { normaliseCallsign, normaliseGrid, normaliseMinutes, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
-  import { audio, band, busy } from '../lib/state/station.svelte';
+  import { audio, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
   import { log } from '../lib/log/log.svelte';
   import { features, setFeature, type FeatureId } from '../lib/state/features.svelte';
   import { practice } from '../lib/state/practice.svelte';
-  import { isDefault } from '../lib/decode/highlight';
+  import { presetLabel, presetOf } from '../lib/decode/highlight';
 
   /** "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings. */
   let { section = null }: { section?: string | null } = $props();
@@ -21,11 +21,11 @@
     if (section === 'features') featuresHead?.scrollIntoView({ block: 'start' });
   });
 
-  const optional: { id: FeatureId; title: string; sub: string }[] = [
-    { id: 'activations', title: 'Activations', sub: 'Start POTA, SOTA, WWFF and IOTA activations, and follow their progress and files.' },
-    { id: 'potaSpots', title: 'POTA spots', sub: 'Parks on the air now, from the POTA spot list.' },
-    { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster spots through HamQTH.' },
-    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW. Downloads the LoTW user list.' },
+  const optional: { id: FeatureId; title: string; sub?: string }[] = [
+    { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
+    { id: 'potaSpots', title: 'POTA spots' },
+    { id: 'clusterSpots', title: 'Cluster spots' },
+    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW' },
   ];
 
   let callsign = $state(settings.callsign);
@@ -62,6 +62,18 @@
     gridNote = r.note;
   }
 
+  let watchdogMin = $state(String(settings.watchdogMin));
+  $effect(() => {
+    watchdogMin = String(settings.watchdogMin);
+  });
+
+  /** Any positive number of minutes; anything else puts back the stored value. */
+  function saveWatchdog() {
+    const m = normaliseMinutes(Number(watchdogMin.replace(',', '.')));
+    if (m === null) watchdogMin = String(settings.watchdogMin);
+    else void updateSettings({ watchdogMin: m });
+  }
+
   function saveCallsign() {
     const v = normaliseCallsign(callsign);
     callsign = v;
@@ -73,14 +85,6 @@
     if (audio.status !== 'running' || !r) return 'Audio off';
     const ch = r.channelUsed === 'mono' || !r.channelUsed ? 'mono' : `${r.channelUsed} channel`;
     return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
-  });
-
-  const decoderText = $derived.by(() => {
-    const d = band.decoder;
-    if (d.state === 'ready') return `${d.version}, loaded in ${Math.round(d.loadMs)} ms`;
-    if (d.state === 'loading') return 'Loading';
-    if (d.state === 'failed') return d.reason === 'crashed' ? 'Stopped' : 'Did not load';
-    return 'Loads when audio starts';
   });
 
   const loggingSummary = $derived.by(() => {
@@ -111,14 +115,14 @@
     void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
   }
 
-  const reloadSub = $derived(reloading === 'reload' ? 'Checking for a newer version.' : 'Checks for a newer version, installs it and reloads. Audio stops.');
+  const reloadSub = $derived(reloading === 'reload' ? 'Checking for updates' : 'Installs any update. Audio stops.');
 
   const clearSub = $derived(
     !online
-      ? 'Needs a connection: the app loads fresh from the network.'
+      ? 'Needs a connection'
       : reloading === 'clear'
-        ? 'Removing the stored copy.'
-        : 'Removes the stored copy and loads the app fresh. Audio stops. Settings and saved data stay on this phone.',
+        ? 'Removing the cached copy'
+        : 'Keeps settings and QSOs. Audio stops.',
   );
 
   const themes: { id: Theme; label: string }[] = [
@@ -142,7 +146,7 @@
           bind:value={callsign}
           onblur={saveCallsign}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          placeholder="Not set"
+          placeholder="Required"
           autocapitalize="characters"
           autocomplete="off"
           spellcheck="false"
@@ -159,7 +163,7 @@
           oninput={() => (gridNote = '')}
           onblur={saveGrid}
           onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
-          placeholder="Not set"
+          placeholder="Required"
           autocapitalize="characters"
           autocomplete="off"
           spellcheck="false"
@@ -169,7 +173,7 @@
       </div>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Decodes addressed to this callsign show in red. Transmitting needs the callsign and the grid. Both stay on this phone.</p>
+    <p class="section-foot">Needed to transmit.</p>
   </div>
 
   <div class="section">
@@ -187,15 +191,38 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Work dupes in Run</span><span class="row-sub">Stations already worked today on this band and mode</span></span>
+        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">Same day, band and mode</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
-        <span class="row-main"><span class="row-title">Hold Tx frequency</span><span class="row-sub">{settings.holdTx ? `Tx stays on ${settings.txHz} Hz when you call a station` : 'Tx moves to the station you call'}</span></span>
+        <span class="row-main"><span class="row-title">Tail-end</span><span class="row-sub">Call once more after their QSO</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.tailEnd} onchange={(e) => void updateSettings({ tailEnd: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Watchdog</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.watchdog} onchange={(e) => void updateSettings({ watchdog: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
+      {#if settings.watchdog}
+        <label class="row">
+          <span class="row-title">Stop Tx after</span>
+          <input
+            class="field num"
+            type="text"
+            inputmode="decimal"
+            bind:value={watchdogMin}
+            onblur={saveWatchdog}
+            onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+            autocomplete="off"
+            aria-label="Stop Tx after, min"
+          />
+          <span class="unit">min</span>
+        </label>
+      {/if}
+      <label class="row">
+        <span class="row-main"><span class="row-title">Hold Tx frequency</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.holdTx} onchange={(e) => void updateSettings({ holdTx: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
     </div>
-    <p class="section-foot">Tx4 sends RR73 or RRR. Calling a station moves Rx to its frequency. The watchdog stops Tx after 6 min without a touch or a new message.</p>
   </div>
 
   <div class="section">
@@ -218,7 +245,6 @@
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
-    {#if features.activations}<p class="section-foot">Wavelog and the POTA, SOTA and WWFF files.</p>{/if}
   </div>
 
   <div class="section">
@@ -239,13 +265,12 @@
         <label class="row">
           <span class="row-main">
             <span class="row-title">{f.title}</span>
-            <span class="row-sub">{f.sub}</span>
+            {#if f.sub}<span class="row-sub">{f.sub}</span>{/if}
           </span>
           <input type="checkbox" role="switch" class="switch" checked={features[f.id]} onchange={(e) => void setFeature(f.id, e.currentTarget.checked)} />
         </label>
       {/each}
     </div>
-    <p class="section-foot">Operate shows a Spots button while Activations, POTA spots or Cluster spots is on. Each feature is off until you turn it on. A feature that is off downloads nothing. Turning one off keeps what it stored.</p>
   </div>
 
   <div class="section">
@@ -261,7 +286,7 @@
     <div class="group colours">
       <a class="row link" href={href('settings', 'colours')}>
         <span class="row-main"><span class="row-title">Decode colours</span></span>
-        <span class="row-value">{isDefault(settings.highlights) ? 'WSJT-X' : 'Custom'}</span>
+        <span class="row-value">{presetLabel(presetOf(settings.highlights))}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>
@@ -271,14 +296,10 @@
     <h2 class="section-head">About</h2>
     <div class="group">
       <a class="row link" href={href('settings', 'versions')}>
-        <span class="row-main"><span class="row-title">Version {__APP_VERSION__} ({__APP_BUILD__})</span></span>
-        <span class="row-value">Version history</span>
+        <span class="row-main"><span class="row-title">Version history</span></span>
+        <span class="row-value">{__APP_VERSION__}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
-      <div class="row">
-        <span class="row-main"><span class="row-title">Decoder</span></span>
-        <span class="row-value" data-testid="decoder-status">{decoderText}</span>
-      </div>
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>
@@ -286,7 +307,6 @@
         <span class="row-main"><span class="row-title acc">Clear cached copy and reload</span><span class="row-sub" aria-live="polite">{clearSub}</span></span>
       </button>
     </div>
-    <p class="section-foot">RR73 is free software under the MIT or Apache 2.0 licence.</p>
   </div>
 </section>
 
@@ -307,14 +327,6 @@
     margin-top: var(--rr-space-4);
   }
 
-  .switch {
-    flex: none;
-    width: 44px;
-    height: 26px;
-    margin: 0;
-    accent-color: var(--rr-accent-fill);
-  }
-
   .reload {
     color: var(--rr-label);
   }
@@ -324,7 +336,7 @@
   }
 
   .reload:disabled .acc {
-    color: var(--rr-label3);
+    opacity: 0.4;
   }
 
   .link :global(.row-chevron) {
@@ -341,6 +353,15 @@
     font-size: var(--rr-text-body);
     text-align: right;
     text-transform: uppercase;
+  }
+
+  .field.num {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .unit {
+    flex: none;
+    color: var(--rr-label2);
   }
 
   .field::placeholder {

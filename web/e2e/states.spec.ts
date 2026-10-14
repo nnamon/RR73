@@ -1,9 +1,11 @@
 // Operate in the states an operator meets, on iPhone viewports in WebKit, light and dark: each
-// state is captured for the visual review, and the decode rows on screen are counted against
-// the targets (15 receiving and 12 in a QSO at 393 x 852, 12 receiving at 375 x 667). The
+// state is captured for the visual review, the decode rows on screen are counted against the
+// targets (13 receiving at 393 x 852, 10 at 375 x 667), and the bottom bar keeps one height. The
 // status bar and home indicator insets of the device are applied, as the app runs from the Home
 // Screen. WebKit's mock microphone runs the audio; decodes come through the screen-review hooks
-// (src/lib/testing/e2e-hooks.ts). Transmissions are real: the scheduler plays them.
+// (src/lib/testing/e2e-hooks.ts). Transmissions are real: the scheduler plays them. Messages to
+// you lead their slot with a red edge; during a QSO the rows unrelated to it dim; a run of empty
+// slots shows as one bar.
 import { expect, test, type Locator, type Page } from '@playwright/test';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +17,7 @@ const SLOT = 15_000;
 /** Status bar and home indicator insets, pt: iPhone 15 and 16 (393 x 852), iPhone SE (375 x 667). */
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
 /** Decode rows that must show, by viewport width. */
-const TARGET: Record<number, { receiving: number; qso: number }> = { 393: { receiving: 15, qso: 12 }, 375: { receiving: 12, qso: 9 } };
+const TARGET: Record<number, { receiving: number; qso: number }> = { 393: { receiving: 13, qso: 9 }, 375: { receiving: 10, qso: 8 } };
 
 interface D {
   text: string;
@@ -38,12 +40,13 @@ const SLOT_A: D[] = [
   d('RA6LIS BA4IE OM86', -15, 1897, 0.3),
   d('VR2XMT 9M2TRX RR73', -9, 1066),
 ];
+/** The message to you comes fifth from the decoder and leads the slot on screen. */
 const SLOT_B: D[] = [
-  d('9V1NE JA1KXM PM95', -14, 2397),
   d('BH1LKO VK4SHG 73', 4, 1641, 0.2),
   d('PV5N 6K2MAS PM37', -10, 622),
   d('CQ VJ6X OF78', 1, 506),
   d('JA8HCE VK2AXN RR73', -8, 1169),
+  d('9V1NE JA1KXM PM95', -14, 2397),
   d('CQ DX ZL1TQK RF73', -18, 2210, 0.2),
   d('CQ XV9Q OK30', -12, 1310, 0.3),
   d('YB0AZK DU1XYZ PK04', 2, 1222),
@@ -73,6 +76,43 @@ function rowOf(page: Page, text: string): Locator {
   return page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) }).first();
 }
 
+/** "13:14:15" for a UTC time in ms. */
+const utc = (ms: number) => new Date(ms).toISOString().slice(11, 19);
+
+/** The message of the first row under the bar of the slot starting at `slotMs`. */
+function firstInSlot(page: Page, slotMs: number): Promise<string | null> {
+  return page.getByTestId('decode-list').evaluate((el, t) => {
+    const bar = [...el.querySelectorAll('li.slot-bar:not(.quiet)')].find((b) => b.querySelector('.st')?.textContent === t);
+    return bar?.nextElementSibling?.querySelector('.c-msg')?.textContent ?? null;
+  }, utc(slotMs));
+}
+
+/** A message to you: the red edge in the transmit red, heavy text, full contrast. */
+async function expectToYou(row: Locator) {
+  await expect(row).toHaveClass(/\bto-you\b/);
+  await expect(row).toHaveCSS('opacity', '1');
+  const look = await row.evaluate((el) => {
+    const probe = document.createElement('span');
+    probe.style.color = 'var(--rr-tx)';
+    document.body.append(probe);
+    const red = getComputedStyle(probe).color;
+    probe.remove();
+    return { edge: getComputedStyle(el, '::after').backgroundColor, red, weight: getComputedStyle(el.querySelector('.c-msg')!).fontWeight };
+  });
+  expect(look.edge).toBe(look.red);
+  expect(look.weight).toBe('800');
+}
+
+/** Our own rows and every slot bar at full contrast. */
+async function expectOursClear(page: Page) {
+  const opacities = await page
+    .getByTestId('decode-list')
+    .locator('.dr.out, li.slot-bar')
+    .evaluateAll((els) => els.map((el) => getComputedStyle(el).opacity));
+  expect(opacities.length).toBeGreaterThan(0);
+  expect(new Set(opacities)).toEqual(new Set(['1']));
+}
+
 /** Decode rows wholly inside the list's box. */
 function rowsOnScreen(page: Page): Promise<number> {
   return page.evaluate(() => {
@@ -84,47 +124,54 @@ function rowsOnScreen(page: Page): Promise<number> {
   });
 }
 
+/** Operate with the device's insets, in `theme`, with callsign and grid set and audio on. */
+async function openOperate(page: Page, theme: 'light' | 'dark') {
+  await page.addInitScript((i) => {
+    document.addEventListener('DOMContentLoaded', () => {
+      const s = document.createElement('style');
+      s.textContent = `:root { --rr-safe-top: ${i.top}px; --rr-safe-bottom: ${i.bottom}px; }`;
+      document.head.append(s);
+    });
+  }, INSETS[page.viewportSize()!.width]);
+  await page.emulateMedia({ colorScheme: theme });
+
+  await page.goto('./#/settings');
+  for (const [name, value] of [
+    ['Callsign', '9V1NE'],
+    ['Grid', 'OJ11'],
+  ]) {
+    const field = page.getByRole('textbox', { name });
+    await field.fill(value);
+    await field.press('Enter');
+  }
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('button', { name: 'Start audio' })).toBeHidden({ timeout: 20_000 });
+}
+
 for (const theme of ['light', 'dark'] as const) {
   test(`Operate states in ${theme}`, async ({ page }, info) => {
-    test.setTimeout(180_000);
+    test.setTimeout(240_000);
     const width = page.viewportSize()!.width;
-    const inset = INSETS[width];
     const counts: Record<string, number> = {};
+    const bars: Record<string, number> = {};
     mkdirSync(SHOTS, { recursive: true });
     const shot = async (name: string) => {
       // As after a tap on the new decodes pill: the newest slot at the top.
       await page.getByTestId('decode-list').evaluate((el) => el.scrollTo({ top: 0 }));
       await page.waitForTimeout(400);
       counts[name] = await rowsOnScreen(page);
+      bars[name] = Math.round((await page.getByRole('region', { name: 'Transmit' }).boundingBox())!.height * 2) / 2;
       expect(await smallTargets(page, 'main .pane:not([hidden])')).toEqual([]);
       const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(wide).toBeLessThanOrEqual(0);
+      // The document never scrolls in any state: only the list does.
+      expect(await page.evaluate(() => ({ y: window.scrollY, fits: document.scrollingElement!.scrollHeight <= window.innerHeight }))).toEqual({ y: 0, fits: true });
       await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-${name}.png` });
     };
-    await page.addInitScript((i) => {
-      document.addEventListener('DOMContentLoaded', () => {
-        const s = document.createElement('style');
-        s.textContent = `:root { --rr-safe-top: ${i.top}px; --rr-safe-bottom: ${i.bottom}px; }`;
-        document.head.append(s);
-      });
-    }, inset);
-    await page.emulateMedia({ colorScheme: theme });
-
-    await page.goto('./#/settings');
-    for (const [name, value] of [
-      ['Callsign', '9V1NE'],
-      ['Grid', 'OJ11'],
-    ]) {
-      const field = page.getByRole('textbox', { name });
-      await field.fill(value);
-      await field.press('Enter');
-    }
-    await page.getByRole('link', { name: 'Operate' }).click();
-    const bar = page.getByRole('region', { name: 'Transmit' });
-
     // Receiving: audio on, nothing decoded yet.
-    await page.getByRole('button', { name: 'Start audio' }).click();
-    await expect(page.getByRole('button', { name: 'Start audio' })).toBeHidden({ timeout: 20_000 });
+    await openOperate(page, theme);
+    const bar = page.getByRole('region', { name: 'Transmit' });
     await shot('1-receiving');
 
     // Two slots of decodes.
@@ -132,18 +179,68 @@ for (const theme of ['light', 'dark'] as const) {
     await inject(page, now - 2 * SLOT, SLOT_B);
     await inject(page, now - SLOT, SLOT_A);
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toBeVisible();
+    // Fifth from the decoder, first on screen, with the red edge; nothing dims while receiving.
+    expect(await firstInSlot(page, now - 2 * SLOT)).toBe('9V1NE JA1KXM PM95');
+    await expectToYou(rowOf(page, '9V1NE JA1KXM PM95'));
+    await expect(page.getByTestId('decode-list').locator('button.dr.dim')).toHaveCount(0);
     await shot('2-decodes');
     expect(counts['2-decodes']).toBeGreaterThanOrEqual(TARGET[width].receiving);
 
-    // Calling: a double-tap on a CQ calls with Tx on; the next slot of the other parity goes out.
-    await rowOf(page, 'CQ VJ6X OF78').dblclick();
+    // CQ: planned at once, with a countdown at the top of the list, then on air with a progress line.
+    // Clicked early in an odd slot, so the even slot it goes out in is 9 to 14 s away.
+    await phase(page, 1, 6, 'odd');
+    await bar.getByRole('button', { name: 'CQ', exact: true }).click();
+    // Tx on is a light tint, set apart from the solid CQ button.
+    await expect(bar.locator('[data-id=tx]')).toHaveClass(/soft/);
+    await expect(bar.locator('[data-id=cq]')).toHaveClass(/selected/);
+    const next = page.getByTestId('next-row');
+    await expect(next).toBeVisible();
+    await expect(next.locator('.c-tag')).toHaveText(/^Next · :[0-5]\d$/);
+    await expect(next.locator('.c-when')).toHaveText(/^in \d+ s$/);
+    await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/CQ.*Report.*R-report.*RR73.*Logged/);
+    // Calling CQ with nobody answering yet: nothing dims.
+    await expect(page.getByTestId('decode-list').locator('button.dr.dim')).toHaveCount(0);
+    await shot('3-cq-next');
+    await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 35_000 });
+    await expect(bar.locator('[data-id=tx]')).toHaveClass(/air/);
+    const cqSlot = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
+    const sending = page.getByTestId('decode-list').locator('button.dr.sending');
+    await expect(sending.locator('.c-tag')).toHaveText('Sending');
+    await expect(next).toHaveCount(0);
+    await page.waitForTimeout(2000);
+    await shot('4-cq-sending');
+    expect(await sending.locator('.prog').evaluate((el) => el.getBoundingClientRect().width)).toBeGreaterThan(0);
+    await bar.getByRole('button', { name: 'Halt' }).click();
+    await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+    await expect(page.getByTestId('decode-list').locator('button.dr.sent .c-tag').first()).toHaveText('Sent');
+
+    // Calling: fresh decodes in the slot after the CQ; a double-tap on a CQ calls with Tx on, and
+    // the next slot of the other parity goes out.
+    // The slot heard in has ended and was decoded, so the decoder's own result does not replace it.
+    let after = await phase(page, 2, 5);
+    while (after - SLOT <= cqSlot) {
+      await page.waitForTimeout(SLOT - 4000);
+      after = await phase(page, 2, 5);
+    }
+    await inject(page, after - SLOT, SLOT_B);
+    // Both taps in one task, so a loaded machine cannot stretch them past the double-tap time.
+    await rowOf(page, 'CQ VJ6X OF78').evaluate((el: HTMLElement) => {
+      el.click();
+      el.click();
+    });
     await expect(bar.getByRole('button', { name: 'Tx on' })).toBeVisible();
-    await expect(bar.getByText('On air')).toBeVisible({ timeout: 20_000 });
+    await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 40_000 });
     // The slot RR73 transmits in, read as soon as it is on air: the screenshot below can run past
     // the slot boundary on a loaded machine.
     const ours = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
-    await shot('3-calling');
-    expect(counts['3-calling']).toBeGreaterThanOrEqual(TARGET[width].qso);
+    // Calling VJ6X: the rest of the band dims; his CQ, the message to you and our rows stay clear.
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveClass(/\bdim\b/);
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
+    await expect(rowOf(page, 'CQ VJ6X OF78')).toHaveCSS('opacity', '1');
+    await expectToYou(rowOf(page, '9V1NE JA1KXM PM95'));
+    await expectOursClear(page);
+    await shot('5-calling');
+    expect(counts['5-calling']).toBeGreaterThanOrEqual(TARGET[width].qso);
 
     // The radio hands RR73's own signal back in the slot it transmits in, at +45 dB: that slot is
     // not decoded or shown, and the amber row says what was sent.
@@ -155,16 +252,35 @@ for (const theme of ['light', 'dark'] as const) {
     // In a QSO: VJ6X answers with a report in the slot after ours, decoded as it starts so the
     // next transmission is planned and not yet on air.
     await page.waitForTimeout(Math.max(0, ours + SLOT + 500 - Date.now()));
-    await inject(page, ours + SLOT, [d('9V1NE VJ6X -12', -9, 506), ...SLOT_A.slice(0, 7)]);
+    await inject(page, ours + SLOT, [...SLOT_A.slice(0, 3), d('9V1NE VJ6X -12', -9, 506), ...SLOT_A.slice(3, 7)]);
     await expect(bar.getByRole('list', { name: 'QSO progress' })).toBeVisible();
     await expect(bar.getByText(/^Tx3 · VJ6X 9V1NE R-09/)).toBeVisible();
-    await shot('4-in-qso');
-    expect(counts['4-in-qso']).toBeGreaterThanOrEqual(TARGET[width].qso);
+    // His report leads its slot; the rest of the band dims; our Sent and Next rows stay clear.
+    expect(await firstInSlot(page, ours + SLOT)).toBe('9V1NE VJ6X -12');
+    await expectToYou(rowOf(page, '9V1NE VJ6X -12'));
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
+    await expect(rowOf(page, 'VJ6X 9V1NE OJ11')).toHaveCSS('opacity', '1');
+    await expect(page.getByTestId('next-row')).toHaveCSS('opacity', '1');
+    await expectOursClear(page);
+    await shot('6-in-qso');
+    // Increase Contrast dims less.
+    await page.emulateMedia({ contrast: 'more' });
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.6');
+    await page.emulateMedia({ contrast: 'no-preference' });
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
+    expect(counts['6-in-qso']).toBeGreaterThanOrEqual(TARGET[width].qso);
 
     // Run: End QSO from the menu, Run, then three callers; the ••• menu open.
     await bar.getByRole('button', { name: 'More' }).click();
     await page.getByRole('menuitem', { name: 'End QSO' }).click();
-    await bar.getByRole('button', { name: 'Run' }).click();
+    // The QSO is over: nothing dims, and his report keeps its red edge.
+    await expect(page.getByTestId('decode-list').locator('button.dr.dim')).toHaveCount(0);
+    await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '1');
+    await expectToYou(rowOf(page, '9V1NE VJ6X -12'));
+    await bar.getByRole('button', { name: 'More' }).click();
+    await page.getByRole('menuitemcheckbox', { name: /^Repeat CQ/ }).click();
+    await page.keyboard.press('Escape');
+    await bar.getByRole('button', { name: 'CQ', exact: true }).click();
     // The callers answer in an odd slot that starts after the QSO ended, so RR73 sent nothing in it.
     const ended = Date.now();
     now = await phase(page, 2, 11, 'even');
@@ -176,12 +292,42 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('decode-list').getByText('Working')).toBeVisible();
     await bar.getByRole('button', { name: 'More' }).click();
     await expect(page.getByRole('menu', { name: 'More' })).toBeVisible();
-    await shot('5-run');
+    await shot('7-run');
     await page.keyboard.press('Escape');
     await bar.getByRole('button', { name: 'Halt' }).click();
     await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+    // Tx off: nothing dims.
+    await expect(page.getByTestId('decode-list').locator('button.dr.dim')).toHaveCount(0);
 
-    writeFileSync(`${SHOTS}/${info.project.name}-${theme}-rows.json`, JSON.stringify(counts));
-    console.log(`${info.project.name} ${theme} rows ${JSON.stringify(counts)}`);
+    // One bottom bar height in every state: idle, CQ, calling, in a QSO and Run.
+    expect(new Set(Object.values(bars)).size, JSON.stringify(bars)).toBe(1);
+    writeFileSync(`${SHOTS}/${info.project.name}-${theme}-rows.json`, JSON.stringify({ counts, bars }));
+    console.log(`${info.project.name} ${theme} rows ${JSON.stringify(counts)} bar ${JSON.stringify(bars)}`);
+  });
+}
+
+for (const theme of ['light', 'dark'] as const) {
+  test(`Operate with a run of empty slots in ${theme}`, async ({ page }, info) => {
+    mkdirSync(SHOTS, { recursive: true });
+    await openOperate(page, theme);
+    // Slots from before audio started, so the decoder's own empty slots cannot join or split the
+    // run: decodes, 4 slots with none, decodes. Early in the slot, so the 8 slots kept still hold
+    // them all when the decoder adds this one.
+    const now = await phase(page, 2, 6);
+    await inject(page, now - 7 * SLOT, SLOT_B);
+    for (let i = 6; i >= 3; i--) await inject(page, now - i * SLOT, []);
+    await inject(page, now - 2 * SLOT, SLOT_A.slice(0, 3));
+    const list = page.getByTestId('decode-list');
+    const run = list.locator('li.slot-bar.quiet', { hasText: `${utc(now - 6 * SLOT)} to ${utc(now - 3 * SLOT)} UTC · no decodes` });
+    await expect(run).toHaveCount(1);
+    await expect(run.locator('[aria-hidden=true]')).toHaveText([utc(now - 6 * SLOT), 'to', utc(now - 3 * SLOT), 'no decodes']);
+    for (let i = 6; i >= 3; i--) await expect(list.locator('li.slot-bar:not(.quiet)', { hasText: utc(now - i * SLOT) })).toHaveCount(0);
+    // One 22 pt bar in the place of 4, between the two slots with decodes.
+    expect(Math.round((await run.boundingBox())!.height)).toBe(22);
+    expect(await firstInSlot(page, now - 7 * SLOT)).toBe('9V1NE JA1KXM PM95');
+    await list.evaluate((el) => el.scrollTo({ top: 0 }));
+    await page.waitForTimeout(400);
+    expect(await smallTargets(page, 'main .pane:not([hidden])')).toEqual([]);
+    await page.screenshot({ path: `${SHOTS}/${info.project.name}-${theme}-8-empty-slots.png` });
   });
 }

@@ -22,6 +22,8 @@ export interface E2eHooks {
   clockErrorMs(): number | null;
   /** UTC stamped on the end of the last captured chunk, minus Date.now() when it arrived, ms. */
   rxLagMs(): number | null;
+  /** The messages sent, newest first (the last 20). */
+  transmitted(): string[];
   /** Decodes of a slot RR73 transmitted `text` in at `f0Hz`, as if from the decoder. */
   heardBack(slotStartMs: number, text: string, f0Hz: number, decodes: Decode[]): void;
 }
@@ -50,6 +52,7 @@ export function installE2eHooks() {
       return out ? out.mapper.toUtcMs(out.ctx.currentTime) - Date.now() : null;
     },
     rxLagMs: () => rxLag,
+    transmitted: () => qso.sent.map((s) => s.text),
     heardBack: (slotStartMs, text, f0Hz, decodes) => noteHeardBack(slotStartMs, { text, f0Hz }, decodes),
   };
 }

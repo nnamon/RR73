@@ -33,7 +33,7 @@ test('Log and Settings on a new install, and an old Activate link opens Optional
   await page.goto('./#/activate');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
-  await expect(page.getByText('Operate shows a Spots button while Activations, POTA spots or Cluster spots is on.', { exact: false })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
   await page.getByRole('link', { name: 'Operate' }).click();
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link')).toHaveCount(2);
   await expect(page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Spots' })).toHaveCount(0);
@@ -146,11 +146,10 @@ test('the theme setting overrides the system', async ({ page }) => {
 
 test('Settings shows the version, and it opens the version history', async ({ page }) => {
   await page.goto('./#/settings');
-  const row = page.getByRole('link', { name: new RegExp(`^Version ${VERSION.replace(/\./g, '\\.')} \\(\\w+\\)`) });
+  const row = page.getByRole('link', { name: `Version history ${VERSION}` });
   await expect(row).toBeVisible();
   await row.click();
   await expect(page.getByRole('heading', { level: 1, name: 'Version history' })).toBeVisible();
-  await expect(page.getByText(`You are using version ${VERSION}`)).toBeVisible();
   const section = page.locator(`[id="v${VERSION}"]`);
   await expect(section).toContainText(VERSION);
   await expect(section).toContainText('This version');
@@ -174,6 +173,40 @@ test('after an update, a notice opens the version history at the new version', a
   await expect(page.getByText(`Updated to ${VERSION}`)).toBeHidden();
 });
 
+test('the update notice floats over Operate and goes by itself after 4 s', async ({ page }) => {
+  await page.clock.install();
+  await page.addInitScript(() => {
+    if (!sessionStorage.getItem('seeded')) {
+      localStorage.setItem('rr73.lastVersion', '0.0.1');
+      sessionStorage.setItem('seeded', '1');
+    }
+  });
+  await page.goto('./');
+  const notice = page.getByRole('status').filter({ hasText: `Updated to ${VERSION}` });
+  await expect(notice).toBeVisible();
+  // It floats: nothing in Operate moves to make room for it.
+  expect(await notice.evaluate((el) => getComputedStyle(el).position)).toBe('fixed');
+  expect(Math.round((await page.locator('header.top').boundingBox())!.y)).toBe(0);
+  await page.clock.fastForward(3500);
+  await expect(notice).toBeVisible();
+  await page.clock.fastForward(1000);
+  await expect(notice).toBeHidden();
+});
+
+test('a screen opened from Settings starts at the top, and Back returns to the same place', async ({ page }) => {
+  await page.goto('./#/settings');
+  const pane = page.locator('main .pane.scroll');
+  await pane.evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const down = await pane.evaluate((el) => el.scrollTop);
+  expect(down).toBeGreaterThan(100);
+  await page.getByRole('link', { name: /^Version history/ }).click();
+  await expect(page).toHaveURL(/#\/settings\/versions$/);
+  await expect.poll(() => pane.evaluate((el) => el.scrollTop)).toBe(0);
+  await page.goBack();
+  await expect(page).toHaveURL(/#\/settings$/);
+  await expect.poll(() => pane.evaluate((el) => Math.round(el.scrollTop))).toBe(Math.round(down));
+});
+
 test('Reload app and Clear cached copy and reload both reload the page', async ({ page }) => {
   for (const name of [/^Reload app/, /^Clear cached copy and reload/]) {
     await page.goto('./#/settings');
@@ -190,7 +223,7 @@ test('Clear cached copy waits for a connection', async ({ page, context }) => {
   await page.goto('./#/settings');
   await context.setOffline(true);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeDisabled();
-  await expect(page.getByText('Needs a connection: the app loads fresh from the network.')).toBeVisible();
+  await expect(page.getByText('Needs a connection', { exact: true })).toBeVisible();
   await context.setOffline(false);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
 });

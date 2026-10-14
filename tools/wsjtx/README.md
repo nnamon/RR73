@@ -52,7 +52,7 @@ docker compose run --rm wsjtx python3 tools/wsjtx/vectors.py tools/wsjtx/cases.t
 tools/wsjtx/decodes.sh
 ```
 
-- `vectors.py` runs `ft8sim` on every message in `cases.txt` (346 lines) and writes `fixtures/ft8/wsjtx.json`: the input, the text WSJT-X displays, i3.n3, the 77 message bits and the 79 FT8 channel symbols. `ft8sim` prints n3 as `*` for some type 4 messages; the file stores null. Each run uses a temporary directory, so its WAV file never lands in the repository.
+- `vectors.py` runs `ft8sim` on every message in `cases.txt` (359 messages) and writes `fixtures/ft8/wsjtx.json`: the input, the text WSJT-X displays, i3.n3, the 77 message bits and the 79 FT8 channel symbols. `ft8sim` prints n3 as `*` for some type 4 messages; the file stores null. Each run uses a temporary directory, so its WAV file never lands in the repository.
 - `decodes.sh` runs on the host. It builds FT8 and FT4 slots from `decode_cases.txt` with the `slot_wav` example of rr73-ft8 (12 signals per slot, 180 Hz apart), decodes them with `jt9` through `decodes.py`, and writes `fixtures/ft8/wsjtx_decodes.json`: each payload with the text `jt9` shows for it, or null. The slots live in `results/wsjtx-decodes/` and are removed afterwards. `decodes.py` accepts decode lines with an empty message, which `jt9` prints for some payloads it cannot unpack.
 - `crates/rr73-ft8/tests/wsjtx.rs` and `wsjtx_decodes.rs` check rr73-ft8 against both files and list each place where rr73-ft8 differs on purpose.
 

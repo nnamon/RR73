@@ -26,7 +26,7 @@ class Session {
   /** Slot i: the band transmits, ours plays, and the slot's decodes arrive unless we transmitted. */
   step(i: number): SimSignal[] {
     const ours = this.sim.sent.find((t) => t.slot === i - 1);
-    const signals = this.band.slot(this.sim.at(i), ours ? { text: ours.text, freqHz: 1500 } : null);
+    const signals = this.band.slot(this.sim.at(i), ours ? { text: ours.text, freqHz: ours.freqHz ?? this.sim.st.config.txHz } : null);
     this.slots[i] = signals;
     this.sim.play(i);
     if (!this.sim.sent.some((t) => t.slot === i)) this.sim.hear(i, signals.filter((s) => s.snrDb >= -21).map((s) => decode(s.text, Math.round(s.snrDb), s.freqHz, s.dtS)));
@@ -82,8 +82,8 @@ describe('calling CQ', () => {
 
   it('a pile-up brings 3 to 5 callers, and Run works more than one of them', () => {
     for (const seed of [2, 3, 4]) {
-      const s = new Session('cq-pileup', seed);
-      s.sim.send({ type: 'runMode', on: true, nowMs: s.sim.at(0, 0.1) });
+      const s = new Session('cq-pileup', seed, { run: true });
+      callCq(s);
       s.run(0, 1);
       const n = s.toMe(1).length;
       expect(n, `seed ${seed}`).toBeGreaterThanOrEqual(3);
@@ -136,29 +136,26 @@ describe('calling a station', () => {
     expect(s.sentTexts().at(-1)).toBe(`${cq.call} ${ME} 73`);
   });
 
-  it('he answers someone else, works him to RR73 or 73, and only then may answer us', () => {
-    let tailEnded = 0;
+  it('he works someone else to RR73 or 73, then answers our one tail-end call, and the QSO is logged', () => {
     for (const seed of [8, 9, 10, 11, 12, 13]) {
       const s = new Session('answer-busy', seed);
       s.run(0, 0);
       const cq = plainCq(s, 0);
       s.sim.call(0, decode(cq.text, Math.round(cq.snrDb), cq.freqHz, cq.dtS));
-      s.run(1, 12);
-      const theirs = s.from(cq.call, 1).map((m) => parseExchange(m.text));
-      const other = theirs[0].to!;
+      s.run(1, 16);
+      const theirs = s.from(cq.call, 1).map((m) => ({ slot: m.slot, ex: parseExchange(m.text) }));
+      const other = theirs[0].ex.to!;
       expect(other, `seed ${seed}`).not.toBe(ME);
-      expect(theirs[0].kind, `seed ${seed}`).toBe('report');
-      const end = theirs.findIndex((x) => x.to === other && (x.kind === 'rr73' || x.kind === '73' || x.kind === 'rrr'));
-      expect(end, `seed ${seed}: ends the QSO with ${other}`).toBeGreaterThan(0);
-      const first = theirs.findIndex((x) => x.to === ME);
-      if (first >= 0) {
-        expect(first, `seed ${seed}`).toBeGreaterThan(end);
-        tailEnded++;
-      }
+      expect(theirs[0].ex.kind, `seed ${seed}`).toBe('report');
+      const end = theirs.find((x) => x.ex.to === other && (x.ex.kind === 'rr73' || x.ex.kind === '73'));
+      expect(end, `seed ${seed}: ends the QSO with ${other} by RR73 or 73`).toBeDefined();
+      // Our calls: the first one, nothing while they work, one more in the slot after the end.
+      const ours = s.sim.sent.filter((t) => t.text === `${cq.call} ${ME} OJ11`).map((t) => t.slot);
+      expect(ours, `seed ${seed}`).toEqual([1, end!.slot + 1]);
+      expect(theirs.find((x) => x.ex.to === ME)?.slot, `seed ${seed}`).toBe(end!.slot + 2);
+      expect(s.sim.logged().map((q) => q.call), `seed ${seed}`).toEqual([cq.call]);
+      expect(s.sim.notices()[0], `seed ${seed}`).toMatchObject({ kind: 'lost', text: `${cq.call} answered ${other}` });
     }
-    // A tail-end chance: some of the six answer us afterwards, not all.
-    expect(tailEnded).toBeGreaterThan(0);
-    expect(tailEnded).toBeLessThan(6);
   });
 
   it('he never hears us and keeps calling CQ', () => {
@@ -172,6 +169,51 @@ describe('calling a station', () => {
     for (const t of theirs) expect(parseExchange(t).to).not.toBe(ME);
     expect(theirs[0]).toBe(cq.text);
     expect(s.sentTexts().filter((t) => t.startsWith(`${cq.call} ${ME}`)).length).toBeGreaterThanOrEqual(2);
+  });
+});
+
+describe('Hunt: busy band', () => {
+  function hunt(seed: number, over: Partial<SeqConfig> = {}) {
+    const s = new Session('hunt-busy', seed, over);
+    s.sim.send({ type: 'hunt', on: true, nowMs: s.sim.at(0, 5) });
+    return s;
+  }
+
+  it('carries at least 6 plain CQs a slot, and the weaker stations ignore us', () => {
+    const s = hunt(71);
+    s.run(0, 12);
+    for (let i = 0; i <= 12; i++) {
+      const plain = (s.slots[i] ?? []).filter((x) => /^CQ [A-Z0-9/]+ [A-R]{2}\d{2}$/.test(x.text));
+      expect(plain.length, `slot ${i}`).toBeGreaterThanOrEqual(6);
+    }
+  });
+
+  it('Hunt works one station after another and logs each QSO', () => {
+    for (const seed of [71, 72, 73]) {
+      const s = hunt(seed);
+      s.run(0, 24);
+      const calls = s.sim.logged().map((q) => q.call);
+      expect(calls.length, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      expect(new Set(calls).size, `seed ${seed}`).toBe(calls.length);
+      expect(s.sim.st.huntQsos, `seed ${seed}`).toBe(calls.length);
+    }
+  });
+
+  it('Hunt gives up on a station that does not hear us and does not call it again', () => {
+    // Farthest first reaches the weak stations, which ignore us.
+    const s = hunt(74, { huntOrder: 'farthest' });
+    s.run(0, 60);
+    const ignored = s.sim.st.ignored;
+    expect(ignored.length).toBeGreaterThan(0);
+    for (const { call, atMs } of ignored) {
+      const calls = s.sim.sent.filter((t) => t.text.startsWith(`${call} ${ME} `)).map((t) => s.sim.at(t.slot));
+      // 4 calls, or 5 with a tail-end call when he answered someone else; none after giving up.
+      expect(calls.length, call).toBeGreaterThanOrEqual(4);
+      expect(calls.length, call).toBeLessThanOrEqual(5);
+      expect(calls.every((t) => t < atMs), call).toBe(true);
+      expect(s.from(call).some((m) => m.text.startsWith(`${ME} `)), call).toBe(false);
+    }
+    expect(s.sim.logged().length).toBeGreaterThan(0);
   });
 });
 
@@ -301,12 +343,73 @@ describe('the band', () => {
     expect(wasm, 'the wasm package in src/wasm/pkg').not.toBeNull();
     if (!wasm) return;
     const texts = new Set<string>();
-    for (const sc of ['random', 'cq-pileup', 'directed', 'answer-busy'] as const) {
+    for (const sc of ['random', 'cq-pileup', 'directed', 'answer-busy', 'hunt-busy'] as const) {
       const s = new Session(sc, 51, {}, sc === 'random');
       callCq(s);
       s.run(0, 30);
       for (const x of s.slots.flat()) texts.add(x.text);
     }
     for (const t of texts) expect(JSON.parse(wasm.pack_message(t, 'FT8')), t).toMatchObject({ ok: true, text: t });
+  });
+});
+
+describe('Fox (DXpedition)', () => {
+  /** Hound on, the Fox's first message (its CQ) double-tapped, then `slots` slots of the band. */
+  function workFox(seed: number, slots = 30, over: Partial<SeqConfig> = { hound: true }) {
+    const s = new Session('fox', seed, over);
+    s.step(0);
+    const first = s.slots[0][0];
+    s.sim.call(0, decode(first.text, Math.round(first.snrDb), first.freqHz, first.dtS));
+    s.run(1, slots);
+    return { s, fox: first.call };
+  }
+
+  it('calls CQ first, then works up to 3 Hounds a slot from 300 Hz, 60 Hz apart, in even slots', () => {
+    const { s, fox } = workFox(1, 20);
+    expect(s.slots[0].map((x) => x.text)).toEqual([expect.stringMatching(new RegExp(`^CQ ${fox} [A-R]{2}\\d{2}$`))]);
+    const foxSlots = s.slots.map((xs) => xs.filter((x) => x.call === fox));
+    expect(foxSlots.filter((xs, i) => i % 2 === 1 && xs.length)).toEqual([]);
+    expect(Math.max(...foxSlots.map((xs) => xs.length))).toBe(3);
+    for (const x of foxSlots.flat()) expect([300, 360, 420]).toContain(x.freqHz);
+    expect(foxSlots.flat().some((x) => / RR73; /.test(x.text))).toBe(true);
+    // The Hounds call between 1000 and 2850 Hz and answer on the Fox's stream.
+    for (const x of s.slots.filter((_, i) => i % 2 === 1).flat()) {
+      if (/ [A-R]{2}\d{2}$/.test(x.text)) expect(x.freqHz).toBeGreaterThanOrEqual(1000);
+      else expect([300, 360, 420]).toContain(x.freqHz);
+    }
+  });
+
+  it('answers us after 2 to 4 calls; the R-report goes on its frequency and RR73 logs the QSO', () => {
+    const multi: boolean[] = [];
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { s, fox } = workFox(seed);
+      const calls = s.sim.sent.filter((t) => t.tx === 1).length;
+      expect(calls, `seed ${seed}`).toBeGreaterThanOrEqual(2);
+      expect(calls, `seed ${seed}`).toBeLessThanOrEqual(5);
+      const toMe = s.slots.flatMap((xs, i) => xs.filter((x) => x.call === fox && x.text.includes(`${ME} <${fox}>`) || x.text.startsWith(`${ME} ${fox} -`) || x.text.startsWith(`${ME} ${fox} +`)).map((x) => ({ ...x, slot: i })));
+      expect(toMe.length, `seed ${seed}`).toBeGreaterThan(0);
+      multi.push(toMe[0].text.includes(';'));
+      const r = s.sim.sent.find((t) => t.tx === 3)!;
+      expect(r.slot, `seed ${seed}`).toBe(toMe[0].slot + 1);
+      expect(r.freqHz, `seed ${seed}`).toBe(Math.round(toMe[0].freqHz));
+      expect(s.sim.logged().map((q) => q.call), `seed ${seed}`).toEqual([fox]);
+      expect(s.sim.notices().map((n) => n.kind), `seed ${seed}`).toEqual([]);
+    }
+    // Sometimes the report comes inside a multi-call message, sometimes alone.
+    expect(multi).toContain(true);
+    expect(multi).toContain(false);
+  });
+
+  it('never answers a call below 1000 Hz', () => {
+    const { s } = workFox(1, 20, { hound: false, txHz: 600 });
+    expect(s.sim.sent.every((t) => t.tx === 1)).toBe(true);
+    expect(s.sim.logged()).toEqual([]);
+  });
+
+  it('sends only messages that encode', async () => {
+    const wasm = await loadWasm();
+    if (!wasm) return;
+    const { s } = workFox(9, 40);
+    for (const t of new Set(s.slots.flat().map((x) => x.text))) expect(JSON.parse(wasm.pack_message(t, 'FT8')), t).toMatchObject({ ok: true, text: t });
   });
 });

@@ -3,12 +3,15 @@
    * Change band. RR73 cannot read the radio's dial, so the operator chooses the band here and
    * sets the radio to the frequency shown. A tap on a band applies it and closes the sheet; a tap
    * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
+   * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
    */
   import Sheet from './Sheet.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
   import type { Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
+  import { setHound, setHoundDial } from '../lib/state/qso.svelte';
+  import { operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -22,7 +25,27 @@
     }
   });
 
-  const dial = $derived(dialHz(band, mode));
+  const hound = $derived(settings.houndBands.includes(band));
+  const dial = $derived(operatingDialHz(band, mode, hound, settings.houndDialHz));
+
+  // The DXpedition's dial frequency, as typed; it starts at the stored value or the band's FT8 frequency.
+  let dialText = $state('');
+  let dialError = $state<string | null>(null);
+  $effect(() => {
+    if (!hound || mode !== 'FT8') return;
+    dialText = ((settings.houndDialHz[band] ?? dialHz(band, 'FT8') ?? 0) / 1e6).toFixed(3);
+    dialError = null;
+  });
+
+  function saveDial() {
+    const r = parseDialMhz(dialText, band);
+    if ('error' in r) {
+      dialError = r.error;
+      return;
+    }
+    dialError = null;
+    setHoundDial(band, r.hz);
+  }
 
   // FT4 has no usual frequency on 160m and 60m.
   function chooseBand(b: BandId) {
@@ -57,6 +80,32 @@
       </label>
     {/each}
   </fieldset>
+  {#if mode === 'FT8'}
+    <div class="group hound">
+      <label class="row">
+        <span class="row-main"><span class="row-title">Hound</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={hound} onchange={(e) => setHound(e.currentTarget.checked)} />
+      </label>
+      {#if hound}
+        <label class="row">
+          <span class="row-title">Dial frequency</span>
+          <input
+            class="field"
+            type="text"
+            inputmode="decimal"
+            bind:value={dialText}
+            onblur={saveDial}
+            onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+            autocomplete="off"
+            aria-label="Dial frequency, MHz"
+            aria-invalid={dialError !== null}
+          />
+          <span class="unit">MHz</span>
+        </label>
+      {/if}
+    </div>
+    {#if dialError}<p class="err" role="alert">{dialError}</p>{/if}
+  {/if}
   <div class="setblock">
     <p class="k">Set the radio to</p>
     <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
@@ -84,7 +133,7 @@
     align-items: center;
     justify-content: center;
     height: var(--rr-tap);
-    border-radius: var(--rr-radius-l);
+    border-radius: var(--rr-radius-button);
     background: var(--rr-sheet-card);
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-semibold);
@@ -102,13 +151,52 @@
     outline-offset: 2px;
   }
 
+  /* The fieldset rule above clears padding; the track keeps its 2 pt inset around the thumb. */
   .seg {
     margin-top: var(--rr-space-3);
+    padding: var(--rr-space-half);
   }
 
   .seg-i.off {
     color: var(--rr-label3);
     cursor: default;
+  }
+
+  .hound {
+    margin-top: var(--rr-space-3);
+    background: var(--rr-sheet-card);
+  }
+
+  .field {
+    flex: 1;
+    min-width: 0;
+    height: var(--rr-tap);
+    border: 0;
+    background: transparent;
+    font-size: var(--rr-text-body);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .field:focus {
+    outline: none;
+  }
+
+  .row:has(.field:focus-visible) {
+    box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  .unit {
+    flex: none;
+    margin-left: var(--rr-space-1);
+    color: var(--rr-label2);
+  }
+
+  .err {
+    margin: var(--rr-space-2) var(--rr-space-4) 0;
+    font-size: var(--rr-text-foot);
+    line-height: var(--rr-leading-row);
+    color: var(--rr-tx-text);
   }
 
   .setblock {
@@ -136,7 +224,7 @@
   .m {
     font-size: var(--rr-text-sideband);
     font-weight: var(--rr-weight-semibold);
-    line-height: var(--rr-leading-title);
+    line-height: var(--rr-leading-sideband);
   }
 
   .note {

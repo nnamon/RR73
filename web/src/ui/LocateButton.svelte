@@ -25,7 +25,7 @@
 <style>
   /* The tinted fill is too light for its text on sheet cards in dark mode; this fill works on every card. */
   .soft {
-    background: var(--rr-fill2);
+    background-color: var(--rr-fill2);
     color: var(--rr-accent);
   }
 

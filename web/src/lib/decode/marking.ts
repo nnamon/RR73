@@ -25,7 +25,7 @@ export interface DecodeRowData {
   /** Shown in place of SNR and DT for sent rows: "13:14:30". */
   time?: string;
   badge?: Badge;
-  /** Right-hand note, such as a country or "You sent". */
+  /** Note before the numbers, such as a country or a Run caller's place in the queue. */
   meta?: string;
   /** Already worked: the message is dimmed. */
   worked?: boolean;

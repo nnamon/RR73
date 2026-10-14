@@ -6,11 +6,15 @@
  * The visible height covers about 45 s (three FT8 slots), so the row period follows the canvas
  * height. A slot boundary paints a hairline into the row that contains it. When audio stops and
  * resumes, the missing time is drawn as blank rows, so the slot lines stay at their UTC times.
+ * In the slots RR73 transmitted in, the receive audio is the radio's own transmission, so those
+ * rows show the transmitted audio instead (setTxWave), as a strong signal over an even floor. A
+ * row in such a slot that no transmitted audio covers is blank.
  */
 
 import { buildLut, type WaterfallPalette } from './colormap';
-import { LevelMapper } from './levels';
+import { LevelMapper, type Contrast } from './levels';
 import { BIN_HZ, DISPLAY_BINS, DISPLAY_FFT, DISPLAY_RATE, DisplaySpectrum, MAX_HZ } from './spectrum';
+import { NOISE_POSITION } from './levels';
 import { SLOT_MS, type Mode } from '../clock/slots';
 import { QuietTracker, quietestHz } from './pick';
 
@@ -40,6 +44,24 @@ export interface FrameInfo {
 export const VISIBLE_S = 45;
 /** A jump of more than this between chunks is a gap in the audio, ms. */
 const GAP_MS = 150;
+
+/** Transmitted audio drawn on the waterfall. */
+export interface TxWave {
+  /** UTC of samples[0], ms. */
+  startUtcMs: number;
+  /** End of the transmission, UTC ms; earlier than the audio's end after Halt. */
+  endUtcMs: number;
+  /** The transmitted audio at 12 kHz (DISPLAY_RATE). */
+  samples: Float32Array;
+}
+
+/** Transmissions kept for drawing: the visible 45 s holds at most 4 FT8 or 7 FT4 slots. */
+const TX_WAVES_KEPT = 8;
+/** dB under its peak where a transmitted row reaches the floor colour. */
+const TX_RANGE_DB = 30;
+/** Levels for the transmitted rows: the floor sits where receive noise does, the tones near the top. */
+const TX_FLOOR = Math.round(NOISE_POSITION * 255);
+const TX_TOP = 240;
 
 interface Row {
   levels: Uint8Array;
@@ -101,6 +123,11 @@ export class WaterfallRenderer {
   private marks: { utcMs: number; row: number }[] = [];
   private lastRowUtc: number | null = null;
   private readonly quiet: QuietTracker;
+  /** Starts of the slots RR73 transmitted in, UTC ms. */
+  private txSlots = new Set<number>();
+  private txWaves: TxWave[] = [];
+  private readonly txFrame = new Float32Array(DISPLAY_FFT);
+  private readonly txDb = new Float32Array(DISPLAY_BINS);
 
   constructor(ctx: Context2D, palette: WaterfallPalette, mode: Mode, width: number, height: number) {
     this.ctx = ctx;
@@ -135,8 +162,78 @@ export class WaterfallRenderer {
     this.ctx.canvas.height = this.height;
     this.cols = columns(this.width);
     this.hop = Math.max(64, Math.round((VISIBLE_S * DISPLAY_RATE) / this.height));
+    this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
     this.redraw();
+  }
+
+  /** Sets the contrast of the colormap for the rows drawn from now on. */
+  setContrast(c: Contrast) {
+    this.mapper.setContrast(c);
+  }
+
+  /**
+   * Sets the slots RR73 transmitted in, UTC ms. Their rows show the transmitted audio, or blank
+   * where none covers them, including rows drawn before the slot was known.
+   */
+  setTxSlots(starts: readonly number[]) {
+    this.txSlots = new Set(starts);
+    this.redrawTx();
+  }
+
+  /**
+   * Adds or updates a transmission's audio (matched by its start), including rows drawn before
+   * it arrived. A Halt sends the same transmission again with an earlier end.
+   */
+  setTxWave(w: TxWave) {
+    this.txWaves = [...this.txWaves.filter((x) => x.startUtcMs !== w.startUtcMs), w].slice(-TX_WAVES_KEPT);
+    this.redrawTx();
+  }
+
+  /** Redraws the rows in transmitted slots from the transmitted audio. */
+  private redrawTx() {
+    let changed = false;
+    for (const r of this.history) {
+      if (!this.inTxSlot(r.utcMs)) continue;
+      const lv = this.txLevels(r.utcMs);
+      if (lv) {
+        r.levels = lv;
+        r.blank = false;
+        changed = true;
+      } else if (!r.blank) {
+        r.blank = true;
+        changed = true;
+      }
+    }
+    if (changed) this.redraw();
+  }
+
+  /**
+   * Levels for a row centred at `utcMs` from the transmitted audio, or null where no transmission
+   * covers it. Each row is levelled against its own peak: RR73 does not know the radio's power.
+   */
+  private txLevels(utcMs: number): Uint8Array | null {
+    const w = this.txWaves.find((x) => utcMs >= x.startUtcMs && utcMs < x.endUtcMs);
+    if (!w) return null;
+    const centre = Math.round(((utcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
+    const end = Math.round(((w.endUtcMs - w.startUtcMs) / 1000) * DISPLAY_RATE);
+    for (let i = 0, j = centre - DISPLAY_FFT / 2; i < DISPLAY_FFT; i++, j++) this.txFrame[i] = j >= 0 && j < end && j < w.samples.length ? w.samples[j] : 0;
+    this.spectrum.compute(this.txFrame, this.txDb);
+    let peak = -Infinity;
+    for (const v of this.txDb) if (v > peak) peak = v;
+    const out = new Uint8Array(DISPLAY_BINS);
+    if (!Number.isFinite(peak)) return out.fill(TX_FLOOR);
+    for (let k = 0; k < DISPLAY_BINS; k++) {
+      const p = Math.min(1, Math.max(0, (this.txDb[k] - (peak - TX_RANGE_DB)) / TX_RANGE_DB));
+      out[k] = Math.round(TX_FLOOR + p * (TX_TOP - TX_FLOOR));
+    }
+    return out;
+  }
+
+  private inTxSlot(utcMs: number): boolean {
+    if (!this.txSlots.size) return false;
+    const slot = SLOT_MS[this.mode];
+    return this.txSlots.has(Math.floor(utcMs / slot) * slot);
   }
 
   /** Clears the picture and the history. */
@@ -204,6 +301,11 @@ export class WaterfallRenderer {
         // across every bin. Until then the row is blank, so the time scale keeps moving.
         if (this.valid < DISPLAY_FFT) {
           rows.push({ levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
+          continue;
+        }
+        if (this.inTxSlot(t)) {
+          const lv = this.txLevels(t);
+          rows.push(lv ? { levels: lv, utcMs: t, blank: false } : { levels: new Uint8Array(DISPLAY_BINS), utcMs: t, blank: true });
           continue;
         }
         this.spectrum.compute(this.frame, this.db);
