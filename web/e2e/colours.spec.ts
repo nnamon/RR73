@@ -43,6 +43,27 @@ async function toColours(page: Page) {
 async function toOperate(page: Page) {
   await page.getByRole('link', { name: 'Settings', exact: true }).click();
   await page.getByRole('link', { name: 'Operate' }).click();
+  // Operate's pane shows a moment after the route changes; a hidden row has no box to measure.
+  await expect(page.getByTestId('decode-list')).toBeVisible();
+}
+
+/** Whether the stored decode colours have the category on, read from IndexedDB. */
+function storedOn(page: Page, id: string): Promise<boolean | null> {
+  return page.evaluate(
+    (key) =>
+      new Promise((resolve) => {
+        const req = indexedDB.open('rr73');
+        req.onsuccess = () => {
+          const get = req.result.transaction('kv').objectStore('kv').get('settings');
+          get.onsuccess = () => {
+            req.result.close();
+            const hl = (get.result?.value?.highlights ?? []) as { id: string; on: boolean }[];
+            resolve(hl.find((h) => h.id === key)?.on ?? null);
+          };
+        };
+      }),
+    id,
+  );
 }
 
 /** Touch and hold a category's handle, then drag it onto another category's row, as on iOS. */
@@ -193,7 +214,8 @@ test('the WSJT-X preset acts on the first tap and offers Undo', async ({ page })
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).not.toBeChecked();
   expect(await hlOf(page.getByRole('button', { name: 'Change colour: CQ in the message' }))).toBe('#FF00FF');
 
-  // Stored: a reload keeps the operator's colours.
+  // Stored: a reload keeps the operator's colours, once the Undo has reached storage.
+  await expect.poll(() => storedOn(page, 'newCall')).toBe(false);
   await page.reload();
   await expect(page.getByRole('switch', { name: 'New call', exact: true })).not.toBeChecked();
   expect(await order(page)).toEqual(changed);
