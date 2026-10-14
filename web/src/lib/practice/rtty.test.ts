@@ -26,7 +26,7 @@ describe('RTTY stations on the practice band', () => {
     expect(run(new RttyStations('9V1NE', T), T, 60_000, true)).toEqual([]);
   });
 
-  it('JA1XYZ answers a call with his name and QTH, and signs after 73', () => {
+  it('JA1XYZ answers a call with name and QTH, and signs after 73', () => {
     const st = new RttyStations('9V1NE', T);
     transmit(st, T + 10_000, '\nJA1XYZ JA1XYZ DE 9V1NE 9V1NE K\n');
     const reply = run(st, T + 15_000, 3000).filter((s) => s.call === 'JA1XYZ');

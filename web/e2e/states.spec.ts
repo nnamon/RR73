@@ -105,7 +105,7 @@ for (const theme of ['light', 'dark'] as const) {
     // The slot RR73 transmits in, read as soon as it is on air: the screenshot below can run past
     // the slot boundary on a loaded machine.
     const ours = await page.evaluate(() => Date.now() - (Date.now() % 15_000));
-    // Calling VJ6X: the rest of the band dims; his CQ, the message to you and our rows stay clear.
+    // Calling VJ6X: the rest of the band dims; their CQ, the message to you and our rows stay clear.
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveClass(/\bdim\b/);
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
     await expect(rowOf(page, 'CQ VJ6X OF78')).toHaveCSS('opacity', '1');
@@ -127,7 +127,7 @@ for (const theme of ['light', 'dark'] as const) {
     await inject(page, ours + SLOT, [...SLOT_A.slice(0, 3), d('9V1NE VJ6X -12', -9, 506), ...SLOT_A.slice(3, 7)]);
     await expect(bar.getByRole('list', { name: 'QSO progress' })).toBeVisible();
     await expect(bar.getByText(/^Tx3 · VJ6X 9V1NE R-09/)).toBeVisible();
-    // His report leads its slot; the rest of the band dims; our Sent and Next rows stay clear.
+    // Their report leads its slot; the rest of the band dims; our Sent and Next rows stay clear.
     expect(await firstInSlot(page, ours + SLOT)).toBe('9V1NE VJ6X -12');
     await expectToYou(rowOf(page, '9V1NE VJ6X -12'));
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
@@ -145,7 +145,7 @@ for (const theme of ['light', 'dark'] as const) {
     // Run: End QSO from the menu, Run, then three callers; the ••• menu open.
     await bar.getByRole('button', { name: 'More' }).click();
     await page.getByRole('menuitem', { name: 'End QSO' }).click();
-    // The QSO is over: nothing dims, and his report keeps its red edge.
+    // The QSO is over: nothing dims, and their report keeps its red edge.
     await expectNoneDim(page);
     await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '1');
     await expectToYou(rowOf(page, '9V1NE VJ6X -12'));

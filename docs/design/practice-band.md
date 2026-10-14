@@ -22,9 +22,9 @@ Chosen from ••• in Operate while practice is on. A new scenario applies to
 | Practice: One caller | A CQ gets 1 caller, who completes the QSO. |
 | Practice: Pile-up | A CQ gets 3 to 5 callers. Those not worked keep calling, more often as a QSO ends. |
 | Practice: Caller goes quiet | The caller stops after the operator's report. |
-| Practice: Caller misses RR73 | The caller sends his R-report again after the first RR73, then 73. |
+| Practice: Caller misses RR73 | The caller sends its R-report again after the first RR73, then 73. |
 | Practice: Station answers | A called station answers with a report and ends with RR73. |
-| Practice: Station works another | A called station answers another caller, works him to RR73 or 73, then answers the operator 60 % of the time if he is still calling. |
+| Practice: Station works another | A called station answers another caller, works that station to RR73 or 73, then answers the operator 60 % of the time if the operator is still calling. |
 | Practice: Station never answers | A called station keeps calling CQ. |
 | Practice: Fox (DXpedition) | A Fox works 3 Hounds a slot in FT8 DXpedition mode and answers the operator after 2 to 4 calls at 1000 Hz or above, with the report alone or in a multi-call message. It replaces the band while chosen (`practice/fox.ts`, `docs/design/hound.md`). |
 | Practice: CQ DX and CQ NA | The band carries CQ DX and CQ NA in every slot. CQ NA answers only North America; CQ DX answers only other continents. |

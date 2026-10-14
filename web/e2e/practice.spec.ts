@@ -217,7 +217,7 @@ test('Hound works the practice Fox: call, report, R-report, RR73, logged', async
   expect(await callsInLog(page, 'rr73-practice')).toEqual([fox]);
 });
 
-test('RTTY on the practice band: JA1XYZ calls CQ, a tap on his call and Answer, and he answers with name and QTH', async ({ page }) => {
+test('RTTY on the practice band: JA1XYZ calls CQ, a tap on the call and Answer, and JA1XYZ answers with name and QTH', async ({ page }) => {
   test.setTimeout(90_000);
   await practiceOn(page);
   await page.getByRole('button', { name: /^Change band/ }).click();

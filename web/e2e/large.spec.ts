@@ -381,7 +381,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.mouse.move(0, 0);
     await shot(page, info, theme, 'operate');
 
-    // In a QSO with VK3ZOI: Tx1 went in the slot after his CQ, he answered with a report, and
+    // In a QSO with VK3ZOI: Tx1 went in the slot after their CQ, they answered with a report, and
     // Tx3 is on air now (shown through the hooks).
     await page.evaluate((s) => window.__rr73!.sent(s, 'VK3ZOI 9V1NE OJ11'), now - 2 * SLOT);
     await inject(page, now - SLOT, Q00);

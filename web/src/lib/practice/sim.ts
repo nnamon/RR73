@@ -341,7 +341,7 @@ export class PracticeBand {
   private keepCalling(s: Station, inbox: Heard[]) {
     if (++s.tries > s.maxCalls) return this.leave(s);
     const partnerSent = inbox.find((m) => sameCall(m.ex.from, s.partner));
-    // The station called is working someone else: wait, or call over him; call again as he ends.
+    // The station called is working someone else: wait, or call over them; call again as their QSO ends.
     const busy = partnerSent && partnerSent.ex.kind !== 'cq' && !sameCall(partnerSent.ex.to, s.call);
     const ending = busy && (partnerSent.ex.kind === 'rr73' || partnerSent.ex.kind === 'rrr' || partnerSent.ex.kind === '73');
     if (busy && !ending && !s.rng.chance(0.5)) return;

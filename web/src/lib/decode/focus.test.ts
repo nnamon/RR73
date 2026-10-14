@@ -139,7 +139,7 @@ describe('applyFocus', () => {
       'clear 9V1NE ZL1TQK RF73',
       'dim CQ K1ABC FN42',
       'clear VJ6X JA1KXM -05',
-      // Mentions the operator but is not addressed to him.
+      // Mentions the operator but is not addressed to them.
       'dim JA1KXM 9V1NE R-14',
       '[2 decodes]',
       'clear CQ VJ6X OF78',

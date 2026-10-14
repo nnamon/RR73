@@ -107,7 +107,7 @@ describe('calling CQ', () => {
     expect(s.sim.logged()).toEqual([]);
   });
 
-  it('a caller who misses the RR73 sends his R-report again, then 73, and the QSO is logged once', () => {
+  it('a caller who misses the RR73 sends the R-report again, then 73, and the QSO is logged once', () => {
     const s = new Session('cq-repeat', 6);
     callCq(s);
     s.run(0, 1);
@@ -123,7 +123,7 @@ describe('calling CQ', () => {
 });
 
 describe('calling a station', () => {
-  it('he answers with a report, sends RR73 after our R-report, and the QSO is logged', () => {
+  it('the station answers with a report, sends RR73 after our R-report, and the QSO is logged', () => {
     const s = new Session('answer', 7);
     s.run(0, 0);
     const cq = plainCq(s, 0);
@@ -136,7 +136,7 @@ describe('calling a station', () => {
     expect(s.sentTexts().at(-1)).toBe(`${cq.call} ${ME} 73`);
   });
 
-  it('he works someone else to RR73 or 73, then answers our one tail-end call, and the QSO is logged', () => {
+  it('the station works someone else to RR73 or 73, then answers our one tail-end call, and the QSO is logged', () => {
     for (const seed of [8, 9, 10, 11, 12, 13]) {
       const s = new Session('answer-busy', seed);
       s.run(0, 0);
@@ -158,7 +158,7 @@ describe('calling a station', () => {
     }
   });
 
-  it('he never hears us and keeps calling CQ', () => {
+  it('the station never hears us and keeps calling CQ', () => {
     const s = new Session('answer-deaf', 14);
     s.run(0, 0);
     const cq = plainCq(s, 0);
@@ -207,7 +207,7 @@ describe('Hunt: busy band', () => {
     expect(ignored.length).toBeGreaterThan(0);
     for (const { call, atMs } of ignored) {
       const calls = s.sim.sent.filter((t) => t.text.startsWith(`${call} ${ME} `)).map((t) => s.sim.at(t.slot));
-      // 4 calls, or 5 with a tail-end call when he answered someone else; none after giving up.
+      // 4 calls, or 5 with a tail-end call when the station answered someone else; none after giving up.
       expect(calls.length, call).toBeGreaterThanOrEqual(4);
       expect(calls.length, call).toBeLessThanOrEqual(5);
       expect(calls.every((t) => t < atMs), call).toBe(true);

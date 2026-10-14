@@ -9,7 +9,7 @@ import type { Qso } from '../log/types';
 const T = Date.UTC(2026, 9, 14, 14, 4, 12);
 const run = (text: string, s: number): RxRun => ({ text, atMs: T + s * 1000 });
 
-/** The mockup's QSO with JA1XYZ, from his CQ to his over. */
+/** The mockup's QSO with JA1XYZ, from their CQ to their over. */
 const RUNS: RxRun[] = [
   run('BV2KQ DE VK4TQ', -300),
   run('NAME BOB QTH PERTH', -290),

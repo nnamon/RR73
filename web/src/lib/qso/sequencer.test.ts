@@ -576,7 +576,7 @@ describe('Hunt', () => {
     s.run(0, 18, heard);
     expect(texts(s)).toEqual([2, 4, 6, 8].map((i) => `${i}:JA1KXM 9V1NE OJ11`).concat([10, 12, 14, 16].map((i) => `${i}:K1ABC 9V1NE OJ11`)));
     expect(s.notices().map((n) => n.text)).toEqual(['No reply from JA1KXM', 'No reply from K1ABC']);
-    // JA1KXM was given up at 13:16:30.1; Hunt calls him again 10 min later.
+    // JA1KXM was given up at 13:16:30.1; Hunt calls them again 10 min later.
     expect(s.st.ignored.map((i) => i.call)).toEqual(['JA1KXM', 'K1ABC']);
     s.run(19, 50, heard);
     expect(texts(s).slice(8)).toEqual(['50:JA1KXM 9V1NE OJ11']);
