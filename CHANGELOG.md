@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.15.0 · 2026-10-14
 
 - Spots lists POTA and DX cluster spots, newest first, while POTA spots or Cluster spots is on in Settings › Optional features. The list refreshes every minute while Spots is open and online, and offline shows the last list with its time.
 - Chips choose POTA, SOTA, WWFF, IOTA or DX, FT8 and FT4 only, your bands and New only. A row reads Worked today for a station you worked on its band today, or New park, New summit, New WWFF or New IOTA for a reference not in your log.
