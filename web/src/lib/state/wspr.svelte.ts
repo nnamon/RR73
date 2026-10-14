@@ -211,7 +211,7 @@ export function stepStopAfter(nowMs = Date.now()) {
 export function stepSort(nowMs = Date.now()) {
   const sort = SPOT_SORTS[(SPOT_SORTS.indexOf(settings.wspr.sort) + 1) % SPOT_SORTS.length];
   void updateSettings({ wspr: { ...settings.wspr, sort } });
-  notice(STATUS.beaconSort(SORT_LABELS[sort].toLowerCase()), nowMs);
+  notice(STATUS.beaconSort(sort === 'snr' ? 'SNR' : SORT_LABELS[sort].toLowerCase()), nowMs);
 }
 
 /** Sets the Tx frequency, Hz (from the waterfall or Settings). A transmission waiting for its slot is made again. */

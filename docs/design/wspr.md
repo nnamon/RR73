@@ -64,7 +64,7 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006). `views/Operate
 - ••• menu: Transmit next slot (once, with Beacon on or off), Tune for 10 s, Save slot (2 min of audio), Sort by and Stop beacon after. The last two step through their values on each tap, as FT8's menu items do; Stop beacon after steps through Off, 30 min, 1 h, 2 h, 4 h, 8 h and 12 h, and Settings › WSPR takes any number of minutes.
 - Halt ends the transmission and turns the beacon off in one tap. It has FT8's look (a red tint since 0.10.5) and is always visible.
 - Beacon off lets a transmission on air finish, as Tx off does in FT8; Halt stops it.
-- The status line shows a notice for 20 s, then the message and Tx frequency again. Notices are in `lib/qso/status.ts`: "Beacon stopped after 1 h", "Audio stopped · Beacon off", "Spots sorted by snr" and others.
+- The status line shows a notice for 20 s, then the message and Tx frequency again. Notices are in `lib/qso/status.ts`: "Beacon stopped after 1 h", "Audio stopped · Beacon off", "Spots sorted by SNR" and others.
 
 ## Beacon schedule
 

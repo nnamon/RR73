@@ -148,6 +148,7 @@ describe('spots', () => {
     expect(settings.wspr.sort).toBe('distance');
     stepSort();
     expect(settings.wspr.sort).toBe('snr');
+    expect(wspr.notice?.text).toBe('Spots sorted by SNR');
     stepSort();
     expect(settings.wspr.sort).toBe('call');
     stepSort();
