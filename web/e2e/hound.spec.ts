@@ -20,13 +20,13 @@ async function inject(page: Page, slotStartMs: number, decodes: ReturnType<typeo
   await page.evaluate(([s, ds]) => window.__rr73!.decoded(s as number, ds as ReturnType<typeof d>[]), [slotStartMs, decodes] as const);
 }
 
-/** Waits for an odd slot between 2 and 6 s old; returns the start of the even slot before it. */
+/** Waits for an odd slot 5 to 8 s old, past the 4.5 s late start; returns the start of the even slot before it. */
 async function afterFoxSlot(page: Page): Promise<number> {
   for (;;) {
     const now = Date.now();
     const start = now - (now % SLOT);
     const at = now - start;
-    if ((start / SLOT) % 2 === 1 && at >= 2000 && at <= 6000) return start - SLOT;
+    if ((start / SLOT) % 2 === 1 && at >= 5000 && at <= 8000) return start - SLOT;
     await page.waitForTimeout(250);
   }
 }

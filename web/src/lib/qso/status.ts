@@ -16,6 +16,7 @@ export const STATUS = {
   audioOff: 'Audio off',
   audioStopped: 'Audio stopped · Tx off',
   watchdog: (min: number) => `Watchdog stopped Tx after ${min} min`,
+  watchdogLast: 'Watchdog ends Tx after this QSO',
   encode: 'Message cannot be encoded',
   txSet: (hz: number) => `Tx set to ${hz} Hz`,
   noClear: 'Not enough audio yet',

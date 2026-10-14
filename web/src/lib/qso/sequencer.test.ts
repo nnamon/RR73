@@ -278,6 +278,18 @@ describe('Run mode', () => {
     expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false });
   });
 
+  it('stops repeating RR73 after the repeats to a caller who keeps sending the R-report, and keeps the QSO logged', () => {
+    const s = new Sim();
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    const r = '9V1NE K1ABC R-12';
+    s.run(0, 14, { 1: ['9V1NE K1ABC FN42'], 3: [r], 5: [r], 7: [r], 9: [r], 11: [r], 13: [r] });
+    expect(texts(s).filter((t) => t.endsWith('RR73'))).toEqual(['4:K1ABC 9V1NE RR73', '6:K1ABC 9V1NE RR73', '8:K1ABC 9V1NE RR73', '10:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    // The QSO is logged: no "not logged" notice when the repeats run out.
+    expect(s.notices().map((n) => n.text)).toEqual([]);
+    expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false });
+  });
+
   it('turns Tx off after the QSO without Run, as WSJT-X does after 73', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
@@ -406,6 +418,20 @@ describe('a lost station', () => {
     }
   });
 
+  it('reports the loss once, with the station, the station it answered and the slot, for the Lost mark on its rows', () => {
+    for (const hunt of [false, true]) {
+      const s = new Sim();
+      if (hunt) {
+        s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+        s.run(0, 6, { 1: ['CQ VK2LAW QF56'], 3: ['DV5CEL VK2LAW -05'], 5: ['DV5CEL VK2LAW RR73'] });
+      } else {
+        s.call(1, 'CQ VK2LAW QF56');
+        s.run(2, 6, { 3: ['DV5CEL VK2LAW -05'], 5: ['DV5CEL VK2LAW RR73'] });
+      }
+      expect(s.effects.filter((f) => f.type === 'lostTo'), `hunt ${hunt}`).toEqual([{ type: 'lostTo', call: 'VK2LAW', other: 'DV5CEL', slotStartMs: s.at(3) }]);
+    }
+  });
+
   it('keeps calling a station that calls CQ again or calls another station', () => {
     const s = new Sim({ tailEnd: false });
     s.call(1, 'CQ VK2LAW QF56');
@@ -463,7 +489,8 @@ describe('tail-ending', () => {
     for (const [delay, slot, offset, tooLate] of [
       [0.1, 7, 0.5, null],
       [1.0, 7, 1.2, null],
-      [1.9, 9, 0.5, 7],
+      [1.9, 7, 2.1, null],
+      [4.4, 9, 0.5, 7],
     ] as const) {
       const s = new Sim();
       s.call(2, 'CQ VK2LAW QF56');
@@ -606,6 +633,24 @@ describe('Hunt', () => {
     expect(t.st).toMatchObject({ hunt: false, txEnabled: false });
   });
 
+  it('moves on after the calls the operator set, and keeps the usual repeats once answered', () => {
+    const calls = (huntCalls?: number) => {
+      const s = new Sim({ huntCalls });
+      s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+      s.run(0, 12, { 1: ['CQ JA1KXM PM95'], 3: ['CQ K1ABC FN42'], 5: ['CQ K1ABC FN42'], 9: ['CQ K1ABC FN42'] });
+      return texts(s);
+    };
+    // 4 calls by default: the first and 3 repeats.
+    expect(calls().slice(0, 5)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE OJ11', '6:JA1KXM 9V1NE OJ11', '8:JA1KXM 9V1NE OJ11', '10:K1ABC 9V1NE OJ11']);
+    expect(calls(1).slice(0, 2)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:K1ABC 9V1NE OJ11']);
+    expect(calls(2).slice(0, 3)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE OJ11', '6:K1ABC 9V1NE OJ11']);
+
+    const s = new Sim({ huntCalls: 1 });
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    s.run(0, 10, { 1: ['CQ JA1KXM PM95'], 3: ['9V1NE JA1KXM -09'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE R-10', '8:JA1KXM 9V1NE R-10', '10:JA1KXM 9V1NE R-10']);
+  });
+
   it('stops with Halt and the watchdog', () => {
     const s = new Sim();
     s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
@@ -618,27 +663,87 @@ describe('Hunt', () => {
   });
 });
 
+describe('our transmission on air', () => {
+  /** Calling CQ in `cqParity`, with the CQ of slot `i` on air since 0.5 s. */
+  function cqOnAir(i: number, over: ConstructorParameters<typeof Sim>[0] = {}) {
+    const s = new Sim({ cqParity: i % 2 === 0 ? 'even' : 'odd', ...over });
+    s.send({ type: 'callCq', nowMs: s.at(i - 2, 1) });
+    s.play(i - 2);
+    s.hear(i - 1, []);
+    s.send({ type: 'txStarted', slotStartMs: s.at(i), text: 'CQ 9V1NE OJ11', nowMs: s.at(i, 0.5) });
+    s.pending = null;
+    return s;
+  }
+
+  it('gives way to a station called by hand: the call goes out in the same slot', () => {
+    for (const i of [2, 3]) {
+      const s = cqOnAir(i);
+      const fx = s.call(i - 1, 'CQ JA1KXM PM95', 0.6);
+      expect(fx.filter((f) => f.type === 'cancelTx').at(-1), String(i)).toEqual({ type: 'cancelTx', stopPlaying: true });
+      expect(fx.at(-1), String(i)).toMatchObject({ type: 'scheduleTx', tx: 1, text: 'JA1KXM 9V1NE OJ11', slotStartMs: s.at(i), startOffsetS: 0.8 });
+      expect(s.st.onAir).toBeNull();
+    }
+  });
+
+  it('plays out after 1.5 s in FT8 and 0.5 s in FT4, where the switch would spoil the new message', () => {
+    const s = cqOnAir(2);
+    const fx = s.call(1, 'CQ JA1KXM PM95', 1.81);
+    expect(fx.filter((f) => f.type === 'cancelTx' && f.stopPlaying)).toEqual([]);
+    expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(4), tooLateFor: s.at(2) });
+    expect(s.st.onAir).toMatchObject({ text: 'CQ 9V1NE OJ11' });
+    const t = cqOnAir(2);
+    t.call(1, 'CQ JA1KXM PM95', 1.8);
+    expect(t.st.next).toMatchObject({ slotStartMs: t.at(2), offsetS: 2 });
+
+    for (const [after, slot] of [
+      [0.8, 2],
+      [0.81, 4],
+    ] as const) {
+      const f = cqOnAir(2, { mode: 'FT4' });
+      f.call(1, 'CQ JA1KXM PM95', after);
+      expect(f.st.next, String(after)).toMatchObject({ slotStartMs: f.at(slot) });
+    }
+  });
+
+  it('plays out RR73, RRR, 73 and the same message, and the new one goes a cycle later', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM R-09'] });
+    // RR73 on air in slot 4; the operator calls another station heard in slot 3.
+    s.send({ type: 'txStarted', slotStartMs: s.at(4), text: 'JA1KXM 9V1NE RR73', nowMs: s.at(4, 0.5) });
+    const fx = s.call(3, 'CQ K1ABC FN42', 0.6);
+    expect(fx.filter((f) => f.type === 'cancelTx' && f.stopPlaying)).toEqual([]);
+    expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(6), tooLateFor: s.at(4) });
+
+    const t = cqOnAir(2);
+    t.send({ type: 'callCq', nowMs: t.at(2, 0.8) });
+    expect(t.st.next).toMatchObject({ tx: 6, slotStartMs: t.at(4) });
+    expect(t.st.onAir).toMatchObject({ text: 'CQ 9V1NE OJ11' });
+  });
+});
+
 describe('late start', () => {
-  it('starts up to 1.5 s late in FT8 and moves to the next slot of our parity after that', () => {
+  it('starts up to 4 s late in FT8 and moves to the next slot of our parity after that', () => {
     const s = new Sim();
     for (const [after, slot, offset, tooLate] of [
       [0.1, 2, 0.5, null],
       [0.3, 2, 0.5, null],
       [1.0, 2, 1.2, null],
       [1.8, 2, 2.0, null],
-      [1.81, 4, 0.5, 2],
+      [4.3, 2, 4.5, null],
+      [4.31, 4, 0.5, 2],
     ] as const) {
       s.call(1, 'CQ JA1KXM PM95', after);
       expect(s.st.next, String(after)).toMatchObject({ slotStartMs: s.at(slot), offsetS: offset, tooLateFor: tooLate === null ? null : s.at(tooLate) });
     }
-    expect(LATE_S.FT8).toBe(1.5);
+    expect(LATE_S.FT8).toBe(4);
   });
 
-  it('allows 1.0 s in FT4', () => {
+  it('allows 1.25 s in FT4', () => {
     const s = new Sim({ mode: 'FT4' });
-    s.call(1, 'CQ JA1KXM PM95', 1.3);
-    expect(s.st.next).toMatchObject({ slotStartMs: s.at(2), offsetS: 1.5 });
-    s.call(1, 'CQ JA1KXM PM95', 1.31);
+    s.call(1, 'CQ JA1KXM PM95', 1.55);
+    expect(s.st.next).toMatchObject({ slotStartMs: s.at(2), offsetS: 1.75 });
+    s.call(1, 'CQ JA1KXM PM95', 1.56);
     expect(s.st.next).toMatchObject({ slotStartMs: s.at(4), offsetS: 0.5, tooLateFor: s.at(2) });
   });
 
@@ -667,24 +772,27 @@ describe('later decoding passes', () => {
     expect(s.logged()).toHaveLength(1);
   });
 
-  it('plan a cycle later when the reply comes too late for the slot, and never stop a transmission on air', () => {
-    // 1.9 s into slot 4 the start would be 2.1 s, past the 1.5 s late start.
+  it('plan a cycle later when the reply comes too late for the slot', () => {
+    // 4.4 s into slot 4 the start would be 4.6 s, past the 4 s late start.
     const a = new Sim();
     a.call(1, 'CQ JA1KXM PM95');
     a.run(2, 3);
-    a.hear(3, ['9V1NE JA1KXM -09'], 1.9, 'late');
+    a.hear(3, ['9V1NE JA1KXM -09'], 4.4, 'late');
     expect(a.st.next).toMatchObject({ tx: 3, slotStartMs: a.at(6), offsetS: 0.5, tooLateFor: a.at(4) });
+  });
 
-    // Tx1 went on air in slot 4 before the later pass came: it plays on, and Tx3 goes in slot 6.
+  it('replace a repeat on air with the answer they found', () => {
     const b = new Sim();
     b.call(1, 'CQ JA1KXM PM95');
     b.run(2, 3);
     b.send({ type: 'txStarted', slotStartMs: b.at(4), text: 'JA1KXM 9V1NE OJ11', nowMs: b.at(4, 0.5) });
     const fx = b.hear(3, ['9V1NE JA1KXM -09'], 0.9, 'late');
-    expect(fx.filter((f) => f.type === 'cancelTx')).toEqual([]);
-    expect(fx).toContainEqual(expect.objectContaining({ type: 'scheduleTx', tx: 3, slotStartMs: b.at(6), startOffsetS: 0.5 }));
-    expect(b.st.onAir).toMatchObject({ tx: 1, slotStartMs: b.at(4) });
-    expect(b.st.next).toMatchObject({ tx: 3, slotStartMs: b.at(6), tooLateFor: b.at(4) });
+    expect(fx.filter((f) => f.type === 'cancelTx')).toEqual([{ type: 'cancelTx', stopPlaying: true }]);
+    expect(fx).toContainEqual(expect.objectContaining({ type: 'scheduleTx', tx: 3, slotStartMs: b.at(4), startOffsetS: 1.1 }));
+    expect(b.st.onAir).toBeNull();
+    // The Tx1 cut short is not a call sent: the audio layer's end report changes nothing.
+    b.send({ type: 'txEnded', slotStartMs: b.at(4), text: 'JA1KXM 9V1NE OJ11', complete: false, nowMs: b.at(4, 1) });
+    expect(b.st.next).toMatchObject({ tx: 3, slotStartMs: b.at(4), scheduled: true });
   });
 
   it('add a caller only they found to the queue, answered at once when nobody else called', () => {
@@ -782,14 +890,13 @@ describe('records', () => {
 });
 
 describe('watchdog', () => {
-  it('stops Tx after 6 min without a touch while the message stays the same', () => {
+  it('stops Tx 6 min after the last action', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
     s.run(0, 22);
-    // The first CQ is a new message: the count runs from its start, 13:14:00.5.
-    s.send({ type: 'tick', nowMs: s.at(24, 0.45) });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.05) });
     expect(s.st.txEnabled).toBe(true);
-    s.send({ type: 'tick', nowMs: s.at(24, 0.5) });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.1) });
     expect(s.st).toMatchObject({ txEnabled: false, hunt: false });
     expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Watchdog stopped Tx after 6 min' });
     expect(s.effects.at(-2)).toEqual({ type: 'cancelTx', stopPlaying: true });
@@ -805,14 +912,94 @@ describe('watchdog', () => {
     expect(s.st.txEnabled).toBe(false);
   });
 
-  it('resets when the transmitted message changes', () => {
-    const s = new Sim();
+  it('counts from the last action while the QSO moves on, unless Responses refresh watchdog is on', () => {
+    for (const refresh of [false, true]) {
+      const s = new Sim({ watchdogRefresh: refresh });
+      s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+      s.run(0, 20);
+      s.run(21, 22, { 21: ['9V1NE K1ABC FN42'] });
+      expect(s.st.watchdogFromMs, String(refresh)).toBe(refresh ? s.at(22, 0.5) : s.at(0, 0.1));
+    }
+  });
+
+  it('lets a QSO under way finish, logs it, then turns Tx off', () => {
+    const s = new Sim({ watchdogMs: 30_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'tick', nowMs: s.at(4, 1) });
+    expect(s.st).toMatchObject({ txEnabled: true, watchdogEnding: true });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'watchdog', text: 'Watchdog ends Tx after this QSO' });
+    s.run(4, 6, { 5: ['9V1NE JA1KXM RR73'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE 73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st).toMatchObject({ txEnabled: false, watchdogEnding: false, phase: 'idle' });
+    expect(s.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 0.5 min');
+  });
+
+  it('starts nothing after the QSO it let finish: no next caller, CQ or Hunt pick', () => {
+    const s = new Sim({ run: true });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
-    s.run(0, 20);
-    s.run(21, 22, { 21: ['9V1NE K1ABC FN42'] });
-    s.send({ type: 'tick', nowMs: s.at(25) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    expect(s.st.watchdogEnding).toBe(true);
+    s.run(23, 28, { 23: ['9V1NE K1ABC R-05'], 25: ['9V1NE W1AW FN31'] });
+    expect(texts(s).slice(-2)).toEqual(['22:K1ABC 9V1NE -10', '24:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st).toMatchObject({ txEnabled: false, hunt: false });
+
+    const h = new Sim({ watchdogMs: 60_000 });
+    h.send({ type: 'hunt', on: true, nowMs: h.at(0, 5) });
+    h.run(0, 2, { 1: ['CQ JA1KXM PM95'] });
+    h.run(3, 3, { 3: ['9V1NE JA1KXM -09'] });
+    h.send({ type: 'tick', nowMs: h.at(4, 6) });
+    h.run(4, 8, { 5: ['9V1NE JA1KXM RR73'], 7: ['CQ K1ABC FN42'] });
+    expect(texts(h)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10', '6:JA1KXM 9V1NE 73']);
+    expect(h.st).toMatchObject({ txEnabled: false, hunt: false, partner: null });
+  });
+
+  it('stops at once with no reply yet, or when the QSO it let finish gives up', () => {
+    const s = new Sim({ watchdogMs: 60_000 });
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 5);
+    s.send({ type: 'tick', nowMs: s.at(6, 0.3) });
+    expect(s.st).toMatchObject({ txEnabled: false, watchdogEnding: false });
+    expect(s.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 1 min');
+
+    const g = new Sim({ watchdogMs: 30_000 });
+    g.call(1, 'CQ JA1KXM PM95');
+    g.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    g.send({ type: 'tick', nowMs: g.at(4, 1) });
+    // No reply to the R-report: it repeats to the retry limit, then the call pauses.
+    g.run(4, 12);
+    expect(g.st.paused).toBe(true);
+    g.send({ type: 'tick', nowMs: g.at(13, 1) });
+    expect(g.st).toMatchObject({ txEnabled: false, watchdogEnding: false });
+    expect(g.notices().at(-1)?.text).toBe('Watchdog stopped Tx after 0.5 min');
+  });
+
+  it('a touch while the last QSO finishes restarts the count, and CQ carries on after it', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    s.send({ type: 'touch', nowMs: s.at(24, 0.3) });
+    expect(s.st).toMatchObject({ watchdogEnding: false, watchdogFromMs: s.at(24, 0.3) });
+    s.run(23, 26, { 23: ['9V1NE K1ABC R-05'] });
+    expect(texts(s).slice(-2)).toEqual(['24:K1ABC 9V1NE RR73', '26:CQ 9V1NE OJ11']);
     expect(s.st.txEnabled).toBe(true);
-    expect(s.st.watchdogFromMs).toBe(s.at(22, 0.5));
+  });
+
+  it('keeps Stop after QSO set while the last QSO finishes', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 22, { 21: ['9V1NE K1ABC FN42'] });
+    s.send({ type: 'tick', nowMs: s.at(24, 0.2) });
+    s.send({ type: 'stopAfterQso', on: true, nowMs: s.at(24, 0.3) });
+    expect(s.st).toMatchObject({ stopAfter: true, watchdogEnding: false });
+    s.run(23, 26, { 23: ['9V1NE K1ABC R-05'] });
+    expect(texts(s).at(-1)).toBe('24:K1ABC 9V1NE RR73');
+    expect(s.st.txEnabled).toBe(false);
+    expect(s.notices().at(-1)?.text).toBe('Watchdog ends Tx after this QSO');
   });
 
   it('takes any limit the operator sets', () => {

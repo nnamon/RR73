@@ -9,6 +9,7 @@ import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import type { TxNum } from '../qso/messages';
 import { STATUS } from '../qso/status';
+import type { LostMark } from '../decode/lost';
 import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
 import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
@@ -51,6 +52,8 @@ class QsoRuntime {
   notice = $state<Notice | null>(null);
   /** On air now: start and end, UTC ms. */
   onAir = $state<{ text: string; tx: TxNum; startMs: number; endMs: number } | null>(null);
+  /** Stations we called that answered another station: their rows read Lost (lib/decode/lost.ts). */
+  lostTo = $state.raw<LostMark[]>([]);
 }
 
 export const qso = new QsoRuntime();
@@ -81,6 +84,8 @@ export function configNow() {
     tailEnd: settings.tailEnd,
     huntOrder: settings.huntOrder,
     watchdogMs: settings.watchdog ? Math.round(settings.watchdogMin * 60_000) : 0,
+    watchdogRefresh: settings.watchdogRefresh,
+    huntCalls: settings.huntCalls,
     cqParity: settings.cqParity,
     cqModifier: null,
     preset: PRESET,
@@ -154,6 +159,9 @@ export function dispatch(e: SeqEvent) {
         break;
       case 'queueChanged':
         break;
+      case 'lostTo':
+        qso.lostTo = [...qso.lostTo, { call: f.call, other: f.other, slotStartMs: f.slotStartMs }].slice(-20);
+        break;
     }
   }
 }
@@ -166,12 +174,13 @@ function onTxReport(r: TxReport) {
     const hz = (n && n.slotStartMs === r.slotStartMs && n.text === r.text ? n.freqHz : null) ?? settings.txHz;
     const txn = (Object.entries(messages(qso.st)).find(([, t]) => t === r.text)?.[0] ?? '6') as unknown as TxNum;
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
-    const dur = qso.st.config.mode === 'FT8' ? 12_640 : 5_040;
+    // A transmission that started part way through ends on time.
+    const dur = (qso.st.config.mode === 'FT8' ? 12_640 : 5_040) - r.skippedS * 1000;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
     // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
     markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: hz });
     qso.sent = [{ slotStartMs: r.slotStartMs, text: r.text, freqHz: hz }, ...qso.sent.filter((s) => s.slotStartMs !== r.slotStartMs)].slice(0, 20);
-    void showTx(r.startUtcMs, r.text, qso.st.config.mode, hz);
+    void showTx(r.startUtcMs, r.text, qso.st.config.mode, hz, r.skippedS);
   } else if (r.type === 'ended') {
     qso.onAir = null;
     if (!r.complete) cutTx(now);
@@ -391,6 +400,8 @@ export function startQso() {
         tailEnd: c.tailEnd,
         huntOrder: c.huntOrder,
         watchdogMs: c.watchdogMs,
+        watchdogRefresh: c.watchdogRefresh,
+        huntCalls: c.huntCalls,
         hound: c.hound,
       };
       // The dispatch reads and writes the sequencer state; only Settings should re-run this.

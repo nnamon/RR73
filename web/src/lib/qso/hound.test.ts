@@ -164,7 +164,7 @@ describe('Hound', () => {
     const s = calling();
     s.run(1, 2, { 2: [decode('9V1NE KH7Z -10', -12, 360)] });
     expect(houndText(s.st)).toBe('Report received · −10 dB from KH1/KH7Z');
-    expect(steps(s.st).map((x) => x.label)).toEqual(['Grid', '−10', 'R−12', 'RR73', 'Logged']);
+    expect(steps(s.st).map((x) => x.label)).toEqual(['OJ11', '−10', 'R−12', 'RR73', 'Logged']);
     expect(houndText({ ...s.st, config: { ...s.st.config, hound: false } })).toBeNull();
   });
 
