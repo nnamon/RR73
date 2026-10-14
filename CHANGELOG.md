@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.14.2 · 2026-10-14
 
 - Calling CQ with Repeat CQ on, the stations waiting read Next, 2nd and so on, or Dupe, on their latest message to you in the decode list, where a CQ row has its country. The callers panel at the top of the list, which repeated those messages, is gone.
 
