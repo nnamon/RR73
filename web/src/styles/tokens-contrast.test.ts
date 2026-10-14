@@ -168,7 +168,9 @@ add('rr-slot-odd-strong', [['rr-slot-odd']], 'odd slot bars');
 add('rr-slot-odd-text', [['rr-slot-odd']], 'odd slot bars');
 
 add('rr-wf-text', [['rr-wf-bg'], ['rr-wf-tag-bg', 'rr-wf-bg']], 'waterfall times and hints');
-add('rr-wf-ruler-text', [['rr-wf-ruler']], 'waterfall ruler');
+add('rr-wf-ruler-text', [['rr-wf-ruler-veil', 'rr-wf-bg']], 'waterfall ruler');
+add('rr-slot-quiet-strong', [['rr-slot-quiet']], 'the bar for a run of empty slots');
+add('rr-slot-quiet-text', [['rr-slot-quiet']], 'the bar for a run of empty slots');
 
 describe('token contrast', () => {
   it('reads every token it checks from tokens.css', () => {

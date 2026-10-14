@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, callerItems, filterCounts, outText, slotHeader, type RowItem, type SlotDecodes } from './list';
+import { buildList, callerItems, filterCounts, outText, quietHeader, slotHeader, type ListItem, type RowItem, type SlotDecodes } from './list';
 import type { Caller } from '../qso/sequencer';
 
 const T = Date.UTC(2026, 9, 13, 13, 14, 15);
@@ -76,8 +76,8 @@ describe('buildList with our transmissions', () => {
     const r = rows(buildList([OLDER, NEWER], '9V1NE', 'all', 1500, sent));
     expect(r.map((x) => `${x.old ? 'old' : 'new'} ${x.out?.stage ?? x.row.decode.text}`)).toEqual([
       'new sent',
-      'new CQ 9M2TRX OJ02',
       'new 9V1NE JA1KXM PM95',
+      'new CQ 9M2TRX OJ02',
       'new JH1RRT YB0AZK RR73',
       'old CQ K1ABC FN42',
       'old sent',
@@ -89,12 +89,12 @@ describe('buildList with our transmissions', () => {
 });
 
 describe('buildList', () => {
-  it('puts the newest slot first, each under its header, with the rows marked', () => {
+  it('puts the newest slot first, each under its header, with the rows marked and messages to you first', () => {
     const items = buildList([OLDER, NEWER], '9V1NE', 'all', 1500);
     expect(items.map((i) => (i.kind === 'header' ? i.text.slice(0, 12) : `${i.row.mark ?? '-'} ${i.row.decode.text}`))).toEqual([
       '13:14:15 UTC',
-      'cq CQ 9M2TRX OJ02',
       'me 9V1NE JA1KXM PM95',
+      'cq CQ 9M2TRX OJ02',
       '- JH1RRT YB0AZK RR73',
       '13:14:00 UTC',
       'cq CQ K1ABC FN42',
@@ -122,6 +122,124 @@ describe('buildList', () => {
   });
 });
 
+describe('buildList with messages to you', () => {
+  const rows = (items: ListItem[]) => items.filter((i): i is RowItem => i.kind === 'row');
+  const slot = (startUtcMs: number, texts: string[]): SlotDecodes => ({ startUtcMs, mode: 'FT8', decodes: texts.map((t, i) => d(t, 500 + 100 * i)), ms: 40 });
+
+  it('puts messages to you first within their slot, the rest in the decoder\'s order', () => {
+    const s = slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09', 'JA1KXM 9V1NE R-14', 'JH1RRT YB0AZK RR73', '9V1NE/P ZL1TQK RF73', 'CQ 9V1NE OJ11']);
+    const r = rows(buildList([s], 'VK3/9V1NE', 'all', 1500));
+    expect(r.map((x) => `${x.toYou ? 'to you' : '-'} ${x.row.decode.text}`)).toEqual([
+      'to you 9V1NE JA1KXM -09',
+      'to you 9V1NE/P ZL1TQK RF73',
+      '- CQ K1ABC FN42',
+      '- JA1KXM 9V1NE R-14',
+      '- JH1RRT YB0AZK RR73',
+      '- CQ 9V1NE OJ11',
+    ]);
+    // A row keeps the id of its place in the decoder's order.
+    expect(r.map((x) => x.id)).toEqual([1, 4, 0, 2, 3, 5].map((i) => `${T}-${i}`));
+  });
+
+  it('sorts within each slot only, in every filter that shows them', () => {
+    const items = buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09']), slot(T - 15_000, ['CQ VJ6X OF78', '9V1NE VJ6X -12'])], '9V1NE', 'all', 1500);
+    expect(items.map((i) => (i.kind === 'header' ? i.time : i.row.decode.text))).toEqual(['13:14:15', '9V1NE JA1KXM -09', 'CQ K1ABC FN42', '13:14:00', '9V1NE VJ6X -12', 'CQ VJ6X OF78']);
+    expect(rows(buildList([slot(T, ['JA1KXM 9V1NE R-14', '9V1NE JA1KXM -09'])], '9V1NE', 'me', 1500)).map((x) => x.row.decode.text)).toEqual(['9V1NE JA1KXM -09', 'JA1KXM 9V1NE R-14']);
+    expect(rows(buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09'])], '9V1NE', 'rx', 600))[0]).toMatchObject({ toYou: true });
+  });
+
+  it('marks nothing without a callsign, and never our own rows', () => {
+    expect(rows(buildList([slot(T, ['CQ K1ABC FN42', '9V1NE JA1KXM -09'])], '', 'all', 1500)).some((x) => x.toYou)).toBe(false);
+    const sent = [{ slotStartMs: T + 15_000, text: 'JA1KXM 9V1NE R-14', freqHz: 1500 }];
+    expect(rows(buildList([], '9V1NE', 'all', 1500, sent))[0].toYou).toBeUndefined();
+  });
+});
+
+describe('buildList with runs of empty slots', () => {
+  const empty = (startUtcMs: number, mode: 'FT8' | 'FT4' = 'FT8'): SlotDecodes => ({ startUtcMs, mode, decodes: [], ms: 30 });
+  const full = (startUtcMs: number, mode: 'FT8' | 'FT4' = 'FT8'): SlotDecodes => ({ startUtcMs, mode, decodes: [d('CQ K1ABC FN42', 700)], ms: 30 });
+  const bars = (items: ListItem[]) => items.map((i) => (i.kind === 'header' ? `${i.time}${i.until ? ` to ${i.until}` : ''} ${i.detail}` : 'row'));
+  const S = 15_000;
+
+  it('gives a run one bar with its span, and no parity', () => {
+    expect(quietHeader(T - 5 * S, T)).toEqual({ kind: 'header', id: `hq${T - 5 * S}`, time: '13:13:00', until: '13:14:15', detail: 'no decodes', parity: null, text: '13:13:00 to 13:14:15 UTC · no decodes' });
+  });
+
+  it('keeps a single empty slot as its own bar', () => {
+    expect(bars(buildList([full(T), empty(T - S), full(T - 2 * S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 1 decode', 'row', '13:14:00 0 decodes', '13:13:45 1 decode', 'row']);
+  });
+
+  it('collapses runs between slots with decodes', () => {
+    const slots = [full(T), empty(T - S), empty(T - 2 * S), empty(T - 3 * S), full(T - 4 * S), empty(T - 5 * S), empty(T - 6 * S), full(T - 7 * S)];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500))).toEqual([
+      '13:14:15 1 decode',
+      'row',
+      '13:13:30 to 13:14:00 no decodes',
+      '13:13:15 1 decode',
+      'row',
+      '13:12:45 to 13:13:00 no decodes',
+      '13:12:30 1 decode',
+      'row',
+    ]);
+  });
+
+  it('collapses a run at the top and one at the bottom of the list', () => {
+    const slots = [empty(T + 2 * S), empty(T + S), full(T), empty(T - S), empty(T - 2 * S)];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500))).toEqual(['13:14:30 to 13:14:45 no decodes', '13:14:15 1 decode', 'row', '13:13:45 to 13:14:00 no decodes']);
+  });
+
+  it('shows one bar when every slot is empty', () => {
+    const items = buildList([0, 1, 2, 3, 4, 5].map((i) => empty(T - i * S)), '9V1NE', 'all', 1500);
+    expect(bars(items)).toEqual(['13:13:00 to 13:14:15 no decodes']);
+    expect(items[0]).toMatchObject({ parity: null, id: `hq${T - 5 * S}` });
+  });
+
+  it('collapses FT4 slots 7.5 s apart', () => {
+    const F = 7_500;
+    const slots = [full(T + 3 * F, 'FT4'), empty(T + 2 * F, 'FT4'), empty(T + F, 'FT4'), empty(T, 'FT4'), full(T - F, 'FT4')];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500, [], 'FT4'))).toEqual(['13:14:37 1 decode', 'row', '13:14:15 to 13:14:30 no decodes', '13:14:07 1 decode', 'row']);
+    // 15 s apart in FT4 is a gap.
+    expect(bars(buildList([empty(T + 2 * F, 'FT4'), empty(T, 'FT4')], '9V1NE', 'all', 1500, [], 'FT4'))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes']);
+  });
+
+  it('ends a run at a gap in time, a skipped slot or a change of mode', () => {
+    expect(bars(buildList([empty(T), empty(T - 2 * S), empty(T - 3 * S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 0 decodes', '13:13:30 to 13:13:45 no decodes']);
+    const skipped: SlotDecodes = { ...empty(T - S), skipped: true };
+    expect(bars(buildList([empty(T), skipped, empty(T - 2 * S), empty(T - 3 * S)], '9V1NE', 'all', 1500))).toEqual([
+      '13:14:15 0 decodes',
+      '13:14:00 not decoded: the decoder was busy',
+      '13:13:30 to 13:13:45 no decodes',
+    ]);
+    expect(bars(buildList([empty(T, 'FT4'), empty(T - S)], '9V1NE', 'all', 1500))).toEqual(['13:14:15 0 decodes', '13:14:00 0 decodes']);
+  });
+
+  it('never folds a slot holding our own row, which splits the run', () => {
+    // Sent in T - 2S, with the slots on both sides empty.
+    const slots = [empty(T + S), empty(T), empty(T - S), empty(T - 3 * S), empty(T - 4 * S)];
+    const sent = [{ slotStartMs: T - 2 * S, text: 'CQ 9V1NE OJ11', freqHz: 1500 }];
+    expect(bars(buildList(slots, '9V1NE', 'all', 1500, sent))).toEqual(['13:14:00 to 13:14:30 no decodes', '13:13:45 sent', 'row', '13:13:15 to 13:13:30 no decodes']);
+    // An empty slot at the start of our own row keeps its bar; so do Next and Sending.
+    const ours = [empty(T + S), empty(T), empty(T - S)];
+    expect(bars(buildList(ours, '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes', '13:14:15 sent', 'row', '13:14:00 0 decodes']);
+    const next = { slotStartMs: T, startMs: T + 500, text: 'CQ 9V1NE OJ11', freqHz: 1500 };
+    expect(bars(buildList(ours, '9V1NE', 'all', 1500, [], 'FT8', undefined, { next }))).toEqual(['13:14:30 0 decodes', '13:14:15 0 decodes', '13:14:15 next', 'row', '13:14:00 0 decodes']);
+    const onAir = { slotStartMs: T, startMs: T + 500, endMs: T + 13_140 };
+    const sending = buildList(ours, '9V1NE', 'all', 1500, [{ slotStartMs: T, text: 'CQ 9V1NE OJ11', freqHz: 1500 }], 'FT8', undefined, { onAir });
+    expect(bars(sending)).toContain('13:14:15 sending');
+    expect(bars(sending).filter((b) => b.includes(' to '))).toEqual([]);
+  });
+
+  it('leaves empty slots out with a filter, as before', () => {
+    expect(buildList([empty(T), empty(T - S), full(T - 2 * S)], '9V1NE', 'cq', 1500).filter((i) => i.kind === 'header')).toHaveLength(1);
+  });
+
+  it('gives every item a unique id', () => {
+    const slots = [empty(T + 2 * S), empty(T + S), full(T), empty(T - S), empty(T - 2 * S), full(T - 3 * S)];
+    const items = buildList(slots, '9V1NE', 'all', 1500, [{ slotStartMs: T - 4 * S, text: 'CQ 9V1NE OJ11', freqHz: 1500 }]);
+    expect(new Set(items.map((i) => i.id)).size).toBe(items.length);
+  });
+});
+
 describe('callerItems', () => {
   const caller = (call: string, over: Partial<Caller> = {}): Caller => ({
     call,
@@ -145,7 +263,7 @@ describe('callerItems', () => {
     const working = { call: 'K1ABC', grid: 'FN42', snrDb: -12, dtS: 0.2, freqHz: 2341 };
     const items = callerItems(slots, '9V1NE', 'FT8', working, [caller('ZL1TQK'), caller('DU1XYZ', { grid: 'PK04', heardMs: T - 30_000 })], false);
     expect(show(items)).toEqual(['[13:14:15 callers, in answering order]', '9V1NE K1ABC R-15 Working', '9V1NE ZL1TQK RF73 Next', '9V1NE DU1XYZ PK04 3rd']);
-    expect(items.slice(1).every((i) => i.kind === 'row' && i.row.mark === 'me')).toBe(true);
+    expect(items.slice(1).every((i) => i.kind === 'row' && i.row.mark === 'me' && i.toYou)).toBe(true);
   });
 
   it('marks dupes and skips them in the order unless dupes are worked', () => {

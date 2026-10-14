@@ -756,9 +756,9 @@ class Machine {
 
   /**
    * The station we call, before it has answered us, sends a report, an R-report, RR73 or 73 to
-   * another station: calling stops. With tail-ending on, one more call goes out in the next slot
-   * of our parity once they send RR73 or 73 to that station (or call CQ). Returns true when this
-   * decides the slot.
+   * another station: calling stops. Hunt moves on to the next CQ at once. Called by hand with
+   * tail-ending on, one more call goes out in the next slot of our parity once they send RR73 or
+   * 73 to that station (or call CQ). Returns true when this decides the slot.
    */
   lostStation(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean): boolean {
     const st = this.st;
@@ -774,7 +774,8 @@ class Machine {
       const other = bare(toOther.to!);
       st.lost = { other, state: 'watching', sinceMs: e.slotStartMs };
       this.unplan();
-      if (!this.cfg.tailEnd) {
+      // Hunt never waits for a lost station: another CQ is worth more than a tail-end call.
+      if (!this.cfg.tailEnd || st.hunt) {
         this.notice('lost', STATUS.answered(call, other));
         this.drop(PAUSED.answered(other), e.nowMs, false);
         return true;

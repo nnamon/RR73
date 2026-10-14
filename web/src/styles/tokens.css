@@ -249,8 +249,8 @@
   --rr-wf-tx: #FF4245;
   --rr-wf-rx-band: rgb(48 209 88 / 20%);
   --rr-wf-tx-band: rgb(255 66 69 / 18%);
-  --rr-wf-ruler: #000000;
-  --rr-wf-ruler-rule: rgb(255 255 255 / 22%);
+  /* The ruler over the bottom of the picture: the waterfall's background, so signals show through dimmed. */
+  --rr-wf-ruler-veil: rgb(4 6 10 / 70%);
   --rr-wf-ruler-text: rgb(255 255 255 / 90%);
   --rr-wf-tick: rgb(255 255 255 / 55%);
   --rr-wf-tick-major: rgb(255 255 255 / 90%);
@@ -261,6 +261,27 @@
   --rr-wf-c4: #8AF0C8;
   --rr-wf-c5: #FFF060;
   --rr-wf-c6: #FFF8E6;
+
+  /*
+   * Decode list: messages to you, the focus during a QSO and runs of empty slots. A message to
+   * you has a solid red edge and heavy text. During a QSO, rows unrelated to the station being
+   * worked show at --rr-focus-dim (label text 2.6:1 on white); with Increase Contrast at 0.6,
+   * which keeps it at 5:1. A run of slots with no decodes has one grey bar, its text 5.3:1 or
+   * more in both themes.
+   */
+  --rr-weight-heavy: 800;
+  --rr-to-you-edge: var(--rr-tx);
+  --rr-focus-dim: 0.4;
+  --rr-slot-quiet: light-dark(#F2F2F7, #1C1C1E);
+  --rr-slot-quiet-rule: var(--rr-sep-strong);
+  --rr-slot-quiet-strong: var(--rr-label2);
+  --rr-slot-quiet-text: var(--rr-label3);
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --rr-focus-dim: 0.6;
+  }
 }
 
 /*
