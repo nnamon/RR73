@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The first step of a QSO you answer shows the grid your call sends, "OJ11", where it said Grid. Every step now shows what went out or came in.
+- A tap or a touch and hold no longer selects text or opens the copy menu anywhere in the app. Text fields, the message editor and the timing report keep selection.
+
 ## 0.12.4 · 2026-10-14
 
 - Clear decodes in ••• empties the FT8 and FT4 decode list, and Clear spots the WSPR spot list. A QSO under way, its next transmission and Hunt carry on, and new decodes list as usual.

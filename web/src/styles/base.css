@@ -37,6 +37,23 @@ body {
   font-variant-numeric: tabular-nums;
   -webkit-font-smoothing: antialiased;
   -webkit-tap-highlight-color: transparent;
+
+  /*
+   * An app, not a page: a tap or a touch and hold never selects text or opens the copy menu.
+   * iOS Safari needs the prefixed property; the unprefixed one alone does nothing there.
+   */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* Text that is typed or copied keeps selection: fields, the message editor, the timing report. */
+input,
+textarea,
+[contenteditable='true'] {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
 }
 
 h1,
