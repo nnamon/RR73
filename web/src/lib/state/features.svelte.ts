@@ -13,6 +13,7 @@
 
 import { untrack } from 'svelte';
 import { settings, updateSettings, type FeatureId, type Features } from './settings.svelte';
+import { heardYou } from './heard.svelte';
 
 export { FEATURE_IDS, FEATURES_OFF, type FeatureId, type Features } from './settings.svelte';
 
@@ -37,9 +38,9 @@ export function setFeature(id: FeatureId, on: boolean): Promise<void> {
   return updateSettings({ features: { ...settings.features, [id]: on } });
 }
 
-/** Spots shows in Operate's top bar while activations or either spot source is on. */
+/** Spots shows in Operate's top bar while activations, either spot source or Heard you is on. */
 export function spotsShown(f: Readonly<Features> = features): boolean {
-  return f.activations || f.potaSpots || f.clusterSpots;
+  return f.activations || f.potaSpots || f.clusterSpots || heardYou.on;
 }
 
 /**

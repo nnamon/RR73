@@ -3,7 +3,8 @@
    * Spots, with the parts turned on in Settings › Optional features. The activation sits at the
    * top: a Start activation row when none runs, else the running activation. Spots from POTA and
    * the DX cluster follow below, polled while this screen is shown. Go on a spot chases its
-   * station (lib/state/spots.svelte.ts). The practice band pauses spots.
+   * station (lib/state/spots.svelte.ts). The practice band pauses spots. Heard you, turned on in
+   * Settings › PSK Reporter, lists who reported the operator's signal (ui/HeardList.svelte).
    *
    * Beside the list (compact height and regular width) Spots follows the Log: the list on the
    * left, the running activation in the detail pane on the right. Without activations the spot
@@ -19,6 +20,8 @@
   import { log } from '../lib/log/log.svelte';
   import { features } from '../lib/state/features.svelte';
   import SpotList from '../ui/SpotList.svelte';
+  import HeardList from '../ui/HeardList.svelte';
+  import { heardYou } from '../lib/state/heard.svelte';
   import { spotFeed } from '../lib/spots/feed.svelte';
   import { isNewSpot, spotBadge, spotLog } from '../lib/spots/log';
   import { goTarget, goToSpot, spots } from '../lib/state/spots.svelte';
@@ -83,6 +86,7 @@
       {/if}
     </div>
   {/if}
+  {#if heardYou.on}<HeardList />{/if}
 {/snippet}
 
 {#if split()}

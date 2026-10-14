@@ -41,7 +41,7 @@ const SCREENSHOT_ONLY = new Set(['operate', 'operate-running', 'settings-feature
 for (const theme of ['light', 'dark'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, SCREENSHOT_ONLY.has(s.name) ? ci(theme) : ci(theme, 375), async ({ page }, info) => {
-      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk);
+      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk, s.heard);
       await expect(page.getByRole('heading', { level: 1, name: s.heading })).toBeAttached();
       await checkLayout(page);
       await shot(page, info, SHOTS, `${theme}-${s.name}`);

@@ -2,7 +2,9 @@
   /**
    * Settings › PSK Reporter: reports the stations the radio decodes, through the relay
    * (docs/design/qsp.md, PSK Reporter). Off by default. The status line says what holds reports
-   * back, or what went last. The relay's /about says whether it reports to PSK Reporter.
+   * back, or what went last. The relay's /about says whether it reports to PSK Reporter. Heard
+   * you, also off by default, lists on Spots who reported the operator's signal, live from PSK
+   * Reporter's MQTT feed with no relay.
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -11,6 +13,9 @@
   import { relay, relayName } from '../lib/state/relay.svelte';
   import { pskHold, pskReporter, pskStatus, updatePskReporter } from '../lib/state/pskreporter.svelte';
   import { qspAbout } from '../lib/relay/qsp';
+  import { heard, heardYou, setHeardYou } from '../lib/state/heard.svelte';
+  import { practice } from '../lib/state/practice.svelte';
+  import { settings } from '../lib/state/settings.svelte';
 
   let offered = $state<boolean | null>(null);
   $effect(() => {
@@ -48,6 +53,16 @@
     if (pskStatus.error) return pskStatus.error;
     if (pskStatus.atMs !== null) return `Sent ${pskStatus.spots} ${pskStatus.spots === 1 ? 'spot' : 'spots'}, last at ${utcHm(pskStatus.atMs)} UTC`;
     return 'Waiting for decodes';
+  });
+
+  const heardText = $derived.by(() => {
+    if (!heardYou.on) return '';
+    if (!settings.callsign.trim()) return 'Needs your callsign';
+    if (practice.on) return 'Paused while the practice band is on';
+    if (heard.feed === 'live') return heard.list.length ? `Live · ${heard.list.length} in the last 30 min` : 'Live';
+    if (heard.feed === 'refused') return 'PSK Reporter’s feed refused the connection';
+    if (heard.feed === 'retrying') return 'Feed unreachable. Trying again.';
+    return 'Connecting';
   });
 </script>
 
@@ -90,6 +105,19 @@
       </a>
     </div>
     <p class="section-foot">PSK Reporter shows your antenna on its map. The relay reports every 5 min.</p>
+  </div>
+
+  <div class="section">
+    <div class="group">
+      <label class="row">
+        <span class="row-main">
+          <span class="row-title">Show who heard you</span>
+          <span class="row-sub">On Spots, live from PSK Reporter</span>
+        </span>
+        <input type="checkbox" role="switch" class="switch" checked={heardYou.on} onchange={(e) => void setHeardYou(e.currentTarget.checked)} />
+      </label>
+    </div>
+    <p class="section-foot" role="status">{heardText || 'Your phone connects to PSK Reporter’s feed directly. No relay is needed.'}</p>
   </div>
 </section>
 

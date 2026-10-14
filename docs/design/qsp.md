@@ -18,7 +18,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 | --- | --- | --- |
 | KiwiSDR receivers, other web SDR kinds later | QSP | KiwiSDRs serve plain `ws://`; Safari refuses it from the https app. |
 | PSK Reporter, reports | QSP | IPFIX over UDP to port 4739; a web page cannot send UDP. |
-| PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). The feed pushes reports to the page. Topic names and terms of use: Unverified. |
+| PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). The feed pushes reports to the page. |
 | WSPRnet | QSP | An upload can go out from the page, but its answer cannot be read. |
 | Wavelog, Cloudlog | Direct | The operator's own server. Cloudlog is not scheduled. |
 | QRZ XML, HamQTH | Direct | Open to browsers. Not scheduled. |
@@ -74,7 +74,7 @@ Time comes from QSP's clock, which its host keeps by NTP. A receiver's GPS time 
 Each part is built against the real service and tested against a small stand-in. QSP has no mock mode.
 
 1. QSP with KiwiSDR receive, `/docs`, and Settings › Relay and Settings › Web SDR in the app. Shipped in 0.16.0.
-2. PSK Reporter: reports through QSP (built), who heard you from the MQTT feed.
+2. PSK Reporter: reports through QSP, and who heard you from the MQTT feed. Built.
 3. WSPRnet uploads.
 
 ## PSK Reporter
@@ -98,6 +98,15 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 QSP keeps one report stream per receiving station: its own observation domain, sequence number and timer. All streams send from one UDP socket. `POST /v1/pskreporter/receptions` takes a station and up to 500 spots and answers what was taken, what repeated a recent report, and what was refused. `GET /v1/pskreporter/status?callsign=` shows what waits and what went.
 
 The app reports only what the operator's radio hears. Decodes from the practice band or a web SDR are left out: their signals or antenna belong to someone else. It reports FT8 and FT4, the sender of each message once per band and slot, with the grid the message carried. Hashed callsigns are left out. It sends to QSP at most once a minute, 500 spots at most, and keeps up to 1000 while the relay is unreachable. A refusal from the relay drops them. Settings › PSK Reporter turns reports on, off by default, and takes the antenna.
+
+## Who heard you
+
+The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https://www.mqtt.pskreporter.info, read 15 October 2026). The feed is run by Tom M0LTE with PSK Reporter's permission. Its page invites any client, asks for no account, and lists apps that use it; it publishes no other terms.
+
+- Port 1886 is MQTT over WebSocket and TLS, for pages on https. RR73's client (`lib/pskreporter/mqtt.ts`) speaks MQTT 3.1.1: a clean session, one subscription at QoS 0, a ping every 50 s.
+- Topics are `pskr/filter/v2/{band}/{mode}/{tx}/{rx}/{tx_grid}/{rx_grid}/{tx_dxcc}/{rx_dxcc}`; RR73 subscribes to `pskr/filter/v2/+/+/{callsign}/#`. A callsign's `/` is `.` in a topic: 7 of 161 messages sampled on 15 October showed it, such as `AI4UC/T` as `AI4UC.T`.
+- Each message is one spot as JSON. RR73 uses the receiver (`rc`, `rl`), band, mode, SNR (`rp`, which can be null) and time: `t_tx`, the transmission's start, when the feed gives it, else `t`.
+- Spots lists the reports of the last 30 min, one per receiver and band. Settings › PSK Reporter turns it on, off by default. The feed reconnects after 5 s, doubling to 5 min, and closes while the practice band is on.
 
 ## WSPRnet
 

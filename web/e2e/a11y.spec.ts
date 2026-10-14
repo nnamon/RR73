@@ -16,7 +16,7 @@ const PAGES = SCREENS.filter((s) => s.name !== 'settings-features');
 for (const theme of ['light', 'dark'] as const) {
   for (const s of PAGES) {
     test(`${s.name} in ${theme}`, async ({ page }) => {
-      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk);
+      await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk, s.heard);
       expect(await axe(page)).toEqual([]);
     });
   }

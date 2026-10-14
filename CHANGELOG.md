@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Spots lists the stations that heard you in the last 30 min, live from PSK Reporter's MQTT feed: callsign, grid, distance, band, SNR and time. Turn it on in Settings › PSK Reporter. No relay is needed.
 - PSK Reporter reports carry the time each station was decoded. They carried the slot's start, which PSK Reporter and its MQTT feed read as a decode time one slot early.
 
 ## 0.17.0 · 2026-10-14

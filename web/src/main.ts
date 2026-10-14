@@ -10,6 +10,7 @@ import { installNetworkGuard } from './lib/practice/guard';
 import { linkSpotFeed } from './lib/state/spots.svelte';
 import { initRelay, loadRelay } from './lib/state/relay.svelte';
 import { initPskReporter, loadPskReporter } from './lib/state/pskreporter.svelte';
+import { initHeardYou, loadHeardYou } from './lib/state/heard.svelte';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
@@ -39,12 +40,14 @@ window.addEventListener(
 const practiceLoaded = loadPractice();
 const relayLoaded = loadRelay();
 const pskLoaded = loadPskReporter();
-void Promise.race([Promise.all([loadSettings(), practiceLoaded, relayLoaded, pskLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
+const heardLoaded = loadHeardYou();
+void Promise.race([Promise.all([loadSettings(), practiceLoaded, relayLoaded, pskLoaded, heardLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
   mount(App, { target: document.getElementById('app')! });
   void Promise.all([practiceLoaded, relayLoaded])
     .then(() => initPractice())
     .then(() => initRelay())
     .then(() => initPskReporter())
+    .then(() => initHeardYou())
     .catch(() => undefined)
     .finally(() => void loadLog());
 });
