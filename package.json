@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "lint:copy": "node tools/lint-copy/lint-copy.mjs",
-    "test:tools": "node --test tools/lint-copy/lint-copy.test.mjs tools/release/version.test.mjs",
-    "check:version": "node tools/release/version.mjs check"
+    "test:tools": "node --test tools/lint-copy/lint-copy.test.mjs tools/release/version.test.mjs 'tools/refdata/*.test.mjs'",
+    "check:version": "node tools/release/version.mjs check",
+    "refdata": "node tools/refdata/build.mjs"
   }
 }

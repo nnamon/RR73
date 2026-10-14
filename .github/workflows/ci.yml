@@ -155,15 +155,66 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
 
+  refdata:
+    name: Reference data
+    runs-on: ubuntu-latest
+    container: node:24-slim
+    # actions: read lists the repository's caches, to find whether any run asked SOTA today.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Today's date, UTC
+        id: day
+        run: echo "day=$(date -u +%Y-%m-%d)" >> "$GITHUB_OUTPUT"
+      # The newest cache this run can read: today's or an earlier day's, from this branch or main.
+      - uses: actions/cache/restore@v4
+        id: restore
+        with:
+          path: .refdata-cache
+          key: refdata-${{ steps.day.outputs.day }}
+          restore-keys: refdata-
+      # Main asks the sources, each once a day; other refs build from the cache they restored.
+      # SOTA is asked once a day across all branches (tools/refdata/ci-plan.mjs).
+      - name: Choose the sources to ask
+        id: plan
+        run: node tools/refdata/ci-plan.mjs
+        env:
+          DAY: ${{ steps.day.outputs.day }}
+          RESTORED: ${{ steps.restore.outputs.cache-matched-key }}
+          GITHUB_TOKEN: ${{ github.token }}
+      # Saved before the request, so a run cancelled or failed during the download still counts.
+      - name: Record today's SOTA request
+        if: steps.plan.outputs.sota == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .refdata-sota
+          key: sota-asked-${{ steps.day.outputs.day }}
+      - name: Build reference data
+        run: node tools/refdata/build.mjs --out web/public/data --cache .refdata-cache --ask "${{ steps.plan.outputs.ask }}"
+      # Also after a failure: the cache records each request, and a later run that day asks again
+      # only for sources it holds no record of.
+      - name: Keep the downloads
+        if: always() && steps.plan.outputs.ask != '' && steps.restore.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .refdata-cache
+          key: refdata-${{ steps.day.outputs.day }}
+      - uses: actions/upload-artifact@v4
+        with: { name: refdata, path: web/public/data }
+
   web:
     name: Web
     runs-on: ubuntu-latest
-    needs: wasm
+    needs: [wasm, refdata]
     container: node:24-slim
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
+      - uses: actions/download-artifact@v4
+        with: { name: refdata, path: web/public/data }
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
       - name: Type check
@@ -176,6 +227,8 @@ jobs:
         run: npm --prefix web run build:pages
         env:
           GITHUB_SHA: ${{ github.sha }}
+      - name: Check the reference data in the build
+        run: node tools/refdata/verify-dist.mjs web/dist
       - uses: actions/upload-pages-artifact@v3
         if: startsWith(github.ref, 'refs/tags/v')
         with: { path: web/dist }
@@ -183,12 +236,14 @@ jobs:
   e2e:
     name: End-to-end
     runs-on: ubuntu-latest
-    needs: wasm
+    needs: [wasm, refdata]
     container: mcr.microsoft.com/playwright:v1.63.0-noble
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with: { name: wasm-pkg, path: web/src/wasm/pkg }
+      - uses: actions/download-artifact@v4
+        with: { name: refdata, path: web/public/data }
       - name: Install
         run: npm --prefix web ci --no-audit --no-fund
       # The same fonts as the local e2e image (tools/e2e/Dockerfile), so text measures the same.

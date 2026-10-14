@@ -1,0 +1,9 @@
+SOTA Summits List (Date=01/10/2026)
+SummitCode,AssociationName,RegionName,SummitName,AltM,AltFt,GridRef1,GridRef2,Longitude,Latitude,Points,BonusPoints,ValidFrom,ValidTo,ActivationCount,ActivationDate,ActivationCall
+XA/AA-001,Sample Association,Alpha Hills,"Alpha Peak",1200,3937,10.0,50.0,10.0,50.0,8,3,01/01/2010,31/12/2099,12,05/09/2026,XA1AA
+XA/AA-002,Sample Association,Alpha Hills,"Beta Hill, North Top",650.4,2134,10.1,50.05,10.1,50.05,2,0,01/01/2010,31/12/2099,0,,
+XA/AA-003,Sample Association,Alpha Hills,"Retired Knoll",420,1378,10.05,50.02,10.05,50.02,1,0,01/01/2010,31/12/2020,3,01/06/2019,XA2BB
+XA/BB-001,Sample Association,Bravo Range,"Future Fell",900,2953,11.0,50.5,11.0,50.5,6,0,01/01/2030,31/12/2099,0,,
+XA/BB-002,Sample Association,Bravo Range,"Unplaced Mound",300,984,,,,,1,0,01/01/2010,31/12/2099,0,,
+XB/CC-001,Other Association,Charlie Coast,"Charlie Point",1500,4921,-122.0,45.0,-122.0,45.0,10,3,01/07/2015,31/12/2099,40,02/10/2026,XB3CC
+NOT-A-CODE,Other Association,Charlie Coast,"Bad Row",1,3,0,0,0,0,1,0,01/01/2010,31/12/2099,0,,

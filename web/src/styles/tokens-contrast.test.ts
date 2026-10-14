@@ -136,6 +136,9 @@ add('rr-label2', [['rr-fill3', ...BG]], 'the search placeholder, segment counts'
 add('rr-label2', [['rr-fill', ...PLAIN]], 'the Next tag');
 
 add('rr-label3', GROUNDS, 'placeholders, SNR and frequency in decodes, step labels');
+// On a tint, an older slot or a selected row the country takes the row's other text colours,
+// which lib/decode/highlight-contrast.test.ts and the selected decode above check.
+add('rr-label2', [PLAIN], 'the country on a CQ row');
 add('rr-chev', [SURFACE, CARD], 'chevrons', 3);
 
 add('rr-accent', GROUNDS, 'links, Back, bar buttons, row actions');

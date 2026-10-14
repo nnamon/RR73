@@ -81,7 +81,7 @@ export default defineConfig({
     // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
     // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
     { name: 'decode', testMatch: /decode\.spec/, use: { ...desktop, ...ft8Mic } },
-    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list)\.spec/, use: desktop },
+    { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list|country)\.spec/, use: desktop },
     // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
     { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
     // Layout in the light theme: geometry is the same in dark, where only colours change

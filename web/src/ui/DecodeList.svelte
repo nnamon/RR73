@@ -21,6 +21,10 @@
    * A message to you has a solid red edge and heavier text, over its decode colour. During a QSO,
    * rows unrelated to the station being worked dim (lib/decode/focus.ts); a selected row does not.
    *
+   * A CQ row names the caller's country before the numbers ("Australia"), once the country file
+   * has loaded. The country gives way to the message: it ends in an ellipsis when short of room
+   * and drops out when there is none.
+   *
    * Our own transmission is a row of its own: Next with a countdown to its slot (grey), Sending
    * with a red progress line while on air, then Sent in its slot.
    *
@@ -29,10 +33,12 @@
    * the rows without actions, for the example in Settings.
    */
   import { dt, snr } from '../lib/clock/format';
+  import { cqCountry } from '../lib/decode/country';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
   import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
   import { outText, type RowItem } from '../lib/decode/list';
   import { splitKey, type DecodeRowData, type TextParts } from '../lib/decode/marking';
+  import type { DxccIndex } from '../lib/reference';
 
   let {
     items,
@@ -41,6 +47,7 @@
     highlights = defaultHighlights(),
     preview = false,
     nowMs = 0,
+    countries = null,
     onselect,
     oncall,
     ondetail,
@@ -53,6 +60,8 @@
     preview?: boolean;
     /** Now, UTC ms: the Next row's countdown and the Sending row's progress. */
     nowMs?: number;
+    /** The country file, for the caller's country on CQ rows; null until it has loaded. */
+    countries?: DxccIndex | null;
     onselect?: (item: RowItem) => void;
     oncall?: (item: RowItem) => void;
     ondetail?: (item: RowItem) => void;
@@ -67,7 +76,7 @@
 
   type Out = ReturnType<typeof outText>;
 
-  function spoken(item: RowItem, o: Out | null): string {
+  function spoken(item: RowItem, o: Out | null, country: string | null = null): string {
     const r = item.row;
     const parts = [
       o ? o.tag.replace(' · :', ', :') : '',
@@ -76,6 +85,7 @@
       r.decode.text,
       // Our own rows say Next, Sending or Sent in their tag.
       r.mark && !item.out ? MARK_TEXT[r.mark] : '',
+      country ?? '',
       r.hl && !SAID.includes(r.hl) ? category(r.hl).spoken : '',
       r.ink ? category(r.ink).spoken : '',
       r.badge?.text ?? '',
@@ -162,7 +172,7 @@
   }
 </script>
 
-{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean)}
+{#snippet cells(r: DecodeRowData, t: TextParts, o: Out | null, next: boolean, country: string | null)}
   {#if o}<span class="c-tag" aria-hidden="true">{o.tag}</span>{/if}
   <span class="c-msg" aria-hidden="true">{t.before}{#if t.bold}<b>{t.bold}</b>{/if}{t.after}</span>
   {#if r.badge}
@@ -174,6 +184,7 @@
     <span class="c-num" aria-hidden="true"><span class={next ? 'c-when' : 'c-hz'}>{o.meta}</span></span>
     {#if o.progress !== null}<i class="prog" style:width="{o.progress * 100}%" aria-hidden="true"></i>{/if}
   {:else}
+    {#if country}<span class="c-country" aria-hidden="true"><span>{country}</span></span>{/if}
     <span class="c-num" aria-hidden="true"><span class="c-db">{snr(r.decode.snr_db)} dB</span> · <span class="c-hz">{Math.round(r.decode.freq_hz)} Hz</span></span>
   {/if}
 {/snippet}
@@ -200,6 +211,7 @@
       {@const ink = inkOf(item)}
       {@const o = item.out ? outText(item.out, item.slotStartMs, r.decode.freq_hz, nowMs) : null}
       {@const next = item.out?.stage === 'next'}
+      {@const country = item.out ? null : cqCountry(r, countries)}
       <li class="dr-item">
         {#if preview || next}
           <div
@@ -212,7 +224,7 @@
             data-testid={next ? 'next-row' : undefined}
           >
             <span class="visually-hidden">{spoken(item, o)}</span>
-            {@render cells(r, t, o, next)}
+            {@render cells(r, t, o, next, country)}
           </div>
         {:else}
           <button
@@ -223,7 +235,7 @@
             style:--rr-ink-dark={ink?.dark}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
-            aria-label={spoken(item, o)}
+            aria-label={spoken(item, o, country)}
             aria-pressed={selectedId === item.id}
             onpointerdown={(e) => down(e, item)}
             onpointermove={move}
@@ -232,7 +244,7 @@
             oncontextmenu={(e) => e.preventDefault()}
             onclick={(e) => click(e, item)}
           >
-            {@render cells(r, t, o, false)}
+            {@render cells(r, t, o, false, country)}
           </button>
         {/if}
       </li>
@@ -545,5 +557,61 @@
   .badge.muted {
     background: var(--rr-fill2);
     color: var(--rr-label2);
+  }
+
+  /*
+   * The caller's country on a CQ row. The message keeps its whole width and the country takes
+   * what is left, ending in an ellipsis; under 3 em it drops out. Its negative margin takes back
+   * the row's gap, so a country with no room leaves the message the width it has without one.
+   */
+  .dr:has(.c-country) .c-msg {
+    flex: 0 1 auto;
+  }
+
+  .c-country {
+    flex: 1 1 0;
+    min-width: 0;
+    margin-left: calc(-1 * var(--rr-space-2));
+    container-type: inline-size;
+    font-size: var(--rr-text-caption);
+    font-weight: var(--rr-weight-medium);
+    line-height: var(--rr-leading-caption);
+    color: var(--rr-label2);
+    text-align: right;
+  }
+
+  .c-country > span {
+    display: block;
+    padding-left: var(--rr-space-2);
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  @container (width < 3em) {
+    .c-country > span {
+      display: none;
+    }
+  }
+
+  /* Colours as for the numbers: on a tint, worked before, faded, selected. */
+  .hl-background .c-country {
+    color: var(--rr-label);
+  }
+
+  .hl-ink .c-country {
+    color: var(--rr-hl-ink);
+  }
+
+  .dr.old .c-country {
+    color: var(--rr-old-text);
+  }
+
+  .dr.old.hl-background .c-country {
+    color: var(--rr-hl-old-ink);
+  }
+
+  .dr.sel .c-country,
+  .dr.old.sel .c-country {
+    color: var(--rr-label);
   }
 </style>
