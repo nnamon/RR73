@@ -79,29 +79,52 @@ async function tapStartAudio(page: Page): Promise<number> {
 
 interface ListedSlot {
   head: string;
+  /** False for a slot listed before the decoder answered for it. */
+  decoded: boolean;
   rows: { text: string; hz: number; db: number }[];
+}
+
+/**
+ * The slots one bar stands for, newest first, each head starting with the slot's start as Save
+ * slot names it. Since 0.10.4 a run of decoded slots with no decodes shares one bar, "23:59:45 to
+ * 00:00:15 UTC · no decodes" (lib/decode/list.ts): one entry for each of its slots.
+ */
+function slotsOfBar(text: string, ms: string | null): ListedSlot[] {
+  const run = /^(\d\d):(\d\d):(\d\d) to (\d\d):(\d\d):(\d\d) UTC · no decodes$/.exec(text);
+  if (!run) return [{ head: `${text}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, decoded: !!ms, rows: [] }];
+  const sec = (h: string, m: string, s: string) => Number(h) * 3600 + Number(m) * 60 + Number(s);
+  const from = sec(run[1], run[2], run[3]);
+  const span = (sec(run[4], run[5], run[6]) - from + 86_400) % 86_400;
+  const out: ListedSlot[] = [];
+  for (let t = span; t >= 0; t -= 15) {
+    const at = (from + t) % 86_400;
+    const hms = [Math.floor(at / 3600), Math.floor(at / 60) % 60, at % 60].map((n) => String(n).padStart(2, '0')).join(':');
+    out.push({ head: `${hms} UTC · no decodes, in a run`, decoded: true, rows: [] });
+  }
+  return out;
 }
 
 /** The slots in the decode list, oldest first, each with its rows as shown. */
 async function listedSlots(page: Page): Promise<ListedSlot[]> {
-  return page.getByTestId('decode-list').evaluate((list) => {
-    const slots: ListedSlot[] = [];
+  const items = await page.getByTestId('decode-list').evaluate((list) => {
+    const out: ({ bar: string; ms: string | null } | { text: string; hz: number; db: number })[] = [];
     for (const li of list.querySelectorAll('li')) {
       const cell = (c: string) => li.querySelector(c)?.textContent ?? '';
-      if (li.classList.contains('slot-bar')) {
-        const ms = li.dataset.ms;
-        slots.push({ head: `${cell('.visually-hidden')}${ms ? ` · decoded in ${(Number(ms) / 1000).toFixed(2)} s` : ''}`, rows: [] });
-      }
-      else if (li.querySelector('button.dr') && slots.length) {
-        slots[slots.length - 1].rows.push({ text: cell('.c-msg'), hz: parseInt(cell('.c-hz')), db: parseInt(cell('.c-db').replace('\u2212', '-')) });
-      }
+      if (li.classList.contains('slot-bar')) out.push({ bar: cell('.visually-hidden'), ms: li.dataset.ms ?? null });
+      else if (li.querySelector('button.dr')) out.push({ text: cell('.c-msg'), hz: parseInt(cell('.c-hz')), db: parseInt(cell('.c-db').replace('\u2212', '-')) });
     }
-    return slots.reverse();
+    return out;
   });
+  const slots: ListedSlot[] = [];
+  for (const it of items) {
+    if ('bar' in it) slots.push(...slotsOfBar(it.bar, it.ms));
+    else if (slots.length) slots[slots.length - 1].rows.push(it);
+  }
+  return slots.reverse();
 }
 
 /** The slots the test judges: the first two the app decoded. */
-const judged = (slots: ListedSlot[]) => slots.filter((s) => / decoded in /.test(s.head)).slice(0, 2);
+const judged = (slots: ListedSlot[]) => slots.filter((s) => s.decoded).slice(0, 2);
 
 /**
  * For each message, the first row in the judged slots that has its text, with frequency within
@@ -134,6 +157,19 @@ test('zero runs of 2 ms or more count as lost audio, and silence at the start as
   expect(complete(loss)).toBe(false);
   expect(complete({ beforeStartS: 0.05, lostS: 0.099 })).toBe(true);
   expect(complete({ beforeStartS: 0.1, lostS: 0 })).toBe(false);
+});
+
+// A run of empty slots on one bar counts as each of its slots, so a starved host, whose slots
+// decode nothing, still has 2 slots to judge and skips the test. In 0.10.4 the run hid them.
+test('a bar for a run of empty slots stands for each of its slots', () => {
+  const run = slotsOfBar('23:59:45 to 00:00:15 UTC · no decodes', null);
+  expect(run.map((s) => [s.head.slice(0, 8), s.decoded])).toEqual([
+    ['00:00:15', true],
+    ['00:00:00', true],
+    ['23:59:45', true],
+  ]);
+  expect(slotsOfBar('13:14:15 UTC · 4 decodes, odd slot', '820')).toEqual([{ head: '13:14:15 UTC · 4 decodes, odd slot · decoded in 0.82 s', decoded: true, rows: [] }]);
+  expect(slotsOfBar('13:14:30 UTC · not decoded: the decoder was busy', null)[0].decoded).toBe(false);
 });
 
 test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page }) => {
