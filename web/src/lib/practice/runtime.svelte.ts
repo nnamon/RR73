@@ -25,7 +25,7 @@ import { PracticeBand, type OperatorTx } from './sim';
 import { PracticeInput, type SlotFeed, type StreamFeed } from './source';
 import { RttyStations } from './rtty';
 import { amplitudeFor } from './render';
-import { client as keyboardClient, session as keyboardSession } from '../state/keyboard.svelte';
+import { client as keyboardClient, keyboard, session as keyboardSession } from '../state/keyboard.svelte';
 import { STAND_IN_URL, standInConfig, wavelogStandIn } from './wavelog-stand-in';
 
 let band: PracticeBand | null = null;
@@ -65,6 +65,7 @@ function ftMode(): FtMode {
 }
 
 const feed: SlotFeed = {
+  active: () => isFt(settings.mode),
   mode: ftMode,
   signals: (startMs) => (isFt(settings.mode) ? currentBand().slot(startMs, operatorTx(startMs - SLOT_MS[ftMode()])) : []),
   synth: (text, mode, f0Hz) => codec().synthesize(text, mode, f0Hz, SLOT_RATE),
@@ -77,6 +78,9 @@ const stream: StreamFeed = {
   due(nowMs) {
     const sent = keyboardSession.takeSent();
     if (!isKeyboard(settings.mode)) return [];
+    // The stations start once the modem can encode their transmissions and receive them: before
+    // that their first CQ would be lost, and the next is 40 s away.
+    if (!keyboard.modemReady) return [];
     const key = `${seed}|${myStation().callsign}`;
     if (!rtty || key !== rttyKey) {
       rtty = new RttyStations(myStation().callsign, nowMs);

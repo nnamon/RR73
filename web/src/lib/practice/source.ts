@@ -12,6 +12,12 @@ import { NOISE_RMS, mixSlot, noise, type Part } from './render';
 import type { SimSignal } from './sim';
 
 export interface SlotFeed {
+  /**
+   * False while the band carries no slots (WSPR's noise, the keyboard modes). Slot audio already
+   * scheduled stops then: a slot rendered before a change to RTTY would otherwise play on for up
+   * to 13 s under the RTTY stations.
+   */
+  active(): boolean;
   mode(): Mode;
   /** The transmissions of the slot starting at `slotStartMs`, UTC ms. Called once per slot, in order. */
   signals(slotStartMs: number): SimSignal[];
@@ -125,6 +131,11 @@ export class SlotRunner {
   stop() {
     if (this.timer) clearInterval(this.timer);
     this.timer = null;
+    this.silence();
+  }
+
+  /** Stops every slot scheduled or playing. */
+  private silence() {
     for (const p of this.playing) {
       try {
         p.stop();
@@ -139,6 +150,13 @@ export class SlotRunner {
   /** Renders the current slot at the first tick (its rest plays), then each next slot LEAD_MS before it starts. */
   tick() {
     if (this.ctx.state !== 'running') return;
+    if (!this.feed.active()) {
+      // Back in a slot mode, the slot under way renders again from the first tick.
+      this.mode = null;
+      this.done.clear();
+      this.silence();
+      return;
+    }
     const mode = this.feed.mode();
     if (mode !== this.mode) {
       this.mode = mode;
@@ -163,7 +181,8 @@ export class SlotRunner {
         }
       }),
     );
-    if (!this.timer || this.ctx.state !== 'running') return;
+    // The band may have left the slot modes while the slot rendered.
+    if (!this.timer || this.ctx.state !== 'running' || !this.feed.active()) return;
     this.schedule(startMs, mixSlot(mode, parts));
   }
 
