@@ -11,7 +11,7 @@
  * The scheduler plays through the output only while it transmits.
  */
 
-import type { Mode } from '../clock/slots';
+import type { SlotMode as Mode } from '../clock/slots';
 import { LATE_S } from '../qso/sequencer';
 
 /** Where a transmission starts in its slot, s. */

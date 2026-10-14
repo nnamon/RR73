@@ -30,6 +30,18 @@ export const STATUS = {
   beaconStopAfter: (after: string) => `Stop beacon after ${after}`,
   beaconPct: (pct: number) => `Tx in ${pct}% of slots`,
   noWsprCall: 'Callsign cannot be sent in WSPR',
+  noMyCall: 'Set callsign in Settings',
+  callSet: (call: string) => `Call set to ${call}`,
+  tuned: (hz: number) => `Tuned to ${hz} Hz`,
+  shiftFound: (hz: number) => `Shift ${hz} Hz found`,
+  notSent: (chars: string) => `Not sent: ${chars}`,
+  idleOff: (after: string) => `Tx off after ${after} idle`,
+  speedShift: (baud: number, shift: number) => `Speed ${baud} baud, shift ${shift} Hz`,
+  squelch: (db: string) => `Squelch ${db}`,
+  reverse: (on: boolean) => (on ? 'Reverse on' : 'Reverse off'),
+  afc: (on: boolean) => (on ? 'AFC on' : 'AFC off'),
+  macroSet: (set: string) => `${set} macros`,
+  textCleared: 'Text cleared',
 } as const;
 
 /** Why a call paused on its last message, after the message in the status line: "Tx1 · VK2LAW 9V1NE OJ11 · no reply". */

@@ -1,13 +1,15 @@
 /**
  * Operate's frame keeps the top bar, the waterfall and the bottom edge; each mode family brings
- * the middle of the screen and its bottom bar as one pane. A new family (RTTY, CW) adds its pane
- * here and leaves the others as they are.
+ * the middle of the screen and its bottom bar as one pane. A new family (CW) adds its pane here
+ * and leaves the others as they are. The keyboard family (RTTY, and PSK31 and the other keyboard
+ * modes after it) shares KeyboardPane, which takes the mode's tuning row.
  */
 
 import type { Component } from 'svelte';
-import type { Mode } from '../../lib/clock/slots';
+import { isKeyboard, type Mode } from '../../lib/clock/slots';
 import FtPane from './FtPane.svelte';
 import WsprPane from './WsprPane.svelte';
+import KeyboardPane from './KeyboardPane.svelte';
 
 /** The waterfall as a pane uses it. */
 export interface WaterfallHandle {
@@ -21,10 +23,10 @@ export interface PaneProps {
   waterfall?: WaterfallHandle;
 }
 
-export type Family = 'ft' | 'wspr';
+export type Family = 'ft' | 'wspr' | 'keyboard';
 
 export function familyOf(mode: Mode): Family {
-  return mode === 'WSPR' ? 'wspr' : 'ft';
+  return mode === 'WSPR' ? 'wspr' : isKeyboard(mode) ? 'keyboard' : 'ft';
 }
 
-export const PANES: Record<Family, Component<PaneProps>> = { ft: FtPane, wspr: WsprPane };
+export const PANES: Record<Family, Component<PaneProps>> = { ft: FtPane, wspr: WsprPane, keyboard: KeyboardPane };

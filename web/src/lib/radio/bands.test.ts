@@ -46,4 +46,29 @@ describe('bands', () => {
     expect(isBand('4m')).toBe(false);
     expect(isBand(20)).toBe(false);
   });
+  it('has the approved RTTY dials, clear of FT4 on 20m, with the pair inside the band', () => {
+    const kHz = Object.fromEntries(BAND_IDS.map((b) => [b, (dialHz(b, 'RTTY') ?? 0) / 1000]));
+    expect(kHz).toEqual({
+      '160m': 1805,
+      '80m': 3580,
+      '60m': 0,
+      '40m': 7040,
+      '30m': 10143,
+      '20m': 14083,
+      '17m': 18107,
+      '15m': 21080,
+      '12m': 24922,
+      '10m': 28080,
+      '6m': 50300,
+      '2m': 0,
+    });
+    // FT4 on 20m sits 14.0802 to 14.0830 MHz: the RTTY pair starts above it.
+    expect(dialHz('20m', 'RTTY')! + 1415).toBeGreaterThan(14083000);
+    for (const b of BAND_IDS) {
+      const d = dialHz(b, 'RTTY');
+      if (d === null) continue;
+      expect(bandOfHz(d + 1415)).toBe(b);
+      expect(bandOfHz(d + 1585)).toBe(b);
+    }
+  });
 });

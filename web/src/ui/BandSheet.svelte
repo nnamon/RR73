@@ -5,7 +5,10 @@
    * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
    * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
    * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
+   * RTTY has no calling frequency: the sheet takes the dial, in MHz or kHz, kept per band, and
+   * opens with that field focused, so a retune takes a few digits.
    */
+  import { tick } from 'svelte';
   import Sheet from './Sheet.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
   import { MODES, type Mode } from '../lib/clock/slots';
@@ -13,6 +16,8 @@
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { setHound, setHoundDial } from '../lib/state/qso.svelte';
   import { operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
+  import { dial4, parseRttyDial, rttyDialHz } from '../lib/rtty/dial';
+  import { setRtty } from '../lib/state/keyboard.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -37,6 +42,35 @@
     dialText = ((settings.houndDialHz[band] ?? dialHz(band, 'FT8') ?? 0) / 1e6).toFixed(3);
     dialError = null;
   });
+
+  // RTTY's dial, as typed; it follows the band chosen.
+  let rttyText = $state('');
+  let rttyError = $state<string | null>(null);
+  let rttyField: HTMLInputElement | undefined = $state();
+  $effect(() => {
+    if (mode !== 'RTTY') return;
+    const hz = rttyDialHz(band, settings.rtty.dialHz);
+    rttyText = hz === null ? '' : dial4(hz);
+    rttyError = null;
+  });
+  $effect(() => {
+    if (!open || mode !== 'RTTY') return;
+    void tick().then(() => {
+      rttyField?.focus({ preventScroll: true });
+      rttyField?.select();
+    });
+  });
+
+  function saveRttyDial() {
+    const r = parseRttyDial(rttyText, band);
+    if ('error' in r) {
+      rttyError = r.error;
+      return;
+    }
+    rttyError = null;
+    rttyText = dial4(r.hz);
+    if (r.hz !== rttyDialHz(band, settings.rtty.dialHz)) setRtty({ dialHz: { ...settings.rtty.dialHz, [band]: r.hz } });
+  }
 
   function saveDial() {
     const r = parseDialMhz(dialText, band);
@@ -114,12 +148,37 @@
     </div>
     {#if dialError}<p class="err" role="alert">{dialError}</p>{/if}
   {/if}
-  <div class="setblock">
-    <p class="k">Set the radio to</p>
-    <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
-    <p class="m">USB</p>
-  </div>
-  <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.</p>
+  {#if mode === 'RTTY'}
+    <div class="setblock">
+      <label class="k" for="rtty-dial">Set the radio to</label>
+      <div class="dialrow">
+        <input
+          id="rtty-dial"
+          class="dialf mono"
+          type="text"
+          inputmode="decimal"
+          bind:this={rttyField}
+          bind:value={rttyText}
+          onblur={saveRttyDial}
+          onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          autocomplete="off"
+          aria-invalid={rttyError !== null}
+          data-testid="rtty-dial"
+        />
+        <span class="mhz">MHz</span>
+      </div>
+      <p class="m">USB</p>
+    </div>
+    {#if rttyError}<p class="err" role="alert">{rttyError}</p>{/if}
+    <p class="note">Update this after each retune: QSOs log it as their frequency.</p>
+  {:else}
+    <div class="setblock">
+      <p class="k">Set the radio to</p>
+      <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
+      <p class="m">USB</p>
+    </div>
+    <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.</p>
+  {/if}
 </Sheet>
 
 <style>
@@ -238,6 +297,43 @@
     font-size: var(--rr-text-sideband);
     font-weight: var(--rr-weight-semibold);
     line-height: var(--rr-leading-sideband);
+  }
+
+  .dialrow {
+    display: flex;
+    gap: var(--rr-space-2);
+    align-items: center;
+    margin-top: var(--rr-space-1);
+  }
+
+  /* The dial as a field: the same size as the dial shown for the other modes, in a box that says it can be edited. */
+  .dialf {
+    width: 7ch;
+    min-width: 0;
+    height: var(--rr-leading-dial);
+    padding: 0 var(--rr-space-1-5);
+    border: 2px solid var(--rr-accent);
+    border-radius: var(--rr-radius-m);
+    background: transparent;
+    color: var(--rr-label);
+    font-size: var(--rr-text-dial);
+    font-weight: var(--rr-weight-bold);
+    letter-spacing: -0.02em;
+    box-sizing: content-box;
+  }
+
+  .dialf:focus {
+    outline: none;
+  }
+
+  .dialf[aria-invalid='true'] {
+    border-color: var(--rr-tx);
+  }
+
+  .mhz {
+    font-size: var(--rr-text-dial);
+    font-weight: var(--rr-weight-bold);
+    line-height: var(--rr-leading-dial);
   }
 
   .note {

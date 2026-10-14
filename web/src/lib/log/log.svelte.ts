@@ -16,7 +16,7 @@ import { checkRefs } from './activation';
 import { fileParts, markHandled, markSubmitted, reconcile, requeue, retry, UNDO_MS, type DestinationFacts } from './ledger';
 import { migrateLogging } from './migrations';
 import { Outbox, systemClock, type DestinationStatus, type SendingDestination } from './outbox';
-import { adifChanged, createQso, displayMode, newId, stampActivation } from './qso';
+import { adifChanged, createQso, displayMode, newId, stampActivation, withAllFields } from './qso';
 import { loadSnapshot, saveChanges, saveLoggingSettings, saveMigrations, setLogStore, type Changes } from './store';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
@@ -84,8 +84,8 @@ class LogState {
   offlineSince = $state<number | null>(null);
   outbox = $state.raw<Partial<Record<DestinationId, DestinationStatus>>>({});
   notice = $state.raw<LogNotice | null>(null);
-  /** The QSO sheet: closed, a new QSO (null id) or an existing one. */
-  editor = $state.raw<{ open: boolean; qsoId: string | null }>({ open: false, qsoId: null });
+  /** The QSO sheet: closed, a new QSO (null id), an existing one, or a keyboard mode's strip to log. */
+  editor = $state.raw<{ open: boolean; qsoId: string | null; draft?: QsoDraftInit | null }>({ open: false, qsoId: null });
   /** Send to Wavelog: progress while it runs, then what happened. */
   sync = $state.raw<SyncState>({ running: false, total: 0, done: 0, summary: null });
 
@@ -226,7 +226,7 @@ export function loadLog(): Promise<void> {
   loading ??= (async () => {
     try {
       const s = await loadSnapshot();
-      for (const q of s.qsos) byId.set(q.id, q);
+      for (const q of s.qsos) byId.set(q.id, withAllFields(q));
       log.qsos = sortQsos([...byId.values()]);
       log.ledger = s.ledger;
       log.activations = s.activations.sort((a, b) => b.startedAt - a.startedAt);
@@ -413,8 +413,35 @@ export function openEditor(qsoId: string | null) {
   log.editor = { open: true, qsoId };
 }
 
+/** A keyboard mode's QSO strip, opened in the QSO sheet to log (the strip's chevron). */
+export interface QsoDraftInit {
+  call: string;
+  startMs: number;
+  band: string;
+  mode: 'RTTY';
+  /** Dial plus mark tone, Hz. */
+  freqHz: number;
+  rstSent: string;
+  rstRcvd: string;
+  name: string;
+  qth: string;
+  grid: string;
+  notes: string;
+  /** Contest serial numbers, sent and received; '' outside the Contest set. */
+  stx: string;
+  srx: string;
+  contestId: string;
+  /** Called once the sheet has logged the QSO: the strip clears and the serial steps on. */
+  onlogged: () => void;
+}
+
+/** Opens the QSO sheet with a keyboard mode's strip, to log it. */
+export function openDraft(draft: QsoDraftInit) {
+  log.editor = { open: true, qsoId: null, draft };
+}
+
 export function closeEditor() {
-  log.editor = { open: false, qsoId: log.editor.qsoId };
+  log.editor = { open: false, qsoId: log.editor.qsoId, draft: null };
 }
 
 export interface ActivationInput {

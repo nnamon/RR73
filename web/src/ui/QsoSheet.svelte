@@ -3,11 +3,13 @@
    * Add a QSO by hand, or edit or delete one. Times are UTC. A new QSO joins the running
    * activation unless the operator unticks it. Opened from the Log, the logged notice and Fix.
    * An existing QSO shows where it stands at Wavelog, with Send to Wavelog when it is not sent.
+   * Opened from a keyboard mode's QSO strip it shows the strip's fields and logs them: Log QSO.
+   * Name, QTH and the contest numbers show for RTTY and for any QSO that has them.
    */
   import Sheet from './Sheet.svelte';
   import { checkRef, refsLabel } from '../lib/log/activation';
   import { bandOfHz } from '../lib/log/bandplan';
-  import { closeEditor, deleteQso, log, logQso, qsoById, restoreQso, sendToWavelog, updateQso } from '../lib/log/log.svelte';
+  import { closeEditor, deleteQso, log, logQso, qsoById, restoreQso, sendToWavelog, updateQso, type QsoDraftInit } from '../lib/log/log.svelte';
   import { stateWords } from '../lib/log/view';
   import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
@@ -29,6 +31,11 @@
   let rcvd = $state('');
   let refs = $state('');
   let comment = $state('');
+  let name = $state('');
+  let qth = $state('');
+  let stx = $state('');
+  let srx = $state('');
+  let draft = $state.raw<QsoDraftInit | null>(null);
   let join = $state(true);
   let errors = $state<string[]>([]);
   /** True while a save waits for storage, so a second tap cannot log the QSO twice. */
@@ -39,27 +46,33 @@
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
   const mhzText = (hz: number | null) => (hz ? String(Math.round(hz) / 1e6) : '');
-  const defaultFreq = (b: string, m: string) => (isBand(b) && (m === 'FT8' || m === 'FT4') ? mhzText(dialHz(b, m)) : '');
+  const defaultFreq = (b: string, m: string) => (isBand(b) && (m === 'FT8' || m === 'FT4' || m === 'RTTY') ? mhzText(dialHz(b, m)) : '');
 
   // Each opening starts from the QSO, or from now on the current band for a new one.
   $effect(() => {
     if (log.editor.open && !open) {
       const q = log.editor.qsoId ? (qsoById(log.editor.qsoId) ?? null) : null;
+      const d = q ? null : (log.editor.draft ?? null);
       original = q;
+      draft = d;
       errors = [];
-      const t = q?.start ?? Date.now();
-      call = q?.call ?? '';
+      const t = q?.start ?? d?.startMs ?? Date.now();
+      call = q?.call ?? d?.call ?? '';
       date = isoDate(t);
       time = isoTime(t);
-      band = q?.band ?? settings.band;
-      // QSOs are FT8 or FT4 here: WSPR spots never become QSOs.
-      mode = q ? displayMode(q) : isFt(settings.mode) ? settings.mode : 'FT8';
-      freq = q ? mhzText(q.freqHz) : defaultFreq(band, mode);
-      grid = q?.gridsquare ?? '';
-      sent = q?.rstSent ?? '';
-      rcvd = q?.rstRcvd ?? '';
+      band = q?.band ?? d?.band ?? settings.band;
+      // QSOs are FT8, FT4 or RTTY here: WSPR spots never become QSOs.
+      mode = q ? displayMode(q) : (d?.mode ?? (isFt(settings.mode) || settings.mode === 'RTTY' ? settings.mode : 'FT8'));
+      freq = q ? mhzText(q.freqHz) : d ? mhzText(d.freqHz) : defaultFreq(band, mode);
+      grid = q?.gridsquare ?? d?.grid ?? '';
+      sent = q?.rstSent ?? d?.rstSent ?? '';
+      rcvd = q?.rstRcvd ?? d?.rstRcvd ?? '';
+      name = q?.name ?? d?.name ?? '';
+      qth = q?.qth ?? d?.qth ?? '';
+      stx = q?.stx ?? d?.stx ?? '';
+      srx = q?.srx ?? d?.srx ?? '';
       refs = q ? theirRefs(q).map((r) => r.ref).join(', ') : '';
-      comment = q?.comment ?? '';
+      comment = q?.comment ?? d?.notes ?? '';
       join = true;
       open = true;
     }
@@ -71,9 +84,10 @@
   }
 
   const bands = $derived([...new Set([...BAND_IDS, ...(original && !isBand(original.band) && original.band ? [original.band] : [])])]);
-  const modes = $derived([...new Set(['FT8', 'FT4', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
+  const modes = $derived([...new Set(['FT8', 'FT4', 'RTTY', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
+  const keyboardRows = $derived(mode === 'RTTY' || !!(name || qth || stx || srx));
   const activation = $derived(original ? log.activations.find((a) => a.id === original!.activationId) : running);
-  const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : 'Add QSO');
+  const title = $derived(original ? (original.deletedAt === null ? 'Edit QSO' : 'Deleted QSO') : draft ? 'Log QSO' : 'Add QSO');
   const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
   const wavelog = $derived(original ? (log.index.get(original.id)?.find((e) => e.destinationId === 'wavelog') ?? null) : null);
   const canSend = $derived(!!wavelog && (wavelog.state === 'not-sent' || wavelog.state === 'waiting' || wavelog.state === 'refused'));
@@ -157,13 +171,17 @@
           rstSent: formatReport(sent),
           rstRcvd: formatReport(rcvd),
           comment: comment.trim(),
+          name: name.trim().toUpperCase(),
+          qth: qth.trim().toUpperCase(),
+          stx: stx.trim(),
+          srx: srx.trim(),
           ...theirFields(parsed.refs),
         });
       } else {
         await logQso({
           call: c,
           grid: normaliseGrid(grid),
-          mode: mode === 'FT4' ? 'FT4' : 'FT8',
+          mode: mode === 'FT4' ? 'FT4' : mode === 'RTTY' ? 'RTTY' : 'FT8',
           band: band.toLowerCase(),
           dialHz: hz ?? 0,
           audioHz: 0,
@@ -172,10 +190,16 @@
           reportSent: formatReport(sent),
           reportRcvd: formatReport(rcvd),
           comment: comment.trim(),
+          name,
+          qth,
+          stx,
+          srx,
+          contestId: draft?.contestId ?? '',
           theirRefs: parsed.refs,
-          source: 'manual',
+          source: draft ? 'keyboard' : 'manual',
           activationId: running && join ? running.id : null,
         });
+        draft?.onlogged();
       }
     } finally {
       saving = false;
@@ -264,6 +288,24 @@
         <span class="row-title">Report received</span>
         <input class="row-field mono" bind:value={rcvd} autocomplete="off" spellcheck="false" maxlength="4" placeholder="Optional" />
       </label>
+      {#if keyboardRows}
+        <label class="row">
+          <span class="row-title">Name</span>
+          <input class="row-field mono up" bind:value={name} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="20" placeholder="Optional" />
+        </label>
+        <label class="row">
+          <span class="row-title">QTH</span>
+          <input class="row-field mono up" bind:value={qth} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength="30" placeholder="Optional" />
+        </label>
+        <label class="row">
+          <span class="row-title">Number sent</span>
+          <input class="row-field mono" bind:value={stx} inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="6" placeholder="Optional" />
+        </label>
+        <label class="row">
+          <span class="row-title">Number received</span>
+          <input class="row-field mono" bind:value={srx} inputmode="numeric" autocomplete="off" spellcheck="false" maxlength="6" placeholder="Optional" />
+        </label>
+      {/if}
       <label class="row">
         <span class="row-title">Their park or summit</span>
         <input class="row-field mono up" bind:value={refs} autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="Optional" />
@@ -306,7 +348,7 @@
     {#if original?.deletedAt != null}
       <button type="button" class="btn primary wide" onclick={() => void restore()}>Restore QSO</button>
     {:else}
-      <button type="submit" class="btn primary wide" disabled={saving}>{original ? 'Save QSO' : 'Add QSO'}</button>
+      <button type="submit" class="btn primary wide" disabled={saving}>{original ? 'Save QSO' : draft ? 'Log QSO' : 'Add QSO'}</button>
     {/if}
     <button type="button" class="btn wide cancel" onclick={closed}>Cancel</button>
     {#if original && original.deletedAt === null}

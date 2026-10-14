@@ -5,6 +5,7 @@
  *   a window spans 171 ms, about one FT8 symbol (160 ms); 0 to 3000 Hz over 45 s.
  * - WSPR: 8192-point FFT, 1.46 Hz bins (one tone spacing) and a 683 ms window (one symbol);
  *   1400 to 1600 Hz over 240 s, two slots. A WSPR signal is 6 Hz wide (ADR 0005).
+ * - RTTY: FT8's FFT, 0 to 3000 Hz over 30 s.
  *
  * Levels are dB relative to full scale: a full-scale sine centred on a bin reads 0 dB.
  */
@@ -27,9 +28,11 @@ export interface View {
 
 export const FT_VIEW: View = { fft: 2048, minHz: 0, maxHz: 3000, visibleS: 45 };
 export const WSPR_VIEW: View = { fft: 8192, minHz: 1400, maxHz: 1600, visibleS: 240 };
+/** RTTY: FT8's bins over 30 s, so a station that starts sending shows within a few seconds. */
+export const RTTY_VIEW: View = { fft: 2048, minHz: 0, maxHz: 3000, visibleS: 30 };
 
 export function viewOf(mode: Mode): View {
-  return mode === 'WSPR' ? WSPR_VIEW : FT_VIEW;
+  return mode === 'WSPR' ? WSPR_VIEW : mode === 'RTTY' ? RTTY_VIEW : FT_VIEW;
 }
 
 /** Bin width, Hz. */

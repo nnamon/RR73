@@ -69,6 +69,9 @@ describe('QSO to ADIF', () => {
       SOTA_REF: '',
       WWFF_REF: '',
       IOTA: '',
+      NAME: '',
+      QTH: '',
+      CONTEST_ID: '',
       COMMENT: 'Grüße',
     });
   });

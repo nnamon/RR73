@@ -5,7 +5,7 @@
 
 import type { AssembledSlot } from './assembler';
 import { slotStem } from '../clock/format';
-import { SLOT_RATE, type Mode } from '../clock/slots';
+import { SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
 import { encodeWav16 } from './wav';
 import { sidecar, type SidecarInput } from './sidecar';
 

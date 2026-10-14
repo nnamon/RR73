@@ -140,6 +140,11 @@ export function createQso(r: LogQsoRecord, ctx: CreateContext): Qso {
     ...activationFields(a),
     ...theirFields(r.theirRefs ?? []),
     comment: (r.comment ?? '').trim(),
+    name: (r.name ?? '').trim().toUpperCase(),
+    qth: (r.qth ?? '').trim().toUpperCase(),
+    stx: (r.stx ?? '').trim(),
+    srx: (r.srx ?? '').trim(),
+    contestId: (r.contestId ?? '').trim().toUpperCase(),
     extra: {},
     id: ctx.id,
     createdAt: ctx.now,
@@ -160,6 +165,14 @@ export function stampActivation(q: Qso, a: Activation): Qso {
     operator: a.operator || q.operator,
     myGridsquare: a.grid || q.myGridsquare,
   };
+}
+
+/** The fields RTTY added to every QSO, empty in a QSO stored before them. */
+export const QSO_ADDED_FIELDS = { name: '', qth: '', stx: '', srx: '', contestId: '' } as const;
+
+/** A stored QSO with every field present: records stored before RTTY lack NAME, QTH, STX, SRX and CONTEST_ID. */
+export function withAllFields(q: Qso): Qso {
+  return { ...QSO_ADDED_FIELDS, ...q };
 }
 
 /** True when two QSOs differ in a field a destination receives. */

@@ -16,7 +16,7 @@ import type { AudioClockMapper } from '../clock/mapping';
 import { RxCalibration } from '../clock/calibration';
 import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
-import { SLOT_MS, SLOT_SAMPLES, type FtMode, type Mode } from '../clock/slots';
+import { SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
 import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
@@ -34,7 +34,7 @@ import { noteLoadFailure } from '../app/update.svelte';
 
 export interface SlotSummary {
   startUtcMs: number;
-  mode: Mode;
+  mode: SlotMode;
   filled: number;
   lateStart: boolean;
   gap: boolean;
@@ -119,7 +119,7 @@ const calibration = new RxCalibration();
  * Notes output from `fromUtcMs` to `toUtcMs`: the slots it overlaps hold RR73's own signal, so
  * their decodes are not shown. A transmission's slot is decoded for Your Tx, heard back.
  */
-export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: Mode = settings.mode, sent?: SentTx) {
+export function markTransmitted(fromUtcMs: number, toUtcMs: number, mode: SlotMode = hasSlots(settings.mode) ? settings.mode : 'FT8', sent?: SentTx) {
   transmitted.mark(fromUtcMs, toUtcMs, mode);
   if (sent) {
     sentTx.set(Math.floor(fromUtcMs / SLOT_MS[mode]) * SLOT_MS[mode], sent);
@@ -247,12 +247,20 @@ function onChunk(c: Chunk) {
   levelLog.push([now, c.rmsDb]);
   if (levelLog.length > 600) levelLog = levelLog.slice(-400);
 
-  if (!assembler || assembler.mode !== settings.mode) {
+  // RTTY is continuous: its receiver takes the chunks (lib/state/keyboard.svelte.ts), with no slots.
+  const mode = settings.mode;
+  if (!hasSlots(mode)) {
     const partial = assembler?.flush();
     if (partial) onSlot(partial);
-    assembler = new SlotAssembler(settings.mode);
+    assembler = null;
+  } else {
+    if (!assembler || assembler.mode !== mode) {
+      const partial = assembler?.flush();
+      if (partial) onSlot(partial);
+      assembler = new SlotAssembler(mode);
+    }
+    for (const slot of assembler.push(c)) onSlot(slot);
   }
-  for (const slot of assembler.push(c)) onSlot(slot);
   for (const l of chunkListeners) l(c);
 }
 
@@ -416,6 +424,12 @@ export function audioOut(): { ctx: AudioContext; mapper: AudioClockMapper } | nu
   const ctx = engine?.context;
   if (!engine || !ctx || audio.status !== 'running' || !engine.mapper.ready) return null;
   return { ctx, mapper: engine.mapper };
+}
+
+/** The running audio context, for output that needs no clock mapping (a keyboard mode's stream). */
+export function outputContext(): AudioContext | null {
+  const ctx = engine?.context;
+  return ctx && audio.status === 'running' ? ctx : null;
 }
 
 /** The wasm client, for encoding transmissions. */

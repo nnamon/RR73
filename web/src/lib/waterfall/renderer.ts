@@ -16,7 +16,7 @@ import { buildLut, type WaterfallPalette } from './colormap';
 import { LevelMapper, bandFor, type Contrast } from './levels';
 import { DISPLAY_RATE, DisplaySpectrum, FT_VIEW, binHz, binsOf, viewOf, type View } from './spectrum';
 import { NOISE_POSITION } from './levels';
-import { SLOT_MS, isFt, type Mode } from '../clock/slots';
+import { SLOT_MS, hasSlots, isFt, type Mode } from '../clock/slots';
 import { QuietTracker, quietestHz } from './pick';
 
 /** The parts of a 2D context the renderer uses, shared by canvas and OffscreenCanvas. */
@@ -270,7 +270,7 @@ export class WaterfallRenderer {
   }
 
   private inTxSlot(utcMs: number): boolean {
-    if (!this.txSlots.size) return false;
+    if (!this.txSlots.size || !hasSlots(this.mode)) return false;
     const slot = SLOT_MS[this.mode];
     return this.txSlots.has(Math.floor(utcMs / slot) * slot);
   }
@@ -427,9 +427,10 @@ export class WaterfallRenderer {
 
   /** Records the row and its slot boundary; returns true when a boundary falls in it. */
   private note(row: Row): boolean {
-    const slot = SLOT_MS[this.mode];
     let crossed = false;
-    if (this.lastRowUtc !== null) {
+    // RTTY is continuous: no slot lines.
+    if (this.lastRowUtc !== null && hasSlots(this.mode)) {
+      const slot = SLOT_MS[this.mode];
       const b = Math.floor(row.utcMs / slot) * slot;
       if (b > this.lastRowUtc && b <= row.utcMs) {
         this.marks.push({ utcMs: b, row: this.rowCount });

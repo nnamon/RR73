@@ -14,6 +14,8 @@ import { isFt } from '../clock/slots';
 import type { WsprDecode } from '../wspr/spots';
 import { TX_SECONDS } from '../wspr/schedule';
 import { wspr } from '../state/wspr.svelte';
+import { keyboard, session, tuneMark } from '../state/keyboard.svelte';
+import type { ModemEvent } from '../keyboard/modem';
 
 export interface E2eHooks {
   /** Decodes for the slot starting at `slotStartMs`, UTC ms. */
@@ -38,6 +40,14 @@ export interface E2eHooks {
   wsprSent(slotStartMs: number, text: string): void;
   /** The beacon now: on air (UTC ms), the next Tx slot, and the slots with spots. */
   wsprState(): { onAir: { text: string; slotStartMs: number; startMs: number } | null; next: number | null; on: boolean; slots: { startUtcMs: number; spots: number; ms: number }[] };
+  /** Received RTTY text, as if from the receiver; characters in `uncertain` print as uncertain. */
+  rttyReceived(text: string, uncertain?: string): void;
+  /** The RTTY receiver's signal report, dB in 3000 Hz. */
+  rttySignal(snrDb: number, squelchOpen: boolean): void;
+  /** Moves the RTTY pair to a mark tone, Hz. */
+  rttyTune(markHz: number): void;
+  /** The keyboard session now, and the last transmission's underruns and frames. */
+  rttyState(): { tx: string; field: string; call: string; fields: Record<string, string>; lastTx: { underrunFrames: number; playedFrames: number } | null; notice: string | null };
 }
 
 declare global {
@@ -74,6 +84,20 @@ export function installE2eHooks() {
     wsprSent: (slotStartMs, text) => {
       wspr.sent = [{ slotStartMs, text, freqHz: settings.wspr.txHz, complete: true }, ...wspr.sent];
     },
+    rttyReceived: (text, uncertain = '') => {
+      const events: ModemEvent[] = [...text].map((ch) => ({ type: 'char', ch, snrDb: -6, quality: uncertain.includes(ch) ? 0.2 : 0.95, framingError: false }));
+      session.receive(events);
+    },
+    rttySignal: (snrDb, squelchOpen) => session.receive([{ type: 'signal', snrDb, squelchOpen }]),
+    rttyTune: (markHz) => tuneMark(markHz),
+    rttyState: () => ({
+      tx: session.tx,
+      field: session.field,
+      call: session.draft.fields.call,
+      fields: { ...session.draft.fields },
+      lastTx: keyboard.lastTx,
+      notice: session.notice?.text ?? null,
+    }),
     wsprState: () => ({
       onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
       next: wspr.next?.slotStartMs ?? null,

@@ -16,12 +16,18 @@
    * WSPR shows 1400 to 1600 Hz over two 2-minute slots, with its own ruler (a tick every 10 Hz, a
    * label every 50 Hz) and a 6 Hz Tx marker around the signal centre. It has no Rx marker: the
    * decoder searches the whole window.
+   *
+   * RTTY (`pair`) shows 0 to 3000 Hz over 30 s with no slot lines, and marks the pair it receives
+   * and transmits on: two lines at mark and space, labelled M and S, with a light fill between,
+   * green while receiving and red on air. A tap tunes to the strongest signal near it (`onfind`);
+   * a drag moves the pair with the finger, keeping the shift (`ontune` on each move). With the
+   * keyboard up it shrinks to a 48 pt strip without its ruler (`strip`).
    */
   import { onMount } from 'svelte';
   import { WaterfallClient } from '../lib/waterfall/client';
   import { paletteFrom } from '../lib/waterfall/colormap';
   import type { FrameInfo } from '../lib/waterfall/renderer';
-  import { FREQ_LIMITS, xOfHz } from '../lib/waterfall/pick';
+  import { FREQ_LIMITS, hzAtX, xOfHz } from '../lib/waterfall/pick';
   import { STEP_HZ_OF, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
   import { bracket, ruler } from '../lib/waterfall/axis';
   import { viewOf } from '../lib/waterfall/spectrum';
@@ -40,6 +46,10 @@
     stoppedAtUtcMs = null,
     hint = false,
     onset,
+    pair = null,
+    ontune,
+    onfind,
+    strip = false,
   }: {
     mode: Mode;
     /** Null hides the Rx marker (WSPR). */
@@ -54,6 +64,14 @@
     /** Shows the pill that says how to move Tx and Rx: until the first drag or tap. */
     hint?: boolean;
     onset: (f: { rxHz?: number; txHz?: number }) => void;
+    /** RTTY's pair, Hz, and whether it is on air: replaces the Tx and Rx markers. */
+    pair?: { markHz: number; spaceHz: number; air: boolean } | null;
+    /** A drag on the pair: the new mark, Hz; `done` when the finger lifts. */
+    ontune?: (markHz: number, done: boolean) => void;
+    /** A tap with a pair: the frequency under the finger, Hz. */
+    onfind?: (hz: number) => void;
+    /** The keyboard is up: a 48 pt strip without the ruler. */
+    strip?: boolean;
   } = $props();
 
   let box: HTMLDivElement;
@@ -80,7 +98,7 @@
   const step = $derived(STEP_HZ_OF[mode]);
 
   /** The press in progress, and the marker it moves once it is a drag. */
-  let press: { id: number; x0: number; y0: number; t0: number; which: Marker; g: Gesture } | null = null;
+  let press: { id: number; x0: number; y0: number; t0: number; which: Marker; g: Gesture; mark0: number } | null = null;
   let live = $state<{ which: Marker; hz: number } | null>(null);
   let tagWidth = $state(96);
   const shownRx = $derived(live?.which === 'rx' ? live.hz : rxHz);
@@ -90,6 +108,16 @@
   const rxBand = $derived(shownRx === null ? null : bracket(shownRx, mode));
   const txBand = $derived(bracket(shownTx, mode));
   const markBand = $derived(markHz === null ? null : bracket(markHz, mode));
+  // RTTY's pair: the two lines, left to right, and which is mark.
+  const pairLines = $derived(
+    pair
+      ? [
+          { key: 'M', x: xOfHz(pair.markHz, mode) },
+          { key: 'S', x: xOfHz(pair.spaceHz, mode) },
+        ]
+      : [],
+  );
+  const pairBand = $derived(pairLines.length ? { x0: Math.min(pairLines[0].x, pairLines[1].x), x1: Math.max(pairLines[0].x, pairLines[1].x) } : null);
 
   // Each effect reads its value first: `client?.` skips its arguments while there is no client,
   // and an effect that read nothing would never run again.
@@ -117,9 +145,15 @@
     return e.clientX - box.getBoundingClientRect().left;
   }
 
+  /** The mark a drag puts the pair on: it moves with the finger from where the drag started. */
+  function pairMark(e: PointerEvent, p: { x0: number; mark0: number }): number {
+    const span = view.maxHz - view.minHz;
+    return Math.round(p.mark0 + ((e.clientX - p.x0) / Math.max(1, width)) * span);
+  }
+
   function down(e: PointerEvent) {
     if (e.button !== 0 || press) return;
-    press = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, which: grabbed(at(e), width, rxHz, txHz, mode), g: 'pending' };
+    press = { id: e.pointerId, x0: e.clientX, y0: e.clientY, t0: e.timeStamp, which: grabbed(at(e), width, rxHz, txHz, mode), g: 'pending', mark0: pair?.markHz ?? 0 };
   }
 
   function move(e: PointerEvent) {
@@ -132,6 +166,11 @@
       return;
     }
     if (p.g !== 'drag') return;
+    if (pair) {
+      box.setPointerCapture?.(e.pointerId);
+      ontune?.(pairMark(e, p), false);
+      return;
+    }
     if (!live) box.setPointerCapture?.(e.pointerId);
     live = { which: p.which, hz: dragHz(at(e), width, mode) };
   }
@@ -140,6 +179,11 @@
     const p = press;
     if (!p || p.id !== e.pointerId) return;
     press = null;
+    if (pair) {
+      if (p.g === 'drag') ontune?.(pairMark(e, p), true);
+      else if (p.g === 'pending' && isTap(e.clientX - p.x0, e.clientY - p.y0, e.timeStamp - p.t0)) onfind?.(hzAtX(at(e), width, mode));
+      return;
+    }
     const l = live;
     live = null;
     if (p.g === 'drag' && l) set(l.which, l.hz);
@@ -196,7 +240,7 @@
 
 <figure class="wf-wrap" aria-label="Waterfall, {view.minHz} to {view.maxHz} Hz, newest at the top">
   <!-- svelte-ignore a11y_no_static_element_interactions (the sliders below are the way in without a pointer) -->
-  <div class="wf" class:dragging={!!live} bind:this={box} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} data-testid="waterfall-area">
+  <div class="wf" class:strip class:dragging={!!live} bind:this={box} onpointerdown={down} onpointermove={move} onpointerup={up} onpointercancel={cancel} data-testid="waterfall-area">
     <div class="pic" bind:this={pic}>
       <canvas bind:this={canvas} data-testid="waterfall"></canvas>
       {#each labels as l (l.key)}
@@ -205,11 +249,11 @@
       {#if stoppedAtUtcMs !== null}
         <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
       {/if}
-      {#if hint && !live}
-        <span class="hint" data-testid="drag-hint">{rxHz === null ? 'Drag to move Tx.' : 'Drag to move Tx. Drag the green marker to move Rx.'}</span>
+      {#if hint && !live && !strip}
+        <span class="hint" data-testid="drag-hint">{pair ? 'Tap a signal to tune' : rxHz === null ? 'Drag to move Tx.' : 'Drag to move Tx. Drag the green marker to move Rx.'}</span>
       {/if}
     </div>
-    <div class="ruler" aria-hidden="true" bind:clientHeight={rulerH}>
+    <div class="ruler" class:gone={strip} aria-hidden="true" bind:clientHeight={rulerH}>
       {#each axis.ticks as t (t.hz)}
         <i class="tick" class:major={t.major} style:left="{t.x * 100}%"></i>
       {/each}
@@ -217,29 +261,51 @@
         <span class="rl" class:start={l.align === 'start'} class:end={l.align === 'end'} style:left="{l.x * 100}%">{l.text}</span>
       {/each}
     </div>
-    {#if rxBand}
+    {#if pairBand}
+      <i class="pair" class:air={pair?.air} data-testid="pair-marker" style:left="{pairBand.x0 * 100}%" style:width="{(pairBand.x1 - pairBand.x0) * 100}%" aria-hidden="true"></i>
+      {#each pairLines as l (l.key)}
+        <i class="pl" class:air={pair?.air} style:left="calc({l.x * 100}% - 1px)" aria-hidden="true"></i>
+        <span class="pt" style:left="{l.x * 100}%" aria-hidden="true">{l.key}</span>
+      {/each}
+    {:else if rxBand}
       <i class="mark rx" data-testid="rx-marker" style:left="calc({rxBand.x0 * 100}% - 1px)" style:width="calc({(rxBand.x1 - rxBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
     {/if}
     {#if markBand}
       <i class="mark sel" data-testid="selected-marker" style:left="calc({markBand.x0 * 100}% - 1px)" style:width="calc({(markBand.x1 - markBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
     {/if}
-    <i class="mark tx" data-testid="tx-marker" style:left="calc({txBand.x0 * 100}% - 1px)" style:width="calc({(txBand.x1 - txBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    {#if !pair}
+      <i class="mark tx" data-testid="tx-marker" style:left="calc({txBand.x0 * 100}% - 1px)" style:width="calc({(txBand.x1 - txBand.x0) * 100}% + 2px)" aria-hidden="true"></i>
+    {/if}
     {#if live}
       <span class="tag {live.which}" bind:clientWidth={tagWidth} style:left="{tagLeft}px" data-testid="drag-label">{live.which === 'tx' ? 'Tx' : 'Rx'} {live.hz} Hz</span>
     {/if}
   </div>
-  <input
-    class="visually-hidden slider"
-    type="range"
-    min={limits.minHz}
-    max={limits.maxHz}
-    {step}
-    value={txHz}
-    aria-label="Transmit frequency, Hz"
-    aria-valuetext="{txHz} Hz"
-    onchange={(e) => set('tx', Number(e.currentTarget.value))}
-  />
-  {#if rxHz !== null}
+  {#if pair}
+    <input
+      class="visually-hidden slider"
+      type="range"
+      min={limits.minHz}
+      max={limits.maxHz}
+      step="1"
+      value={pair.markHz}
+      aria-label="Mark tone, Hz"
+      aria-valuetext="{Math.round(pair.markHz)} Hz"
+      onchange={(e) => ontune?.(Number(e.currentTarget.value), true)}
+    />
+  {:else}
+    <input
+      class="visually-hidden slider"
+      type="range"
+      min={limits.minHz}
+      max={limits.maxHz}
+      {step}
+      value={txHz}
+      aria-label="Transmit frequency, Hz"
+      aria-valuetext="{txHz} Hz"
+      onchange={(e) => set('tx', Number(e.currentTarget.value))}
+    />
+  {/if}
+  {#if rxHz !== null && !pair}
     <input
       class="visually-hidden slider"
       type="range"
@@ -278,6 +344,67 @@
 
   .wf.dragging {
     cursor: ew-resize;
+  }
+
+  .wf.strip {
+    height: var(--rr-wf-strip);
+  }
+
+  .ruler.gone {
+    display: none;
+  }
+
+  /* RTTY's pair: a light fill between mark and space over the picture, a 2 pt line at each tone
+     through the picture and the ruler, and M and S at the top. */
+  .pair {
+    position: absolute;
+    top: 0;
+    bottom: var(--rr-ruler);
+    z-index: 1;
+    background: var(--rr-wf-rx-band);
+    pointer-events: none;
+  }
+
+  .wf.strip .pair {
+    bottom: 0;
+  }
+
+  .pair.air {
+    background: var(--rr-wf-tx-band);
+  }
+
+  .pl {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    z-index: 1;
+    width: 2px;
+    background: var(--rr-wf-rx);
+    pointer-events: none;
+  }
+
+  .pl.air {
+    background: var(--rr-wf-tx);
+  }
+
+  .pt {
+    position: absolute;
+    top: var(--rr-space-half);
+    z-index: 2;
+    padding: 0 var(--rr-space-half);
+    border-radius: var(--rr-radius-xs);
+    background: var(--rr-wf-tag-bg);
+    color: var(--rr-wf-text);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-ruler);
+    font-weight: var(--rr-weight-semibold);
+    line-height: 13px;
+    transform: translateX(-50%);
+    pointer-events: none;
+  }
+
+  .wf.strip .pt {
+    display: none;
   }
 
   /* The picture fills the waterfall; the ruler lies over its bottom edge. */

@@ -108,6 +108,8 @@
   --rr-row-icon: 30px;
   /* 130 pt at 393 x 852, 110 pt at 375 x 667. */
   --rr-waterfall: clamp(96px, calc(38px + 10.8dvh), 180px);
+  /* RTTY with the keyboard up: the waterfall as a strip, still taking taps to tune. */
+  --rr-wf-strip: var(--rr-space-12);
   --rr-level-line: 2px;
   --rr-reading: 640px;
 

@@ -6,6 +6,9 @@ export interface Wasm {
   decode_slot(samples: Float32Array, mode: string, preset: string): string;
   synthesize(text: string, mode: string, f0Hz: number, sampleRate: number): Float32Array;
   pack_message(text: string, mode: string): string;
+  /** RTTY's streaming receiver (crates/rr73-wasm/src/rtty.rs), for decoding what the app sent. */
+  RttyReceiver: new (json: string) => { push(samples: Float32Array): string; flush(): string; free(): void };
+  rtty_encode(text: string, json: string): Float32Array;
 }
 
 let cached: Promise<Wasm | null> | null = null;

@@ -11,6 +11,8 @@ import { HUNT_ORDERS, type HuntOrder } from '../qso/sequencer';
 import { DEFAULT_POWER_DBM, isPowerDbm } from '../wspr/power';
 import { DEFAULT_STOP_AFTER_MIN, DEFAULT_TX_PCT, normalisePct, normaliseStopAfter } from '../wspr/schedule';
 import { SPOT_SORTS, type SpotSort } from '../wspr/spots';
+import { RTTY_DEFAULTS, validateRtty, type RttySettings } from '../rtty/settings';
+import { keyboardDefaults, validateKeyboard, type KeyboardSettings } from '../keyboard/settings';
 
 export type Theme = 'system' | 'light' | 'dark';
 
@@ -108,6 +110,13 @@ export interface Settings {
   /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
   waterfallContrast: Contrast;
   wspr: WsprSettings;
+  /** The operator's name and QTH, for {MYNAME} and {MYQTH} in keyboard macros. */
+  myName: string;
+  myQth: string;
+  /** RTTY's own settings (Settings › RTTY). */
+  rtty: RttySettings;
+  /** Macros, contest and serial numbers, shared by every keyboard mode. */
+  keyboard: KeyboardSettings;
 }
 
 export const DEFAULTS: Settings = {
@@ -139,6 +148,10 @@ export const DEFAULTS: Settings = {
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
   wspr: { ...WSPR_DEFAULTS },
+  myName: '',
+  myQth: '',
+  rtty: { ...RTTY_DEFAULTS, dialHz: {} },
+  keyboard: keyboardDefaults(),
 };
 
 const KEY = 'settings';
@@ -155,8 +168,10 @@ const KEY = 'settings';
  * 6. Waterfall contrast, starting at Normal.
  * 7. WSPR's settings, at their defaults: 20%, 37 dBm, 1500 Hz, Stop beacon after 1 h, sorted by
  *    distance. FT8 and FT4 keep their fields at the top level.
+ * 8. RTTY's settings, the keyboard modes' macros and contest, and the operator's name and QTH,
+ *    at their defaults. Every other value stays where it was.
  */
-export const SETTINGS_SCHEMA = 7;
+export const SETTINGS_SCHEMA = 8;
 
 /** The sequencer settings schema 5 adds. */
 const SEQUENCER_DEFAULTS = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 } as const;
@@ -176,6 +191,7 @@ export function migration(raw: unknown): Record<string, unknown> {
   if (from < 5) Object.assign(patch, SEQUENCER_DEFAULTS);
   if (from < 6) patch.waterfallContrast = 'normal';
   if (from < 7) patch.wspr = { ...WSPR_DEFAULTS };
+  if (from < 8) Object.assign(patch, { myName: '', myQth: '', rtty: { ...RTTY_DEFAULTS, dialHz: {} }, keyboard: keyboardDefaults() });
   return patch;
 }
 
@@ -196,6 +212,11 @@ export function normaliseCallsign(s: string): string {
 export function normaliseGrid(s: string): string {
   const g = s.trim().replace(/\s+/g, '');
   return g.slice(0, 4).toUpperCase() + g.slice(4, 6).toLowerCase();
+}
+
+/** Name and QTH as sent in keyboard modes: upper case, single spaces, at most 40 characters. */
+export function normaliseText(s: string): string {
+  return s.toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 40);
 }
 
 /** A watchdog limit, min: positive, to 0.1 min, at most 9999; null when not one. */
@@ -223,7 +244,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.callsign === 'string') s.callsign = normaliseCallsign(r.callsign);
   if (r.theme === 'light' || r.theme === 'dark' || r.theme === 'system') s.theme = r.theme;
   if (isBand(r.band)) s.band = r.band;
-  if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
+  if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';
   if (typeof r.inputDeviceId === 'string' && r.inputDeviceId) s.inputDeviceId = r.inputDeviceId;
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;
@@ -259,6 +280,9 @@ export function validate(raw: unknown): Settings {
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
   if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
   s.wspr = validateWspr(r.wspr);
+  for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);
+  s.rtty = validateRtty(r.rtty);
+  s.keyboard = validateKeyboard(r.keyboard);
   return s;
 }
 

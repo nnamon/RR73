@@ -3,8 +3,12 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { DEFAULTS, FEATURES_OFF, WSPR_DEFAULTS, loadSettings, migration, normaliseCallsign, resetSettings, settings, settingsStatus, SETTINGS_SCHEMA, updateSettings, validate } from './settings.svelte';
 import { closeDb, DB_NAME, getKv, setKv } from './db';
 import { defaultHighlights } from '../decode/highlight';
+import { RTTY_DEFAULTS } from '../rtty/settings';
+import { keyboardDefaults } from '../keyboard/settings';
 
 const SEQ = { run: false, tailEnd: true, huntOrder: 'unworked', watchdog: true, watchdogMin: 6 };
+/** What schema 8 adds: RTTY, the keyboard modes' macros and contest, and the operator's name and QTH. */
+const KB = { myName: '', myQth: '', rtty: { ...RTTY_DEFAULTS, dialHz: {} }, keyboard: keyboardDefaults() };
 
 beforeEach(async () => {
   await closeDb();
@@ -84,7 +88,7 @@ describe('the optional features migration', () => {
     await setKv('settings', { callsign: '9V1NE', theme: 'dark', band: '40m' });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF });
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps the features of a current record', async () => {
@@ -98,7 +102,7 @@ describe('the optional features migration', () => {
     await loadSettings();
     expect(settings).toEqual(DEFAULTS);
     expect(await getKv('settings')).toBeUndefined();
-    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
+    expect(migration(undefined)).toEqual({ schema: SETTINGS_SCHEMA, features: FEATURES_OFF, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB });
   });
 
   it('keeps a feature turned on before the stored settings arrived', async () => {
@@ -117,7 +121,7 @@ describe('the decode colours migration', () => {
     expect(settings.highlights).toEqual(defaultHighlights());
     expect(settings.highlights.every((h) => h.on)).toBe(true);
     expect(settings.features.activations).toBe(true);
-    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, highlights: defaultHighlights(), ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps a stored order, colours and switches', async () => {
@@ -135,10 +139,10 @@ describe('the sequencer settings migration', () => {
   it('stores Run off, tail-ending on, not worked first and a 6 min watchdog on a phone that ran 0.9', async () => {
     const stored = { callsign: '9V1NE', highlights: defaultHighlights(), schema: 3 };
     await setKv('settings', stored);
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB });
     await loadSettings();
     expect(settings).toMatchObject({ callsign: '9V1NE', ...SEQ });
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...SEQ, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps sequencer settings the operator changed', async () => {
@@ -161,10 +165,10 @@ describe('the waterfall contrast migration', () => {
     const mine = { run: true, tailEnd: false, huntOrder: 'farthest', watchdog: false, watchdogMin: 2.5 };
     const stored = { callsign: '9V1NE', highlights: defaultHighlights(), ...mine, schema: 5 };
     await setKv('settings', stored);
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB });
     await loadSettings();
     expect(settings).toMatchObject({ ...mine, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS });
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, waterfallContrast: 'normal', wspr: WSPR_DEFAULTS, ...KB, schema: SETTINGS_SCHEMA });
   });
 
   it('keeps a stored contrast and drops an unknown one', async () => {
@@ -180,10 +184,10 @@ describe('the WSPR settings migration', () => {
     const mine = { callsign: '9V1NE', band: '40m', mode: 'FT4', rxHz: 900, txHz: 1200, watchdogMin: 4, waterfallContrast: 'high' };
     const stored = { ...mine, schema: 6 };
     await setKv('settings', stored);
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, wspr: WSPR_DEFAULTS });
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, wspr: WSPR_DEFAULTS, ...KB });
     await loadSettings();
     expect(settings).toMatchObject({ ...mine, wspr: WSPR_DEFAULTS });
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, wspr: WSPR_DEFAULTS, schema: SETTINGS_SCHEMA });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, wspr: WSPR_DEFAULTS, ...KB, schema: SETTINGS_SCHEMA });
   });
 
   it('starts at 20%, 37 dBm, 1500 Hz, Stop beacon after 1 h, sorted by distance', () => {
@@ -204,6 +208,42 @@ describe('the WSPR settings migration', () => {
     expect(validate({ band: '2m', mode: 'FT8' })).toMatchObject({ band: '2m', mode: 'WSPR' });
     expect(validate({ band: '2m' })).toMatchObject({ band: '2m', mode: 'WSPR' });
     expect(validate({ band: '60m', mode: 'FT4' })).toMatchObject({ band: '60m', mode: 'FT8' });
+  });
+});
+
+describe('the RTTY settings migration', () => {
+  it('adds RTTY, the macros and the name and QTH at their defaults on a phone that ran 0.12, keeping every other value', async () => {
+    const mine = { callsign: '9V1NE', band: '40m', mode: 'WSPR', rxHz: 900, wspr: { ...WSPR_DEFAULTS, txPct: 35 } };
+    const stored = { ...mine, schema: 7 };
+    await setKv('settings', stored);
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, ...KB });
+    await loadSettings();
+    expect(settings).toMatchObject({ ...mine, ...KB });
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...KB, schema: SETTINGS_SCHEMA });
+  });
+
+  it('keeps RTTY on a band with an RTTY dial and refuses it on 60m and 2m', () => {
+    expect(validate({ band: '20m', mode: 'RTTY' })).toMatchObject({ band: '20m', mode: 'RTTY' });
+    expect(validate({ band: '60m', mode: 'RTTY' })).toMatchObject({ band: '60m', mode: 'FT8' });
+    expect(validate({ band: '2m', mode: 'RTTY' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+  });
+
+  it('keeps stored RTTY values that are valid and drops the rest', () => {
+    const r = validate({ rtty: { baud: 50, shiftHz: 425, stopBits: 2, squelchDb: null, figures: 'ita2', idleStopS: 0, watchdogMin: 0, markHz: 2210, dialHz: { '20m': 14085000, '9m': 1 } } }).rtty;
+    expect(r).toMatchObject({ baud: 50, shiftHz: 425, stopBits: 2, squelchDb: null, figures: 'ita2', idleStopS: 0, watchdogMin: 0, markHz: 2210, dialHz: { '20m': 14085000 } });
+    const bad = validate({ rtty: { baud: 300, shiftHz: 20, stopBits: 3, squelchDb: -40, figures: 'x', idleStopS: 5, repeatGapS: 0, markHz: 2950 } }).rtty;
+    expect(bad).toMatchObject({ baud: 45.45, shiftHz: 170, stopBits: 1.5, squelchDb: -14, figures: 'us', idleStopS: 60, repeatGapS: 3 });
+    // The mark keeps both tones inside 200 to 2900 Hz.
+    expect(bad.markHz).toBe(2900);
+    expect(validate({ myName: '  amon ', myQth: 'singapore   city' })).toMatchObject({ myName: 'AMON', myQth: 'SINGAPORE CITY' });
+  });
+
+  it('keeps the macro sets, contest and serial, and drops what is malformed', () => {
+    const k = validate({ keyboard: { set: 'contest', contestId: 'cq-wpx-rtty!', nextSerial: 42, serialDigits: 4, exchange: '599 {NR}', macros: { qso: [{ id: 'a', label: 'Hi', text: 'HI {CALL}', returnToRx: false }, { id: 2 }] } } }).keyboard;
+    expect(k).toMatchObject({ set: 'contest', contestId: 'CQ-WPX-RTTY', nextSerial: 42, serialDigits: 4 });
+    expect(k.macros.qso).toEqual([{ id: 'a', label: 'Hi', text: 'HI {CALL}', returnToRx: false, logWhenSent: false }]);
+    expect(k.macros.contest).toEqual(keyboardDefaults().macros.contest);
+    expect(validate({ keyboard: { nextSerial: 0, serialDigits: 9 } }).keyboard).toMatchObject({ nextSerial: 1, serialDigits: 3 });
   });
 });
 

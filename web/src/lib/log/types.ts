@@ -11,7 +11,7 @@ export interface Reference {
   ref: string;
 }
 
-export type QsoSource = 'sequencer' | 'manual' | 'import';
+export type QsoSource = 'sequencer' | 'manual' | 'import' | 'keyboard';
 
 /** Where a sequencer QSO's last decode of the other station came from. */
 export interface DecodeProvenance {
@@ -34,7 +34,7 @@ export interface Qso {
   call: string;
   /** GRIDSQUARE, their grid when received. */
   gridsquare: string;
-  /** MODE: FT8, or MFSK for FT4 (ADIF 3.1). */
+  /** MODE: FT8, RTTY, or MFSK for FT4 (ADIF 3.1). */
   mode: string;
   /** SUBMODE: FT4 with MODE MFSK, else ''. */
   submode: string;
@@ -74,6 +74,14 @@ export interface Qso {
   iota: string;
   /** COMMENT. */
   comment: string;
+  /** NAME and QTH: the other operator's name and location, as received. */
+  name: string;
+  qth: string;
+  /** STX and SRX: contest serial numbers sent and received, as on air ("042"). */
+  stx: string;
+  srx: string;
+  /** CONTEST_ID, such as CQ-WPX-RTTY. */
+  contestId: string;
   /** Other ADIF fields from an import, by upper-case name, written back unchanged. */
   extra: Record<string, string>;
 
@@ -97,17 +105,23 @@ export interface LogQsoRecord {
   call: string;
   /** Their grid, when received. */
   grid?: string | null;
-  mode: 'FT8' | 'FT4';
+  mode: 'FT8' | 'FT4' | 'RTTY';
   band: string;
   /** Dial frequency, Hz. */
   dialHz: number;
-  /** Our transmit audio frequency, Hz. FREQ is dial plus audio. */
+  /** Our transmit audio frequency, Hz: the lowest tone in FT8 and FT4, the mark tone in RTTY. FREQ is dial plus audio. */
   audioHz: number;
   startUtcMs: number;
   endUtcMs: number;
-  /** Reports as sent on air, dB: -14, or the text "-14". */
+  /** Reports as sent on air, dB: -14, or the text "-14" or "599". */
   reportSent: number | string;
   reportRcvd: number | string;
+  /** NAME, QTH, STX, SRX and CONTEST_ID, from a keyboard mode's strip. */
+  name?: string;
+  qth?: string;
+  stx?: string;
+  srx?: string;
+  contestId?: string;
   /** The activation the QSO belongs to. Left out: the running one. null: none. */
   activationId?: string | null;
   /** Defaults to sequencer. */

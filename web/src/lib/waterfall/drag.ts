@@ -15,7 +15,7 @@ export const TAP_PX = 10;
 export const TAP_MS = 1000;
 /** Frequencies set by touch step by this much, Hz: 5 Hz across FT8's 3000 Hz, 1 Hz across WSPR's 200 Hz. */
 export const STEP_HZ = 5;
-export const STEP_HZ_OF: Record<Mode, number> = { FT8: STEP_HZ, FT4: STEP_HZ, WSPR: 1 };
+export const STEP_HZ_OF: Record<Mode, number> = { FT8: STEP_HZ, FT4: STEP_HZ, WSPR: 1, RTTY: 1 };
 
 export type Marker = 'rx' | 'tx';
 export type Gesture = 'pending' | 'drag' | 'scroll';

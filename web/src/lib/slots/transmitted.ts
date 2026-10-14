@@ -4,7 +4,7 @@
  * shows what was sent in their place.
  */
 
-import { SLOT_MS, type Mode } from '../clock/slots';
+import { SLOT_MS, type SlotMode as Mode } from '../clock/slots';
 
 /** Slots kept: 4 minutes of FT8. */
 const KEEP = 16;

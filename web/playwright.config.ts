@@ -98,7 +98,7 @@ export default defineConfig({
     // (locally: --no-deps to run them alone), with 2 retries. The QSO comes first: it is the
     // longest of the three.
     { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
-    { name: 'tx-cq', testMatch: /tx-cq\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
+    { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
     // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
     { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
     // The practice band: synthesised in the page, decoded in real time, no microphone. It loads

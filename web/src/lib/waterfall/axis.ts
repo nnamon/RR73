@@ -39,7 +39,7 @@ export function rulerLabels(step = 500, maxHz = MAX_HZ): RulerLabel[] {
  * apart. WSPR's 4 tones 1.46 Hz apart sit around the frequency, which is the signal's centre: its
  * marker is 6 Hz wide, centred.
  */
-export const SIGNAL_WIDTH_HZ: Record<Mode, number> = { FT8: 8 * 6.25, FT4: (4 * 62.5) / 3, WSPR: 6 };
+export const SIGNAL_WIDTH_HZ: Record<Mode, number> = { FT8: 8 * 6.25, FT4: (4 * 62.5) / 3, WSPR: 6, RTTY: 170 };
 
 /** Left and right edges, 0 to 1, of the marker for a signal in `mode` at `hz`. */
 export function bracket(hz: number, mode: Mode, maxHz = MAX_HZ): { x0: number; x1: number } {

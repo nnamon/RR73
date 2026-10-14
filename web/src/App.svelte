@@ -11,6 +11,8 @@
   import PracticeSettings from './views/PracticeSettings.svelte';
   import FtSettings from './views/FtSettings.svelte';
   import WsprSettings from './views/WsprSettings.svelte';
+  import RttySettings from './views/RttySettings.svelte';
+  import MacroSettings from './views/MacroSettings.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
   import Settings from './views/Settings.svelte';
   import Spots from './views/Spots.svelte';
@@ -115,6 +117,10 @@
           <FtSettings />
         {:else if sub === 'wspr'}
           <WsprSettings />
+        {:else if sub === 'rtty'}
+          <RttySettings />
+        {:else if sub === 'macros'}
+          <MacroSettings macroId={route.path[2] ?? null} />
         {:else if sub === 'colours'}
           <DecodeColours />
         {:else if sub === 'versions'}
@@ -140,7 +146,10 @@
     display: flex;
     flex-direction: column;
     box-sizing: border-box;
-    height: 100dvh;
+
+    /* A keyboard mode sets --rr-app-h to the visual viewport while the keyboard is up, so Operate's
+       bottom bar sits on the keyboard (lib/state/keyboard.svelte.ts). */
+    height: var(--rr-app-h, 100dvh);
     padding-bottom: var(--rr-safe-bottom);
     background: var(--rr-bg);
   }

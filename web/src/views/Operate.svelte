@@ -11,7 +11,7 @@
   import { PANES, familyOf } from './operate/panes';
   import { houndOn, qso, setFrequencies } from '../lib/state/qso.svelte';
   import { utcTime } from '../lib/clock/format';
-  import { slotProgress } from '../lib/clock/slots';
+  import { hasSlots, slotProgress } from '../lib/clock/slots';
   import { dialHz } from '../lib/radio/bands';
   import { operatingDialHz } from '../lib/radio/hound-dial';
   import { markedTxHz } from '../lib/qso/view';
@@ -21,6 +21,9 @@
   import { practice } from '../lib/state/practice.svelte';
   import { audio, resumeAudio, startAudio, tx } from '../lib/state/station.svelte';
   import { setWsprTxHz, wspr } from '../lib/state/wspr.svelte';
+  import { currentDialHz, keyboard, session, settle, tapToTune, tuneMark } from '../lib/state/keyboard.svelte';
+  import { dial4 } from '../lib/rtty/dial';
+  import { spaceHz } from '../lib/rtty/settings';
 
   /** False while another screen is pushed over Operate: the list keeps its place for the return. */
   let { active = true }: { active?: boolean } = $props();
@@ -31,6 +34,7 @@
   const family = $derived(familyOf(settings.mode));
   const Pane = $derived(PANES[family]);
   const isWspr = $derived(family === 'wspr');
+  const isKeyboard = $derived(family === 'keyboard');
 
   // A selected spot's trace is marked on the waterfall.
   const selectedHz = $derived.by(() => {
@@ -41,7 +45,7 @@
   });
 
   const live = $derived(audio.status === 'running');
-  const onAir = $derived(isWspr ? !!wspr.onAir : !!qso.onAir);
+  const onAir = $derived(isWspr ? !!wspr.onAir : isKeyboard ? session.tx !== 'off' : !!qso.onAir);
   const transmitting = $derived(onAir || tx.tuning);
   const stateText = $derived(
     onAir
@@ -63,9 +67,10 @@
   <TopBar
     band={settings.band}
     mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
-    dialHz={isWspr ? dialHz(settings.band, 'WSPR') : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
+    dialHz={isWspr ? dialHz(settings.band, 'WSPR') : isKeyboard ? currentDialHz() : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
+    dialText={isKeyboard ? dial4(currentDialHz()) : undefined}
     utc={utcTime(clock.ms)}
-    progress={slotProgress(clock.ms, settings.mode)}
+    progress={hasSlots(settings.mode) ? slotProgress(clock.ms, settings.mode) : null}
     tone={transmitting ? 'tx' : live ? 'rx' : 'idle'}
     state={stateText}
     onair={transmitting}
@@ -98,6 +103,24 @@
       stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
       hint={!settings.freqPicked}
       onset={(f) => f.txHz !== undefined && setWsprTxHz(f.txHz)}
+    />
+  {:else if isKeyboard}
+    <Waterfall
+      bind:this={wf}
+      mode="RTTY"
+      rxHz={null}
+      txHz={0}
+      contrast={settings.waterfallContrast}
+      stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
+      hint={!live}
+      onset={() => undefined}
+      pair={{ markHz: keyboard.markHz, spaceHz: spaceHz(settings.rtty, keyboard.markHz), air: session.tx !== 'off' }}
+      strip={keyboard.keyboardUp}
+      ontune={(mark, done) => {
+        tuneMark(mark);
+        if (done) settle();
+      }}
+      onfind={tapToTune}
     />
   {:else}
     <Waterfall

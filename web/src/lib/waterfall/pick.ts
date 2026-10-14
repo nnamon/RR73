@@ -18,6 +18,8 @@ export const FREQ_LIMITS: Record<Mode, { minHz: number; maxHz: number }> = {
   FT8: { minHz: 200, maxHz: 2800 },
   FT4: { minHz: 200, maxHz: 2767 },
   WSPR: { minHz: 1410, maxHz: 1590 },
+  // RTTY's pair: its mark tone, kept so both tones stay inside 200 to 2900 Hz (lib/rtty/settings.ts).
+  RTTY: { minHz: 200, maxHz: 2900 },
 };
 
 /** `hz` rounded to 1 Hz and kept inside the mode's limits. */

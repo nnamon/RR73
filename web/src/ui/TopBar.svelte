@@ -3,7 +3,8 @@
    * Operate's top bar, one 44 pt row under the status bar: band and mode (a tap opens the band
    * sheet) with the dial frequency, the slot ring, the UTC clock, and the buttons that open
    * Spots, the Log and Settings. The audio level is the 2 pt line along its bottom edge. On air,
-   * a red edge runs along its top and the ring turns red.
+   * a red edge runs along its top and the ring turns red. RTTY has no slots, so no ring, and
+   * shows its dial to four decimals (`dialText`).
    */
   import Icon from './Icon.svelte';
   import LevelMeter from './LevelMeter.svelte';
@@ -15,6 +16,7 @@
     band,
     mode,
     dialHz,
+    dialText,
     utc,
     progress,
     tone,
@@ -29,8 +31,11 @@
     band: string;
     mode: string;
     dialHz: number | null;
+    /** The dial as shown, where the mode wants its own format ("14.0830"). */
+    dialText?: string;
     utc: string;
-    progress: number;
+    /** Slot progress, 0 to 1; null for a mode without slots. */
+    progress: number | null;
     tone: 'rx' | 'tx' | 'idle';
     /** What the station does now, for screen readers: "Receiving", "Transmitting". The ring's colour shows it. */
     state: string;
@@ -44,7 +49,7 @@
     onband: () => void;
   } = $props();
 
-  const dial = $derived(dialHz === null ? '' : mhz(dialHz).replace(/\sMHz$/, ''));
+  const dial = $derived(dialText ?? (dialHz === null ? '' : mhz(dialHz).replace(/\sMHz$/, '')));
 </script>
 
 <header class="top" class:onair>
@@ -56,8 +61,8 @@
   </button>
   {#if practice}<span class="practice">Practice</span>{/if}
   <span class="grow"></span>
-  <div class="clk" role="timer" aria-label="UTC time and slot progress. {state}">
-    <SlotRing {progress} {tone} />
+  <div class="clk" role="timer" aria-label="{progress === null ? 'UTC time' : 'UTC time and slot progress'}. {state}">
+    {#if progress !== null}<SlotRing {progress} {tone} />{/if}
     <span class="utc">{utc}</span>
   </div>
   <nav class="icons" aria-label="Screens">

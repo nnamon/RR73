@@ -4,7 +4,7 @@
   import LocateButton from '../ui/LocateButton.svelte';
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
-  import { normaliseCallsign, normaliseGrid, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
   import { audio, busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
@@ -60,6 +60,20 @@
     grid = r.grid;
     saveGrid();
     gridNote = r.note;
+  }
+
+  let myName = $state(settings.myName);
+  let myQth = $state(settings.myQth);
+  $effect(() => {
+    myName = settings.myName;
+    myQth = settings.myQth;
+  });
+
+  function saveText(key: 'myName' | 'myQth', value: string) {
+    const v = normaliseText(value);
+    if (key === 'myName') myName = v;
+    else myQth = v;
+    if (v !== settings[key]) void updateSettings({ [key]: v });
   }
 
   function saveCallsign() {
@@ -159,9 +173,39 @@
         />
         <LocateButton chars={6} onresult={useGps} />
       </div>
+      <label class="row">
+        <span class="row-title">Name</span>
+        <input
+          class="field mono"
+          type="text"
+          bind:value={myName}
+          onblur={() => saveText('myName', myName)}
+          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+          placeholder="Optional"
+          autocapitalize="characters"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="40"
+        />
+      </label>
+      <label class="row">
+        <span class="row-title">QTH</span>
+        <input
+          class="field mono"
+          type="text"
+          bind:value={myQth}
+          onblur={() => saveText('myQth', myQth)}
+          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+          placeholder="Optional"
+          autocapitalize="characters"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="40"
+        />
+      </label>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Needed to transmit.</p>
+    <p class="section-foot">Callsign and grid are needed to transmit.</p>
   </div>
 
   <div class="section">
@@ -174,6 +218,16 @@
       <a class="row link" href={href('settings', 'wspr')}>
         <span class="row-main"><span class="row-title">WSPR</span></span>
         <span class="row-value">{settings.wspr.txPct}% · {settings.wspr.powerDbm} dBm</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'rtty')}>
+        <span class="row-main"><span class="row-title">RTTY</span></span>
+        <span class="row-value">{settings.rtty.baud} · {settings.rtty.shiftHz} Hz</span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
+      <a class="row link" href={href('settings', 'macros')}>
+        <span class="row-main"><span class="row-title">Macros</span></span>
+        <span class="row-value">{settings.keyboard.set === 'qso' ? 'QSO' : 'Contest'} · {settings.keyboard.macros[settings.keyboard.set].length}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
     </div>

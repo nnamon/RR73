@@ -4,7 +4,7 @@
  * carries audio, so the bench can skip or weight slots with holes.
  */
 
-import { SLOT_RATE, type Mode } from '../clock/slots';
+import { SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
 import { isoUtc } from '../clock/format';
 
 export interface SlotSidecar {

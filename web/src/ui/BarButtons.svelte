@@ -19,6 +19,8 @@
     grow?: boolean;
     /** Opens a menu: aria-haspopup, and whether it is open. */
     menu?: { open: boolean };
+    /** Shown with the tint at reduced opacity until it can act; a tap still reaches onclick. */
+    dim?: boolean;
     onclick: () => void;
   }
 </script>
@@ -30,7 +32,8 @@
    */
   import Icon from './Icon.svelte';
 
-  let { buttons }: { buttons: BarButton[] } = $props();
+  /** `keepFocus`: a tap leaves the focus where it is, so the keyboard stays up over a text field. */
+  let { buttons, keepFocus = false }: { buttons: BarButton[]; keepFocus?: boolean } = $props();
 </script>
 
 <div class="ctl">
@@ -40,7 +43,10 @@
       class="b {b.tone ?? 'plain'}"
       class:grow={b.grow}
       class:icon={!!b.icon}
+      class:dim={b.dim}
       data-id={b.id}
+      aria-disabled={b.dim || undefined}
+      onpointerdown={keepFocus ? (e) => e.preventDefault() : undefined}
       aria-label={b.icon ? b.label : undefined}
       aria-pressed={b.pressed}
       aria-haspopup={b.menu ? 'menu' : undefined}
@@ -77,6 +83,10 @@
 
   .b.grow {
     flex: 1;
+  }
+
+  .b.dim .face {
+    opacity: 0.4;
   }
 
   .face {
