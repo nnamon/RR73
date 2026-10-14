@@ -1,6 +1,6 @@
 // RTTY in Operate on iPhone viewports in WebKit, as in the approved mockup (docs/design/rtty.md):
 // 20m from 9V1NE on 14 October 2026, the page clock held at the mockup's moments and the text
-// added through the review hooks. Listening, a QSO with JA1XYZ filled from his text, a macro and a
+// added through the review hooks. Listening, a QSO with JA1XYZ filled from their text, a macro and a
 // typed line on air, the keyboard up, Halt, the strip logged through the QSO sheet, the Contest set
 // with the other-case reading, weak copy with the speed menu, the band sheet's RTTY dial, Settings ›
 // RTTY and Settings › Macros. CI runs it in light at 375 x 667; the review projects run both themes
@@ -174,13 +174,15 @@ for (const theme of ['light', 'dark'] as const) {
     expect(Math.abs(Number(await page.getByRole('slider', { name: 'Mark tone, Hz' }).inputValue()) - 1885)).toBeLessThanOrEqual(8);
     await page.evaluate(() => window.__rr73!.rttyTune(1612));
 
-    // JA1XYZ answers; a tap on his callsign fills the strip from his text.
+    // JA1XYZ answers; a tap on the callsign fills the strip from their text.
     await lines(page, ['@14:05', ...RX_REPLY], at(14, 5, 0));
     await word(page, 'JA1XYZ').last().click();
     await expect(page.getByTestId('strip-call')).toHaveValue('JA1XYZ');
     await expect(page.getByTestId('strip-rcvd')).toHaveValue('579');
     await expect(page.getByTestId('strip-name')).toHaveValue('TARO');
     await expect(page.getByTestId('strip-qth')).toHaveValue('YOKOHAMA');
+    // At 375 pt YOKOHAMA is wider than its cell: it ends in an ellipsis, never cut mid-letter.
+    await expect(page.getByTestId('strip-qth')).toHaveCSS('text-overflow', 'ellipsis');
     await expect(bar(page).getByRole('status')).toHaveText(/Call set to JA1XYZ/);
 
     // The Report macro starts a transmission and leaves Tx on; a typed line follows on air.

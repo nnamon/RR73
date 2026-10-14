@@ -160,6 +160,9 @@
     font: inherit;
     font-weight: var(--rr-weight-semibold);
     text-transform: uppercase;
+
+    /* A value wider than its cell ends in an ellipsis while the field is not being edited. */
+    text-overflow: ellipsis;
   }
 
   .filled input {
