@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.15.3 · 2026-10-14
 
 - RTTY on an iPad or a desktop has the transmit panel on the right, as FT8: the status, the QSO as a form, their station (country, distance and bearing, QSOs before) and Halt at its foot. The received text, the text to send and the macros take the left, under a waterfall a quarter of the window high.
 - RTTY on an upright iPad keeps the phone's order, with Tx, Log QSO, ••• and Halt along the bottom. On a phone on its side the macros and Halt move under the waterfall on the right.
