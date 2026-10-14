@@ -194,7 +194,7 @@
     height: var(--rr-tap);
     padding: 0 var(--rr-space-2);
     border-radius: var(--rr-radius-l);
-    background: var(--rr-fill-bg);
+    background: var(--rr-fill3);
     color: var(--rr-label3);
   }
 

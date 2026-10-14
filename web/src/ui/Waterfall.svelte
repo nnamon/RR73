@@ -279,7 +279,7 @@
     position: absolute;
     height: 13px;
     font-family: var(--rr-mono);
-    font-size: var(--rr-text-axis);
+    font-size: var(--rr-text-ruler);
     line-height: 13px;
     letter-spacing: 0;
     white-space: nowrap;
@@ -409,6 +409,6 @@
   }
 
   .tag.rx {
-    background: var(--rr-ic-green);
+    background: var(--rr-run);
   }
 </style>

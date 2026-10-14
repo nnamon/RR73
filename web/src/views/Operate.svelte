@@ -17,6 +17,7 @@
   import { SLOT_MS, slotProgress } from '../lib/clock/slots';
   import { TouchFreeze } from '../lib/decode/freeze';
   import { buildList, callerItems, filterCounts, type Classify, type Filter, type Outgoing } from '../lib/decode/list';
+  import { applyFocus, focusCall } from '../lib/decode/focus';
   import { highlightDecode } from '../lib/decode/highlight';
   import { log } from '../lib/log/log.svelte';
   import { buildLogIndex } from '../lib/log/worked';
@@ -203,7 +204,10 @@
       onAir: air ? { slotStartMs: Math.floor(air.startMs / slot) * slot, startMs: air.startMs, endMs: air.endMs } : null,
     };
   });
-  const items = $derived([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)]);
+  // While calling a station or in a QSO, rows unrelated to it dim. The focus is a callsign or
+  // null, so the sequencer's 1 s tick does not rebuild the list.
+  const focus = $derived(focusCall(qso.st));
+  const items = $derived(applyFocus([...callers, ...buildList(shown, settings.callsign, filter, settings.rxHz, qso.sent, settings.mode, classify, outgoing)], focus));
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -319,7 +323,9 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-top: var(--rr-safe-top);
-    background: var(--rr-dock);
+
+    /* The status bar's inset takes the top bar's material. */
+    background: linear-gradient(var(--rr-dock), var(--rr-dock)) top / 100% var(--rr-safe-top) no-repeat, var(--rr-plain);
   }
 
   .filters {
@@ -330,7 +336,7 @@
     align-items: center;
     height: var(--rr-filters);
     padding: 0 var(--rr-safe-right) 0 calc(var(--rr-space-2) + var(--rr-safe-left));
-    background: var(--rr-bg);
+    background: var(--rr-plain);
     box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
 
@@ -356,10 +362,10 @@
     display: flex;
     align-items: center;
     height: var(--rr-chip);
-    padding: 0 var(--rr-space-3);
-    border-radius: 14px;
+    padding: 0 calc(var(--rr-space-2) + var(--rr-space-half));
+    border-radius: var(--rr-radius-pill);
     background: var(--rr-fill-bg);
-    font-size: var(--rr-text-row);
+    font-size: var(--rr-text-sub);
     font-weight: var(--rr-weight-semibold);
     white-space: nowrap;
   }
@@ -371,13 +377,12 @@
   }
 
   .chip.on .pill {
-    background: var(--rr-label);
-    color: var(--rr-on-strong);
+    background: var(--rr-accent-fill);
+    color: var(--rr-on-fill);
   }
 
   .chip.on .n {
     color: inherit;
-    opacity: 0.75;
   }
 
   .chip:focus-visible {

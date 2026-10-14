@@ -58,7 +58,7 @@
   <span class="grow"></span>
   <div class="clk" role="timer" aria-label="UTC time and slot progress. {state}">
     <SlotRing {progress} {tone} />
-    <span class="utc mono">{utc}</span>
+    <span class="utc">{utc}</span>
   </div>
   <nav class="icons" aria-label="Screens">
     {#if spots}<a class="bar-button" href={href('spots')} aria-label="Spots"><Icon name="spots" size={24} /></a>{/if}
@@ -77,6 +77,8 @@
     height: var(--rr-tap);
     padding: 0 var(--rr-safe-right) 0 calc(var(--rr-space-1) + var(--rr-safe-left));
     background: var(--rr-dock);
+    -webkit-backdrop-filter: var(--rr-material-blur);
+    backdrop-filter: var(--rr-material-blur);
   }
 
   .top.onair {
@@ -120,8 +122,8 @@
   .mode {
     padding: var(--rr-space-px) var(--rr-space-1);
     border-radius: var(--rr-radius-s);
-    background: var(--rr-accent-soft);
-    color: var(--rr-accent);
+    background: var(--rr-fill-bg);
+    color: var(--rr-label);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-bold);
     line-height: var(--rr-leading-caption);
@@ -160,11 +162,14 @@
     flex: none;
     gap: var(--rr-space-1-5);
     align-items: center;
+    margin-left: var(--rr-space-1-5);
   }
 
+  /* SF Pro with tabular digits, so the clock keeps its width. */
   .utc {
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-semibold);
+    font-variant-numeric: tabular-nums;
     letter-spacing: 0;
   }
 

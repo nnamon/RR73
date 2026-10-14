@@ -158,7 +158,7 @@
   }
 
   .teal {
-    background: var(--rr-teal);
+    background: var(--rr-ic-teal);
   }
 
   .grey {

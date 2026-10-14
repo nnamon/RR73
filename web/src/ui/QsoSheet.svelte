@@ -362,7 +362,7 @@
   }
 
   .send:disabled {
-    color: var(--rr-label3);
+    opacity: 0.4;
   }
 
   .errors {

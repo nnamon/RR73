@@ -52,9 +52,9 @@ export default defineConfig({
         name: 'RR73',
         short_name: 'RR73',
         description: 'FT8 and FT4 through the headset jack.',
-        // Literal colours: the manifest cannot read CSS. They match --rr-bg and --rr-accent-fill (light).
-        theme_color: '#F2F3F6',
-        background_color: '#F2F3F6',
+        // Literal colours: the manifest cannot read CSS. They match --rr-bg in light.
+        theme_color: '#F2F2F7',
+        background_color: '#F2F2F7',
         display: 'standalone',
         orientation: 'any',
         start_url: base,

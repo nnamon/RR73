@@ -34,7 +34,7 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 **Hunt.** A main button. Hunt answers CQs one after another until the operator stops it:
 
 - At each final decoding pass with nobody in a QSO, it calls the first CQ in Hunt's order among the plain CQs heard in the slot just decoded, in the next slot of the opposite parity. Hunt started within the late-start window of a slot picks from the slot before at once.
-- It skips stations heard sending anything other than CQ in that slot (in a QSO), dupes (as for Run), and stations that ignored Hunt in the last 10 min (no reply after the repeats).
+- It skips stations heard sending anything other than CQ in that slot (in a QSO), dupes (as for Run), and stations that ignored Hunt in the last 10 min: no reply after the repeats, or a second answer to another station while Hunt called them.
 - Orders, chosen in •••: Not worked (on this band and mode on any day, then strongest; the default), Strongest, Newest (the station whose run of CQs started most recently), Farthest, New call (never worked).
 - Plain CQ only. CQ DX, CQ NA, CQ POTA and other CQs with a modifier are skipped until reference data can say whether the operator is the station asked for.
 - Hunt and CQ stop each other. Starting Hunt during a QSO lets the QSO finish and picks after it. Stopping Hunt during a QSO lets it finish, then Tx goes off. Halt, End QSO, an audio stop and the watchdog stop Hunt.
