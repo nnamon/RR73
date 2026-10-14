@@ -385,8 +385,8 @@
     font-weight: var(--rr-weight-bold);
   }
 
-  /* SNR and frequency on the right, in one column. */
-  /* Wide enough for "−24 dB · 2999 Hz" in tabular digits, so the numbers start at one x on every row. */
+  /* SNR and frequency on the right, in one column wide enough for "−24 dB · 2999 Hz" in tabular
+     digits, so the numbers start at one x on every row. */
   .c-num {
     flex: none;
     min-width: 9em;
