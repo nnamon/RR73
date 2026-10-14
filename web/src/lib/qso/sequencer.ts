@@ -6,7 +6,9 @@
  *
  * Transmissions use one slot parity: the opposite of the station answered, or the operator's
  * choice for CQ. The sequencer decides on the final decoding pass of each slot of the other
- * parity and plans the next transmission for the slot that follows.
+ * parity and plans the next transmission for the slot that follows. Later passes of the same
+ * slot (deeper decoder stages) bring only new decodes, and act on what they hold as the final
+ * pass would have: in the slot that follows when still in time, else a cycle later.
  */
 
 import { SLOT_MS, parity as parityOf, slotStart, type FtMode as Mode, type Parity } from '../clock/slots';
@@ -223,10 +225,16 @@ export interface SeqState {
   completed: number;
   /** Hound: the Fox last logged, for the status line until the next call. */
   houndLogged: string | null;
+  /** The last slot decided on its final pass, with the decode texts acted on since, so a later pass acts only on new ones. */
+  decided: { slotStartMs: number; texts: string[] } | null;
 }
 
 export type SeqEvent =
-  | { type: 'slotDecoded'; slotStartMs: number; pass: 'early' | 'final'; decodes: Decode[]; nowMs: number }
+  /**
+   * Decodes of a slot. `early` comes before the slot ends, `final` when it ends; `late` holds
+   * only the decodes that later decoder stages added after `final`.
+   */
+  | { type: 'slotDecoded'; slotStartMs: number; pass: 'early' | 'final' | 'late'; decodes: Decode[]; nowMs: number }
   | { type: 'callStation'; decode: Decode; slotStartMs: number; nowMs: number }
   | { type: 'callCq'; nowMs: number }
   | { type: 'enableTx'; on: boolean; nowMs: number }
@@ -302,6 +310,7 @@ export function initialState(config: SeqConfig): SeqState {
     worked: [],
     completed: 0,
     houndLogged: null,
+    decided: null,
   };
 }
 
@@ -423,7 +432,10 @@ class Machine {
       st.next = null;
       return;
     }
-    st.next = { tx, text, ...ourSlot(st, nowMs), scheduled: false, freqHz: this.txFreq(tx) };
+    let slot = ourSlot(st, nowMs);
+    // The slot a transmission is on air in keeps it: the new one goes a cycle later.
+    if (st.onAir?.slotStartMs === slot.slotStartMs) slot = { slotStartMs: slot.slotStartMs + 2 * this.len, offsetS: 0.5, tooLateFor: slot.slotStartMs };
+    st.next = { tx, text, ...slot, scheduled: false, freqHz: this.txFreq(tx) };
     this.flush();
   }
 
@@ -716,12 +728,17 @@ class Machine {
     }
   }
 
-  /** Adds stations calling us to the queue (CQ and Run). Returns true when the queue changed. */
-  addCallers(slotStartMs: number, decodes: Decode[], nowMs: number): boolean {
+  /**
+   * Adds stations calling us to the queue (CQ and Run). Returns true when the queue changed. A
+   * later pass (`more`) only adds: the final pass of its slot already renewed the queue.
+   */
+  addCallers(slotStartMs: number, decodes: Decode[], nowMs: number, more = false): boolean {
     const st = this.st;
     const me = this.cfg.myCall;
     let changed = false;
-    if (!this.cfg.run) {
+    if (more) {
+      // Nothing to renew.
+    } else if (!this.cfg.run) {
       // Without Run, only the stations calling in the latest slot are candidates.
       if (st.queue.length) changed = true;
       st.queue = [];
@@ -888,6 +905,15 @@ class Machine {
 
   slotDecoded(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
     const st = this.st;
+    if (e.pass === 'late') {
+      // Only the decodes no pass of this slot has brought yet, and only for the slot decided last.
+      const seen = st.decided;
+      if (seen?.slotStartMs !== e.slotStartMs) return;
+      const fresh = e.decodes.filter((d) => !seen.texts.includes(d.text));
+      if (!fresh.length) return;
+      seen.texts.push(...fresh.map((d) => d.text));
+      e = { ...e, decodes: fresh };
+    } else if (e.pass === 'final') st.decided = { slotStartMs: e.slotStartMs, texts: e.decodes.map((d) => d.text) };
     // Keep the partner's latest signal for the report and the log.
     if (st.partner) {
       const heard = e.decodes.filter((d) => parseParts(d.text).some((x) => sameCall(x.from, st.partner!.call)));
@@ -898,25 +924,31 @@ class Machine {
       if (this.cfg.run) this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
       return;
     }
-    if (e.pass !== 'final') return;
+    if (e.pass === 'early') return;
     this.noteCqs(e.slotStartMs, e.decodes, e.nowMs);
     this.decide(e);
     if (st.hunt && st.phase === 'idle') this.huntPick(e.slotStartMs, e.nowMs);
   }
 
+  /**
+   * Acts on a slot's decodes. A later pass (`late`) acts only on what its decodes hold: a reply,
+   * the partner answering another station, a caller. What they lack was the final pass's to act
+   * on, so nothing repeats or moves on for want of an answer.
+   */
   decide(e: Extract<SeqEvent, { type: 'slotDecoded' }>) {
     const st = this.st;
     const me = this.cfg.myCall;
+    const more = e.pass === 'late';
     if (st.phase === 'idle') return;
     // Replies come in the other parity; the slot we transmitted in tells us nothing.
     if (st.parity && parityOf(e.slotStartMs, this.cfg.mode) === st.parity) return;
-    const sentLastSlot = st.lastSent?.slotStartMs === e.slotStartMs - this.len;
+    const sentLastSlot = !more && st.lastSent?.slotStartMs === e.slotStartMs - this.len;
 
     if (this.cfg.hound && st.phase === 'answering' && st.partner && !st.partner.logged) {
-      this.houndDecide(e, sentLastSlot);
+      this.houndDecide(e, sentLastSlot, more);
       return;
     }
-    if (st.phase === 'cq') this.addCallers(e.slotStartMs, e.decodes, e.nowMs);
+    const added = st.phase === 'cq' && this.addCallers(e.slotStartMs, e.decodes, e.nowMs, more);
 
     if (st.partner) {
       const p = st.partner;
@@ -929,7 +961,7 @@ class Machine {
           this.goTo(4, e.nowMs);
           return;
         }
-        this.afterQso(e.nowMs, true);
+        if (!more) this.afterQso(e.nowMs, true);
         return;
       }
       if (ex) st.lost = null;
@@ -953,6 +985,7 @@ class Machine {
         this.goTo(r, e.nowMs);
         return;
       }
+      if (more) return;
       if (sentLastSlot && st.current) {
         if (st.paused) return;
         this.goTo(st.current, e.nowMs);
@@ -965,11 +998,11 @@ class Machine {
     // Calling CQ with nobody in the QSO.
     if (st.phase === 'cq') {
       const callers = this.ordered().filter((c) => this.cfg.workDupes || !c.dupe);
-      if (callers.length) {
+      if (callers.length && (!more || added)) {
         this.nextCaller(e.nowMs);
         return;
       }
-      if (sentLastSlot || !st.next) this.plan(6, e.nowMs);
+      if (!more && (sentLastSlot || !st.next)) this.plan(6, e.nowMs);
     }
   }
 
@@ -980,7 +1013,7 @@ class Machine {
    * after our report logs the QSO and Tx goes off. Tx1 repeats until the Fox answers or the
    * watchdog stops it; the R-report repeats up to the retry limit, 300 Hz away.
    */
-  houndDecide(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean) {
+  houndDecide(e: Extract<SeqEvent, { type: 'slotDecoded' }>, sentLastSlot: boolean, more = false) {
     const st = this.st;
     const p = st.partner!;
     const me = this.cfg.myCall;
@@ -1005,6 +1038,7 @@ class Machine {
       this.goTo(3, e.nowMs);
       return;
     }
+    if (more) return;
     if (sentLastSlot && st.current && !st.paused) {
       // Tx1 repeats with no limit, as WSJT-X's Hound does; the watchdog ends it.
       if (st.current === 1) this.plan(1, e.nowMs);

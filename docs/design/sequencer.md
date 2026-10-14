@@ -51,7 +51,7 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 - Our transmissions use one slot parity: the opposite of the station we answer, or the parity the operator chose for CQ.
 - A transmission starts 0.5 s after its slot boundary, scheduled on the audio clock.
 - Late start: when the decision for a slot is made after its start (decodes arrive about 0.1 to 0.5 s after the previous slot ends), the transmission may start up to 1.5 s late in FT8 and 1.0 s late in FT4. Later than that it moves to the next slot of the same parity, and the dock says which.
-- The sequencer decides on the final decoding pass of each slot. An early pass may only add a caller to the queue.
+- The sequencer decides on the final decoding pass of each slot. An early pass may only add a caller to the queue. A later pass (the decoder's deeper FT8 stages, up to 2 s after the slot) brings only new decodes and acts on them as the final pass would: a reply, a lost station, a caller, a CQ for Hunt. The answer starts late in the slot under way when the late-start limit allows and no transmission is on air in it, else a cycle later. A later pass never repeats a message or counts a retry for what it lacks.
 
 ## Retries
 

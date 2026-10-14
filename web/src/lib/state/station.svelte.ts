@@ -197,7 +197,7 @@ decoder.onStatus((st) => {
   }
 });
 const chunkListeners = new Set<(c: Chunk) => void>();
-const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[]) => void>();
+const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[], pass: 'final' | 'late') => void>();
 const wsprListeners = new Set<(r: WsprSlotResult) => void>();
 /** The WSPR slot being decoded, UTC ms, or null. */
 export const wsprDecoding = $state<{ startUtcMs: number | null }>({ startUtcMs: null });
@@ -372,24 +372,29 @@ function keepSlot(entry: DecodedSlot) {
 export function deliverDecodes(entry: DecodedSlot) {
   if (transmitted.has(entry.startUtcMs)) return;
   keepSlot(entry);
-  for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes);
+  for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes, 'final');
   calibrate(entry);
 }
 
 /**
- * Adds what the later decoder stages found in a slot already delivered, to the decode list
- * only. The sequencer and the receive calibration act on the slot's first decodes, which come
- * at once; these come up to DEEP.budgetMs after decoding started.
+ * Adds what the later decoder stages found in a slot already delivered: to the decode list, and
+ * to the listeners as a later pass of the slot. These come up to DEEP.budgetMs after decoding
+ * started. The receive calibration keeps to the slot's first decodes, which carry its timing.
  */
 export function addDecodes(startUtcMs: number, decodes: Decode[]) {
   const entry = band.slots.find((s) => s.startUtcMs === startUtcMs);
   if (!entry || transmitted.has(startUtcMs)) return;
   const fresh = decodes.filter((d) => !entry.decodes.some((e) => e.text === d.text));
-  if (fresh.length) keepSlot({ ...entry, decodes: [...entry.decodes, ...fresh] });
+  if (!fresh.length) return;
+  keepSlot({ ...entry, decodes: [...entry.decodes, ...fresh] });
+  for (const l of decodeListeners) l(startUtcMs, fresh, 'late');
 }
 
-/** Listens to each slot's decodes as they arrive (the sequencer). */
-export function onSlotDecoded(fn: (slotStartMs: number, decodes: Decode[]) => void): () => void {
+/**
+ * Listens to each slot's decodes as they arrive (the sequencer): the first decodes as the
+ * `final` pass, then what later decoder stages add as `late` passes.
+ */
+export function onSlotDecoded(fn: (slotStartMs: number, decodes: Decode[], pass: 'final' | 'late') => void): () => void {
   decodeListeners.add(fn);
   return () => decodeListeners.delete(fn);
 }

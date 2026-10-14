@@ -329,7 +329,7 @@ let started = false;
 export function startQso() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  onSlotDecoded((slotStartMs, decodes) => dispatch({ type: 'slotDecoded', slotStartMs, pass: 'final', decodes, nowMs: Date.now() }));
+  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, nowMs: Date.now() }));
   onAudioStatus((s) => {
     if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });
     else if (s === 'stopped' || s === 'failed') dispatch({ type: 'audioStopped', nowMs: Date.now() });

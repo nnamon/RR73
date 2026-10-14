@@ -650,6 +650,92 @@ describe('late start', () => {
   });
 });
 
+describe('later decoding passes', () => {
+  it('act on a reply only they found, starting late in the slot while it can still take it', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    // Nothing heard in slot 3 on the final pass: Tx1 again for slot 4.
+    s.run(2, 3);
+    expect(s.st).toMatchObject({ retries: 1, next: { tx: 1, slotStartMs: s.at(4), offsetS: 0.5 } });
+    const fx = s.hear(3, ['9V1NE JA1KXM -09'], 0.9, 'late');
+    expect(fx.map((f) => f.type)).toEqual(['cancelTx', 'scheduleTx']);
+    expect(fx[0]).toEqual({ type: 'cancelTx', stopPlaying: false });
+    expect(s.st).toMatchObject({ retries: 0, next: { tx: 3, slotStartMs: s.at(4), offsetS: 1.1, tooLateFor: null } });
+    s.run(4, 5, { 5: ['9V1NE JA1KXM RR73'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE R-10']);
+    expect(s.sent.at(-1)?.offsetS).toBe(1.1);
+    expect(s.logged()).toHaveLength(1);
+  });
+
+  it('plan a cycle later when the reply comes too late for the slot, and never stop a transmission on air', () => {
+    // 1.9 s into slot 4 the start would be 2.1 s, past the 1.5 s late start.
+    const a = new Sim();
+    a.call(1, 'CQ JA1KXM PM95');
+    a.run(2, 3);
+    a.hear(3, ['9V1NE JA1KXM -09'], 1.9, 'late');
+    expect(a.st.next).toMatchObject({ tx: 3, slotStartMs: a.at(6), offsetS: 0.5, tooLateFor: a.at(4) });
+
+    // Tx1 went on air in slot 4 before the later pass came: it plays on, and Tx3 goes in slot 6.
+    const b = new Sim();
+    b.call(1, 'CQ JA1KXM PM95');
+    b.run(2, 3);
+    b.send({ type: 'txStarted', slotStartMs: b.at(4), text: 'JA1KXM 9V1NE OJ11', nowMs: b.at(4, 0.5) });
+    const fx = b.hear(3, ['9V1NE JA1KXM -09'], 0.9, 'late');
+    expect(fx.filter((f) => f.type === 'cancelTx')).toEqual([]);
+    expect(fx).toContainEqual(expect.objectContaining({ type: 'scheduleTx', tx: 3, slotStartMs: b.at(6), startOffsetS: 0.5 }));
+    expect(b.st.onAir).toMatchObject({ tx: 1, slotStartMs: b.at(4) });
+    expect(b.st.next).toMatchObject({ tx: 3, slotStartMs: b.at(6), tooLateFor: b.at(4) });
+  });
+
+  it('add a caller only they found to the queue, answered at once when nobody else called', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 1);
+    expect(s.st.next).toMatchObject({ tx: 6, slotStartMs: s.at(2) });
+    s.hear(1, [decode('9V1NE K1ABC FN42', -22, 600)], 0.6, 'late');
+    expect(s.st.partner?.call).toBe('K1ABC');
+    expect(s.st.next).toMatchObject({ tx: 2, slotStartMs: s.at(2), offsetS: 0.8 });
+    // In a QSO, a caller found by a later pass waits in the queue.
+    s.run(2, 2);
+    s.hear(3, ['9V1NE K1ABC R-12']);
+    const fx = s.hear(3, [decode('9V1NE JA1KXM PM95', -20, 900)], 0.7, 'late');
+    expect(fx.map((f) => f.type)).toEqual(['queueChanged']);
+    expect(s.st.queue.map((c) => c.call)).toEqual(['JA1KXM']);
+    expect(s.st).toMatchObject({ partner: { call: 'K1ABC' }, next: { tx: 4, slotStartMs: s.at(4), offsetS: 0.5 } });
+  });
+
+  it('let Hunt answer a CQ only they found', () => {
+    const s = new Sim();
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    s.hear(1, []);
+    expect(s.st.partner).toBeNull();
+    s.hear(1, [decode('CQ JA1KXM PM95', -21, 900)], 0.5, 'late');
+    expect(s.st.partner?.call).toBe('JA1KXM');
+    expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(2), offsetS: 0.7 });
+  });
+
+  it('act once on a decode an earlier pass brought, and repeat nothing for what they lack', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 2);
+    s.hear(3, ['9V1NE JA1KXM -09']);
+    const planned = s.st.next;
+    expect(planned).toMatchObject({ tx: 3, slotStartMs: s.at(4), offsetS: 0.5 });
+    expect(s.hear(3, ['9V1NE JA1KXM -09'], 0.8, 'late')).toEqual([]);
+    expect(s.st.next).toEqual(planned);
+    // A later pass of a slot decided before the last one counts for nothing.
+    expect(s.hear(1, ['9V1NE JA1KXM R-03'], 0.9, 'late')).toEqual([]);
+
+    // Nothing from the partner in a later pass: no second repeat, no retry counted.
+    const t = new Sim();
+    t.call(1, 'CQ JA1KXM PM95');
+    t.run(2, 3);
+    expect(t.hear(3, ['CQ K1ABC FN42'], 0.8, 'late')).toEqual([]);
+    expect(t.st.retries).toBe(1);
+    expect(t.st.next).toMatchObject({ tx: 1, slotStartMs: t.at(4), offsetS: 0.5 });
+  });
+});
+
 describe('parity', () => {
   it('transmits in the parity opposite the station answered', () => {
     const odd = new Sim();

@@ -96,7 +96,7 @@ export class Sim {
   }
 
   /** The decodes of slot i arrive `delayS` after it ends. */
-  hear(i: number, decodes: (string | Decode)[], delayS = 0.1, pass: 'early' | 'final' = 'final') {
+  hear(i: number, decodes: (string | Decode)[], delayS = 0.1, pass: 'early' | 'final' | 'late' = 'final') {
     return this.send({
       type: 'slotDecoded',
       slotStartMs: this.at(i),
