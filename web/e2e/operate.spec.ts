@@ -67,7 +67,7 @@ test('Operate keeps one bar height, its row targets, messages to you first and t
   await bar.getByRole('button', { name: 'Halt' }).click();
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
 
-  // Calling a station: the rest of the band dims; his CQ, the message to you, our rows and the
+  // Calling a station: the rest of the band dims; their CQ, the message to you, our rows and the
   // slot bars stay clear. Halt turns Tx off, and the dimming ends.
   await doubleTap('CQ VJ6X OF78');
   await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/OJ11.*Report.*R-report.*RR73.*73/);
@@ -82,12 +82,13 @@ test('Operate keeps one bar height, its row targets, messages to you first and t
   await expectNoneDim(page);
 
   // In a QSO: a double-tap on a station that called us with a report answers with an R-report.
-  // The rest of the band dims, less with Increase Contrast; his report and the Next row stay clear.
+  // The rest of the band dims, less with Increase Contrast; their report and our R-report stay
+  // clear. The R-report is the Next row, or Sending when the tap came within the slot's late start.
   await doubleTap('9V1NE K1ABC -12');
   await expect(bar.getByText(/^Tx3 · K1ABC 9V1NE R-09/)).toBeVisible();
   await expectToYou(rowOf(page, '9V1NE K1ABC -12'));
   await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
-  await expect(page.getByTestId('next-row')).toHaveCSS('opacity', '1');
+  await expect(page.getByTestId('decode-list').locator('.dr.out', { hasText: 'K1ABC 9V1NE R-09' }).first()).toHaveCSS('opacity', '1');
   await expectOursClear(page);
   await check('in a QSO', TARGET[width].qso);
   await page.emulateMedia({ contrast: 'more' });
@@ -95,7 +96,7 @@ test('Operate keeps one bar height, its row targets, messages to you first and t
   await page.emulateMedia({ contrast: 'no-preference' });
   await expect(rowOf(page, 'CQ BH1LKO OM89')).toHaveCSS('opacity', '0.4');
 
-  // End QSO: nothing dims, and his report keeps its red edge.
+  // End QSO: nothing dims, and their report keeps its red edge.
   await bar.getByRole('button', { name: 'More' }).click();
   await page.getByRole('menuitem', { name: 'End QSO' }).click();
   await expectNoneDim(page);
