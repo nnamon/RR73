@@ -348,6 +348,25 @@ describe('CatRadio with a KX2', () => {
     expect(sim.sets_while_transmitting).toBe(0);
   });
 
+  it('never sends a TX held back by a drain once Halt has sent RX', async () => {
+    const { timers, sim, port, radio } = await started();
+    port.silent = true;
+    void radio.request({ type: 'read_frequency' });
+    await timers.advance(REPLY_MS);
+    port.silent = false;
+    const k = radio.key(15_000);
+    await timers.advance(1);
+    expect(port.ptt).toEqual([]);
+    radio.unkeyAll();
+    await timers.advance(1);
+    expect(port.ptt).toEqual(['RX']);
+    await timers.advance(DRAIN_MS + 1000);
+    expect(await k.result).toBe('closed');
+    expect(port.ptt.every((p) => p === 'RX')).toBe(true);
+    expect(sim.transmit).toBe(false);
+    expect(radio.state.unkeyFailed).toBe(false);
+  });
+
   it('never takes the answer after a ?; for the answer to a later request', async () => {
     const { timers, port, radio } = await started();
     // The radio answers ?; and then FA with a dial that is not its own: a late answer.
