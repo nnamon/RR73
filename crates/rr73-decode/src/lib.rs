@@ -18,6 +18,7 @@
 //! LLRs positive for bit 1. The crate starts no threads; callers parallelise over slots.
 
 pub mod ap;
+pub mod block;
 mod clock;
 pub mod config;
 pub mod demod;
