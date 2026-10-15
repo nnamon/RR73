@@ -174,7 +174,6 @@
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.shiftDial} disabled={!settings.cat.keyPtt} onchange={(e) => void updateSettings({ cat: { ...settings.cat, shiftDial: e.currentTarget.checked } })} />
       </label>
     </div>
-    <p class="section-foot">The radio’s dial moves during each FT8 and FT4 Tx, then goes back.</p>
   </div>
 
   {#if connected}
