@@ -1,0 +1,117 @@
+# Experiment 0007: FT4 against the reference decoder
+
+Status: measured 2026-10-15 on the tree of commit d5677a0 (0.21.8). No decoder code changed.
+
+## Question
+
+How far is RR73's FT4 decoder behind WSJT-X's on the same signals, in SNR50, recall, false decodes and time per slot? Where in the SNR range does it lose decodes the reference keeps, and how does that compare with FT8?
+
+## Method
+
+- Reference: `jt9` from WSJT-X 2.7.0-rc3 in the `wsjtx` container, `-5 -d 3` for FT4 and `-8 -d 3` for FT8. Depth 3 is the deepest `jt9` accepts (`jt9 --help`: 1 to 3). It got no callsigns, so its only a priori decodes are CQs, marked `a1`. Only the binary was run; its source was not read.
+- RR73: `subtract-3-osd2` alone (what the early pass and slots RR73 transmitted in get) and with the two `--then` stages of `DEEP` (decision 0007, the `bench` job's deep step in `.github/workflows/ci.yml`), which FT8 and FT4 slots run in the app.
+- FT4 signals: `ft4-sweep` written to disk with `--per-step 40 --crowded-count 20 --noise-count 2000`: one message per slot at -24 to -6 dB in 1 dB steps, 760 slots in AWGN and 760 with Watterson fading at 0.5 Hz spread and 2 ms delay; 20 crowded slots of 10 signals at -16 to 0 dB, base tones at least 100 Hz apart; 2000 FT4 noise slots. FT8 signals: `snr-sweep` with `--per-step 40`, one message per slot at -28 to -8 dB, 840 slots each in AWGN and with fading at 0.5 Hz and 1 ms. All 1680 `snr-sweep` WAV files equal those in the shared corpus, which 0.4.3 wrote.
+- `tools/wsjtx/decode_list.py`, added with this note, runs `jt9` over every slot and writes its decode lines under a `== <slot>` header per slot; `rr73-bench import` scores them against the truth with the bench's matching (text equal, 10 Hz, 0.5 s) and fits SNR50 the same way as for RR73. `jt9`'s DT lies within 0.11 s and its frequency within 5 Hz of the truth on every matched decode, so no offset applies. Its SNR estimate has a median error of 0 dB on both sets, so the synthetic SNR scale and WSJT-X's agree. The decode list from a new `jt9` working directory per slot equals the one from reused directories on all 3540 FT4 slots.
+- Each gap carries a 95 % interval from 300 paired bootstrap resamples of the signals, refitting both curves with the bench's logistic fit (reimplemented for this note in Python; it reproduces the bench's SNR50 values to 0.01 dB).
+- Settings: the preset with one or more `--set` overrides on the FT4 AWGN, fading and noise subsets, to see which part of RR73 moves SNR50.
+- Time per slot: 424 FT4 slots (every 5th AWGN and fading slot, the 20 crowded slots, every 20th noise slot) and 84 FT8 slots (every 20th of each `snr-sweep` subset), one thread for RR73 (`--threads 1`) and one `jt9` process at a time, 3 rounds alternating the decoders, each slot's fastest round. `jt9`'s time is its own `timer.out` total, which leaves out process start. Release build in the `rust` container on the Apple M4 (10 CPUs). Other jobs loaded the host throughout (1-minute load 17 to 30 during the timing rounds), so times are upper bounds. The load does not change what either decoder decodes.
+
+```sh
+docker compose run --rm rust rr73-bench synth --set ft4-sweep --per-step 40 --crowded-count 20 --noise-count 2000
+docker compose run --rm wsjtx python3 tools/wsjtx/decode_list.py --out results/jt9-ft4.txt \
+  --times results/jt9-ft4.times corpus/synthetic/ft4-sweep
+docker compose run --rm rust rr73-bench import --decodes results/jt9-ft4.txt --label jt9-ft4-d3 \
+  --out results/jt9-ft4.json corpus/synthetic/ft4-sweep
+docker compose run --rm rust rr73-bench run --preset subtract-3-osd2 \
+  --then "<stage 2 of DEEP>" --then "<stage 3 of DEEP>" --out results/rr73-ft4.json corpus/synthetic/ft4-sweep
+docker compose run --rm rust rr73-bench compare results/jt9-ft4.json results/rr73-ft4.json
+```
+
+## Results
+
+### FT4
+
+| `ft4-sweep` subset | `jt9 -5 -d 3` | RR73 preset | RR73 through stage 3 |
+| --- | --- | --- | --- |
+| `awgn` (760), matched, recall | 489, 0.643 | 350, 0.461 | 397, 0.522 |
+| `awgn`, SNR50, 10 to 90 % width | -17.73 dB, 1.78 dB | -14.25 dB, 1.96 dB | -15.42 dB, 1.43 dB |
+| `fading` (760), matched, recall | 386, 0.508 | 215, 0.283 | 268, 0.353 |
+| `fading`, SNR50, 10 to 90 % width | -15.15 dB, 6.90 dB | -10.83 dB, 6.63 dB | -12.19 dB, 6.37 dB |
+| `crowded` (200 signals), matched | 200 | 183 | 198 |
+| False decodes, all subsets and 2000 noise slots | 0 | 0 | 0 |
+| Time per slot, 424 slots, one thread, p50, p95 | 27, 172 ms | 15, 45 ms | 338, 494 ms |
+| Time per slot, the 20 crowded slots, p50 | 246 ms | 49 ms | 393 ms |
+
+Gap at SNR50, `jt9` against RR73, with 95 % intervals: in AWGN 3.48 dB (3.16 to 3.79) for the preset and 2.30 dB (2.01 to 2.62) through stage 3; with fading 4.32 dB (3.72 to 4.79) and 2.96 dB (2.48 to 3.40). `jt9` marked 14 of its 1075 FT4 decodes `a1`; without them its SNR50 is -17.60 dB in AWGN (484 matched) and -14.92 dB with fading (377), and the gap through stage 3 is 2.18 dB and 2.73 dB. RR73 has no a priori hypothesis without a QSO context.
+
+`compare` of `jt9` against RR73 through stage 3: RR73 decodes no signal that `jt9` misses, and misses 212 that `jt9` decodes. Decodes per SNR step, out of 40. In AWGN all three decode none below -19 dB and all 40 above -13 dB:
+
+| AWGN step | -19 | -18 | -17 | -16 | -15 | -14 | -13 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `jt9` | 1 | 16 | 32 | 40 | 40 | 40 | 40 |
+| RR73 preset | 0 | 0 | 0 | 1 | 7 | 24 | 38 |
+| RR73 through stage 3 | 0 | 0 | 0 | 7 | 30 | 40 | 40 |
+
+| Fading step | -20 | -18 | -17 | -16 | -15 | -14 | -13 | -12 | -11 | -10 | -9 | -8 | -7 | -6 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `jt9` | 3 | 7 | 10 | 15 | 23 | 28 | 29 | 33 | 38 | 39 | 39 | 40 | 40 | 40 |
+| RR73 preset | 0 | 0 | 0 | 0 | 1 | 8 | 8 | 11 | 20 | 32 | 27 | 35 | 36 | 37 |
+| RR73 through stage 3 | 0 | 0 | 2 | 1 | 4 | 13 | 16 | 20 | 27 | 36 | 33 | 39 | 39 | 38 |
+
+`jt9` also decodes 1 of 40 at -22 dB and 1 at -19 dB with fading; RR73 none below -17 dB.
+
+- In AWGN the curves have the same shape, and RR73's through stage 3 sits 2.3 dB above `jt9`'s. The preset misses signals from -13 dB down and the stages from -15 dB down; `jt9` decodes all 40 down to -16 dB.
+- With fading RR73 loses decodes at every step up to -6 dB: through stage 3 it misses 2, 1 and 1 of 40 at -6, -7 and -8 dB, and 7 at -9 dB, where `jt9` misses none from -8 dB and 1 at -9 dB.
+- Every message type loses. In AWGN RR73 through stage 3 decodes 73 to 89 % of the messages `jt9` decodes per type; CQ is lowest (88 against 120), and 5 of `jt9`'s CQs are `a1` decodes.
+- No DT or frequency range accounts for the loss. From -18 to -14 dB in AWGN, RR73 through stage 3 decodes 31 to 66 % of `jt9`'s decodes in each fifth of the DT range (-0.5 to 0.5 s) and of the band (300 to 2700 Hz), with 28 to 41 `jt9` decodes per fifth.
+
+### FT8, for comparison
+
+| `snr-sweep` subset | `jt9 -8 -d 3` | RR73 preset | RR73 through stage 3 |
+| --- | --- | --- | --- |
+| `awgn` (840), matched, SNR50 | 524, -20.60 dB | 461, -19.02 dB | 495, -19.88 dB |
+| `fading` (840), matched, SNR50 | 442, -18.55 dB | 327, -15.67 dB | 390, -17.25 dB |
+| False decodes | 0 | 0 | 0 |
+| Time per slot, 84 slots, one thread, p50, p95 | 1480, 2516 ms | 24, 44 ms | 445, 570 ms |
+
+Gap at SNR50, with 95 % intervals: in AWGN 1.58 dB (1.29 to 1.87) for the preset and 0.72 dB (0.43 to 0.95) through stage 3; with fading 2.88 dB (2.44 to 3.33) and 1.30 dB (0.94 to 1.64). Without its 15 `a1` decodes, `jt9` reaches -20.50 dB and -18.28 dB. RR73 through stage 3 decodes 5 signals `jt9` misses (4 of them at DT 0.46 to 0.50 s, the edge `docs/design/sequencer.md` notes for `jt9`) and misses 86. In AWGN `jt9` decodes 3, 13 and 31 of 40 at -22, -21 and -20 dB, RR73 through stage 3 0, 4 and 17. From -18 dB up RR73 through stage 3 decodes every signal and `jt9` all but 3 (2 at -15 dB, 1 at -11 dB).
+
+### Which RR73 settings move FT4 SNR50
+
+The preset with overrides, on the FT4 AWGN and fading subsets and the 2000 noise slots:
+
+| Overrides on `subtract-3-osd2` | AWGN SNR50 | Fading SNR50 | False decodes |
+| --- | --- | --- | --- |
+| none (the preset) | -14.25 dB | -10.83 dB | 0 |
+| `ldpc.max_iterations=100` | -14.30 dB | -10.86 dB | 0 |
+| `demod.llr_variance=12`, `=48` | -14.20 dB, -14.20 dB | -10.83 dB, -10.81 dB | 0 |
+| `validate.osd_ft4_min_snr_db=null` | -14.25 dB | -10.83 dB | 0 |
+| `ldpc.osd_window=91` | -14.37 dB | -10.99 dB | 0 |
+| `search.min_score_db=0 search.max_candidates=1000` | -14.27 dB | -10.88 dB | 0 |
+| grid 4 x 4, 2-symbol window (stage 2's) | -15.15 dB | -11.82 dB | 2 |
+| grid 8 x 4, 2-symbol window (stage 3's) | -15.22 dB | -12.03 dB | 1 |
+| grid 8 x 8, 2-symbol window | -15.40 dB | -12.26 dB | 1 |
+| grid 8 x 4, 1-symbol window | -13.40 dB | -9.82 dB | 0 |
+| grid 4 x 2, 1-symbol window | -13.00 dB | -9.27 dB | 2 |
+| grid 4 x 4, 3-symbol window | -13.95 dB | -10.45 dB | 0 |
+| grid 8 x 8, OSD over 91 bits, 100 iterations, 400 candidates from 2 dB, no FT4 OSD floor | -15.58 dB | -12.49 dB | 25 |
+| RR73 through stage 3, for reference | -15.42 dB | -12.19 dB | 0 |
+
+A grid is frames per symbol by bins per tone spacing (`spectrogram.time_osr`, `spectrogram.freq_osr`), the window `spectrogram.window_symbols`. The false decodes in the grid rows are OSD codewords at 28 to 30 hard errors on the slots' true signals, or the true message 10 to 11 Hz from its frequency; the last row's 25 are OSD codewords at 22 to 30 hard errors, 11 of them in the noise slots, and 23 report -20.8 to -23.0 dB, below the FT4 OSD floor that row removes.
+
+## What it means
+
+- FT4 is 2.3 dB behind `jt9` in AWGN and 3.0 dB with fading through RR73's three stages, 2.2 and 2.7 dB when `jt9`'s CQ a priori decodes are left out. The preset alone, which early-pass and transmit slots use, is 3.5 and 4.3 dB behind. FT8 through the same stages is 0.7 and 1.3 dB behind. FT4 therefore carries a deficit of about 1.6 dB that FT8 does not, with the same search, demodulator, LDPC and OSD code; the FT4 and FT8 intervals do not overlap.
+- In operating terms: a station `jt9` decodes in every slot at -16 dB in AWGN, RR73 decodes in 7 of 40 slots through stage 3 and in 1 of 40 with the preset alone.
+- No decoder setting closes the gap. Belief propagation iterations, the LLR scale, the FT4 OSD floor, OSD over all 91 bits and a search of 1000 candidates from a 0 dB threshold each move SNR50 by 0.16 dB or less. Only the spectrogram grid moves it, by up to 1.15 dB in AWGN and 1.43 dB with fading, and the later stages already take that gain. All settings at once reach -15.58 dB with 25 false decodes.
+- At 8 frames per symbol and 8 bins per tone spacing the grid comes within 3 ms and 1.3 Hz of any signal, and 2.3 dB remain. The loss therefore sits after the candidate is placed, in how each symbol's tone energies become bit LLRs: RR73 has one demodulator for FT8 and FT4, a per-symbol max-log metric on dB magnitudes from a 2-symbol Hann window. At the same grid a 1-symbol or 3-symbol window is worse by 1.2 to 2.2 dB, so the metric's input alone moves SNR50 by that much.
+- RR73's WSPR decoder measured a loss of the same size (experiment 0004): single-symbol soft bits were 2.6 dB worse at SNR50 than 7-symbol coherent block detection with start, frequency and drift refined from phase. FT4 is continuous-phase 4-GFSK with a modulation index of 1 (`crates/rr73-ft8/src/synth.rs`), so the method applies to it. Unverified for FT4: no multi-symbol demodulator was measured here.
+- `jt9` decodes FT4 at a p50 of 27 ms per slot on one thread, against 338 ms for RR73's three stages, and its time grows with the signals in the slot (12 ms on noise, 246 ms with 10 signals), where RR73's later stages add 320 to 350 ms (p50) to every slot, noise slots included. In FT8 the balance is the other way: `jt9 -8 -d 3` takes 1480 ms (p50), 3.3 times RR73's three stages. A better FT4 demodulator in the preset could replace much of the finer-grid search that stages 2 and 3 pay for.
+- FT4 sensitivity work looks worth doing: 2.2 to 3.0 dB is 1.7 to 2 times the transmitter power, with fading RR73 still misses signals at -6 dB, and no setting recovers it. A demodulator change would apply to FT8 as well, where 0.7 to 1.3 dB remain.
+
+## Open risks
+
+- Synthetic signals only: AWGN and one Watterson channel, DT within ±0.5 s, no drift, no FT4 recordings in the corpus. On the air the gap may differ.
+- `jt9` ran without callsigns. Given its own and the other station's callsign (`-c`, `-x`), WSJT-X can decode from the QSO under way; RR73's counterpart (decision 0009, `ap-sweep`) was not compared with it.
+- The cause named above rests on what the settings did not change. No multi-symbol or coherent FT4 demodulator was built to confirm it.
+- Times come from a loaded host and are upper bounds for both decoders. `jt9`'s timer leaves out its process start; RR73's leaves out reading the file.

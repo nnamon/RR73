@@ -33,6 +33,19 @@ docker compose run --rm wsjtx reference.py --print --mode FT8 corpus/public/ft8_
 
 `jt9` takes about 5 s per FT8 slot at depth 3 on one core of an Apple M-series machine under Docker.
 
+## Decode lists for the bench
+
+```sh
+docker compose run --rm wsjtx python3 tools/wsjtx/decode_list.py --out results/jt9-ft4.txt \
+  --times results/jt9-ft4.times corpus/synthetic/ft4-sweep
+docker compose run --rm rust rr73-bench import --decodes results/jt9-ft4.txt --label jt9-ft4-d3 \
+  --out results/jt9-ft4.json corpus/synthetic/ft4-sweep
+```
+
+- `decode_list.py` decodes every slot below the paths with `jt9 -d 3`, in the mode its sidecar names, and writes the decode list `rr73-bench import` reads (`docs/bench.md`): a line `== <path below corpus/ without extension>` per slot, in path order, followed by `jt9`'s decode lines unchanged, `?` and `aN` marks included. Sidecars are never changed, so synthetic slots work too.
+- Each worker thread keeps one `jt9` working directory for its slots, so `jt9` reuses its FFTW wisdom between slots as WSJT-X does. `--fresh` gives every slot a new directory; on the 3540 `ft4-sweep` slots both give the same decodes.
+- `--times` writes one JSON line per slot: the tool, the decode count, the wall time and CPU time of the `jt9` process, and `jt9_s`, the total of the `jt9` row in its `timer.out`, in seconds.
+
 ## Output parsing
 
 `jt9` prints one line per decode, then `<DecodeFinished>` with the decode count:
