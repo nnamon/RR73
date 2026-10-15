@@ -113,14 +113,21 @@ export function silentClipUri(): string {
  * Plays a clip through a media element. Call synchronously inside a tap handler, before any
  * await, or iOS does not count it as part of the gesture. Returns performance.now() at the call.
  * Refusals are ignored: other browsers do not mute output in the first place.
+ *
+ * With `sinkId`, the output device chosen in Chromium (lib/audio/sink.ts), the clip plays there
+ * once the element has switched to it, or through the system default if the device is missing.
+ * Chromium lets a page that had a tap play later, so the switch may finish after the tap. iOS
+ * never passes one.
  */
-export function playClip(uri: string, doc: Document = document, now: () => number = () => performance.now()): number {
+export function playClip(uri: string, doc: Document = document, now: () => number = () => performance.now(), sinkId: string | null = null): number {
   const at = now();
   try {
     const el = doc.createElement('audio');
     el.setAttribute('playsinline', '');
     el.src = uri;
-    void el.play().catch(() => undefined);
+    const play = () => void el.play().catch(() => undefined);
+    if (sinkId && typeof el.setSinkId === 'function') void el.setSinkId(sinkId).then(play, play);
+    else play();
   } catch {
     // Nothing to unlock on this browser.
   }

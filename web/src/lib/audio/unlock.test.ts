@@ -102,4 +102,32 @@ describe('playClip', () => {
     const { doc } = fakeDoc(() => Promise.reject(new Error('NotAllowedError')));
     expect(() => playClip(silentClipUri(), doc)).not.toThrow();
   });
+
+  it('plays through the chosen output once the element has switched to it', async () => {
+    const { el, doc } = fakeDoc(async () => undefined);
+    const order: string[] = [];
+    const sink = Object.assign(el, {
+      setSinkId: vi.fn(async (id: string) => void order.push(`sink ${id}`)),
+    });
+    el.play.mockImplementation(async () => void order.push('play'));
+    playClip(silentClipUri(), doc, () => 0, 'codec-1');
+    // Nothing plays until the switch resolves.
+    expect(el.play).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(el.play).toHaveBeenCalledOnce());
+    expect(sink.setSinkId).toHaveBeenCalledWith('codec-1');
+    expect(order).toEqual(['sink codec-1', 'play']);
+  });
+
+  it('plays through the system default when the chosen output is missing', async () => {
+    const { el, doc } = fakeDoc(async () => undefined);
+    Object.assign(el, { setSinkId: vi.fn(() => Promise.reject(new DOMException('gone', 'NotFoundError'))) });
+    playClip(silentClipUri(), doc, () => 0, 'codec-1');
+    await vi.waitFor(() => expect(el.play).toHaveBeenCalledOnce());
+  });
+
+  it('plays at once, inside the tap, where the browser cannot choose an output', () => {
+    const { el, doc } = fakeDoc(async () => undefined);
+    playClip(silentClipUri(), doc, () => 0, 'codec-1');
+    expect(el.play).toHaveBeenCalledOnce();
+  });
 });

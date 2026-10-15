@@ -52,6 +52,17 @@ describe('settings', () => {
     expect(validate({ holdTx: 'no', freqPicked: 1 })).toMatchObject({ holdTx: true, freqPicked: false });
   });
 
+  it('keeps the input and output devices, or the system default', () => {
+    expect(DEFAULTS).toMatchObject({ inputDeviceId: null, outputDeviceId: null, outputDeviceLabel: '' });
+    expect(validate({ inputDeviceId: 'mic-1', outputDeviceId: 'codec-2', outputDeviceLabel: 'USB Audio CODEC' })).toMatchObject({
+      inputDeviceId: 'mic-1',
+      outputDeviceId: 'codec-2',
+      outputDeviceLabel: 'USB Audio CODEC',
+    });
+    for (const bad of ['', 7, null, {}]) expect(validate({ outputDeviceId: bad }).outputDeviceId).toBeNull();
+    expect(validate({ outputDeviceLabel: 3 }).outputDeviceLabel).toBe('');
+  });
+
   it('keeps only valid stored values', () => {
     expect(
       validate({

@@ -138,7 +138,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 
 | Module | Responsibility |
 | --- | --- |
-| `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling. |
+| `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling, and the output device in Chromium (`sink.ts`). |
 | `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas; the callsign labels over FT8 and FT4 signals (`calls.ts`), placed on the page from the slot lines the worker reports. |

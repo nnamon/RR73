@@ -1,7 +1,7 @@
 /**
- * Capture engine: the one AudioContext, the microphone, the capture worklet and the clock
- * mapping. Browsers allow audio only after a tap, so start() and resume() must be called from
- * one.
+ * Capture engine: the one AudioContext, the microphone, the capture worklet, the clock mapping
+ * and the output device the context plays to. Browsers allow audio only after a tap, so start()
+ * and resume() must be called from one.
  *
  * Interruptions stop capture and wait for a tap: the context leaving "running" (a phone call
  * on iOS shows as "interrupted"), the input track ending or going mute, and the page being
@@ -16,8 +16,10 @@ import { CAPTURE_PROCESSOR, type CaptureChunkMessage, type CaptureMessage } from
 import { RateMeter, type CaptureReport } from './report';
 import { setAudioSession } from './session';
 import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
+import { applySink, type OutputError, type OutputState, type SinkContext } from './sink';
 
 export type { InputSource, StartError } from './input';
+export type { OutputState } from './sink';
 
 export type AudioStatus = 'off' | 'starting' | 'running' | 'stopped' | 'failed';
 
@@ -125,6 +127,13 @@ export class CaptureEngine {
   private settled = false;
   /** Clock readings, capture lags and the mapping around stops and resumes. */
   readonly timing = new TimingLog();
+  /** The output device chosen, and why it does not play if it does not. */
+  private outputValue: OutputState = { sinkId: null, error: null };
+  private readonly outputListeners = new Set<(o: OutputState) => void>();
+  /** Output switches in progress: the context's state changes during them are the switch's own. */
+  private switching = 0;
+  /** The last output switch, which a start waits for before it resumes the context. */
+  private sinkSwitch: Promise<void> | null = null;
 
   constructor(deps: EngineDeps = browserDeps(), input: InputSource | null = null) {
     this.deps = deps;
@@ -172,15 +181,70 @@ export class CaptureEngine {
     return () => this.reportListeners.delete(fn);
   }
 
+  /** The output device chosen, and why it does not play if it does not. */
+  get output(): OutputState {
+    return this.outputValue;
+  }
+
+  onOutput(fn: (o: OutputState) => void): () => void {
+    this.outputListeners.add(fn);
+    return () => this.outputListeners.delete(fn);
+  }
+
+  /**
+   * Sends everything the context plays to `sinkId`, or to the system default for null. Before the
+   * context exists the choice waits and applies when it is created. A device that is missing
+   * leaves output on the system default and reports `missing`; calling again with it after a
+   * device change tries again. Capture keeps running through the switch.
+   */
+  useOutput(sinkId: string | null): Promise<OutputState> {
+    this.outputValue = { sinkId, error: null };
+    if (!this.ctx) {
+      this.emitOutput();
+      return Promise.resolve(this.outputValue);
+    }
+    return this.switchOutput(this.ctx, sinkId);
+  }
+
+  private switchOutput(ctx: AudioContext, sinkId: string | null): Promise<OutputState> {
+    const run = async () => {
+      let error: OutputError | null = 'failed';
+      this.switching++;
+      try {
+        error = await applySink(ctx as unknown as SinkContext, sinkId);
+        if (this.stateValue.status === 'running' && ctx.state !== 'running') await ctx.resume().catch(() => undefined);
+      } finally {
+        this.switching--;
+      }
+      // A later choice replaced this one while it ran, and its own switch reports.
+      if (this.outputValue.sinkId !== sinkId) return;
+      if (this.stateValue.status === 'running') {
+        if (ctx.state !== 'running') this.interrupt('suspended');
+        // Each device has its own output latency, so the clock mapping starts over.
+        else if (error === null) {
+          this.resetClock();
+          this.rate.reset();
+        }
+      }
+      this.outputValue = { sinkId, error };
+      this.emitOutput();
+    };
+    // One switch at a time, in the order chosen.
+    const next = (this.sinkSwitch ?? Promise.resolve()).then(run, run);
+    this.sinkSwitch = next;
+    return next.then(() => this.outputValue);
+  }
+
   /**
    * Creates the context if needed and resumes it. Call from a tap. Used by Tune, which plays
-   * without the microphone.
+   * without the microphone. A new context switches to the chosen output at once.
    */
   ensureContext(): AudioContext {
     this.deps.setSession();
     if (!this.ctx) {
       this.ctx = this.deps.createContext();
       this.ctx.onstatechange = () => this.onContextState();
+      if (this.outputValue.sinkId !== null) void this.switchOutput(this.ctx, this.outputValue.sinkId);
     }
     if (this.ctx.state !== 'running') void this.ctx.resume().catch(() => undefined);
     return this.ctx;
@@ -206,6 +270,8 @@ export class CaptureEngine {
       this.closeInput();
       return this.fail(e instanceof WorkletError ? 'worklet' : startError(e));
     }
+    // An output switch suspends the context for a moment; let it finish before the check below.
+    if (this.sinkSwitch) await this.sinkSwitch;
     try {
       if (ctx.state !== 'running') await ctx.resume();
     } catch {
@@ -301,7 +367,7 @@ export class CaptureEngine {
 
   private onContextState() {
     const ctx = this.ctx;
-    if (!ctx || this.stateValue.status !== 'running') return;
+    if (!ctx || this.stateValue.status !== 'running' || this.switching > 0) return;
     if (ctx.state === 'running') return;
     this.interrupt((ctx.state as string) === 'interrupted' ? 'interrupted' : 'suspended');
   }
@@ -403,6 +469,10 @@ export class CaptureEngine {
   private emitReport() {
     if (!this.report) return;
     for (const l of this.reportListeners) l(this.report);
+  }
+
+  private emitOutput() {
+    for (const l of this.outputListeners) l(this.outputValue);
   }
 }
 

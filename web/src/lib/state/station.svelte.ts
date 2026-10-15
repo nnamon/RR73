@@ -11,6 +11,7 @@ import { CaptureEngine, type Chunk, type InputSource, type StartError, type Stop
 import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } from '../audio/unlock';
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
+import { matchOutput, outputChange, outputChoices, outputChoiceSupported, type OutputState } from '../audio/sink';
 import type { CaptureReport } from '../audio/report';
 import type { AudioClockMapper } from '../clock/mapping';
 import { RxCalibration, clockWarns } from '../clock/calibration';
@@ -28,7 +29,7 @@ import { saveSlot, type SaveResult } from '../slots/share';
 import { TransmittedSlots } from '../slots/transmitted';
 import type { TxWave } from '../waterfall/renderer';
 import { DISPLAY_RATE } from '../waterfall/spectrum';
-import { settings } from './settings.svelte';
+import { settings, updateSettings } from './settings.svelte';
 import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
 
@@ -87,6 +88,8 @@ export const audio = $state({
   peakDb: FLOOR_DB as number,
   report: null as CaptureReport | null,
   wake: 'off' as WakeState,
+  /** The output device chosen, and why it does not play if it does not (lib/audio/sink.ts). */
+  output: { sinkId: null, error: null } as OutputState,
 });
 
 export const recent = $state<{ slots: SlotSummary[] }>({ slots: [] });
@@ -252,10 +255,20 @@ function getEngine(): CaptureEngine {
       audio.peakDb = FLOOR_DB;
     }
     wake?.set(s.status === 'running' || tx.tuning);
+    // Device names are readable once the microphone is allowed.
+    if (changed && s.status === 'running') void refindOutput();
   });
   engine.onReport((r) => (audio.report = r));
   engine.onChunk(onChunk);
+  engine.onOutput((o) => (audio.output = o));
+  // Applies when the context is created, at the first tap that plays or captures.
+  void engine.useOutput(chosenOutput());
   return engine;
+}
+
+/** The output device to play to: the one chosen, where the browser can choose one. */
+function chosenOutput(): string | null {
+  return outputChoiceSupported() ? settings.outputDeviceId : null;
 }
 
 function onChunk(c: Chunk) {
@@ -556,13 +569,13 @@ let startToneUri: { level: number; uri: string } | null = null;
  */
 function playStartClip(): number | null {
   if (!settings.startTone || txLevel(1) === 0) {
-    playClip(silentClipUri());
+    playClip(silentClipUri(), document, undefined, chosenOutput());
     return null;
   }
   if (startToneUri?.level !== settings.outputLevel) {
     startToneUri = { level: settings.outputLevel, uri: wavDataUri(startToneSamples(settings.outputLevel)) };
   }
-  return playClip(startToneUri.uri) + START_TONE.leadS * 1000;
+  return playClip(startToneUri.uri, document, undefined, chosenOutput()) + START_TONE.leadS * 1000;
 }
 
 /** Compares receive level before and during the start chime once it has played. */
@@ -617,6 +630,40 @@ export async function inputDevices(): Promise<MediaDeviceInfo[]> {
   return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
 }
 
+/** The audio outputs the browser lists; none where it cannot choose one (Safari). */
+export async function outputDevices(): Promise<MediaDeviceInfo[]> {
+  if (!outputChoiceSupported() || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return [];
+  return outputChoices(await navigator.mediaDevices.enumerateDevices());
+}
+
+/**
+ * Switches the output device, or to the system default for null. Halts Tune and any transmission
+ * first, so none moves between devices. Call from a change event.
+ */
+export function useOutput(deviceId: string | null): Promise<OutputState> {
+  halt();
+  // Picked from the list, so it is there.
+  outputListed = true;
+  return getEngine().useOutput(deviceId);
+}
+
+/**
+ * Finds the chosen output again by its name when the browser lists it under a new ID (another USB
+ * port, cleared site data, a private window), saves the new ID and switches to it.
+ */
+export async function refindOutput(): Promise<void> {
+  const saved = settings.outputDeviceId;
+  if (!saved || !outputChoiceSupported() || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return;
+  const id = matchOutput(await navigator.mediaDevices.enumerateDevices(), saved, settings.outputDeviceLabel);
+  if (id === saved || settings.outputDeviceId !== saved) return;
+  await updateSettings({ outputDeviceId: id });
+  if (engine && engine.output.sinkId !== id) {
+    halt();
+    outputListed = true;
+    await engine.useOutput(id);
+  }
+}
+
 /** Saves a recent slot through the share sheet, or returns download links. Call from a tap. */
 export function saveRecentSlot(startUtcMs: number): Promise<SaveResult> | null {
   const slot = recorder.get(startUtcMs);
@@ -639,7 +686,7 @@ function median(xs: number[]): number | null {
 
 /** Plays the Tune tone at the Tx frequency (`hz`; FT8 and FT4's by default) for 10 s. Call from the tap. */
 export function startTune(hz: number = settings.txHz) {
-  playClip(silentClipUri());
+  playClip(silentClipUri(), document, undefined, chosenOutput());
   const now = Date.now();
   markTransmitted(now, now + TUNE.seconds * 1000);
   emitTxWave(toneWave(now, hz, TUNE.seconds));
@@ -678,4 +725,22 @@ if (typeof document !== 'undefined') {
     if (document.visibilityState === 'hidden') halt();
   });
   window.addEventListener('pagehide', () => halt());
+}
+
+// The chosen output going (a radio switched off) halts any transmission, so none carries on
+// through another device; its return switches back to it.
+let outputListed = true;
+if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
+  const md = navigator.mediaDevices;
+  md.addEventListener('devicechange', async () => {
+    if (!engine || !outputChoiceSupported()) return;
+    await refindOutput();
+    const { sinkId, error } = engine.output;
+    const devices = await md.enumerateDevices().catch(() => []);
+    const change = outputChange(sinkId, outputListed, devices, error);
+    if (change === null) return;
+    outputListed = change === 'back';
+    halt();
+    if (change === 'back') void engine.useOutput(sinkId);
+  });
 }

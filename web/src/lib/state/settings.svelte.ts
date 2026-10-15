@@ -67,6 +67,10 @@ export interface Settings {
   mode: Mode;
   /** Input device, or null for the system default. */
   inputDeviceId: string | null;
+  /** Output device for transmit audio, or null for the system default. Chromium only (lib/audio/sink.ts). */
+  outputDeviceId: string | null;
+  /** The output device's name, to find it again when the browser gives it a new ID; empty when unknown. */
+  outputDeviceLabel: string;
   /** Tune output level, 0 to 1. */
   outputLevel: number;
   /** Play the start tone (1500 Hz, 0.4 s) through the radio when audio starts. */
@@ -134,6 +138,8 @@ export const DEFAULTS: Settings = {
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,
+  outputDeviceId: null,
+  outputDeviceLabel: '',
   outputLevel: 0.5,
   startTone: true,
   checklist: { focus: false, clicks: false, volume: false },
@@ -277,6 +283,8 @@ export function validate(raw: unknown): Settings {
   if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';
   if (typeof r.inputDeviceId === 'string' && r.inputDeviceId) s.inputDeviceId = r.inputDeviceId;
+  if (typeof r.outputDeviceId === 'string' && r.outputDeviceId) s.outputDeviceId = r.outputDeviceId;
+  if (typeof r.outputDeviceLabel === 'string') s.outputDeviceLabel = r.outputDeviceLabel;
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;
   if (typeof r.startTone === 'boolean') s.startTone = r.startTone;
   const c = r.checklist as Partial<Checklist> | undefined;

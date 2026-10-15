@@ -12,17 +12,44 @@
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, band, clockCheck, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
+  import { outputChoiceSupported } from '../lib/audio/sink';
+  import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
+  let outputs = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
   const live = $derived(audio.status === 'running');
   const r = $derived(audio.report);
+  // Chromium sends transmit audio to a chosen device; Safari has no way to, so the row hides there.
+  const outputChoice = outputChoiceSupported();
+  /** The chosen output is not among the devices the browser lists now. */
+  const outputMissing = $derived(settings.outputDeviceId !== null && (audio.output.error === 'missing' || (outputs.length > 0 && !outputs.some((d) => d.deviceId === settings.outputDeviceId))));
+  /** Why transmit audio is not going to the chosen output, if it is not. */
+  const outputFoot = $derived.by(() => {
+    if (!outputChoice || settings.outputDeviceId === null) return null;
+    if (outputMissing) return 'The chosen output is not connected, so transmit audio plays through the system default.';
+    if (audio.output.error === 'failed') return 'The browser refused the chosen output, so transmit audio plays through the system default.';
+    return null;
+  });
 
-  // Device labels are readable only after microphone permission, so list again once audio runs.
+  function listDevices() {
+    void inputDevices().then((d) => (devices = d));
+    // The chosen output may be listed under a new ID; find it by name before showing the list.
+    void refindOutput()
+      .then(() => outputDevices())
+      .then((d) => (outputs = d));
+  }
+
+  // Device labels are readable only after microphone permission, so list again once audio runs,
+  // and whenever a device comes or goes.
   $effect(() => {
     void audio.status;
-    void inputDevices().then((d) => (devices = d));
+    listDevices();
+  });
+  $effect(() => {
+    const md = typeof navigator === 'undefined' ? undefined : navigator.mediaDevices;
+    md?.addEventListener?.('devicechange', listDevices);
+    return () => md?.removeEventListener?.('devicechange', listDevices);
   });
 
   // Leaving this screen halts Tune: Halt must stay in reach while anything plays.
@@ -163,6 +190,13 @@
     void updateSettings({ inputDeviceId: id });
     void useInput(id);
   }
+
+  function pickOutput(e: Event) {
+    const id = (e.currentTarget as HTMLSelectElement).value || null;
+    const label = outputs.find((d) => d.deviceId === id)?.label ?? '';
+    void updateSettings({ outputDeviceId: id, outputDeviceLabel: label });
+    void useOutput(id);
+  }
 </script>
 
 <section class="screen sub" aria-labelledby="radio-title">
@@ -226,6 +260,21 @@
   <div class="section">
     <h2 class="section-head">Transmit audio</h2>
     <div class="group">
+      {#if outputChoice}
+        <label class="row">
+          <span class="row-title">Output</span>
+          <select class="select" value={settings.outputDeviceId ?? ''} onchange={pickOutput}>
+            <option value="">System default</option>
+            {#each outputs as d, i (d.deviceId)}
+              <option value={d.deviceId}>{d.label || `Output ${i + 1}`}</option>
+            {/each}
+            <!-- Device names show only after microphone permission; until then the choice has no name. -->
+            {#if settings.outputDeviceId && !outputs.some((d) => d.deviceId === settings.outputDeviceId)}
+              <option value={settings.outputDeviceId}>{outputMissing ? 'Not connected' : 'Chosen output'}</option>
+            {/if}
+          </select>
+        </label>
+      {/if}
       <label class="row">
         <span class="row-title">Output level</span>
         <input
@@ -260,6 +309,7 @@
         </span>
       </button>
     </div>
+    {#if outputFoot}<p class="section-foot" data-testid="output-foot">{outputFoot}</p>{/if}
     <p class="section-foot">Set the level for 4 to 5 ALC bars during Tune, no more.</p>
   </div>
 

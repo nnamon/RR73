@@ -16,7 +16,7 @@ This branch adds the protocol and the pieces under it: the CI-V crate (`crates/r
 ## Reason
 
 - One cable carries control and audio, and the radio's dial, mode and transmit state become known to RR73. VOX keys on any sound the tablet makes and cannot be read back.
-- Web Serial is the only serial access a web page has. Chromium ships it on desktop; Safari and Firefox do not.
+- Web Serial is the only serial access a web page has. Chromium ships it on desktop, and Safari does not. Playwright's Firefox 155 build has `navigator.serial` too (measured); RR73 checks for the API, so Firefox would get rig control where it has it. Firefox is not tested.
 - One app on the phone and the desktop keeps one decoder, one sequencer and one log.
 - The protocol code sits with the other protocol crates, where random-input tests and a simulated radio run natively.
 
@@ -42,7 +42,7 @@ The CI-V guide prints the frame layout and the data formats but no complete exam
 - On later visits `navigator.serial.getPorts()` returns the ports the operator granted, and RR73 reopens the saved one without the chooser. When more than one granted port has the same USB IDs, RR73 sends a frequency read to each and keeps the one that answers. Unverified: whether ports A and B report the same USB IDs.
 - The chooser takes no filter. Icom's documents give no USB vendor ID, so RR73 does not assume one.
 - Revoking the permission in the browser's site settings empties `getPorts()`; Connect radio then shows the chooser again.
-- Where `navigator.serial` is absent (Safari, Firefox, iOS) `serialApi()` returns null and no rig control setting renders.
+- Where `navigator.serial` is absent (Safari 26.6, measured, and iOS) `serialApi()` returns null and no rig control setting renders.
 
 ### Port settings
 
@@ -139,7 +139,7 @@ Unverified: the time from `1C 00 01` to RF output. SET > Function > TX Delay add
 The IC-705's [microUSB] port carries USB audio both ways: "USB Audio Input: Inputting a modulation AF signal" and "USB Audio Output: Outputting a demodulated AF signal or 12 kHz IF signal" (Basic Manual p. 13-2). On Windows the audio driver installs with the USB driver (driver guide p. 4). Icom's documents do not name the audio devices as Windows lists them.
 
 - Receive: Settings › Radio and audio › Input, set to the IC-705's USB audio.
-- Transmit: Settings › Radio and audio › Output, set to the IC-705's USB audio (this branch). It uses `AudioContext.setSinkId`, which Chromium has and Safari lacks, so the row shows only where the browser supports it. FT8, FT4, WSPR and RTTY transmissions, Tune and the start chime play to the chosen output.
+- Transmit: Settings › Radio and audio › Output, set to the IC-705's USB audio (this branch). It uses `AudioContext.setSinkId`, which Chromium has and Safari 26.6 and Firefox 155 lack (measured in Playwright's builds), so the row shows only where the browser supports it. FT8, FT4, WSPR and RTTY transmissions, Tune and the start chime play to the chosen output.
 
 Measured in Chromium 153 (headless on Linux, with fake devices):
 
@@ -147,6 +147,7 @@ Measured in Chromium 153 (headless on Linux, with fake devices):
 - A context created with a `sinkId` naming a missing device starts and then suspends, with its `sinkId` back to the default. RR73 never passes `sinkId` to the constructor: it calls `setSinkId` after creating the context.
 - `setSinkId` with a missing device rejects with `NotFoundError` and leaves the output where it was. RR73 then plays to the system default, the Output row says the chosen output is not connected, and RR73 tries again when a device is plugged in.
 - Fake devices list 3 outputs, so the end-to-end test runs in Chromium.
+- Playwright's Chromium gives devices new IDs on every page load, as a private window does. RR73 saves the output's name with its ID and finds it again by name when the ID is gone (`matchOutput` in `lib/audio/sink.ts`), unless 2 outputs share the name. Unverified: whether Windows gives a USB audio device a new ID on another USB port.
 
 Changing the output halts Tune and any transmission, so no transmission moves between devices.
 

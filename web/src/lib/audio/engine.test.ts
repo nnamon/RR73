@@ -57,6 +57,21 @@ class FakeContext {
     this.state = s;
     this.onstatechange?.();
   }
+  /** The output device, '' for the system default. */
+  sinkId = '';
+  /** Devices setSinkId does not find. */
+  missing = new Set<string>();
+  /** The switch leaves the context suspended. */
+  leaveSuspended = false;
+  /** As Chromium 153 does: suspended, then running again a moment later. */
+  setSinkId = vi.fn(async (id: string) => {
+    if (this.missing.has(id)) throw new DOMException('Requested device not found', 'NotFoundError');
+    const was = this.state;
+    this.setState('suspended');
+    await Promise.resolve();
+    this.sinkId = id;
+    if (was === 'running' && !this.leaveSuspended) this.setState('running');
+  });
 }
 
 const T0 = Date.UTC(2026, 9, 13, 13, 14, 52);
@@ -351,5 +366,99 @@ describe('input sources', () => {
     // The microphone again: insecure pages cannot open it.
     expect((await engine.start()).status).toBe('running');
     expect(streams).toHaveLength(2);
+  });
+});
+
+describe('output device', () => {
+  beforeEach(() => setVisibility('visible'));
+
+  it('waits for the context, then switches it when a tap creates it', async () => {
+    const { engine, ctx } = setup();
+    const seen: unknown[] = [];
+    engine.onOutput((o) => seen.push(o));
+    await engine.useOutput('codec-1');
+    expect(ctx.setSinkId).not.toHaveBeenCalled();
+    expect(seen).toEqual([{ sinkId: 'codec-1', error: null }]);
+    expect((await engine.start()).status).toBe('running');
+    expect(ctx.setSinkId).toHaveBeenCalledWith('codec-1');
+    expect(ctx.sinkId).toBe('codec-1');
+    expect(engine.output).toEqual({ sinkId: 'codec-1', error: null });
+  });
+
+  it('keeps capture running through a switch, and starts the clock mapping over', async () => {
+    const { engine, ctx, nodes } = setup();
+    await engine.start();
+    const states: string[] = [];
+    engine.onState((st) => states.push(st.status));
+    for (let i = 0; i < 6; i++) nodes[0].post(chunk(i * 512, 0.5 + i * CHUNK_S));
+    expect(engine.clockSource).toBe('output');
+    await engine.useOutput('codec-1');
+    // Chromium suspends the context for a moment: no stop.
+    expect(states).toEqual([]);
+    expect(engine.state.status).toBe('running');
+    expect(ctx.state).toBe('running');
+    expect(engine.clockSource).toBeNull();
+    await engine.useOutput(null);
+    expect(ctx.setSinkId).toHaveBeenLastCalledWith('');
+    expect(engine.state.status).toBe('running');
+  });
+
+  it('resumes a context the switch leaves suspended', async () => {
+    const { engine, ctx } = setup();
+    await engine.start();
+    ctx.leaveSuspended = true;
+    await engine.useOutput('codec-1');
+    expect(ctx.resume).toHaveBeenCalledTimes(2);
+    expect(ctx.state).toBe('running');
+    expect(engine.state.status).toBe('running');
+  });
+
+  it('stops capture when the context will not run after a switch', async () => {
+    const { engine, ctx } = setup();
+    await engine.start();
+    ctx.leaveSuspended = true;
+    ctx.resume.mockImplementation(async () => undefined);
+    await engine.useOutput('codec-1');
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'suspended' });
+  });
+
+  it('reports a missing device and plays on through the system default', async () => {
+    const { engine, ctx, nodes } = setup();
+    await engine.start();
+    for (let i = 0; i < 6; i++) nodes[0].post(chunk(i * 512, 0.5 + i * CHUNK_S));
+    ctx.missing.add('codec-1');
+    expect(await engine.useOutput('codec-1')).toEqual({ sinkId: 'codec-1', error: 'missing' });
+    expect(ctx.sinkId).toBe('');
+    expect(engine.state.status).toBe('running');
+    // Nothing switched, so the mapping holds.
+    expect(engine.clockSource).toBe('output');
+    // The device comes back and the same choice applies.
+    ctx.missing.clear();
+    expect(await engine.useOutput('codec-1')).toEqual({ sinkId: 'codec-1', error: null });
+    expect(ctx.sinkId).toBe('codec-1');
+  });
+
+  it('applies choices in order, the last one winning', async () => {
+    const { engine, ctx } = setup();
+    await engine.start();
+    const reported: unknown[] = [];
+    engine.onOutput((o) => reported.push(o));
+    const a = engine.useOutput('codec-1');
+    const b = engine.useOutput('codec-2');
+    await Promise.all([a, b]);
+    expect(ctx.setSinkId.mock.calls.map((c) => c[0])).toEqual(['codec-1', 'codec-2']);
+    expect(ctx.sinkId).toBe('codec-2');
+    expect(engine.output).toEqual({ sinkId: 'codec-2', error: null });
+    expect(reported.at(-1)).toEqual({ sinkId: 'codec-2', error: null });
+  });
+
+  it('says so where the browser cannot choose an output', async () => {
+    const plain = new FakeContext() as Partial<FakeContext>;
+    delete plain.setSinkId;
+    const { engine } = setup({ createContext: () => plain as unknown as AudioContext });
+    await engine.useOutput('codec-1');
+    await engine.start();
+    await vi.waitFor(() => expect(engine.output).toEqual({ sinkId: 'codec-1', error: 'unsupported' }));
+    expect(engine.state.status).toBe('running');
   });
 });
