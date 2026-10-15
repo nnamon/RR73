@@ -19,7 +19,10 @@ const at = (id: HighlightId) => defaultHighlights().findIndex((e) => e.id === id
 const on = (...ids: HighlightId[]): HighlightEntry[] => defaultHighlights().map((e) => ({ ...e, on: ids.includes(e.id) }));
 const order = (...ids: HighlightId[]): HighlightEntry[] => ids.map((id) => ({ id, on: true, colour: '#FF0000' }));
 type Opts = { sent?: boolean; me?: string; at?: typeof AT };
-const both = (text: string, entries = defaultHighlights(), opts: Opts = {}) => highlightDecode({ text, sent: opts.sent }, opts.me ?? ME, LOG, opts.at ?? AT, entries);
+const both = (text: string, entries = defaultHighlights(), opts: Opts = {}) => {
+  const { bg, ink } = highlightDecode({ text, sent: opts.sent }, opts.me ?? ME, LOG, opts.at ?? AT, entries);
+  return { bg, ink };
+};
 /** The background category. */
 const hl = (text: string, entries = defaultHighlights(), opts: Opts = {}) => both(text, entries, opts).bg;
 /** The text layer. */
@@ -116,10 +119,21 @@ describe('highlightDecode', () => {
 
   it("ignores the operator's own callsign for new and worked before", () => {
     const log = buildLogIndex([qso('9V1NE/P', 'OJ11', '20m')]);
-    const none = { bg: null, ink: null };
+    const none = { bg: null, ink: null, isNew: false, worked: false };
     expect(highlightDecode({ text: 'CQ 9V1NE OJ11' }, ME, log, AT, on('newCall', 'newCallBand', 'newGrid', 'worked'))).toEqual(none);
     expect(highlightDecode({ text: 'CQ 9V1NE/P OJ11' }, ME, log, AT, on('worked'))).toEqual(none);
     expect(highlightDecode({ text: 'JA1KXM VK3/9V1NE 73' }, ME, buildLogIndex([]), AT, on('newCall'))).toEqual(none);
+  });
+
+  it('says whether any enabled new category matches, and whether the sender is worked, for the filters', () => {
+    const full = (text: string, entries = defaultHighlights()) => highlightDecode({ text }, ME, LOG, AT, entries);
+    // My call wins the background; the 73 sender is still a new call.
+    expect(full('9V1NE A41ZZ 73')).toMatchObject({ bg: 'myCall', isNew: true, worked: false });
+    expect(full('9V1NE A41ZZ 73', on('myCall', 'cq'))).toMatchObject({ isNew: false });
+    expect(full('CQ 9M2TRX OJ02')).toMatchObject({ isNew: false, worked: true });
+    // Worked whatever the Worked before switch says.
+    expect(full('CQ 9M2TRX OJ02', on('cq'))).toMatchObject({ ink: null, worked: true });
+    expect(highlightDecode({ text: 'JA1KXM 9V1NE R-10', sent: true }, ME, LOG, AT, defaultHighlights())).toMatchObject({ isNew: false, worked: false });
   });
 
   it('matches own transmissions as Sent, and nothing else', () => {

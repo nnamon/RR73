@@ -27,7 +27,7 @@
   import { queueMarks, type QueueMark } from '../../lib/decode/queue';
   import { CHASE_MS, chaseMark, spots } from '../../lib/state/spots.svelte';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
-  import { highlightDecode } from '../../lib/decode/highlight';
+  import { highlightDecode, isNewCategory } from '../../lib/decode/highlight';
   import { log } from '../../lib/log/log.svelte';
   import { buildLogIndex } from '../../lib/log/worked';
   import { orderQueue } from '../../lib/qso/sequencer';
@@ -61,6 +61,8 @@
     detailOpen = true;
   }
   let filter = $state<Filter>('all');
+  // Hide worked: decodes from stations in the log on this band and mode leave Band activity.
+  let hideWorked = $state(false);
 
   // CQ rows name the caller's country, and decode colours place stations, once the country file
   // has loaded, when the page is idle.
@@ -214,20 +216,23 @@
   // null, so the sequencer's 1 s tick does not rebuild the list.
   const focus = $derived(focusCall(qso.st));
   const regular = $derived(layout.size === 'regular');
-  // Regular width: the Rx frequency pane takes the place of the Rx freq filter.
-  const shownFilter = $derived<Filter>(regular && filter === 'rx' ? 'all' : filter);
+  // New shows what the decode colours call new, so it shows only while one of those categories is
+  // on. Regular width: the Rx frequency pane takes the place of the Rx freq filter.
+  const anyNew = $derived(settings.highlights.some((e) => e.on && isNewCategory(e.id)));
+  const shownFilter = $derived<Filter>((regular && filter === 'rx') || (!anyNew && filter === 'new') ? 'all' : filter);
   const items = $derived(
-    applyFocus(buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar' } : {}), focus),
+    applyFocus(buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar', hideWorked } : { hideWorked }), focus),
   );
   const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true }), focus) : []);
-  const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz));
+  const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz, classify, hideWorked));
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'cq', label: 'CQ' },
+    { id: 'new', label: 'New' },
     { id: 'me', label: 'To me' },
     { id: 'rx', label: 'Rx freq' },
   ];
-  const shownChips = $derived(regular ? chips.filter((c) => c.id !== 'rx') : chips);
+  const shownChips = $derived(chips.filter((c) => !(regular && c.id === 'rx') && !(!anyNew && c.id === 'new')));
   const callWord = $derived(layout.pointer === 'mouse' ? 'Double-click' : 'Double-tap');
 
   // Return calls the selected station; the arrows move the selection through the list's rows.
@@ -276,12 +281,17 @@
 {/snippet}
 
 {#snippet chipRow()}
-  <div class="chips" role="radiogroup" aria-label="Show decodes">
-    {#each shownChips as c (c.id)}
-      <button class="chip" class:on={shownFilter === c.id} role="radio" aria-checked={shownFilter === c.id} onclick={() => (filter = c.id)}>
-        <span class="pill">{c.label} <span class="n">{counts[c.id]}</span></span>
-      </button>
-    {/each}
+  <div class="chip-row" data-scroll-x>
+    <div class="chips" role="radiogroup" aria-label="Show decodes">
+      {#each shownChips as c (c.id)}
+        <button class="chip" class:on={shownFilter === c.id} role="radio" aria-checked={shownFilter === c.id} onclick={() => (filter = c.id)}>
+          <span class="pill">{c.label} <span class="n">{counts[c.id]}</span></span>
+        </button>
+      {/each}
+    </div>
+    <button class="chip toggle" class:on={hideWorked} aria-pressed={hideWorked} onclick={() => (hideWorked = !hideWorked)}>
+      <span class="pill">{#if hideWorked}<Icon name="check" size={13} />{/if}Hide worked</span>
+    </button>
   </div>
   <button class="save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" size={22} /></button>
 {/snippet}
@@ -376,11 +386,29 @@
     box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
 
-  .chips {
+  /* The chips scroll sideways when they outgrow the row, as the macro row does. */
+  .chip-row {
     display: flex;
     flex: 1;
     min-width: 0;
     align-items: center;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
+  }
+
+  .chip-row::-webkit-scrollbar {
+    display: none;
+  }
+
+  .chips {
+    display: flex;
+    flex: none;
+    align-items: center;
+  }
+
+  .chip.toggle .pill {
+    gap: var(--rr-space-1);
   }
 
   /* 28 pt chips inside 44 pt targets that reach over the edges of the 36 pt row. */

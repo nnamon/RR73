@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Operate's New chip lists the decodes your decode colours mark as new: new DXCC entities, grids and calls, as Settings › Decode colours sets them.
+- Hide worked leaves stations already in the log on this band and mode out of the list. Their messages to you stay.
+
 ## 0.19.10 · 2026-10-15
 
 - Decode colours add New DXCC entity, New continent, New CQ zone and New ITU zone, each also on this band, placed by the country file. New DXCC is on, in magenta. The others start off.

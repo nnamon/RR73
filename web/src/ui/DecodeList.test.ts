@@ -17,7 +17,7 @@ const FIXTURE: DecodeListItem[] = [
   { kind: 'row', id: 's1', slotStartMs, row: row(d('JA1KXM 9V1NE R-14', 0, 0, 1180), { time: '13:14:30' }, true), out: { stage: 'sent', startMs: slotStartMs + 15500 } },
   { kind: 'header', id: 'h1', time: '13:14:15', detail: '23 decodes', parity: 'odd', text: '13:14:15 UTC · 23 decodes' },
   { kind: 'row', id: 'r1', slotStartMs, row: row(d('9V1NE JA1KXM -09', -9, 0.2, 1418), { meta: 'Japan' }) },
-  { kind: 'row', id: 'r2', slotStartMs, row: row(d('CQ 9M2TRX OJ02', -7, 0.1, 1022), { meta: 'Worked', worked: true }) },
+  { kind: 'row', id: 'r2', slotStartMs, row: row(d('CQ 9M2TRX OJ02', -7, 0.1, 1022), { meta: 'Worked' }) },
   { kind: 'row', id: 'r3', slotStartMs, row: row(d('CQ POTA VK3QRP QF22', -15, 0.3, 1846), { badge: { text: 'New grid', tone: 'teal' } }) },
   { kind: 'row', id: 'r4', slotStartMs, row: row(d('CQ 3D2KQ RH91', -21, 0.4, 641), { badge: { text: 'New DXCC', tone: 'mag' } }) },
   { kind: 'row', id: 'r5', slotStartMs, row: row(d('JH1RRT YB0AZK RR73', -6, -0.2, 2210), { meta: 'Indonesia' }) },
@@ -96,12 +96,12 @@ describe('DecodeList', () => {
     expect(rows.map((r) => r.classList.contains('k-cq'))).toEqual([false, false, true, true, true, false]);
   });
 
-  it('shows badges and notes, and dims worked stations', () => {
+  it('shows badges and notes', () => {
     const rows = [...render(FIXTURE).querySelectorAll('button.dr')];
     expect(rows[3].querySelector('.badge.teal')?.textContent).toBe('New grid');
     expect(rows[4].querySelector('.badge.mag')?.textContent).toBe('New DXCC');
     expect(rows[1].querySelector('.c-meta')?.textContent).toBe('Japan');
-    expect(rows[2].classList.contains('worked')).toBe(true);
+    expect(rows[2].querySelector('.c-meta')?.textContent).toBe('Worked');
   });
 
   it('gives each row a spoken label', () => {

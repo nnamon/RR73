@@ -342,10 +342,24 @@ export interface HighlightInput {
   sent?: boolean;
 }
 
-/** A decode's colours: the background category that won, and the text layer, each null when none. */
+/** The categories that mark a station as new: the place categories, new grid and new call, each overall and on the band. */
+const NEW_IDS: ReadonlySet<HighlightId> = new Set([...PLACE_IDS, 'newGrid', 'newGridBand', 'newCall', 'newCallBand']);
+
+/** True for a category that marks a station as new. */
+export function isNewCategory(id: HighlightId): boolean {
+  return NEW_IDS.has(id);
+}
+
+/**
+ * A decode's colours: the background category that won, and the text layer, each null when none.
+ * `isNew` is true when any enabled new category matches, whichever won the background; `worked`
+ * when the sender is in the log on this band and mode, whether Worked before is on or not.
+ */
 export interface DecodeHighlight {
   bg: HighlightId | null;
   ink: HighlightId | null;
+  isNew: boolean;
+  worked: boolean;
 }
 
 /**
@@ -391,5 +405,5 @@ export function highlightDecode(decode: HighlightInput, myCall: string, index: L
     worked: () => !!sender && setOf(index.callsByBandMode, bandModeKey(band, where.mode)).has(sender),
   };
   const first = (style: HighlightStyle) => entries.find((e) => e.on && category(e.id).style === style && test[e.id]())?.id ?? null;
-  return { bg: first('background'), ink: first('text') };
+  return { bg: first('background'), ink: first('text'), isNew: entries.some((e) => e.on && NEW_IDS.has(e.id) && test[e.id]()), worked: test.worked() };
 }

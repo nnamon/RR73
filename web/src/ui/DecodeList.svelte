@@ -120,7 +120,6 @@
     return [
       'dr',
       r.mark ? `k-${r.mark}` : '',
-      r.worked ? 'worked' : '',
       bg ? 'rr-hl hl-background' : '',
       ink ? 'rr-ink hl-ink' : '',
       item.old ? 'old' : '',
@@ -429,10 +428,6 @@
     font-variant-numeric: tabular-nums;
     color: var(--rr-label3);
     text-align: right;
-  }
-
-  .worked .c-msg {
-    color: var(--rr-label2);
   }
 
   /* Decode colours: --rr-hl-bg and --rr-hl-ink come from .rr-hl in tokens.css. */

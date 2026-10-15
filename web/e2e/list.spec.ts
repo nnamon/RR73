@@ -41,3 +41,48 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   // Free again 0.5 s after the finger lifts: the newer slot goes in on top.
   await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).toMatch(new RegExp(`^${hhmmss(newer)} UTC`));
 });
+
+test('New shows what the decode colours call new, and Hide worked hides stations in the log on this band and mode', async ({ page }) => {
+  // Without the country file, new means a new call or grid here.
+  await page.route('**/data/cty.json', (route) => route.fulfill({ status: 404, body: '' }));
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await page.evaluate(() => window.__rr73!.logged({ call: '9M2TRX', grid: 'OJ02', band: '20m', mode: 'FT8', dialHz: 14_074_000, audioHz: 1500, startUtcMs: Date.now() - 120_000, endUtcMs: Date.now() - 60_000, reportSent: -10, reportRcvd: -12 }));
+  await page.getByRole('button', { name: 'Dismiss the notice' }).click();
+
+  const slot = Date.now() - (Date.now() % 15_000) - 15_000;
+  await decoded(page, slot, ['CQ 9M2TRX OJ02', 'CQ K1ABC FN42', '9V1NE 9M2TRX R-10', 'JA1KXM 9M2TRX 73', 'JH1RRT YB0AZK RR73']);
+  const list = page.getByTestId('decode-list');
+  const texts = () => list.locator('button.dr .c-msg').allTextContents();
+  const chips = page.getByRole('radiogroup', { name: 'Show decodes' });
+  await expect(chips.getByRole('radio')).toHaveText([/^All 5$/, /^CQ 2$/, /^New 2$/, /^To me 1$/, /^Rx freq \d+$/]);
+
+  // New: the CQ from a new call and the RR73 from a new call, whatever colour won.
+  await chips.getByRole('radio', { name: /^New/ }).click();
+  await expect.poll(texts).toEqual(['CQ K1ABC FN42', 'JH1RRT YB0AZK RR73']);
+
+  // Hide worked: 9M2TRX leaves the list but for its message to me, and the counts follow.
+  await chips.getByRole('radio', { name: /^All/ }).click();
+  const hide = page.getByRole('button', { name: 'Hide worked' });
+  await expect(hide).toHaveAttribute('aria-pressed', 'false');
+  await hide.click();
+  await expect(hide).toHaveAttribute('aria-pressed', 'true');
+  await expect.poll(texts).toEqual(['9V1NE 9M2TRX R-10', 'CQ K1ABC FN42', 'JH1RRT YB0AZK RR73']);
+  await expect(chips.getByRole('radio')).toHaveText([/^All 3$/, /^CQ 1$/, /^New 2$/, /^To me 1$/, /^Rx freq \d+$/]);
+  await hide.click();
+  await expect.poll(texts).toHaveLength(5);
+
+  // With every new category off in Decode colours, New leaves the row, and its filter with it.
+  await chips.getByRole('radio', { name: /^New/ }).click();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Decode colours/ }).click();
+  await page.getByRole('radiogroup', { name: 'Preset' }).getByText('Quiet', { exact: true }).click();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(chips.getByRole('radio', { name: /^New/ })).toHaveCount(0);
+  await expect(chips.getByRole('radio', { name: /^All/ })).toBeChecked();
+  await expect.poll(texts).toHaveLength(5);
+});

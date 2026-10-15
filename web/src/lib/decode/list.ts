@@ -16,14 +16,15 @@ import type { Decode } from './types';
 /** The decode colours for a decode; `sent` is true for the operator's own transmissions. */
 export type Classify = (decode: Decode, sent: boolean) => DecodeHighlight;
 
-const NO_COLOUR: DecodeHighlight = { bg: null, ink: null };
+const NO_COLOUR: DecodeHighlight = { bg: null, ink: null, isNew: false, worked: false };
 
-function colours(classify: Classify | undefined, d: Decode, sent: boolean): { hl: DecodeHighlight['bg']; ink: DecodeHighlight['ink'] } {
+function colours(classify: Classify | undefined, d: Decode, sent: boolean): Pick<DecodeRowData, 'hl' | 'ink' | 'isNew' | 'worked'> {
   const h = classify ? classify(d, sent) : NO_COLOUR;
-  return { hl: h.bg, ink: h.ink };
+  return { hl: h.bg, ink: h.ink, isNew: h.isNew, worked: h.worked };
 }
 
-export type Filter = 'all' | 'cq' | 'me' | 'rx';
+/** The chips: every decode, CQs, decodes new by the decode colours, messages to me, and decodes near Rx. */
+export type Filter = 'all' | 'cq' | 'new' | 'me' | 'rx';
 
 /** Decodes within this distance of the receive frequency pass the Rx freq filter, Hz. */
 export const RX_WINDOW_HZ = 10;
@@ -41,6 +42,8 @@ export interface ListOptions {
   own?: 'rows' | 'bar';
   /** The Rx frequency pane: decodes within RX_PANE_HZ of Rx or to us, whatever the filter. */
   rxPane?: boolean;
+  /** Hide worked: leaves out decodes from stations in the log on this band and mode, but messages to us. */
+  hideWorked?: boolean;
 }
 
 export interface SlotDecodes {
@@ -159,7 +162,13 @@ export function quietHeader(oldestMs: number, newestMs: number): HeaderItem {
 function passes(row: DecodeRowData, filter: Filter, rxHz: number): boolean {
   if (filter === 'all') return true;
   if (filter === 'rx') return Math.abs(row.decode.freq_hz - rxHz) <= RX_WINDOW_HZ;
+  if (filter === 'new') return !!row.isNew;
   return row.mark === filter;
+}
+
+/** True for a row Hide worked leaves out: a station in the log on this band and mode, in a message not to us. */
+function hidden(row: DecodeRowData, toYou: boolean, hideWorked: boolean): boolean {
+  return hideWorked && !!row.worked && !toYou;
 }
 
 /**
@@ -185,7 +194,8 @@ export function buildList(
   const groups: Group[] = [];
   const rxPane = !!options.rxPane;
   const showOut = options.own !== 'bar' && (rxPane || filter === 'all' || filter === 'me');
-  const keep = (r: { row: DecodeRowData; toYou: boolean }) => (rxPane ? r.toYou || Math.abs(r.row.decode.freq_hz - rxHz) <= RX_PANE_HZ : passes(r.row, filter, rxHz));
+  const keep = (r: { row: DecodeRowData; toYou: boolean }) =>
+    rxPane ? r.toYou || Math.abs(r.row.decode.freq_hz - rxHz) <= RX_PANE_HZ : passes(r.row, filter, rxHz) && !hidden(r.row, r.toYou, !!options.hideWorked);
   // A slot holding one of our rows is never empty.
   const ours = new Set<number>();
   if (showOut) {
@@ -200,10 +210,9 @@ export function buildList(
   for (const s of slots) {
     // Ids follow the decoder's order, so a row keeps its id when it moves up.
     const rows = s.decodes
-      .map((d, i) => ({ i, toYou: toYou(d.text, myCall), row: { decode: d, ...markDecode(d, myCall) } }))
-      .filter(keep)
-      .map((r) => ({ ...r, row: { ...r.row, ...colours(classify, r.row.decode, false) } }));
-    if (!rows.length && (filter !== 'all' || rxPane)) continue;
+      .map((d, i) => ({ i, toYou: toYou(d.text, myCall), row: { decode: d, ...markDecode(d, myCall), ...colours(classify, d, false) } }))
+      .filter(keep);
+    if (!rows.length && (filter !== 'all' || rxPane || options.hideWorked)) continue;
     const items: ListItem[] = [rxPane ? countedHeader(s, rows.length) : slotHeader(s)];
     for (const r of [...rows.filter((x) => x.toYou), ...rows.filter((x) => !x.toYou)]) {
       const item: RowItem = { kind: 'row', id: `${s.startUtcMs}-${r.i}`, row: r.row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) };
@@ -257,15 +266,11 @@ export function buildList(
   return items;
 }
 
-/** Decodes per filter, for the chips. */
-export function filterCounts(slots: SlotDecodes[], myCall: string, rxHz: number): Record<Filter, number> {
-  const rows = slots.flatMap((s) => s.decodes.map((d) => ({ decode: d, ...markDecode(d, myCall) })));
-  return {
-    all: rows.length,
-    cq: rows.filter((r) => r.mark === 'cq').length,
-    me: rows.filter((r) => r.mark === 'me').length,
-    rx: rows.filter((r) => passes(r, 'rx', rxHz)).length,
-  };
+/** Decodes per filter, for the chips; with `hideWorked`, those it leaves out are not counted. */
+export function filterCounts(slots: SlotDecodes[], myCall: string, rxHz: number, classify?: Classify, hideWorked = false): Record<Filter, number> {
+  const rows = slots.flatMap((s) => s.decodes.map((d): DecodeRowData => ({ decode: d, ...markDecode(d, myCall), ...colours(classify, d, false) }))).filter((r) => !hidden(r, toYou(r.decode.text, myCall), hideWorked));
+  const count = (f: Filter) => rows.filter((r) => passes(r, f, rxHz)).length;
+  return { all: rows.length, cq: count('cq'), new: count('new'), me: count('me'), rx: count('rx') };
 }
 
 

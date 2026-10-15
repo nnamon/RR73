@@ -27,12 +27,14 @@ export interface DecodeRowData {
   badge?: Badge;
   /** Note before the numbers, such as a country or a Run caller's place in the queue. */
   meta?: string;
-  /** Already worked: the message is dimmed. */
-  worked?: boolean;
   /** The background decode colour that matched first (highlight.ts), if any. */
   hl?: HighlightId | null;
   /** The text layer over it, such as worked before, if any. */
   ink?: HighlightId | null;
+  /** An enabled new category matches: the New filter shows it. */
+  isNew?: boolean;
+  /** The sender is in the log on this band and mode: Hide worked hides it. */
+  worked?: boolean;
 }
 
 /** Text with one bold span, for rendering without HTML. */

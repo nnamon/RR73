@@ -168,7 +168,7 @@ describe('Clear decodes', () => {
 
       clearDecodeList(Date.now());
       expect(band.slots).toEqual([]);
-      expect(filterCounts(band.slots, '9V1NE', 1500)).toEqual({ all: 0, cq: 0, me: 0, rx: 0 });
+      expect(filterCounts(band.slots, '9V1NE', 1500)).toEqual({ all: 0, cq: 0, new: 0, me: 0, rx: 0 });
       expect(qso.selected).toBeNull();
       // The transmission of the slot under way stays; the one before goes.
       expect(qso.sent.map((x) => x.slotStartMs)).toEqual([t + 30_000]);

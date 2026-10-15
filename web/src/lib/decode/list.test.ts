@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, filterCounts, outText, quietHeader, slotHeader, type ListItem, type RowItem, type SlotDecodes } from './list';
+import { buildList, filterCounts, outText, quietHeader, slotHeader, type Classify, type ListItem, type RowItem, type SlotDecodes } from './list';
+import { defaultHighlights, highlightDecode } from './highlight';
+import { buildLogIndex } from '../log/worked';
 
 const T = Date.UTC(2026, 9, 13, 13, 14, 15);
 const d = (text: string, freq_hz: number) => ({ text, freq_hz, dt_s: 0.1, snr_db: -10 });
@@ -116,8 +118,45 @@ describe('buildList', () => {
   });
 
   it('counts decodes for each chip', () => {
-    expect(filterCounts([OLDER, NEWER], '9V1NE', 1500)).toEqual({ all: 4, cq: 2, me: 1, rx: 1 });
+    expect(filterCounts([OLDER, NEWER], '9V1NE', 1500)).toEqual({ all: 4, cq: 2, new: 0, me: 1, rx: 1 });
     expect(filterCounts([OLDER, NEWER], '', 1500).me).toBe(0);
+  });
+});
+
+describe('the New filter and Hide worked', () => {
+  // 9M2TRX is in the log on 20m FT8; RR73's decode colours.
+  const index = buildLogIndex([{ call: '9M2TRX', gridsquare: 'OJ02', band: '20m', mode: 'FT8', submode: '' }]);
+  const classify: Classify = (dec, sent) => highlightDecode({ text: dec.text, sent }, '9V1NE', index, { band: '20m', mode: 'FT8' }, defaultHighlights());
+  const LATEST: SlotDecodes = { startUtcMs: T + 15000, mode: 'FT8', decodes: [d('JA1KXM 9M2TRX 73', 900), d('9V1NE 9M2TRX R-10', 1500)], ms: 300 };
+  const texts = (items: ListItem[]) => items.flatMap((i) => (i.kind === 'row' ? [i.row.decode.text] : []));
+
+  it('shows the decodes an enabled new category matches, whichever colour won', () => {
+    expect(texts(buildList([OLDER, NEWER, LATEST], '9V1NE', 'new', 1500, [], 'FT8', classify))).toEqual(['JH1RRT YB0AZK RR73', 'CQ K1ABC FN42']);
+    // With CQ above New call in the order, the CQ keeps its colour and still counts as new.
+    const cqFirst = defaultHighlights().sort((a, b) => (a.id === 'cq' ? -1 : b.id === 'cq' ? 1 : 0));
+    const byCq: Classify = (dec, sent) => highlightDecode({ text: dec.text, sent }, '9V1NE', index, { band: '20m', mode: 'FT8' }, cqFirst);
+    const rows = buildList([OLDER], '9V1NE', 'new', 1500, [], 'FT8', byCq).filter((i): i is RowItem => i.kind === 'row');
+    expect(rows.map((r) => [r.row.decode.text, r.row.hl])).toEqual([['CQ K1ABC FN42', 'cq']]);
+    // With the new categories off, nothing is new.
+    const off: Classify = (dec, sent) => highlightDecode({ text: dec.text, sent }, '9V1NE', index, { band: '20m', mode: 'FT8' }, defaultHighlights().map((e) => ({ ...e, on: false })));
+    expect(texts(buildList([OLDER, NEWER], '9V1NE', 'new', 1500, [], 'FT8', off))).toEqual([]);
+  });
+
+  it('hides stations in the log on this band and mode, but their messages to me, and counts what shows', () => {
+    const all = (hideWorked: boolean) => texts(buildList([OLDER, NEWER, LATEST], '9V1NE', 'all', 1500, [], 'FT8', classify, {}, { hideWorked }));
+    expect(all(false)).toContain('CQ 9M2TRX OJ02');
+    expect(all(true)).toEqual(['9V1NE 9M2TRX R-10', '9V1NE JA1KXM PM95', 'JH1RRT YB0AZK RR73', 'CQ K1ABC FN42']);
+    // Worked before off in the colours changes nothing here.
+    const noInk: Classify = (dec, sent) => highlightDecode({ text: dec.text, sent }, '9V1NE', index, { band: '20m', mode: 'FT8' }, defaultHighlights().map((e) => ({ ...e, on: e.id !== 'worked' })));
+    expect(texts(buildList([NEWER], '9V1NE', 'cq', 1500, [], 'FT8', noInk, {}, { hideWorked: true }))).toEqual([]);
+    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, classify)).toEqual({ all: 6, cq: 2, new: 2, me: 2, rx: 2 });
+    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, classify, true)).toEqual({ all: 4, cq: 1, new: 2, me: 2, rx: 2 });
+  });
+
+  it('leaves out a slot Hide worked empties', () => {
+    const only: SlotDecodes = { startUtcMs: T + 15000, mode: 'FT8', decodes: [d('CQ 9M2TRX OJ02', 900)], ms: 300 };
+    const items = buildList([OLDER, only], '9V1NE', 'all', 1500, [], 'FT8', classify, {}, { hideWorked: true });
+    expect(items.filter((i) => i.kind === 'header').map((i) => i.id)).toEqual([`h${T - 15000}`]);
   });
 });
 

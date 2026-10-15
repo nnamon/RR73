@@ -16,6 +16,7 @@ Operate colours each decode by category, in WSJT-X's order. Settings › Decode 
 - RR73's scheme, the default, turns every category on but the continent, CQ zone and ITU zone categories and New DXCC on this band (RR73's scheme, below). Settings schema 3 gave phones that ran 0.7 the defaults of the time.
 - A stored order that lacks a category, as after an update that adds one, gets it after the last stored category that ranks above it in WSJT-X's order. Its switch and colour come from the preset the stored categories match, so an operator on the WSJT-X preset stays on it, and from RR73's scheme otherwise.
 - The log is indexed once per change of the log or the country file, in sets of calls (any band, per band, per band and mode), grids, DXCC entities, continents and zones (any band, per band), so each row costs a fixed number of set lookups. Places are cached per callsign.
+- Operate's New chip shows the decodes that any enabled new category matches (the place categories, new grid and new call, overall and on the band), whichever category won the background. With none of them on, the chip leaves the row. Hide worked leaves out decodes whose sender is in the log on this band and mode, by the Worked before rule whether its switch is on or not, and keeps messages to the operator.
 - Each category stores one colour, #RRGGBB. The decode rows carry the result as `data-hl` (background), `data-ink` (text layer) and the classes `rr-hl` and `rr-ink`, so a change of row layout does not touch the matcher.
 
 ## Categories and schemes
