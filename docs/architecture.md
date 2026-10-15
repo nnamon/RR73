@@ -86,9 +86,9 @@ SlotAudio (12 kHz f32, start time, mode)
   -> CandidateSearch      Costas sync scoring        -> Vec<Candidate>
   -> SyncRefine           time and frequency refine  -> Candidate
   -> Demodulator          symbol energies to LLRs    -> [f32; 174]
-  -> LdpcDecoder          BP; OSD later              -> codeword or failure
+  -> LdpcDecoder          BP, then OSD               -> codeword or failure
   -> Validator            CRC, message type, plausibility
-  -> Subtractor           later: rebuild and subtract, next pass
+  -> Subtractor           rebuild and subtract, next pass
   -> Vec<Decode>
 ```
 
@@ -108,7 +108,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 
 `decode_wspr(&samples, &WsprConfig, &mut WsprContext) -> WsprReport`. `WsprContext` carries the type 3 callsign hash table. `WsprDecode` carries the text, the signal centre (Hz), DT from 1 s into the slot (s), drift (Hz/s), SNR (dB, 2500 Hz), sync score, Fano steps and hard errors.
 
-- `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, later `osd-depth-3` and so on), so a bench run is reproducible from its name and overrides.
+- `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, `subtract-3-osd2` and so on), so a bench run is reproducible from its name and overrides.
 - `decode(&SlotAudio, &DecoderConfig, &mut DecodeContext) -> DecodeReport`. `DecodeContext` carries callsign hashes and, later, a priori information.
 - `SlotAudio::partial` marks the start of a slot still being received (early decoding): symbols after the last sample count as erasures.
 - `DecodeSession` decodes one slot in stages, each a `DecoderConfig` run on the residual of every earlier decode and returning only new decodes. `step()` does one bounded unit of work (32 spectrogram frames, 8 search frames, 16 candidates or 2 subtractions), `next_stage()` runs a stage to its end. `decode` is a one-stage session.

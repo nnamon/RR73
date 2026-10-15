@@ -58,7 +58,8 @@ const LARGE = /large\.spec/;
 /**
  * RR73_REVIEW=1 adds the projects CI leaves out: review-375x667 and review-393x852 capture every
  * screen, sheet and Operate state in both themes for the visual review (AGENTS.md), and
- * slot-record checks the lost-audio measure behind decode.spec's skip (docs/testing.md).
+ * slot-record checks the lost-audio measure behind decode.spec's skip (docs/testing.md), and
+ * walkthrough takes the README's screenshots.
  */
 const REVIEW = !!process.env.RR73_REVIEW;
 const desktop = { ...devices['Desktop Chrome'], viewport: { width: 393, height: 852 } };
@@ -75,6 +76,10 @@ const reviewProjects = REVIEW
       { name: 'review-1440x900', testMatch: LARGE, use: desk('webkit') },
       { name: 'review-1440x900-chromium', testMatch: LARGE, use: { ...desk('chromium'), ...fakeMic } },
       { name: 'review-852x393', testMatch: LARGE, use: iphone(852, 393, 3) },
+      // The README's walkthrough: live practice-band screens (walkthrough.spec.ts).
+      { name: 'walkthrough', testMatch: /walkthrough\.spec/, use: iphone(393, 852, 3) },
+      { name: 'walkthrough-ipad', testMatch: /walkthrough\.spec/, use: ipad(1180, 820) },
+      { name: 'walkthrough-desktop', testMatch: /walkthrough\.spec/, use: desk('webkit') },
     ]
   : [];
 

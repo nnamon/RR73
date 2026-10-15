@@ -1,6 +1,6 @@
 # WSPR
 
-Status: accepted 2026-10-14 with the owner's decisions at the end. Operate in WSPR, the beacon and Settings › WSPR are built on `feat/wspr-app` for 0.12.0 (As built, below). The WSPR history in Log, its exports and stored spots are not built yet (Not built yet).
+Status: accepted 2026-10-14 with the owner's decisions at the end. Operate in WSPR, the beacon and Settings › WSPR are built on `feat/wspr-app` for 0.12.0 (As built, below). Uploads to WSPRnet shipped in 0.19.0, from the phone (docs/design/qsp.md, WSPRnet). WSPRnet is the WSPR history: the owner dropped the history on the phone on 15 October 2026 (Spots and logging).
 
 WSPR is the second mode family (ADR 0006). This doc covers mode switching, Operate in WSPR, the beacon schedule, settings, where spots are stored, and what the app needs from the WSPR codec and decoder, which are being written in Rust alongside it.
 
@@ -91,7 +91,7 @@ Per ADR 0006. Station, Radio and audio, Logging, Optional features and Appearanc
 | Message | Read only | Station callsign, the first 4 characters of the grid and the reported power. A compound callsign shows both messages. |
 | Sort spots by | Distance | Distance, SNR or callsign. |
 
-- Report to WSPRnet, Keep spots and band hopping are not on screen until they are built (copy rules: no plans or unbuilt features on screen).
+- Settings › WSPR also holds Upload spots to WSPRnet (0.19.0), off by default.
 - Transmitting needs the callsign and grid, as in FT8. Settings › WSPR asks the codec whether the callsign packs and says "Callsign cannot be sent in WSPR" when it does not; Beacon refuses it with the same words.
 - A compound callsign sends Type 2 and Type 3 in turn. A Type 3 message carries a 6-character grid, so with a 4-character grid only the Type 2 message goes out, and a footer says so. Decision: no grid is made up from 4 characters.
 - Migration: decided against moving FT8 and FT4's flat fields. Settings schema 7 adds a `wspr` object at its defaults and leaves every other value where it was. Reason: the move changes nothing the operator sees and touches every FT8 module and its tests, the risk ADR 0006 named. A later family can nest its settings the same way; the FT8 fields can move when something needs them to.
@@ -100,14 +100,8 @@ Per ADR 0006. Station, Radio and audio, Logging, Optional features and Appearanc
 ## Spots and logging
 
 - Built: spots never enter the QSO log, ADIF exports or Wavelog. Operate keeps the last 60 slots (2 h) of spots in memory; a reload starts the list empty.
-- Not built yet: spots go to their own IndexedDB store, `wsprSpots`, and the station's transmissions to `wsprTx`.
 - Reason: a spot is a one-way reception report with no exchange, so storing it as a QSO would put contacts that never happened into ADIF, Wavelog and the worked-before colours.
-- The Log screen gains a QSOs and WSPR control at the top. The Log button opens the side for the current mode.
-- WSPR side: grouped by UTC day and band, with the day's transmissions and spots in the header ("Today · 20m · 3 Tx · 64 spots"). One row per station, farthest first: callsign, grid, spots, SNR range, power, distance and last time heard. Search by callsign or grid. A tap opens the station's spots.
-- Export through the share sheet: WSJT-X-style ALL_WSPR text, one line per spot, or CSV with a header row. The exact ALL_WSPR column layout is Unverified; it will be checked against a WSJT-X run.
-- Retention: spots older than Keep spots are removed at start-up.
-- Spot record: `id`, `slotStart` (UTC ms), `band`, `dialHz`, `audioHz`, `freqHz` (dial + audio), `snrDb`, `dtS`, `driftHz`, `call`, `grid`, `powerDbm`, `msgType`, `distanceKm`, `bearingDeg`, `decoder` (version and preset).
-- Tx record: `slotStart`, `band`, `dialHz`, `audioHz`, `message`, `powerDbm`, `completed` (false when halted).
+- The history is WSPRnet. With Upload spots to WSPRnet on, each slot's spots go there (docs/design/qsp.md, WSPRnet), and wsprnet.org shows them. The owner's call on 15 October 2026: WSPRnet keeps the history and Wavelog takes no WSPR spots, so the phone keeps none.
 
 ## Decoder API
 
@@ -183,8 +177,8 @@ pub struct WsprResult {
 - Built (rr73-wasm on `feat/wspr-core`): `decode_wspr(samples, preset)` returns a JSON array of `{ text, freq_hz, dt_s, drift_hz_per_s, snr_db }`; the worker keeps the type 3 hash table between slots. The app reads the call, grid, power and message type from the text (`lib/wspr/message.ts`).
 - Worker protocol: `{ type: 'decodeWspr', id, preset, samples }` answered by `{ type: 'decodedWspr', id, decodes, ms }`, `ms` measured in the worker.
 - Drift: wsprd prints the frequency change over the transmission. On four synthetic slots drifting −0.03, −0.01, 0.01 and 0.03 Hz/s, `wsprd -f 14.0956` printed −3, −1, 0 and 3, against −3.3, −1.1, 1.1 and 3.3 Hz over 110.6 s. The app shows `drift_hz_per_s × 110.6`, rounded.
-- Each message appears once per slot. Type 2 and Type 3 messages come back as separate spots; the app pairs them by callsign in the history.
-- The app passes `known_calls` from the history (the last 30 days, at most 5000 calls). The decoder holds no state between calls, so a restarted worker loses nothing.
+- Each message appears once per slot. Type 2 and Type 3 messages come back as separate spots.
+- `known_calls` is not passed: the app keeps no history to take calls from. The worker's type 3 hash table carries calls between slots.
 - Display: SNR as an integer dB, DT to 0.1 s, RF frequency = dial + `freq_hz` in MHz to 6 decimals, drift as an integer.
 
 ### Encode and synthesize
@@ -203,7 +197,7 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - `WsprPackError` maps to plain words for the Message row: callsign too long, grid not 4 or 6 characters, power not a WSPR value.
 - The waveform ramps in and out over a few milliseconds to avoid key clicks.
 - The app starts playback 1 s after the slot start, with the Tx timing correction from the timing work.
-- `freq_hz` and `f0_hz` both mean the signal centre, between tones 1 and 2. Which point WSPRnet and ALL_WSPR report is Unverified; export converts if it differs.
+- `freq_hz` and `f0_hz` both mean the signal centre, between tones 1 and 2. Which point WSPRnet reports is Unverified.
 
 ### Testing
 
@@ -236,8 +230,6 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 
 ## Not built yet
 
-- Log › WSPR: the history by day and band, search, a station's spots, ALL_WSPR and CSV export, the `wsprSpots` and `wsprTx` stores and Keep spots.
-- Report to WSPRnet and the spot relay (a later round).
 - Decoding from 114 s into the slot, and a time limit (`max_ms`) in the decoder.
 - WSPR stations in the practice band.
 - Moving FT8 and FT4's settings under a family key (decided against for now, see Settings).
@@ -245,6 +237,7 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 ## Alternatives rejected
 
 - Spots in the QSO log as ADIF records with mode WSPR: Wavelog would count them as contacts.
+- A history of spots on the phone: Log › WSPR by day and band, ALL_WSPR and CSV export, the `wsprSpots` and `wsprTx` stores and Keep spots. Designed here and dropped on 15 October 2026, the owner's call: WSPRnet keeps the history.
 - A separate WSPR screen beside Log and Spots: one more entry point, and "Spots" already names POTA and cluster spots.
 - The full 0 to 3000 Hz waterfall: a 6 Hz signal would be 0.8 pt wide.
 - A filter bar in WSPR: it costs 36 pt, one row more of spots, and Sort by in ••• covers the need.
@@ -261,9 +254,8 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - Decode time on an iPhone: Not tested on a device.
 - The 8192-point FFT per waterfall line: its cost on a phone is Not tested on a device.
 - KX2 at 110.6 s key-down every few minutes: heat at 5 W and 10 W is Not tested on a device. VOX should hold through the continuous tone; Not tested on a device.
-- Storage: at 30 spots a slot, 12 h a day for 30 days, about 320 000 spots or 65 MB. Safari's quota for a home-screen app at that size is Unverified.
-- Unverified: the frequency point WSPRnet uses, the ALL_WSPR column layout, and whether WSPRnet accepts a file upload of exported spots, which could report spots before the relay exists. The drift unit follows wsprd's output on four synthetic slots (Decoder API).
-- Spots live in memory only: a reload or a crash loses the session's list until the stores are built.
+- Unverified: the frequency point WSPRnet uses. The drift unit follows wsprd's output on four synthetic slots (Decoder API).
+- Spots live in memory only: a reload or a crash loses the session's list. Those uploaded stay on WSPRnet.
 - Decode time on real signals is 2 to 4 times that of synthetic ones in the browser (Decoder API). On an iPhone: not tested on a device.
 
 ## Decisions from the owner, 14 October 2026

@@ -58,5 +58,5 @@ Nothing from practice reaches the log, Wavelog or the network.
 
 - Not tested on a device. iOS timing of a 12 kHz buffer scheduled ahead on the audio clock is unverified.
 - Practice stays on across a reload. The Practice badge in Operate's top bar and the Practice log title show it.
-- The guard covers fetch on the page. Workers fetch only the app's own files today; `navigator.sendBeacon`, WebSocket and XMLHttpRequest are not guarded because RR73 does not use them.
+- The guard covers fetch on the page. Workers fetch only the app's own files today; `navigator.sendBeacon` and XMLHttpRequest are not guarded because RR73 does not use them. The WebSockets RR73 opens, the web SDR stream and the feed for who heard you, close while the practice band is on (`relay.svelte.ts`, `heard.svelte.ts`).
 - Slot audio is scheduled against `currentTime` paired with `Date.now()`, off by the output latency (tens of ms), which the DT-based offset correction absorbs.

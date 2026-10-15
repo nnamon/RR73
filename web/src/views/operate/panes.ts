@@ -1,7 +1,7 @@
 /**
  * Operate's frame keeps the top bar, the waterfall and the bottom edge; each mode family brings
- * the middle of the screen and its bottom bar as one pane. A new family (CW) adds its pane here
- * and leaves the others as they are. The keyboard family (RTTY, and PSK31 and the other keyboard
+ * the middle of the screen and its bottom bar as one pane. A new family adds its pane here and
+ * leaves the others as they are. The keyboard family (RTTY, and PSK31 and the other keyboard
  * modes after it) shares KeyboardPane, which takes the mode's tuning row.
  *
  * A pane renders its two parts as top-level elements marked data-part="middle" (the list, the

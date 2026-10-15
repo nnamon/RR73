@@ -18,6 +18,11 @@ Settings › FT8 and FT4 holds Confirm with, Work dupes in Run and Hold Tx frequ
 - Halt, the watchdog and decode colours apply to every mode that transmits or names callsigns.
 - Stored settings take the new structure when the second family lands, likely WSPR, with a one-time migration from today's flat fields.
 
+## Since
+
+- 14 October 2026: the stored settings did not move. WSPR's settings arrived as their own object beside the flat FT8 and FT4 fields (docs/design/wspr.md, Settings).
+- 13 October 2026: CW was dropped; the owner uses another app for CW. PSK31 waits for the secondary modes stage, and joins the keyboard family with RTTY.
+
 ## Alternatives rejected
 
 - Restructuring now, before a second family exists.
