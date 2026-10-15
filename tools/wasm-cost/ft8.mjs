@@ -1,4 +1,4 @@
-// Measures what decoding an FT8 slot costs in rr73-wasm, in a dedicated worker in headless
+// Measures what decoding an FT8 or FT4 slot costs in rr73-wasm, in a dedicated worker in headless
 // browsers, as the app's decoder worker runs it. Runs in the e2e container with the web
 // dependencies installed:
 //
@@ -10,8 +10,9 @@
 // Each `--plan` is a DecoderSession plan: stages separated by `;`, each a preset name and
 // `key=value` overrides. Every slot is decoded `--runs` times per plan and browser; a slot's
 // time is its fastest run. With `--budget-ms`, a run stops stepping once that much time has
-// passed since it started, as the app's worker does. Slots are WAV files (16-bit mono,
-// 12 kHz) under the given paths, or listed one per line in a file given with `--list`.
+// passed since it started, as the app's worker does. `--mode FT4` decodes the slots as FT4
+// (default FT8). Slots are WAV files (16-bit mono, 12 kHz) under the given paths, or listed
+// one per line in a file given with `--list`.
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
@@ -21,13 +22,14 @@ const require = createRequire(new URL('../../web/package.json', import.meta.url)
 const playwright = require('@playwright/test');
 
 const args = process.argv.slice(2);
-const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, out: null, lists: [], paths: [], browsers: [] };
+const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, mode: 'FT8', out: null, lists: [], paths: [], browsers: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--pkg') opts.pkg = args[++i];
   else if (a === '--plan') opts.plans.push(args[++i]);
   else if (a === '--runs') opts.runs = Number(args[++i]);
   else if (a === '--budget-ms') opts.budgetMs = Number(args[++i]);
+  else if (a === '--mode') opts.mode = args[++i];
   else if (a === '--out') opts.out = args[++i];
   else if (a === '--list') opts.lists.push(args[++i]);
   else if (a === 'chromium' || a === 'webkit' || a === 'firefox') opts.browsers.push(a);
@@ -84,7 +86,7 @@ const ready = init({ module_or_path: '/pkg/rr73_wasm_bg.wasm' });
 self.onmessage = (e) => run(e).catch((err) => self.postMessage({ error: String(err && err.stack || err) }));
 async function run(e) {
   await ready;
-  const { plans, count, runs, budgetMs } = e.data;
+  const { plans, count, runs, budgetMs, mode } = e.data;
   const results = plans.map(() => []);
   for (let s = 0; s < count; s++) {
     const samples = new Float32Array(await (await fetch('/slot/' + s)).arrayBuffer());
@@ -92,7 +94,7 @@ async function run(e) {
       const best = { total: Infinity, stages: [], decodes: [], stopped: false, stepMax: 0 };
       for (let r = 0; r < runs; r++) {
         const t0 = performance.now();
-        const session = new DecoderSession(samples, 'FT8', plan);
+        const session = new DecoderSession(samples, mode, plan);
         const stages = [];
         const decodes = [];
         let stepMax = 0;
@@ -158,15 +160,15 @@ const pct = (v, q) => {
   const s = [...v].sort((a, b) => a - b);
   return s[Math.min(s.length - 1, Math.max(0, Math.ceil(q * s.length) - 1))];
 };
-const report = { files, plans: opts.plans, runs: opts.runs, budgetMs: opts.budgetMs, browsers: {} };
-console.log(`${files.length} slots, ${opts.runs} runs each, best run per slot${opts.budgetMs ? `, budget ${opts.budgetMs} ms` : ''}`);
+const report = { files, mode: opts.mode, plans: opts.plans, runs: opts.runs, budgetMs: opts.budgetMs, browsers: {} };
+console.log(`${files.length} ${opts.mode} slots, ${opts.runs} runs each, best run per slot${opts.budgetMs ? `, budget ${opts.budgetMs} ms` : ''}`);
 for (const name of opts.browsers) {
   const browser = await playwright[name].launch();
   const page = await browser.newPage();
   await page.goto(`${origin}/`);
   page.on('console', (m) => console.log(`  [${name}] ${m.text()}`));
   const out = await page.evaluate(
-    ({ plans, count, runs, budgetMs }) =>
+    ({ plans, count, runs, budgetMs, mode }) =>
       new Promise((ok, fail) => {
         const w = new Worker('/worker.js', { type: 'module' });
         w.onerror = (e) => fail(new Error(e.message));
@@ -175,9 +177,9 @@ for (const name of opts.browsers) {
           else if (e.data.error) fail(new Error(e.data.error));
           else ok(e.data);
         };
-        w.postMessage({ plans, count, runs, budgetMs });
+        w.postMessage({ plans, count, runs, budgetMs, mode });
       }),
-    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs },
+    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs, mode: opts.mode },
   );
   report.browsers[name] = { version: browser.version(), wasm: out.version, results: out.results };
   console.log(`\n${name} ${browser.version()}, rr73-wasm ${out.version}`);
