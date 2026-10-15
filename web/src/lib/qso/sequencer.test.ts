@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IGNORE_MS, LATE_S, notReady, ourSlot, reduce, type HuntOrder, type QueueOrder, type SeqState, type Worked } from './sequencer';
+import { IGNORE_MS, LATE_S, loggable, notReady, ourSlot, reduce, type HuntOrder, type QueueOrder, type SeqState, type Worked } from './sequencer';
 import { Sim, T0, decode } from '../testing/qso-sim';
 import type { Decode } from '../decode/types';
 
@@ -1112,6 +1112,28 @@ describe('safety', () => {
     s.send({ type: 'enableTx', on: true, nowMs: s.at(5, 1.1) });
     s.run(6, 6);
     expect(texts(s).at(-1)).toBe('6:JA1KXM 9V1NE R-10');
+  });
+
+  it('logs the QSO under way on Log QSO once reports have gone both ways, and only once', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 3, { 3: ['9V1NE JA1KXM -09'] });
+    s.send({ type: 'audioStopped', nowMs: s.at(4, 0.2) });
+    // Their report is in, ours has not gone: nothing to log yet.
+    expect(loggable(s.st.partner)).toBe(false);
+    expect(s.send({ type: 'logNow', nowMs: s.at(4, 1) }).filter((f) => f.type === 'logQso')).toEqual([]);
+
+    s.send({ type: 'audioResumed', nowMs: s.at(5, 1) });
+    s.send({ type: 'enableTx', on: true, nowMs: s.at(5, 1.1) });
+    s.run(6, 6);
+    expect(texts(s).at(-1)).toBe('6:JA1KXM 9V1NE R-10');
+    s.send({ type: 'audioStopped', nowMs: s.at(7, 0.2) });
+    expect(loggable(s.st.partner)).toBe(true);
+    const logged = s.send({ type: 'logNow', nowMs: s.at(7, 1) }).filter((f) => f.type === 'logQso');
+    expect(logged).toHaveLength(1);
+    expect(logged[0]).toMatchObject({ record: { call: 'JA1KXM', grid: 'PM95', reportSent: '-10', reportRcvd: '-09', source: 'sequencer' } });
+    expect(loggable(s.st.partner)).toBe(false);
+    expect(s.send({ type: 'logNow', nowMs: s.at(7, 2) }).filter((f) => f.type === 'logQso')).toEqual([]);
   });
 
   it('transmits without a band confirmation', () => {

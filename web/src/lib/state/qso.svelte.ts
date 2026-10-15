@@ -294,6 +294,11 @@ export function editMessage(tx: TxNum, text: string) {
   dispatch({ type: 'editMessage', tx, text, nowMs: Date.now() });
 }
 
+/** Log QSO from the audio banner: logs the QSO under way as it stands, once reports have gone both ways. */
+export function logNow() {
+  dispatch({ type: 'logNow', nowMs: Date.now() });
+}
+
 /** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
 export function endQso() {
   dispatch({ type: 'endQso', nowMs: Date.now() });

@@ -552,17 +552,22 @@
     transform: translateX(var(--rr-space-half));
   }
 
+  /* Over the callsign labels, on a scrim of its own. */
   .gap {
     position: absolute;
     top: var(--rr-space-4);
-    right: var(--rr-space-4);
-    left: var(--rr-space-4);
+    left: 50%;
+    z-index: 1;
+    padding: 0 var(--rr-space-2);
+    border-radius: var(--rr-radius-xs);
+    background: var(--rr-wf-scrim);
     font-size: var(--rr-text-caption);
     font-weight: var(--rr-weight-medium);
     line-height: var(--rr-leading-caption);
     letter-spacing: 0;
     color: var(--rr-wf-text);
-    text-align: center;
+    white-space: nowrap;
+    transform: translateX(-50%);
   }
 
   /* A small pill at the bottom left of the picture, above the ruler. */

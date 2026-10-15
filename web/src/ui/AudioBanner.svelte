@@ -1,5 +1,9 @@
 <script lang="ts">
-  /** What the audio is doing when it is not running, and the tap that starts or resumes it: one slim strip under the top bar. */
+  /**
+   * What the audio is doing when it is not running, and the tap that starts or resumes it: one
+   * slim strip under the top bar. Stopped in a QSO whose reports have gone both ways, it also
+   * offers Log QSO, which logs the QSO as it stands (`logCall`, `onlog`).
+   */
   import Icon from './Icon.svelte';
   import { utcTime } from '../lib/clock/format';
   import type { AudioStatus, StartError, StopReason } from '../lib/audio/engine';
@@ -11,6 +15,8 @@
     stoppedAtUtcMs,
     onstart,
     onresume,
+    logCall = null,
+    onlog,
   }: {
     status: AudioStatus;
     reason: StopReason | null;
@@ -18,6 +24,9 @@
     stoppedAtUtcMs: number | null;
     onstart: () => void;
     onresume: () => void;
+    /** The station of a QSO that can be logged as it stands; null for none. */
+    logCall?: string | null;
+    onlog?: () => void;
   } = $props();
 
   const STOPPED: Record<StopReason, string> = {
@@ -61,7 +70,10 @@
       {/if}
     </div>
     {#if status === 'stopped'}
-      <button class="btn primary act" onclick={onresume}>Resume audio</button>
+      <div class="acts">
+        <button class="btn primary act" onclick={onresume}>Resume audio</button>
+        {#if logCall && onlog}<button class="btn act log" aria-label="Log the QSO with {logCall}" onclick={onlog}>Log QSO</button>{/if}
+      </div>
     {:else if status !== 'starting'}
       <button class="btn primary act" onclick={onstart}>Start audio</button>
     {/if}
@@ -114,6 +126,13 @@
   .s {
     font-size: var(--rr-text-foot);
     line-height: var(--rr-leading-foot);
+  }
+
+  .acts {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    gap: var(--rr-space-1);
   }
 
   .act {

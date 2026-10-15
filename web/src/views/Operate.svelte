@@ -14,7 +14,8 @@
   import StationBar from '../ui/StationBar.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
   import { PANES, familyOf } from './operate/panes';
-  import { qso, setFrequencies } from '../lib/state/qso.svelte';
+  import { logNow, qso, setFrequencies } from '../lib/state/qso.svelte';
+  import { loggable } from '../lib/qso/sequencer';
   import { layout } from '../lib/app/layout.svelte';
   import { markedTxHz } from '../lib/qso/view';
   import { settings } from '../lib/state/settings.svelte';
@@ -57,6 +58,8 @@
       stoppedAtUtcMs={audio.stoppedAtUtcMs}
       onstart={() => void startAudio()}
       onresume={() => void resumeAudio()}
+      logCall={family === 'ft' && loggable(qso.st.partner) ? (qso.st.partner?.call ?? null) : null}
+      onlog={logNow}
     />
   </div>
 

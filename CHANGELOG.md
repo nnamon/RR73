@@ -5,6 +5,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - The station detail, from touch and hold on a decode, ends with the station's SNR over its last 8 slots, gaps marked.
+- When the audio stops in a QSO whose reports have gone both ways, its banner offers Log QSO beside Resume audio.
 - Change band takes your own FT8 or FT4 dial for each band, such as a 60m channel. Saved slots, QSOs and the web SDR use it. An empty field goes back to the usual dial.
 
 ## 0.20.0 · 2026-10-15

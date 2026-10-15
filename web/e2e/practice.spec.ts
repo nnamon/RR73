@@ -158,6 +158,30 @@ test('calling CQ gets a caller and logs a practice QSO; the log is untouched', a
   await expect(page.locator('header.top .practice')).toHaveCount(0);
 });
 
+test('audio stopping in a QSO whose reports have gone both ways offers Log QSO, which logs it as it stands', async ({ page }) => {
+  test.setTimeout(240_000);
+  await practiceOn(page);
+  await scenario(page, 'One caller');
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await bar.getByRole('button', { name: 'CQ' }).click();
+  // The caller's R-report: their report is in and ours has gone.
+  const rreport = row(page, new RegExp(`^${ME} [A-Z0-9]+ R[-+]\\d\\d$`)).first();
+  await expect(rreport).toBeVisible({ timeout: 150_000 });
+  const call = (await rreport.locator('.c-msg').textContent())!.split(' ')[1];
+
+  // RR73 leaves the screen: the audio stops before the QSO is logged.
+  await page.evaluate(() => {
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+  });
+  const banner = page.getByRole('status').filter({ hasText: 'Audio stopped at' });
+  await expect(banner).toBeVisible();
+  await banner.getByRole('button', { name: `Log the QSO with ${call}` }).click();
+  await expect(page.getByRole('status').filter({ hasText: `Logged ${call}` })).toBeVisible();
+  await expect(banner.getByRole('button', { name: /^Log the QSO/ })).toHaveCount(0);
+  expect(await callsInLog(page, 'rr73-practice')).toEqual([call]);
+});
+
 test('nothing leaves the phone: the guard refuses sends, Send to Wavelog goes to the stand-in, Clear practice log has Undo', async ({ page }) => {
   test.setTimeout(120_000);
   await page.goto('./');

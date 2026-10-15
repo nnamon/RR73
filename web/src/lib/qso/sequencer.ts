@@ -181,6 +181,11 @@ export interface Partner {
   foxHz: number | null;
 }
 
+/** True once a QSO under way can be logged by hand: their report received, ours sent, not logged yet. */
+export function loggable(p: Partner | null): boolean {
+  return !!p && !p.logged && (p.rcvdRpt || p.rcvdRRpt) && (p.sentRpt || p.sentRRpt);
+}
+
 export interface Planned {
   tx: TxNum;
   text: string;
@@ -273,6 +278,8 @@ export type SeqEvent =
   | { type: 'stopAfterQso'; on: boolean; nowMs: number }
   | { type: 'halt'; nowMs: number }
   | { type: 'endQso'; nowMs: number }
+  /** Logs the QSO under way as it stands, once reports have gone both ways (loggable): from Operate's audio banner. */
+  | { type: 'logNow'; nowMs: number }
   | { type: 'txStarted'; slotStartMs: number; text: string; nowMs: number }
   | { type: 'txEnded'; slotStartMs: number; text: string; complete: boolean; nowMs: number }
   | { type: 'txMissed'; slotStartMs: number; nowMs: number }
@@ -1343,6 +1350,9 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
         st.next = null;
         st.queue = [];
       }
+      break;
+    case 'logNow':
+      if (loggable(st.partner)) m.complete(e.nowMs);
       break;
     case 'endQso':
       // The operator ends the QSO: Tx, Run and Hunt stop and the sequencer goes back to idle.
