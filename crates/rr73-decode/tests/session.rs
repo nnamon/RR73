@@ -363,3 +363,26 @@ fn baseband_refinement_places_decodes_between_grid_points() {
         );
     }
 }
+
+#[test]
+fn a_wider_dt_search_decodes_a_reply_started_4_s_late() {
+    // DT 4.0 s: the transmission runs to 17.1 s, so its last 14 symbols are past the slot
+    // and become erasures. The preset searches to DT 2.5 s, as ft8_lib does.
+    let audio = render(vec![SimSignal::new("K1ABC W9XYZ R-08", 1234.0, 4.0, -12.0)], 44);
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let preset = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let r = decode(&slot, &preset, &mut DecodeContext::new());
+    assert!(r.decodes.is_empty(), "{:?}", r.decodes);
+    for extra in [&[][..], &["refine.kind=baseband"][..]] {
+        let mut overrides = vec!["search.ft8_dt_max_s=4.5"];
+        overrides.extend_from_slice(extra);
+        let wide = preset.with_overrides(&overrides).expect("overrides");
+        let r = decode(&slot, &wide, &mut DecodeContext::new());
+        assert_eq!(texts(&r.decodes), ["K1ABC W9XYZ R-08"], "{overrides:?}");
+        assert!(
+            (r.decodes[0].dt_s - 4.0).abs() < 0.05,
+            "{overrides:?}: {:?}",
+            r.decodes
+        );
+    }
+}
