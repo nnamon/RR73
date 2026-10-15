@@ -441,6 +441,29 @@ describe('CatRadio', () => {
     expect(radio.holdsPtt).toBe(false);
   });
 
+  it('never sends a PTT on held back by a drain once Halt has sent PTT off', async () => {
+    const { timers, sim, port, radio } = setup();
+    radio.start();
+    await timers.advance(400);
+    // A read goes unanswered: the drain starts when it times out, and PTT on waits for its end.
+    port.silent = true;
+    void radio.request({ type: 'read_frequency' });
+    await timers.advance(REPLY_MS);
+    port.silent = false;
+    const k = radio.key(15_000);
+    await timers.advance(1);
+    expect(port.ptt).toEqual([]);
+    // Halt inside the drain: PTT off at once.
+    radio.unkeyAll();
+    await timers.advance(1);
+    expect(port.ptt).toEqual(['00']);
+    await timers.advance(DRAIN_MS + 1000);
+    expect(await k.result).toBe('closed');
+    expect(port.ptt.every((p) => p === '00')).toBe(true);
+    expect(sim.transmit).toBe(false);
+    expect(radio.state.unkeyFailed).toBe(false);
+  });
+
   it('never takes a late OK for the answer to a later request', async () => {
     const { timers, port, radio } = setup();
     // A dial set answered after its timeout, then PTT on that the radio never answers.

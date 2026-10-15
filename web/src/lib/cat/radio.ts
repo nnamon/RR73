@@ -462,7 +462,10 @@ export class CatRadio implements Keyer {
       this.mayBeKeyed = true;
       this.patch({ keyed: true });
       const until = this.timers.now() + PTT_TIMEOUT_MS;
-      const on = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS);
+      // Held back by a drain, PTT on goes out only while this keying still holds and no PTT off
+      // has gone out since (every PTT off bumps pttGen).
+      const gen = this.pttGen;
+      const on = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS, () => held() && gen === this.pttGen);
       return (this.traits.readsPtt ? on.then((r) => this.readUntilKeyed(r, until, held)) : on).then((r) => {
         const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
         if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
@@ -656,12 +659,13 @@ export class CatRadio implements Keyer {
 
   /**
    * Writes a request ahead of the queue: at once for PTT off, at the end of a drain for anything
-   * else, whose answer could not be told from a late one before then.
+   * else, whose answer could not be told from a late one before then. A request held back that way
+   * goes out only if `still` holds when the drain ends; otherwise it resolves `closed` unsent.
    */
-  private sendNow(req: CatRequest, timeoutMs: number): Promise<CatResult> {
+  private sendNow(req: CatRequest, timeoutMs: number, still: () => boolean = () => true): Promise<CatResult> {
     if (this.over) return Promise.resolve({ ok: false, why: 'closed' });
     return new Promise((resolve) => {
-      const go = () => (this.over ? resolve({ ok: false, why: 'closed' }) : this.send(req, timeoutMs, resolve, true));
+      const go = () => (this.over || !still() ? resolve({ ok: false, why: 'closed' }) : this.send(req, timeoutMs, resolve, true));
       if (this.draining() && !(req.type === 'set_transmit' && !req.on)) this.afterDrain.push(go);
       else go();
     });
