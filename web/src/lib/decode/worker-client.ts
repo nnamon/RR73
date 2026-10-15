@@ -44,8 +44,9 @@ interface Request<T> {
  * The decoder preset operators get. `subtract-3-osd2` decodes up to 3 passes, subtracting each
  * decoded signal before the next (docs/experiments/0001-subtraction.md), and retries candidates
  * that belief propagation fails with ordered-statistics decoding of order 2
- * (docs/experiments/0002-osd.md has the measurements). CI gates this preset against
- * bench/subtract-3-osd2.json.
+ * (docs/experiments/0002-osd.md has the measurements). Its soft bits come from blocks of 1 and 3
+ * FT8 symbols or 1 and 4 FT4 symbols (docs/experiments/0008-multi-symbol.md). CI gates this
+ * preset against bench/subtract-3-osd2.json.
  */
 export const PRESET = 'subtract-3-osd2';
 
@@ -53,12 +54,12 @@ export const PRESET = 'subtract-3-osd2';
  * Later stages for FT8 and FT4 slots, after PRESET. Each decodes what the stages before it
  * left: the first on a grid of 4 frames per symbol and 4 bins per tone spacing, the second on
  * 8 frames per symbol with 400 candidates from a 2 dB sync threshold and OSD over all 91
- * information bits. Both leave frames that overlap digital silence out of the sync score. In
- * FT8 they accept OSD decodes from -23 dB, 1 dB above the preset, as they try more
- * candidates; FT4 keeps the preset's -19 dB. Their a priori decoding stays near the QSO
- * partner's frequency, which keeps its cost to 4% (crates/rr73-decode/src/ap.rs). CI gates
- * them against bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has
- * the measurements and the budget.
+ * information bits. Both take the preset's block soft bits and leave frames that overlap
+ * digital silence out of the sync score. In FT8 they accept OSD decodes from -23 dB, 1 dB above
+ * the preset, as they try more candidates; FT4 keeps the preset's -19 dB. Their a priori
+ * decoding stays near the QSO partner's frequency, which keeps its cost to 4%
+ * (crates/rr73-decode/src/ap.rs). CI gates them against bench/subtract-3-osd2-deep.json;
+ * docs/decisions/0007-deeper-ft8-stages.md has the measurements and the budget.
  */
 export const DEEP: DeepStages = {
   plan: [

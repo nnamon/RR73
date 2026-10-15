@@ -512,12 +512,17 @@ fn a_priori_decoding_finds_weak_qso_messages_and_nothing_in_noise() {
 /// noise with every candidate sent to the decoder.
 #[test]
 fn block_soft_bits_decode_weak_signals_and_nothing_from_noise() {
-    let shipped = DecoderConfig::preset("subtract-3-osd2").expect("preset");
-    let block = shipped
+    let preset = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let shipped = preset
+        .with_overrides(&["demod.kind=max-log"])
+        .expect("spectrogram");
+    let block = preset
         .with_overrides(&[
             "demod.kind=block",
             "demod.ft8_blocks=[1,3]",
             "demod.ft4_blocks=[1,4]",
+            "demod.ft8_min_sync=0",
+            "demod.ft4_min_sync=0",
         ])
         .expect("block");
     let texts = [

@@ -1,6 +1,6 @@
 # 0007. Deeper FT8 and FT4 stages after the shipped preset
 
-Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages (FT4, 2026-10-15).
+Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages (FT4, 2026-10-15). Amended 2026-10-16: every stage takes soft bits from blocks of symbols through the preset (experiment 0008).
 
 ## Context
 

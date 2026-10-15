@@ -468,13 +468,24 @@ impl DecoderConfig {
         c
     }
 
+    /// Soft bits from blocks of 1 and 3 FT8 symbols or 1 and 4 FT4 symbols, for candidates with
+    /// at least 5 of 21 (FT8) or 7 of 16 (FT4) sync symbols on their sent tone (experiment 0008).
+    fn with_block_soft_bits(mut self) -> Self {
+        self.demod.kind = DemodKind::Block;
+        self.demod.ft8_blocks = vec![1, 3];
+        self.demod.ft4_blocks = vec![1, 4];
+        self.demod.ft8_min_sync = 5;
+        self.demod.ft4_min_sync = 7;
+        self
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
             "baseline" => Ok(Self::baseline()),
             "subtract-3" => Ok(Self::subtract_3()),
             "subtract-3-osd1" => Ok(Self::subtract_3_osd(1, 91)),
-            "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40)),
+            "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40).with_block_soft_bits()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }

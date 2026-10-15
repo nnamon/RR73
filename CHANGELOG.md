@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT8 and FT4 decode signals 2 to 3.5 dB weaker. The decoder takes its soft bits from blocks of 3 FT8 or 4 FT4 symbols, and its first stage finds 92% of the reference decodes in 350 slots recorded on 40m, up from 74%.
+
 ## 0.22.1 · 2026-10-15
 
 - Settings › Rig control › Keep Tx audio centred moves the IC-705’s dial in 500 Hz steps for each FT8 and FT4 transmission, so its audio sits at 1500 to 2000 Hz inside the transmit passband and the signal stays on the Tx frequency. The dial goes back after each transmission. It is off by default and works with Key the radio with CAT on.

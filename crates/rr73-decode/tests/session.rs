@@ -264,12 +264,11 @@ fn block_stages_transform_each_pass_and_match_decode() {
         "{transforms} for {passes} passes"
     );
     assert_eq!(texts(session.decodes()), texts(&one_shot.decodes));
-    // Every message the shipped preset finds, and the -18 dB one it may miss.
-    let shipped = decode(
-        &slot,
-        &DecoderConfig::preset("subtract-3-osd2").expect("preset"),
-        &mut DecodeContext::new(),
-    );
+    // Every message the spectrogram LLRs find, and the -18 dB one they may miss.
+    let spectrogram = DecoderConfig::preset("subtract-3-osd2")
+        .and_then(|c| c.with_overrides(&["demod.kind=max-log"]))
+        .expect("spectrogram");
+    let shipped = decode(&slot, &spectrogram, &mut DecodeContext::new());
     for t in texts(&shipped.decodes) {
         assert!(texts(session.decodes()).contains(&t), "{t}");
     }
