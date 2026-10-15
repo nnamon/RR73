@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.3 · 2026-10-15
 
 - FT4 no longer shows the false decodes noise gave about twice in 10000 slots, all reported at −20 dB or weaker.
 
