@@ -184,8 +184,12 @@ impl ParityGraph {
     fn pack(&self, hard: &[u8], packed: &mut Vec<u64>) {
         packed.clear();
         packed.resize(self.words, 0);
-        for (b, &h) in hard.iter().take(self.bits).enumerate() {
-            packed[b / 64] |= u64::from(h & 1) << (b % 64);
+        let hard = &hard[..hard.len().min(self.bits)];
+        for (word, chunk) in packed.iter_mut().zip(hard.chunks(64)) {
+            *word = chunk
+                .iter()
+                .enumerate()
+                .fold(0, |w, (i, &h)| w | (u64::from(h & 1) << i));
         }
     }
 
@@ -475,9 +479,17 @@ fn sum_product_iteration(graph: &ParityGraph, s: &mut LdpcScratch) {
                 .zip(prefix[r.clone()].as_chunks::<LANES>().0)
                 .zip(tanh[r].as_chunks::<LANES>().0)
                 .zip(suffix.as_chunks_mut::<LANES>().0.iter_mut());
+            // Three elementwise passes over the lanes: one loop doing all three steps per
+            // value stays scalar.
             for (((c, p), t), u) in lanes {
-                for (((c, &p), &t), u) in c.iter_mut().zip(p).zip(t).zip(u.iter_mut()) {
-                    *c = 2.0 * fast_atanh(p * *u);
+                let mut x = [0.0f32; LANES];
+                for ((x, &p), &u) in x.iter_mut().zip(p).zip(u.iter()) {
+                    *x = p * u;
+                }
+                for (c, &x) in c.iter_mut().zip(&x) {
+                    *c = 2.0 * fast_atanh(x);
+                }
+                for (u, &t) in u.iter_mut().zip(t) {
                     *u *= t;
                 }
             }
