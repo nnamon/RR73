@@ -562,6 +562,15 @@ describe('Hunt', () => {
     expect(s.st.next).toMatchObject({ tx: 1, slotStartMs: s.at(4), offsetS: 0.5 });
   });
 
+  it('calls a directed CQ the operator may answer, and skips the others', () => {
+    const s = new Sim({ huntOrder: 'strongest' });
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    // The country file says 9V1NE may answer ZL1TQK's CQ DX; W1AW's CQ POTA is not on the list.
+    s.send({ type: 'slotDecoded', slotStartMs: s.at(1), pass: 'final', decodes: [...skipped, ...cqs], directed: ['ZL1TQK'], nowMs: s.at(2, 0.1) });
+    expect(s.st.partner?.call).toBe('ZL1TQK');
+    expect(s.st.next).toMatchObject({ tx: 1 });
+  });
+
   it('skips dupes, and picks nothing when only skipped stations call', () => {
     const s = new Sim({ huntOrder: 'strongest' });
     s.send({ type: 'setWorked', worked: [worked('JA1KXM', { day: '20261013' })], nowMs: s.at(0) });

@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Hunt calls directed CQs meant for you: CQ POTA and other activities, your continent, CQ DX from another continent, and your country's prefix. It still skips contest CQs.
+
 ## 0.19.8 · 2026-10-15
 
 - Start activation suggests POTA and SOTA references as you type them, with their names.

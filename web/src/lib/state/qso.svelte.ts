@@ -7,7 +7,9 @@
 
 import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
-import type { TxNum } from '../qso/messages';
+import { parseExchange, type TxNum } from '../qso/messages';
+import { answersDirected } from '../qso/directed';
+import { reference } from '../reference';
 import { STATUS } from '../qso/status';
 import type { LostMark } from '../decode/lost';
 import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
@@ -348,11 +350,24 @@ export function queue(): Caller[] {
 
 let started = false;
 
+/** Senders of the directed CQs in `decodes` the operator may answer, by the country file; none until it has loaded. */
+export function directedFor(decodes: readonly Decode[]): string[] {
+  const countries = reference.loadedCountries();
+  if (!countries) return [];
+  const me = configNow().myCall;
+  const out: string[] = [];
+  for (const d of decodes) {
+    const ex = parseExchange(d.text);
+    if (ex.kind === 'cq' && ex.modifier && ex.from && answersDirected(ex.modifier, ex.from, me, countries)) out.push(ex.from);
+  }
+  return out;
+}
+
 /** Wires the runtime to the station. Called once by the app. */
 export function startQso() {
   if (started || typeof window === 'undefined') return;
   started = true;
-  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, nowMs: Date.now() }));
+  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, directed: directedFor(decodes), nowMs: Date.now() }));
   onAudioStatus((s) => {
     if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });
     else if (s === 'stopped' || s === 'failed') dispatch({ type: 'audioStopped', nowMs: Date.now() });

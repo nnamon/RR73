@@ -255,7 +255,15 @@ export type SeqEvent =
    * Decodes of a slot. `early` comes before the slot ends, `final` when it ends; `late` holds
    * only the decodes that later decoder stages added after `final`.
    */
-  | { type: 'slotDecoded'; slotStartMs: number; pass: 'early' | 'final' | 'late'; decodes: Decode[]; nowMs: number }
+  | {
+      type: 'slotDecoded';
+      slotStartMs: number;
+      pass: 'early' | 'final' | 'late';
+      decodes: Decode[];
+      nowMs: number;
+      /** Senders of directed CQs in `decodes` that the operator may answer (lib/qso/directed.ts). Hunt skips the other directed CQs. */
+      directed?: readonly string[];
+    }
   | { type: 'callStation'; decode: Decode; slotStartMs: number; nowMs: number }
   | { type: 'callCq'; nowMs: number }
   | { type: 'enableTx'; on: boolean; nowMs: number }
@@ -840,11 +848,11 @@ class Machine {
   }
 
   /**
-   * Keeps the plain CQs of the last few slots for Hunt. A station heard sending anything else is
-   * in a QSO and leaves the list. Directed CQs (CQ DX, CQ NA, CQ POTA) are left out until RR73
-   * has the reference data to judge them.
+   * Keeps the CQs of the last few slots for Hunt. A station heard sending anything else is in a
+   * QSO and leaves the list. A directed CQ (CQ DX, CQ NA, CQ POTA) stays only when its sender is
+   * in `directed`: the country file says the operator is a station it asks for.
    */
-  noteCqs(slotStartMs: number, decodes: Decode[], nowMs: number) {
+  noteCqs(slotStartMs: number, decodes: Decode[], nowMs: number, directed: readonly string[] = []) {
     const st = this.st;
     const me = this.cfg.myCall;
     const busy: string[] = [];
@@ -856,7 +864,7 @@ class Machine {
         busy.push(ex.from);
         continue;
       }
-      if (ex.modifier) continue;
+      if (ex.modifier && !directed.some((c) => sameCall(c, ex.from!))) continue;
       const found = cqs.find((q) => sameCall(q.call, ex.from));
       const entry: HeardCq = {
         call: ex.from,
@@ -989,7 +997,7 @@ class Machine {
       return;
     }
     if (e.pass === 'early') return;
-    this.noteCqs(e.slotStartMs, e.decodes, e.nowMs);
+    this.noteCqs(e.slotStartMs, e.decodes, e.nowMs, e.directed);
     this.decide(e);
     if (st.hunt && st.phase === 'idle') this.huntPick(e.slotStartMs, e.nowMs);
   }
