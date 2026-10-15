@@ -26,14 +26,14 @@ const api = (fetch) => ({ day: DAY, repository: 'nnamon/RR73', apiUrl: 'https://
 test('main asks every downloaded source when no run asked SOTA today', async () => {
   const fetch = caches(0);
   const p = await plan({ ref: MAIN, restored: 'refdata-2026-10-13', ...api(fetch) });
-  assert.deepEqual([p.ask, p.sota], [['lotw', 'pota', 'sota'], true]);
+  assert.deepEqual([p.ask, p.sota], [['pota', 'sota'], true]);
   assert.deepEqual(fetch.calls, [{ url: `https://api.test/repos/nnamon/RR73/actions/caches?key=${sotaKey(DAY)}&per_page=1`, auth: 'Bearer t0k' }]);
 });
 
 test('main leaves SOTA out when any branch asked it today, or the list fails', async () => {
   for (const answer of [1, { status: 403 }, new TypeError('fetch failed')]) {
     const p = await plan({ ref: MAIN, restored: '', ...api(caches(answer)) });
-    assert.deepEqual([p.ask, p.sota], [['lotw', 'pota'], false], String(answer));
+    assert.deepEqual([p.ask, p.sota], [['pota'], false], String(answer));
   }
 });
 
@@ -47,6 +47,6 @@ test('other refs with a cache ask nothing and do not list caches', async () => {
 });
 
 test('a ref that restored no cache asks, SOTA only if nobody asked it today', async () => {
-  assert.deepEqual((await plan({ ref: 'refs/heads/feat/x', restored: '', ...api(caches(0)) })).ask, ['lotw', 'pota', 'sota']);
-  assert.deepEqual((await plan({ ref: 'refs/heads/feat/x', restored: '', ...api(caches(2)) })).ask, ['lotw', 'pota']);
+  assert.deepEqual((await plan({ ref: 'refs/heads/feat/x', restored: '', ...api(caches(0)) })).ask, ['pota', 'sota']);
+  assert.deepEqual((await plan({ ref: 'refs/heads/feat/x', restored: '', ...api(caches(2)) })).ask, ['pota']);
 });

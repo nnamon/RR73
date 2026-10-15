@@ -1,5 +1,5 @@
 /**
- * Callsign forms for country and LoTW lookups: which part of a portable callsign says where the
+ * Callsign forms for country lookups: which part of a portable callsign says where the
  * station is.
  *
  * Rules, applied to the parts between slashes:

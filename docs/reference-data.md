@@ -1,6 +1,8 @@
 # Reference data
 
-RR73 ships four reference lists: the country file, the LoTW user list, the POTA parks list and the SOTA summits list. The country file is a Big CTY release committed in the repository, in `refdata/bigcty/`; the other three are downloaded when the app is built. `tools/refdata/build.mjs` converts them to JSON in `web/public/data/`, which Vite copies into the app. The app reads them through `web/src/lib/reference/`. Nothing is fetched from these sources while the app runs, and the build makes no request to country-files.com.
+RR73 ships three reference lists: the country file, the POTA parks list and the SOTA summits list. The country file is a Big CTY release committed in the repository, in `refdata/bigcty/`; the other two are downloaded when the app is built. `tools/refdata/build.mjs` converts them to JSON in `web/public/data/`, which Vite copies into the app. The app reads them through `web/src/lib/reference/`. Nothing is fetched from these sources while the app runs, and the build makes no request to country-files.com.
+
+0.12.0 to 0.19.5 also built ARRL's LoTW user list, behind a "LoTW users" switch that nothing read. The owner had no use for it, and both are removed.
 
 ## Sources and terms
 
@@ -9,7 +11,6 @@ Terms were checked on 13 October 2026. Each source's terms also travel in `data/
 | Source | Publisher | Download | Terms |
 | --- | --- | --- | --- |
 | Big CTY country file | Jim Reisert AD1C, country-files.com | Committed in `refdata/bigcty/` from the `bigcty-YYYYMMDD.zip` its `release.json` names. `update-bigcty.mjs` fetches newer releases linked from https://www.country-files.com/category/big-cty/ | MIT licence (https://www.country-files.com/copyright/). `cty.json` carries the copyright and permission notice. |
-| LoTW user activity | ARRL, Logbook of The World | https://lotw.arrl.org/lotw-user-activity.csv | No terms published for the file. ARRL documents it for logging software at https://lotw.arrl.org/lotw-help/developer-query-lotw-users/ and updates it about once a week. |
 | POTA parks | Parks on the Air | https://pota.app/all_parks_ext.csv | No terms found on docs.pota.app or its resources page. The POTA logo needs a licence; RR73 does not use it. |
 | SOTA summits | Summits on the Air | https://storage.sota.org.uk/summitslist.csv | Source: Summits on the Air. No endorsement implied. No licence found for the list. |
 
@@ -19,12 +20,11 @@ Unverified: the copyright line on the country file reads "Copyright © 1994-" wi
 
 ## What the app gets
 
-Measured on the CI build of 14 October 2026 (run 38488353741, sources fetched at 00:08 UTC), from Big CTY of 15 September 2026, the LoTW list of 12 October and the SOTA list of 13 October. Gzipped sizes are `gzip -9`, close to what GitHub Pages sends.
+Measured on the CI build of 14 October 2026 (run 38488353741, sources fetched at 00:08 UTC), from Big CTY of 15 September 2026 and the SOTA list of 13 October. Gzipped sizes are `gzip -9`, close to what GitHub Pages sends.
 
 | File | Records | Size | Gzipped | Loads |
 | --- | --- | --- | --- | --- |
 | `cty.json` | 346 entities, 29,321 aliases (23,011 exact callsigns) | 341 kB | 111 kB | With the app (precached) |
-| `lotw.<hash>.json` | 236,500 callsigns | 1.73 MB | 957 kB | When "LoTW users" is on |
 | `pota/index.<hash>.json` and 238 shards | 96,585 parks (from a 9.5 MB list) | 6.50 MB | 2.0 MB in all; index 16 kB; median shard 0.6 kB; largest FR 388 kB, US 260 kB, AU 193 kB | When "Activations" is on, shard by shard |
 | `sota/index.<hash>.json` and 227 shards, one per association | 182,280 summits (from a 25.2 MB list) | 11.0 MB | 3.2 MB in all; index 13 kB; median shard 4.0 kB; largest XE2 159 kB, KLA 146 kB, LA 127 kB | When "Activations" is on, shard by shard |
 | `manifest.json` | Sources, dates, counts, sizes, terms | 3 kB | | With the app (precached) |
@@ -32,7 +32,6 @@ Measured on the CI build of 14 October 2026 (run 38488353741, sources fetched at
 Fields kept:
 
 - Country file: per entity the name, primary prefix, WAE flag, ADIF DXCC code (from cty.csv), CQ and ITU zones, continent, position, UTC offset, and the alias list in cty.dat syntax. Positions are east positive and offsets hours east of UTC; cty.dat uses the opposite signs.
-- LoTW: callsign and the date of its last upload, grouped by date. Upload times are dropped.
 - POTA: reference, name, position (4 decimals, 11 m) and active flag. 2,783 parks have no usable position (empty, outside ±90° or ±180°, or exactly 0,0) and are kept without one; the list's `K-TEST` row is dropped.
 - SOTA: summit code, name, association and region names, position, height (m), points, valid-from and valid-to dates. A valid-to date in 2099 or later means no end date.
 
@@ -148,7 +147,7 @@ Rows show a short name where the country file's name is longer than 14 character
 | Wallis & Futuna Islands | Wallis/Futuna |
 | Western Kiribati | W. Kiribati |
 
-The LoTW list and the park and summit lists belong to optional features and are not precached. Their loaders take the feature switch as a boolean: `reference.lotw(settings.lotwUsers)`, `reference.parks(settings.activations)`, `reference.summits(settings.activations)`. With the switch off they return null and make no request. With it on, files load on first use and stay on the phone in the Cache API (`rr73-reference`), each under a stable slot name with the content-hashed file it came from. A later load reads the kept copy when it is the current build's file, fetches the new file when it is not, and falls back to the older kept copy, marked stale, when the fetch fails. An operator who updated the app at home therefore keeps the park lists in the field. `reference.forget(source)` removes a source when its feature is turned off.
+The park and summit lists belong to Activations and are not precached. Their loaders take the switch as a boolean: `reference.parks(settings.activations)`, `reference.summits(settings.activations)`. With the switch off they return null and make no request. With it on, files load on first use and stay on the phone in the Cache API (`rr73-reference`), each under a stable slot name with the content-hashed file it came from. A later load reads the kept copy when it is the current build's file, fetches the new file when it is not, and falls back to the older kept copy, marked stale, when the fetch fails. An operator who updated the app at home therefore keeps the park lists in the field. Turning Activations off keeps the copies; `reference.forget(source)` removes them.
 
 Parks and summits are split by key: the POTA prefix (US, VK) or the SOTA association (W7O, G). Looking up a reference reads one shard. The index lists the Maidenhead squares (2° by 1°) holding each shard's references; a nearest search reads shards in order of their nearest square and stops when no unread shard can hold anything closer. The first search for the 10 nearest parks reads 1 shard from Paris (FR, 388 kB gzipped), Munich (DE, 29 kB), Boston (US, 259 kB) and Melbourne (AU, 193 kB), and 2 from Singapore (SG and MY, 4.6 kB). Squares make the index 17 kB gzipped; with 20° by 10° fields it was 6 kB, but the search from Paris read 22 shards. `keepNear(position, km)` and `keepAll()` download ahead of a trip; `offline()` reports what is on the phone.
 
@@ -159,7 +158,7 @@ Decision: shards by key, kept on demand. Rejected:
 - Shards by Maidenhead field: a lookup by reference would need an index from every reference to its field.
 - Fixed file names read network first: GitHub Pages lets caches keep a file for 10 minutes, so an index could outlive the shards it names after a deploy.
 
-Tested in Chromium through Playwright: lookups online, then offline with the country file and manifest from the precache and LoTW and park shards from the kept copies; a shard never read reports `unreachable`. Playwright's WebKit bypasses the service worker when offline (the app itself does not load), so WebKit was tested online only. Not tested on a device: offline use and how much the Cache API may hold on iPhone. Safari does not apply its 7-day storage limit to web apps on the home screen.
+Tested in Chromium through Playwright: lookups online, then offline with the country file and manifest from the precache and park shards from the kept copies; a shard never read reports `unreachable`. Playwright's WebKit bypasses the service worker when offline (the app itself does not load), so WebKit was tested online only. Not tested on a device: offline use and how much the Cache API may hold on iPhone. Safari does not apply its 7-day storage limit to web apps on the home screen.
 
 ## Callsign rules
 
@@ -167,7 +166,7 @@ Tested in Chromium through Playwright: lookups online, then offline with the cou
 
 ## Refreshing
 
-`build.mjs` asks each downloaded source (LoTW, POTA and SOTA) at most once per UTC day, with one attempt and no retries. It keeps each source's download, HTTP validators and converted files in `.refdata-cache/`, stamped with a hash of the converter code: a later day's request can come back 304 Not Modified, and a changed converter converts the kept download again without a request. When a download fails, the build ships the older copy (status `stale`) or goes on without the source (status `missing`), and the app reports the source as unavailable. `manifest.json` records each source's status, download and check times, the publisher's data date, sizes and terms.
+`build.mjs` asks each downloaded source (POTA and SOTA) at most once per UTC day, with one attempt and no retries. It keeps each source's download, HTTP validators and converted files in `.refdata-cache/`, stamped with a hash of the converter code: a later day's request can come back 304 Not Modified, and a changed converter converts the kept download again without a request. When a download fails, the build ships the older copy (status `stale`) or goes on without the source (status `missing`), and the app reports the source as unavailable. `manifest.json` records each source's status, download and check times, the publisher's data date, sizes and terms.
 
 The country file takes no part in this. Every CQ row reads it, so it does not depend on a download: every build converts the release committed in `refdata/bigcty/`, with no request and no cache entry. The manifest lists it with status `ok`, the release's date and zip URL, and a note that the copy is the one committed in the repository. `verify-dist.mjs` fails a build that has no country file. 0.11.1 to 0.12.2 shipped without one after the site's category page changed, and 0.12.3 fell back to a pinned release when its download failed.
 
@@ -196,8 +195,8 @@ The command commits nothing. Review the diff, run the tool tests and the unit te
 
 In CI the "Reference data" job keeps `.refdata-cache` in the Actions cache under the UTC date and chooses what to ask with `tools/refdata/ci-plan.mjs`:
 
-- Runs on main may ask LoTW, POTA and SOTA, and the build asks each at most once per UTC day. No run asks for the country file.
-- Branches, tags and pull requests restore the newest cache they can read, their own or main's, and build from it with no requests. A run that restores no cache at all asks, so a build before main has a cache still gets the LoTW and parks lists.
+- Runs on main may ask POTA and SOTA, and the build asks each at most once per UTC day. No run asks for the country file.
+- Branches, tags and pull requests restore the newest cache they can read, their own or main's, and build from it with no requests. A run that restores no cache at all asks, so a build before main has a cache still gets the parks list.
 - The SOTA list is asked at most once per UTC day across the repository. Actions caches belong to one branch each, so the job lists the repository's caches through the GitHub API (`actions: read`) for an entry `sota-asked-<date>`, and asks only when there is none. It saves that entry before the request goes out. A failed listing counts as asked.
 - The build records each attempt in the cache before its request, and the job saves the cache after a failed or cancelled build too, so a second run that day does not ask again.
 
@@ -207,7 +206,7 @@ Locally, in the node container from the repository root:
 
 ```sh
 docker compose run --rm node node tools/refdata/build.mjs                  # all sources into web/public/data
-docker compose run --rm node node tools/refdata/build.mjs --only cty,lotw  # some sources
+docker compose run --rm node node tools/refdata/build.mjs --only cty,pota  # some sources
 docker compose run --rm node node tools/refdata/build.mjs --offline        # rebuild from .refdata-cache, no requests
 docker compose run --rm node npm --prefix web run build
 docker compose run --rm node node tools/refdata/verify-dist.mjs web/dist
@@ -219,8 +218,7 @@ Without `web/public/data` the app builds and runs; every lookup reports its sour
 
 ## Open risks
 
-- The LoTW list changes each week, so a phone with "LoTW users" on downloads about 1 MB again after each app update that carries a new list.
-- Building the indexes runs on the main thread: 7 to 37 ms for the country file (50 to 205 ms before alias overrides were read on first match) and 110 to 280 ms for the LoTW list, measured in Node on the build machine under load. `warm()` runs them when the page is idle. Not measured on a phone; a worker would take them off the main thread.
+- Building the country index runs on the main thread: 7 to 37 ms (50 to 205 ms before alias overrides were read on first match), measured in Node on the build machine under load. `warm()` runs them when the page is idle. Not measured on a phone; a worker would take them off the main thread.
 - Two runs allowed to ask SOTA that list the caches within the same few seconds both ask: the entry is saved after the listing. Only main and runs without any cache may ask, so it takes a push to main and a run without a cache at the same moment. When saving the entry fails, a later run that day asks again.
 - On the day main first runs the job, a branch that asked SOTA the same day leaves main without the summits list until the next day.
 - A search near a country with many parks reads that country's whole shard: 388 kB gzipped for France. Splitting the largest shards by region would cut it.

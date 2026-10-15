@@ -124,6 +124,7 @@ test('audio starts from a tap, the meter moves, the waterfall shows the tones, a
   // The sheet passes axe (WCAG 2.2 AA) in both themes, with its slots and download links.
   for (const colorScheme of ['light', 'dark'] as const) {
     await page.emulateMedia({ colorScheme });
+    await page.evaluate((t) => window.__rr73!.theme(t), colorScheme);
     const r = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa']).analyze();
     expect(r.violations.map((v) => `${colorScheme} ${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(' | ')}`)).toEqual([]);
   }

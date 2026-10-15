@@ -148,7 +148,7 @@ test('flags a subtitle over 6 words, in markup, in expressions and in sub string
   assert.deepEqual(lengths('<span class="row-sub">Same day, band and mode</span>'), []);
   assert.deepEqual(lengths("<span class=\"row-sub\">{on ? `Tx stays on ${hz} Hz when you call a station` : 'Tx moves'}</span>"), ['1:subtitle-length']);
   assert.deepEqual(lengths("const a = [\n  { title: 'Activations', sub: 'Start POTA, SOTA, WWFF and IOTA activations, and follow their progress.' },\n];", '.ts'), ['2:subtitle-length']);
-  assert.deepEqual(lengths("const a = [{ title: 'LoTW users', sub: 'Marks stations that use LoTW' }];", '.ts'), []);
+  assert.deepEqual(lengths("const a = [{ title: 'Cluster spots', sub: 'Spots from the DX cluster' }];", '.ts'), []);
 });
 
 test('subtitle length counts copy, measures the longest branch and leaves values out', () => {

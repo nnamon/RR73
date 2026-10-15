@@ -344,7 +344,7 @@ export async function updateQso(id: string, patch: Partial<Qso>): Promise<Qso> {
   const q = byId.get(id);
   if (!q) throw new Error(`No QSO ${id}`);
   const draft: Qso = { ...q, ...patch, id: q.id, createdAt: q.createdAt, source: q.source };
-  if (!adifChanged(q, draft) && draft.deletedAt === q.deletedAt) return q;
+  if (!adifChanged(q, draft) && draft.deletedAt === q.deletedAt && draft.activationId === q.activationId) return q;
   const at = Math.max(now(), q.updatedAt + 1);
   const next = { ...draft, updatedAt: at };
   byId.set(id, next);

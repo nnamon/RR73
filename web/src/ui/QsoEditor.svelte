@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Add a QSO by hand, or edit or delete one. Times are UTC. A new QSO joins the running
-   * activation unless the operator unticks it. An existing QSO shows where it stands at Wavelog,
+   * activation unless the operator unticks it; an existing one outside any activation can join the
+   * running one, or leave it. An existing QSO shows where it stands at Wavelog,
    * with Send to Wavelog when it is not sent. Opened with a keyboard mode's draft (the QSO strip)
    * it starts from the strip's fields and logs them: Log QSO. Name, QTH and the contest numbers
    * show for RTTY and for any QSO that has them.
@@ -17,7 +18,7 @@
   import { bandOfHz } from '../lib/log/bandplan';
   import { deleteQso, log, logQso, qsoById, restoreQso, sendToWavelog, updateQso, type QsoDraftInit } from '../lib/log/log.svelte';
   import { stateWords } from '../lib/log/view';
-  import { adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
+  import { activationPatch, adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
   import { isFt } from '../lib/clock/slots';
@@ -47,8 +48,10 @@
   let errors = $state<string[]>([]);
   /** True while a save waits for storage, so a second tap cannot log the QSO twice. */
   let saving = $state(false);
-  /** The running activation a new QSO can join: only with Activations on. */
+  /** The running activation a QSO can join: only with Activations on. */
   const running = $derived(features.activations ? log.current : null);
+  /** An existing QSO can join the running activation when it is in none, or leave it. */
+  const movable = $derived(!!original && !!running && (original.activationId === null || original.activationId === running.id));
 
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
@@ -57,7 +60,7 @@
 
   /** The fields as loaded, to tell an edit in the pane. */
   let loaded = $state('');
-  const fields = () => JSON.stringify([call, date, time, band, mode, freq, grid, sent, rcvd, name, qth, stx, srx, refs, comment]);
+  const fields = () => JSON.stringify([call, date, time, band, mode, freq, grid, sent, rcvd, name, qth, stx, srx, refs, comment, join]);
 
   // Each opening starts from the QSO, or from now on the current band for a new one. The owner
   // mounts the editor afresh for each opening.
@@ -84,7 +87,7 @@
     srx = q?.srx ?? d?.srx ?? '';
     refs = q ? theirRefs(q).map((r) => r.ref).join(', ') : '';
     comment = q?.comment ?? d?.notes ?? '';
-    join = true;
+    join = q ? !!running && q.activationId === running.id : true;
     loaded = fields();
   }
   load();
@@ -93,7 +96,7 @@
   const changed = $derived(fields() !== loaded);
   let countries = $state.raw(reference.loadedCountries());
   $effect(() => {
-    if (inline && !reference.loadedCountries()) void reference.warm({ lotwUsers: false }).then(() => (countries = reference.loadedCountries()));
+    if (inline && !reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
   });
   const heroLine = $derived.by(() => {
     if (!original) return '';
@@ -183,6 +186,8 @@
     try {
       if (original) {
         const keepMode = mode === displayMode(original) ? { mode: original.mode, submode: original.submode } : adifMode(mode);
+        // Joining or leaving the running activation sets its references; what went on air stays.
+        const moved = movable && running && join !== (original.activationId === running.id) ? activationPatch(join ? running : null) : {};
         await updateQso(original.id, {
           call: c,
           gridsquare: normaliseGrid(grid),
@@ -199,6 +204,7 @@
           stx: stx.trim(),
           srx: srx.trim(),
           ...theirFields(parsed.refs),
+          ...moved,
         });
       } else {
         await logQso({
@@ -361,7 +367,15 @@
       </label>
     </div>
 
-    {#if original}
+    {#if original && movable && running}
+      <label class="card row check">
+        <span class="row-main">
+          <span class="row-title">Part of the activation</span>
+          <span class="row-sub">{refsLabel(running.refs)}{original.stationCallsign && original.stationCallsign !== running.callsign ? `, made as ${original.stationCallsign}` : ''}</span>
+        </span>
+        <input type="checkbox" role="switch" class="switch" bind:checked={join} />
+      </label>
+    {:else if original}
       {#if activation}<p class="note">Part of the activation {refsLabel(activation.refs)}, made as {original.stationCallsign}.</p>{/if}
     {:else if running}
       <label class="card row check">

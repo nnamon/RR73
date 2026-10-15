@@ -48,7 +48,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/minimodem` | minimodem in a container, the reference RTTY decoder for `rr73-bench rtty`. Never linked or copied. |
 | `tools/wasm-cost` | Cost of the WebAssembly exports per second of audio in headless Chromium and WebKit. |
 | `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
-| `tools/refdata` | Build-time conversion of the country file and download and conversion of the LoTW, POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
+| `tools/refdata` | Build-time conversion of the country file and download and conversion of the POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
 | `refdata/bigcty` | The Big CTY release the app ships as its country file (MIT licence). |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |
@@ -153,7 +153,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/pskreporter` | PSK Reporter: the senders in a slot's decodes as spots, the queue that sends them to the relay at most once a minute, and who heard you from the MQTT feed (a subscribe-only MQTT client and the feed's spot parser). The switches live in `lib/state/pskreporter.svelte.ts` and `lib/state/heard.svelte.ts`. See `docs/design/qsp.md`. |
 | `lib/wsprnet` | WSPR spots to WSPRnet, straight from the phone: the form-encoded records as WSJT-X sends them, and the queue that sends them 0 to 20 s after each slot, 200 ms apart. The switch lives in `lib/state/wsprnet.svelte.ts`. See `docs/design/qsp.md`, WSPRnet. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
-| `lib/reference` | Country file (callsign to DXCC entity), LoTW users, POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
+| `lib/reference` | Country file (callsign to DXCC entity), POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
 | `lib/app` | Routing, updates (the service worker, stale builds), the version history, the size classes (`layout.svelte.ts`: compact, compact height, regular) and the keyboard shortcuts (`shortcuts.ts`). See `docs/decisions/0008-large-screens.md`. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`), as two parts the frame places by size class: FT8 and FT4, WSPR, and the keyboard modes (`KeyboardPane`, with RTTY's tuning row). |

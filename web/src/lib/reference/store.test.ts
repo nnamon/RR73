@@ -42,21 +42,21 @@ describe('HttpStore.json', () => {
 
 describe('HttpStore.kept', () => {
   it('keeps a copy under the slot and reads it without the network next time', async () => {
-    const { store, origin, caches } = setup({ 'lotw.aaa.json': { v: 1 } });
-    expect(await store.kept('lotw.json', 'lotw.aaa.json')).toEqual({ data: { v: 1 }, file: 'lotw.aaa.json', stale: false });
+    const { store, origin, caches } = setup({ 'sota/index.aaa.json': { v: 1 } });
+    expect(await store.kept('sota/index.json', 'sota/index.aaa.json')).toEqual({ data: { v: 1 }, file: 'sota/index.aaa.json', stale: false });
     origin.state.offline = true;
-    expect(await store.kept('lotw.json', 'lotw.aaa.json')).toEqual({ data: { v: 1 }, file: 'lotw.aaa.json', stale: false });
-    expect(origin.state.requests).toEqual(['lotw.aaa.json']);
-    expect([...caches.caches.get(CACHE_NAME)!.entries.keys()]).toEqual([`${ORIGIN}lotw.json`]);
+    expect(await store.kept('sota/index.json', 'sota/index.aaa.json')).toEqual({ data: { v: 1 }, file: 'sota/index.aaa.json', stale: false });
+    expect(origin.state.requests).toEqual(['sota/index.aaa.json']);
+    expect([...caches.caches.get(CACHE_NAME)!.entries.keys()]).toEqual([`${ORIGIN}sota/index.json`]);
   });
 
   it('replaces the copy when the current file changes', async () => {
-    const { store, origin } = setup({ 'lotw.aaa.json': { v: 1 }, 'lotw.bbb.json': { v: 2 } });
-    await store.kept('lotw.json', 'lotw.aaa.json');
-    expect(await store.kept('lotw.json', 'lotw.bbb.json')).toEqual({ data: { v: 2 }, file: 'lotw.bbb.json', stale: false });
+    const { store, origin } = setup({ 'sota/index.aaa.json': { v: 1 }, 'sota/index.bbb.json': { v: 2 } });
+    await store.kept('sota/index.json', 'sota/index.aaa.json');
+    expect(await store.kept('sota/index.json', 'sota/index.bbb.json')).toEqual({ data: { v: 2 }, file: 'sota/index.bbb.json', stale: false });
     origin.state.offline = true;
-    expect((await store.kept('lotw.json', 'lotw.bbb.json')).data).toEqual({ v: 2 });
-    expect(await store.keptFiles('')).toEqual(new Map([['lotw.json', 'lotw.bbb.json']]));
+    expect((await store.kept('sota/index.json', 'sota/index.bbb.json')).data).toEqual({ v: 2 });
+    expect(await store.keptFiles('')).toEqual(new Map([['sota/index.json', 'sota/index.bbb.json']]));
   });
 
   it('falls back to an older copy, marked stale, when the current file cannot be fetched', async () => {
@@ -79,9 +79,9 @@ describe('HttpStore.kept', () => {
   });
 
   it('works without the Cache API', async () => {
-    const origin = fakeOrigin({ 'lotw.aaa.json': { v: 1 } });
+    const origin = fakeOrigin({ 'sota/index.aaa.json': { v: 1 } });
     const store = new HttpStore(ORIGIN, { fetch: origin.fetch, caches: null });
-    expect((await store.kept('lotw.json', 'lotw.aaa.json')).data).toEqual({ v: 1 });
+    expect((await store.kept('sota/index.json', 'sota/index.aaa.json')).data).toEqual({ v: 1 });
     expect(await store.keptFiles('')).toEqual(new Map());
     await store.drop('');
   });
@@ -89,11 +89,11 @@ describe('HttpStore.kept', () => {
 
 describe('HttpStore.keptFiles and drop', () => {
   it('lists and removes kept copies by slot prefix', async () => {
-    const { store } = setup({ 'pota/US.a.json': 1, 'pota/FR.a.json': 2, 'sota/G.a.json': 3, 'lotw.a.json': 4 });
+    const { store } = setup({ 'pota/US.a.json': 1, 'pota/FR.a.json': 2, 'sota/G.a.json': 3, 'sota/index.a.json': 4 });
     await store.kept('pota/US.json', 'pota/US.a.json');
     await store.kept('pota/FR.json', 'pota/FR.a.json');
     await store.kept('sota/G.json', 'sota/G.a.json');
-    await store.kept('lotw.json', 'lotw.a.json');
+    await store.kept('sota/index.json', 'sota/index.a.json');
     expect(await store.keptFiles('pota/')).toEqual(
       new Map([
         ['pota/US.json', 'pota/US.a.json'],
@@ -101,8 +101,8 @@ describe('HttpStore.keptFiles and drop', () => {
       ]),
     );
     await store.drop('pota/', (slot) => slot === 'pota/US.json');
-    expect([...(await store.keptFiles('')).keys()].sort()).toEqual(['lotw.json', 'pota/US.json', 'sota/G.json']);
-    await store.drop('lotw.json');
+    expect([...(await store.keptFiles('')).keys()].sort()).toEqual(['pota/US.json', 'sota/G.json', 'sota/index.json']);
+    await store.drop('sota/index.json');
     expect([...(await store.keptFiles('')).keys()].sort()).toEqual(['pota/US.json', 'sota/G.json']);
   });
 });

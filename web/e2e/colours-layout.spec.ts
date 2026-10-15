@@ -8,6 +8,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkLayout, ci, shot, smallTargets } from './layout-checks';
+import { useTheme } from './theme';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/colours', import.meta.url));
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
@@ -58,7 +59,7 @@ const rowBoxes = (page: Page) => page.locator('[data-testid=decode-list] button.
 for (const theme of ['light', 'dark'] as const) {
   test(`decode colours screen and sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     mkdirSync(SHOTS, { recursive: true });
-    await page.emulateMedia({ colorScheme: theme });
+    await useTheme(page, theme);
     await page.goto('./#/settings/colours');
     await expect(page.getByRole('heading', { level: 1, name: 'Decode colours' })).toBeVisible();
     await page.waitForTimeout(300);
@@ -94,7 +95,7 @@ for (const theme of ['light', 'dark'] as const) {
         document.head.append(s);
       });
     }, INSETS[width]);
-    await page.emulateMedia({ colorScheme: theme });
+    await useTheme(page, theme);
     await page.goto('./#/settings');
     for (const [name, value] of [
       ['Callsign', '9V1NE'],

@@ -9,7 +9,7 @@ import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
 import type { TxNum } from '../qso/messages';
 import { qso } from '../state/qso.svelte';
-import { settings } from '../state/settings.svelte';
+import { settings, updateSettings, type Theme } from '../state/settings.svelte';
 import { audioOut, deliverDecodes, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
 import { isFt } from '../clock/slots';
 import type { WsprDecode } from '../wspr/spots';
@@ -57,6 +57,8 @@ export interface E2eHooks {
   rttyTune(markHz: number): void;
   /** The keyboard session now, and the last transmission's underruns and frames. */
   rttyState(): { tx: string; field: string; call: string; fields: Record<string, string>; lastTx: { underrunFrames: number; playedFrames: number } | null; notice: string | null };
+  /** Sets Settings › Theme as the operator would. */
+  theme(theme: Theme): Promise<void>;
 }
 
 declare global {
@@ -121,6 +123,7 @@ export function installE2eHooks() {
       lastTx: keyboard.lastTx,
       notice: session.notice?.text ?? null,
     }),
+    theme: (theme) => updateSettings({ theme }),
     wsprState: () => ({
       onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
       next: wspr.next?.slotStartMs ?? null,

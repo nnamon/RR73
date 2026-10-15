@@ -11,6 +11,7 @@ import { expect, test, type Page, type TestInfo } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { mockupLog, seed, withFeatures } from './log-data';
 import { SLOT, d, inject, phase, rowOf, type D } from './operate-checks';
+import { useTheme } from './theme';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/large', import.meta.url));
 
@@ -84,7 +85,7 @@ const Q00: D[] = [
 
 /** Operate as 9V1NE in OJ11, in `theme`, with the mockup's log and optional `features`; audio on unless `audio` is false. */
 async function start(page: Page, theme: 'light' | 'dark', opts: { audio?: boolean; features?: Parameters<typeof withFeatures>[1]; running?: boolean } = {}) {
-  await page.emulateMedia({ colorScheme: theme });
+  await useTheme(page, theme);
   await page.goto('./');
   const log = mockupLog({ running: opts.running });
   await seed(page, opts.features ? withFeatures(log, opts.features) : log);

@@ -173,7 +173,7 @@ export function emptySeed(): Seed {
 /** The seed with optional features turned on (Settings › Optional features), the rest off. */
 export function withFeatures(data: Seed, on: Partial<Features>): Seed {
   const prev = (data.kv.find((k) => k.key === 'settings')?.value ?? {}) as Record<string, unknown>;
-  const features: Features = { activations: false, potaSpots: false, clusterSpots: false, lotw: false, ...on };
+  const features: Features = { activations: false, potaSpots: false, clusterSpots: false, ...on };
   return { ...data, kv: [...data.kv.filter((k) => k.key !== 'settings'), { key: 'settings', value: { ...prev, features, schema: 2 } }] };
 }
 

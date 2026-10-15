@@ -263,7 +263,7 @@ jobs:
           path: .refdata-cache
           key: refdata-${{ steps.day.outputs.day }}
           restore-keys: refdata-
-      # Main asks LoTW, POTA and SOTA, each once a day; other refs build from the cache they
+      # Main asks POTA and SOTA, each once a day; other refs build from the cache they
       # restored. SOTA is asked once a day across all branches (tools/refdata/ci-plan.mjs). The
       # country file is never asked: build.mjs builds it from the release in refdata/bigcty.
       - name: Choose the sources to ask

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 // Checks a built app for its reference data: every file the manifest names is in the build and
 // reads back, and the service worker precaches the core files (manifest, country file) and none
-// of the optional ones (LoTW, parks, summits), which load only when their feature is on.
+// of the optional ones (parks, summits), which load only while Activations is on.
 //
 //   node tools/refdata/verify-dist.mjs web/dist
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { readCtyJson, readLotwJson, readManifest, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
+import { readCtyJson, readManifest, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
 
 const CORE = new Set(['data/manifest.json', 'data/cty.json']);
 
@@ -37,7 +37,6 @@ export function verifyDist(dist) {
     }
     try {
       if (id === 'cty') readCtyJson(read(s.entry));
-      if (id === 'lotw') readLotwJson(read(s.entry));
       if (id === 'pota' || id === 'sota') {
         const index = readRefIndex(read(s.entry), id.toUpperCase());
         for (const shard of index.shards) {

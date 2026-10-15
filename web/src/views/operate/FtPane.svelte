@@ -64,7 +64,7 @@
 
   // CQ rows name the caller's country once the country file has loaded, when the page is idle.
   let countries = $state.raw(reference.loadedCountries());
-  if (!reference.loadedCountries()) void reference.warm({ lotwUsers: false }).then(() => (countries = reference.loadedCountries()));
+  if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
 
   const live = $derived(audio.status === 'running');
   const slotSeconds = $derived(SLOT_MS[ftMode] / 1000);

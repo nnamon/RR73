@@ -6,10 +6,9 @@
  * - Core files, the country file (cty.json) and the manifest, are in the service worker's
  *   precache (vite.config.ts): they install and update with the app, and json() reads them with a
  *   plain fetch that the service worker answers.
- * - Optional files, the LoTW list and the park and summit lists, are fetched only when their
- *   feature is on, and kept in the Cache API (`rr73-reference`) for offline use. Their file names
- *   carry a content hash, and each is kept under a stable slot name ("lotw.json",
- *   "pota/US.json") with the file it came from. kept() returns the kept copy when it is the
+ * - Optional files, the park and summit lists, are fetched only when their feature is on, and
+ *   kept in the Cache API (`rr73-reference`) for offline use. Their file names carry a content
+ *   hash, and each is kept under a stable slot name ("pota/US.json") with the file it came from. kept() returns the kept copy when it is the
  *   current file, else fetches the current file and replaces the copy. When that fetch fails, an
  *   older kept copy is returned marked stale: an app update while online must not take the parks
  *   away from an operator who is offline later.

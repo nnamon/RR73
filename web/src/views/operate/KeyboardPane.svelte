@@ -56,7 +56,7 @@
   const serial = $derived(serialText(settings.keyboard.nextSerial, settings.keyboard.serialDigits));
 
   let countries = $state.raw(reference.loadedCountries());
-  if (!reference.loadedCountries()) void reference.warm({ lotwUsers: false }).then(() => (countries = reference.loadedCountries()));
+  if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
   const resolves = $derived(countries ? (call: string) => countries!.lookup(call).found : null);
 
   const logIndex = $derived(buildLogIndex(log.live));

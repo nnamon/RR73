@@ -1,11 +1,11 @@
 /**
- * Optional features: activations, POTA spots, cluster spots and LoTW users, each off until the
- * operator turns it on in Settings › Optional features. Code that downloads or polls for a
- * feature checks it first and does nothing while it is off:
+ * Optional features: activations, POTA spots and cluster spots, each off until the operator turns
+ * it on in Settings › Optional features. Code that downloads or polls for a feature checks it
+ * first and does nothing while it is off:
  *
  *   import { features, watchFeatures } from '../state/features.svelte';
- *   if (features.lotw) void lotw.get();
- *   const stop = watchFeatures((f) => loader.setEnabled(f.lotw));
+ *   const parks = reference.parks(features.activations);
+ *   const stop = watchFeatures((f) => spots.setEnabled(f.potaSpots));
  *
  * Every read is reactive in components and effects. The values come from the stored settings,
  * which load before the first screen; until then every feature reads off.
@@ -27,9 +27,6 @@ export const features: Readonly<Features> = {
   },
   get clusterSpots() {
     return settings.features.clusterSpots;
-  },
-  get lotw() {
-    return settings.features.lotw;
   },
 };
 

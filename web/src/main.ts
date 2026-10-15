@@ -3,7 +3,7 @@ import { mount } from 'svelte';
 import App from './App.svelte';
 import { checkUpdated, noteLoadFailure, registerServiceWorker } from './lib/app/update.svelte';
 import { loadLog } from './lib/log/log.svelte';
-import { loadSettings } from './lib/state/settings.svelte';
+import { loadSettings, updateSettings } from './lib/state/settings.svelte';
 import { loadPractice, practice } from './lib/state/practice.svelte';
 import { initPractice } from './lib/practice/runtime.svelte';
 import { installNetworkGuard } from './lib/practice/guard';
@@ -38,6 +38,11 @@ window.addEventListener(
 // but the first render never waits on storage longer than SETTINGS_WAIT_MS: while an older copy
 // of RR73 holds the database, the app opens and says so. The log loads after the first render.
 // With practice on, the practice log loads in place of the log.
+// The Playwright tests pin the theme before the app starts (e2e/theme.ts); other builds leave it out.
+if (import.meta.env.VITE_E2E === '1') {
+  const theme = (window as { __rr73Theme?: unknown }).__rr73Theme;
+  if (theme === 'light' || theme === 'dark' || theme === 'system') void updateSettings({ theme });
+}
 const practiceLoaded = loadPractice();
 const relayLoaded = loadRelay();
 const pskLoaded = loadPskReporter();

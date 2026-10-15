@@ -9,7 +9,7 @@ beforeEach(() => resetSettings());
 
 describe('optional features', () => {
   it('are all off by default', () => {
-    expect({ ...features }).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
+    expect({ ...features }).toEqual({ activations: false, potaSpots: false, clusterSpots: false });
   });
 
   it('change and are stored', async () => {
@@ -20,9 +20,8 @@ describe('optional features', () => {
     expect(features.clusterSpots).toBe(false);
   });
 
-  it('show Spots while activations or a spot source is on, and not for LoTW users alone', () => {
+  it('show Spots while activations or a spot source is on', () => {
     expect(spotsShown(FEATURES_OFF)).toBe(false);
-    expect(spotsShown({ ...FEATURES_OFF, lotw: true })).toBe(false);
     expect(spotsShown({ ...FEATURES_OFF, activations: true })).toBe(true);
     expect(spotsShown({ ...FEATURES_OFF, potaSpots: true })).toBe(true);
     expect(spotsShown({ ...FEATURES_OFF, clusterSpots: true })).toBe(true);
@@ -30,14 +29,14 @@ describe('optional features', () => {
 
   it('tell a watcher now and after each change, until it stops', async () => {
     const seen: boolean[] = [];
-    const stop = watchFeatures((f) => seen.push(f.lotw));
+    const stop = watchFeatures((f) => seen.push(f.clusterSpots));
     flushSync();
-    await setFeature('lotw', true);
+    await setFeature('clusterSpots', true);
     flushSync();
     await setFeature('activations', true);
     flushSync();
     stop();
-    await setFeature('lotw', false);
+    await setFeature('clusterSpots', false);
     flushSync();
     expect(seen).toEqual([false, true, true]);
   });

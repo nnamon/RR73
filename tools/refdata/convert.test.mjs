@@ -1,5 +1,5 @@
 // Converters against fixtures in fixtures/reference: trimmed copies of the real files (category
-// page, Big CTY zip excerpt, LoTW, POTA and SOTA lines) and a hand-written SOTA sample, and against
+// page, Big CTY zip excerpt, POTA and SOTA lines) and a hand-written SOTA sample, and against
 // the Big CTY release committed in refdata/bigcty. The output goes through the app's own readers
 // (web/src/lib/reference/format.ts).
 
@@ -7,9 +7,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { readCtyJson, readLotwJson, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
+import { readCtyJson, readPotaShard, readRefIndex, readSotaShard } from '../../web/src/lib/reference/format.ts';
 import { bigCtyPosts, bigCtyZipFiles, convertBigCty, convertBigCtyFiles, convertCommittedBigCty, ctyCsvColumns, latestBigCty, readBigCtyRelease } from './cty.mjs';
-import { convertLotw } from './lotw.mjs';
 import { convertPota } from './pota.mjs';
 import { convertSota, dmyNumber } from './sota.mjs';
 import { position, square } from './refs.mjs';
@@ -55,26 +54,6 @@ test('Big CTY: a zip without cty.csv or copyright.txt still converts, with warni
   assert.equal(cty.entities[0].dxcc, null);
   assert.match(cty.notice, /Permission is hereby granted/);
   assert.throws(() => convertBigCty(storedZip({ 'README.TXT': 'x' }), { url: ZIP_URL, date: null }), /no cty.dat/);
-});
-
-test('LoTW: callsigns grouped by last upload date, in a hashed file', () => {
-  const out = convertLotw(fixture('lotw-excerpt.csv').toString('utf8'));
-  assert.match(out.entry, /^lotw\.[0-9a-f]{10}\.json$/);
-  const lotw = readLotwJson(JSON.parse(out.files[out.entry]));
-  assert.equal(lotw.count, 9);
-  assert.equal(out.records, 9);
-  assert.equal(lotw.latest, '2026-10-07');
-  assert.equal(lotw.byDate['2026-10-07'], 'W1AW W1AW/4');
-  assert.equal(lotw.byDate['2014-02-08'], '1A0KM');
-  assert.deepEqual(Object.keys(lotw.byDate), [...Object.keys(lotw.byDate)].sort());
-});
-
-test('LoTW: duplicates keep the latest date; malformed lines are skipped and counted', () => {
-  const out = convertLotw('k1abc,2020-01-01,00:00:00\nK1ABC,2024-05-06,10:00:00\nK1ABC,2022-01-01,00:00:00\nbad line\nK2X,26-01-01,1\n');
-  const lotw = readLotwJson(JSON.parse(out.files[out.entry]));
-  assert.deepEqual(lotw.byDate, { '2024-05-06': 'K1ABC' });
-  assert.deepEqual(out.warnings, ['skipped 2 lines that are not "CALL,YYYY-MM-DD,HH:MM:SS"']);
-  assert.throws(() => convertLotw('\n'), /no callsigns/);
 });
 
 test('positions: rounding, empty, out of range and 0,0', () => {

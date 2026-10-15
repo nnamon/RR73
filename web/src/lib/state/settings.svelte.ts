@@ -35,15 +35,13 @@ export interface Features {
   potaSpots: boolean;
   /** DX cluster spots through HamQTH. */
   clusterSpots: boolean;
-  /** Marks stations that use LoTW, from the LoTW user list. */
-  lotw: boolean;
 }
 
 export type FeatureId = keyof Features;
 
-export const FEATURE_IDS: readonly FeatureId[] = ['activations', 'potaSpots', 'clusterSpots', 'lotw'];
+export const FEATURE_IDS: readonly FeatureId[] = ['activations', 'potaSpots', 'clusterSpots'];
 
-export const FEATURES_OFF: Readonly<Features> = { activations: false, potaSpots: false, clusterSpots: false, lotw: false };
+export const FEATURES_OFF: Readonly<Features> = { activations: false, potaSpots: false, clusterSpots: false };
 
 /** WSPR's own settings (Settings › WSPR, ADR 0006). */
 export interface WsprSettings {
@@ -126,7 +124,7 @@ export interface Settings {
 
 export const DEFAULTS: Settings = {
   callsign: '',
-  theme: 'system',
+  theme: 'light',
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,
@@ -181,8 +179,11 @@ const KEY = 'settings';
  * 10. Decode colours left as 0.8.0 to 0.19.2 shipped them, every category on or the Quiet
  *     preset, take RR73's scheme (highlight.ts) in the same form. Colours the operator changed
  *     stay.
+ * 11. Light is the default theme. A stored System, which 0.5.0 and earlier stored for everyone
+ *     with the whole record, becomes Light; Light and Dark stay. The LoTW users feature is gone,
+ *     and validate() drops its stored switch.
  */
-export const SETTINGS_SCHEMA = 10;
+export const SETTINGS_SCHEMA = 11;
 
 /** The decode colours 0.8.0 to 0.19.2 shipped, in their order, for schema 10. */
 const SHIPPED_COLOURS: Record<HighlightId, string> = {
@@ -239,6 +240,7 @@ export function migration(raw: unknown): Record<string, unknown> {
     const h = updateShippedColours((raw as Record<string, unknown>).highlights);
     if (h) patch.highlights = h;
   }
+  if (from < 11 && raw && typeof raw === 'object' && (raw as Record<string, unknown>).theme === 'system') patch.theme = 'light';
   return patch;
 }
 

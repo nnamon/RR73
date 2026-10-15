@@ -3,7 +3,6 @@
 //
 //   cty.json                 country file (Big CTY), precached by the service worker; built from
 //                            the release committed in refdata/bigcty, with no request
-//   lotw.<hash>.json         LoTW users and last upload dates
 //   pota/index.<hash>.json   POTA parks index, and one shard per prefix
 //   sota/index.<hash>.json   SOTA summits index, and one shard per association
 //   manifest.json            sources, terms, dates, counts and sizes; precached
@@ -13,12 +12,12 @@
 //   docker compose run --rm node node tools/refdata/build.mjs
 //
 // Options: --out DIR (default web/public/data), --cache DIR (default .refdata-cache),
-// --only cty,lotw,pota,sota, --ask lotw,pota (the sources that may be requested; the others build
+// --only cty,pota,sota, --ask pota,sota (the sources that may be requested; the others build
 // from the cache; CI chooses them with ci-plan.mjs), --offline (no requests: build from what the
 // cache holds), --strict (exit 1 when a source is stale or missing).
 //
 // The build makes no request for the country file: tools/refdata/update-bigcty.mjs updates the
-// committed release. LoTW, POTA and SOTA are downloaded.
+// committed release. POTA and SOTA are downloaded.
 //
 // Each downloaded source is requested at most once per UTC day, with one attempt and no retries.
 // The attempt is recorded in the cache before the request goes out. The cache
@@ -35,7 +34,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { download } from './http.mjs';
 import { BIGCTY_PAGE, convertCommittedBigCty } from './cty.mjs';
-import { LOTW_URL, convertLotw } from './lotw.mjs';
 import { POTA_URL, convertPota } from './pota.mjs';
 import { SOTA_URL, convertSota } from './sota.mjs';
 
@@ -44,7 +42,7 @@ const CHECKED = '13 October 2026';
 /** A hash of the code that turns downloads into data files: a change re-converts cached downloads. */
 export const CONVERTER = (() => {
   const h = createHash('sha256');
-  for (const f of ['lotw.mjs', 'pota.mjs', 'sota.mjs', 'refs.mjs', 'csv.mjs', '../../web/src/lib/reference/format.ts']) {
+  for (const f of ['pota.mjs', 'sota.mjs', 'refs.mjs', 'csv.mjs', '../../web/src/lib/reference/format.ts']) {
     h.update(readFileSync(fileURLToPath(new URL(f, import.meta.url))));
   }
   return h.digest('hex').slice(0, 12);
@@ -65,14 +63,6 @@ export const SOURCES = {
     // The country file is core: the app precaches it and every CQ row reads it, so it comes from
     // the repository and never depends on the site.
     committed: () => convertCommittedBigCty(),
-  },
-  lotw: {
-    title: 'LoTW user activity list',
-    url: LOTW_URL,
-    publisher: 'ARRL, Logbook of The World',
-    terms: `No terms of use published for this file (checked ${CHECKED} at https://lotw.arrl.org/lotw-help/developer-query-lotw-users/, which documents it for logging software).`,
-    fetch: conditional(LOTW_URL),
-    convert: (body) => convertLotw(body.toString('utf8')),
   },
   pota: {
     title: 'POTA parks list',

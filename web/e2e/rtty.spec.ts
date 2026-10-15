@@ -12,6 +12,7 @@ import { INSETS } from './operate-checks';
 import { seed } from './log-data';
 import { createQso } from '../src/lib/log/qso';
 import type { LogQsoRecord, Qso } from '../src/lib/log/types';
+import { useTheme } from './theme';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/rtty', import.meta.url));
 
@@ -118,7 +119,7 @@ async function openRtty(page: Page, theme: 'light' | 'dark') {
       document.head.append(s);
     });
   }, INSETS[page.viewportSize()!.width]);
-  await page.emulateMedia({ colorScheme: theme });
+  await useTheme(page, theme);
   await page.clock.setFixedTime(at(13, 59, 0));
   await page.goto('./');
   const settings = { callsign: '9V1NE', grid: 'OJ11vi', myName: 'AMON', myQth: 'SINGAPORE', band: '20m', mode: 'RTTY', freqPicked: true, keyboard: { contestId: 'CQ-WPX-RTTY', nextSerial: 42 }, schema: 8 };

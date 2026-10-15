@@ -54,19 +54,6 @@ export interface CtyJson {
 }
 
 // ---------------------------------------------------------------------------------------------
-// lotw.json: LoTW users and their last upload
-
-export interface LotwJson {
-  format: typeof DATA_FORMAT;
-  /** Newest upload date in the list, YYYY-MM-DD. */
-  latest: string;
-  /** Callsigns in the list. */
-  count: number;
-  /** Callsigns grouped by the date of their last upload: { "2026-10-12": "K1ABC 9V1NE" }. */
-  byDate: Record<string, string>;
-}
-
-// ---------------------------------------------------------------------------------------------
 // pota/ and sota/: references split into shards
 
 export type Programme = 'POTA' | 'SOTA';
@@ -127,7 +114,7 @@ export interface SotaShardJson {
 // ---------------------------------------------------------------------------------------------
 // manifest.json: what the build fetched
 
-export type SourceId = 'cty' | 'lotw' | 'pota' | 'sota';
+export type SourceId = 'cty' | 'pota' | 'sota';
 
 /**
  * ok: the data was fetched or confirmed current on the build date, or is the copy committed in the
@@ -156,7 +143,7 @@ export interface ManifestSource {
   /** Records kept: entities, callsigns, parks or summits. */
   records: number | null;
   /**
-   * The file to read first, under data/: "cty.json", "lotw.<hash>.json", "pota/index.<hash>.json".
+   * The file to read first, under data/: "cty.json", "pota/index.<hash>.json".
    * Null when the build has no copy.
    */
   entry: string | null;
@@ -246,16 +233,6 @@ export function readCtyJson(x: unknown): CtyJson {
   return { format: DATA_FORMAT, version: strOrNull(o, 'version', what), source: str(o, 'source', what), notice: str(o, 'notice', what), entities };
 }
 
-export function readLotwJson(x: unknown): LotwJson {
-  const what = 'lotw.json';
-  const o = header(x, what);
-  const byDate = obj(o.byDate, `${what} byDate`);
-  for (const [k, v] of Object.entries(byDate)) {
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(k) || typeof v !== 'string') fail(what, `entry ${k} is not a date and callsigns`);
-  }
-  return { format: DATA_FORMAT, latest: str(o, 'latest', what), count: num(o, 'count', what), byDate: byDate as Record<string, string> };
-}
-
 export function readRefIndex(x: unknown, programme: Programme): RefIndexJson {
   const what = `${programme.toLowerCase()}/index.json`;
   const o = header(x, what);
@@ -323,7 +300,7 @@ export function readManifest(x: unknown): ManifestJson {
   const o = header(x, what);
   const sources = obj(o.sources, `${what} sources`);
   const out: ManifestJson['sources'] = {};
-  for (const id of ['cty', 'lotw', 'pota', 'sota'] as const) {
+  for (const id of ['cty', 'pota', 'sota'] as const) {
     if (sources[id] === undefined) continue;
     const w = `${what} ${id}`;
     const s = obj(sources[id], w);

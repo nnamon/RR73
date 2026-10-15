@@ -24,8 +24,9 @@ export interface HighlightCategory {
   /**
    * Position in WSJT-X's default order. The gaps are the categories that need reference data:
    * new continent (2, 3), CQ zone (4, 5), ITU zone (6, 7) and DXCC (8, 9), each overall and on
-   * the band, and LoTW user (14). When they ship, settings insert them by rank. Ending a QSO
-   * (14.5) and worked before are RR73's own; worked before is a text layer outside the order.
+   * the band. When they ship, settings insert them by rank. RR73 has no LoTW user category (14).
+   * Ending a QSO (14.5) and worked before are RR73's own; worked before is a text layer outside
+   * the order.
    */
   rank: number;
   label: string;

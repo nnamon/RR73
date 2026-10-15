@@ -49,7 +49,7 @@ test('a new install shows three tabs, every feature off, and Spots opens Optiona
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
   await expect(page.getByRole('heading', { level: 2, name: 'Optional features' })).toBeInViewport();
-  for (const name of ['Activations', 'POTA spots', 'Cluster spots', 'LoTW users']) await expect(feature(page, name)).not.toBeChecked();
+  for (const name of ['Activations', 'POTA spots', 'Cluster spots']) await expect(feature(page, name)).not.toBeChecked();
 
   // The Activate tab of earlier versions leads there too, on a fresh page.
   await page.goto('./#/operate');
@@ -107,10 +107,9 @@ test('a spot source alone shows Spots with spots and no activation', async ({ pa
   // The recorded cluster spots hold no FT8 or FT4 activation spot.
   await expect(page.getByText('No FT8 or FT4 activation spots.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Start activation/ })).toHaveCount(0);
-  // LoTW users alone does not bring Spots back.
+  // Off again, Spots goes.
   await page.goto('./#/settings');
   await feature(page, 'Cluster spots').uncheck();
-  await feature(page, 'LoTW users').check();
   await expect.poll(() => screenNames(page)).toEqual(['Log', 'Settings']);
 });
 
@@ -120,9 +119,9 @@ test('a phone that ran 0.5.0 with an activation running ends up with every featu
   // 0.5.0 stored settings without a schema; it always showed activations.
   await seed(page, mockupLog({ running: true }));
   await expect.poll(() => screenNames(page)).toEqual(['Log', 'Settings']);
-  // Schema 9: the features migration (2), decode colours (3), the sequencer settings (5), waterfall contrast (6), WSPR (7) and RTTY (8 and 9) in one step.
-  await expect.poll(async () => (await stored(page))?.schema).toBe(10);
-  expect((await stored(page))?.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
+  // Schema 11: the features migration (2), decode colours (3), the sequencer settings (5), waterfall contrast (6), WSPR (7), RTTY (8 and 9) and the light theme (11) in one step.
+  await expect.poll(async () => (await stored(page))?.schema).toBe(11);
+  expect((await stored(page))?.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false });
   // Operate shows no activation line; the log keeps every QSO.
   await expect(page.getByRole('link', { name: /^Activation / })).toHaveCount(0);
   await page.goto('./#/log');

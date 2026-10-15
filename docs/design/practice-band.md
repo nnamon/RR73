@@ -35,7 +35,7 @@ Nothing from practice reaches the log, Wavelog or the network.
 
 - **Practice log.** A second IndexedDB database, `rr73-practice`, with the same stores as `rr73`. `lib/log/store.ts` picks the database each write goes to before its first await, so a write lands where it was made. Turning practice on or off reloads the log screens from the chosen database. Clear practice log empties the practice database's QSOs, ledger and activations in one transaction and offers Undo for 10 s.
 - **Wavelog stand-in** (`practice/wavelog-stand-in.ts`). The practice log's Wavelog points at `https://wavelog.invalid` and the log's fetch is replaced (`setFetch`) by a function on the phone that answers as Wavelog's API does. One callsign in 4, chosen by a hash so tests know which, is refused on the first attempt as Wavelog refuses a band missing from the station location's configuration; Send again delivers it.
-- **Network guard** (`practice/guard.ts`). `main.ts` wraps `window.fetch` once. While practice is on, a request goes out only when it is same origin and GET or HEAD: the app's own files. Spots, cluster and LoTW downloads, Wavelog and later reporting all use fetch.
+- **Network guard** (`practice/guard.ts`). `main.ts` wraps `window.fetch` once. While practice is on, a request goes out only when it is same origin and GET or HEAD: the app's own files. Spots, cluster spots, Wavelog, PSK Reporter reports through the relay and WSPRnet uploads all use fetch.
 - **Settings.** Practice state is stored under its own kv key, `practice`, outside the settings record, so the settings schema and its migrations are untouched.
 
 ## Tests

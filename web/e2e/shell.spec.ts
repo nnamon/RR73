@@ -113,16 +113,20 @@ function storedSettings(page: Page): Promise<unknown> {
   );
 }
 
-test('the theme setting overrides the system', async ({ page }) => {
-  await page.emulateMedia({ colorScheme: 'light' });
+test('the app starts in light whatever the system, and Settings › Theme changes it', async ({ page }) => {
+  await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('./#/settings');
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   const light = await bg();
+  await page.getByText('System', { exact: true }).click();
+  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
+  expect(await bg()).not.toBe(light);
+  await page.getByText('Light', { exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByText('Dark', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await bg()).not.toBe(light);
-  await page.getByText('System', { exact: true }).click();
-  await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
 });
 
 test('Settings shows the version, and it opens the version history', async ({ page }) => {

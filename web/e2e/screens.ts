@@ -6,6 +6,7 @@ import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
 import { RELAY_SET_UP, routeRelay } from './relay-stand-in';
 import { feedSpot, publish, routeFeed } from './feed-stand-in';
 import { FIXED_TIME } from './time';
+import { useTheme } from './theme';
 
 export { FIXED_TIME };
 
@@ -70,7 +71,7 @@ export const SCREENS: readonly Screen[] = [
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
 export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false, psk = false, heard = false) {
-  await page.emulateMedia({ colorScheme: theme });
+  await useTheme(page, theme);
   await page.clock.setFixedTime(FIXED_TIME);
   if (relay) await routeRelay(page);
   if (heard) {

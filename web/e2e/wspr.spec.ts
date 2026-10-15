@@ -10,6 +10,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { checkLayout, ci, shot } from './layout-checks';
 import { INSETS } from './operate-checks';
+import { useTheme } from './theme';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/wspr', import.meta.url));
 
@@ -45,7 +46,7 @@ async function openOperate(page: Page, theme: 'light' | 'dark') {
       document.head.append(s);
     });
   }, INSETS[page.viewportSize()!.width]);
-  await page.emulateMedia({ colorScheme: theme });
+  await useTheme(page, theme);
   await page.goto('./#/settings');
   for (const [name, value] of [
     ['Callsign', '9V1NE'],

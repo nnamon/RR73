@@ -36,7 +36,6 @@
     { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
     { id: 'potaSpots', title: 'POTA spots', sub: 'Activators from pota.app' },
     { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster from HamQTH' },
-    { id: 'lotw', title: 'LoTW users', sub: 'Marks stations that use LoTW' },
   ];
 
   let callsign = $state(settings.callsign);
@@ -128,9 +127,9 @@
   );
 
   const themes: { id: Theme; label: string }[] = [
-    { id: 'system', label: 'System' },
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
+    { id: 'system', label: 'System' },
   ];
 </script>
 

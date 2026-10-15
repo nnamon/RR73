@@ -8,7 +8,6 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { readManifest } from '../../web/src/lib/reference/format.ts';
 import { buildAll } from './build.mjs';
 import { BIGCTY_LIST, convertCommittedBigCty, readBigCtyRelease } from './cty.mjs';
-import { LOTW_URL } from './lotw.mjs';
 import { POTA_URL } from './pota.mjs';
 import { SOTA_URL } from './sota.mjs';
 import { FIXTURES, fakeFetch, join, tempDir } from './testing.mjs';
@@ -31,7 +30,6 @@ function network() {
   return {
     [BIGCTY_LIST]: { body: fixture('bigcty-category.html') },
     [ZIP_URL]: { body: fixture('bigcty-excerpt.zip') },
-    [LOTW_URL]: validated(fixture('lotw-excerpt.csv'), '"lotw-1"'),
     [POTA_URL]: validated(fixture('pota-excerpt.csv'), '"pota-1"'),
     [SOTA_URL]: validated(fixture('sota-excerpt.csv'), '"sota-1"'),
   };
@@ -52,24 +50,23 @@ test('first build: every downloaded source fetched once, files and manifest writ
   const manifest = readManifest(await buildAll({ ...d, now: DAY1, fetch }));
   assert.deepEqual(
     fetch.calls.map((c) => c.url),
-    [LOTW_URL, POTA_URL, SOTA_URL],
+    [POTA_URL, SOTA_URL],
   );
   assert.ok(noCty(fetch), 'a request went to country-files.com');
   assert.ok(fetch.calls.every((c) => /^RR73-refdata\/1 /.test(c.headers['user-agent'])));
-  for (const id of ['cty', 'lotw', 'pota', 'sota']) {
+  for (const id of ['cty', 'pota', 'sota']) {
     const s = manifest.sources[id];
     assert.equal(s.status, 'ok', id);
     assert.equal(s.fetchedAt, id === 'cty' ? null : DAY1.toISOString());
     assert.ok(s.entry && existsSync(join(d.outDir, s.entry)), `${id} entry ${s.entry}`);
     assert.ok(s.files >= 1 && s.bytes > 0 && s.gzipBytes > 0);
   }
-  assert.equal(manifest.sources.lotw.records, 9);
   assert.equal(manifest.sources.pota.records, 13);
   assert.equal(manifest.sources.pota.files, 9);
   assert.equal(manifest.sources.sota.records, 2);
   assert.equal(manifest.sources.sota.dataDate, '2026-10-13');
   assert.match(manifest.sources.sota.terms, /^Source: Summits on the Air\. No endorsement implied\./);
-  assert.equal(manifest.sources.lotw.rawBytes, fixture('lotw-excerpt.csv').length);
+  assert.equal(manifest.sources.pota.rawBytes, fixture('pota-excerpt.csv').length);
   assert.ok(existsSync(join(d.outDir, 'manifest.json')));
 });
 
@@ -119,11 +116,11 @@ test('the next day: conditional requests, unchanged data keeps its fetch date', 
   const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: next }));
   assert.deepEqual(
     next.calls.map((c) => c.url),
-    [LOTW_URL, POTA_URL, SOTA_URL],
+    [POTA_URL, SOTA_URL],
   );
-  assert.equal(next.calls[0].headers['if-none-match'], '"lotw-1"');
-  assert.equal(next.calls[2].headers['if-modified-since'], 'Mon, 12 Oct 2026 07:13:31 GMT');
-  for (const id of ['lotw', 'pota', 'sota']) {
+  assert.equal(next.calls[0].headers['if-none-match'], '"pota-1"');
+  assert.equal(next.calls[1].headers['if-modified-since'], 'Mon, 12 Oct 2026 07:13:31 GMT');
+  for (const id of ['pota', 'sota']) {
     const s = manifest.sources[id];
     assert.equal(s.status, 'ok');
     assert.equal(s.fetchedAt, DAY1.toISOString());
@@ -175,7 +172,7 @@ test('a converter error counts as a failed download', async () => {
 
 test('offline builds make no requests; --only limits the sources', async () => {
   const d = dirs();
-  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['cty', 'lotw'] });
+  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['cty', 'sota'] });
   const none = fakeFetch(network());
   const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: none, offline: true }));
   assert.deepEqual(none.calls, []);
@@ -191,10 +188,10 @@ test('only the sources in ask are requested; the others build from the cache', a
   const d = dirs();
   await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['cty', 'sota'] });
   const some = fakeFetch(network());
-  const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: some, ask: ['lotw', 'pota'] }));
+  const manifest = readManifest(await buildAll({ ...d, now: DAY2, fetch: some, ask: ['pota'] }));
   assert.deepEqual(
     some.calls.map((c) => c.url),
-    [LOTW_URL, POTA_URL],
+    [POTA_URL],
   );
   assert.equal(manifest.sources.sota.status, 'ok');
   assert.equal(manifest.sources.sota.fetchedAt, DAY1.toISOString());
@@ -228,7 +225,7 @@ test('a converter change converts the cached download again without a request', 
   const manifest = readManifest(await buildAll({ ...d, now: DAY1_LATER, fetch: none, converter: 'new', log: (l) => lines.push(l) }));
   assert.deepEqual(none.calls, []);
   assert.ok(lines.includes('pota: converted: 13 records'));
-  for (const id of ['lotw', 'pota', 'sota']) {
+  for (const id of ['pota', 'sota']) {
     assert.equal(manifest.sources[id].status, 'ok');
     assert.equal(manifest.sources[id].fetchedAt, DAY1.toISOString());
   }
@@ -268,8 +265,8 @@ test('verify-dist: a consistent build passes; missing shards and wrong precache 
   const sw = (urls) => writeFileSync(join(dist, 'sw.js'), `precacheAndRoute([${urls.map((u) => `{url:"${u}",revision:"1"}`).join(',')}])`);
   sw(['index.html', 'data/manifest.json', 'data/cty.json']);
   assert.deepEqual(verifyDist(dist), []);
-  sw(['data/manifest.json', `data/${manifest.sources.lotw.entry}`]);
-  assert.deepEqual(verifyDist(dist), ['sw.js does not precache data/cty.json', `sw.js precaches data/${manifest.sources.lotw.entry}, which loads only when its feature is on`]);
+  sw(['data/manifest.json', `data/${manifest.sources.sota.entry}`]);
+  assert.deepEqual(verifyDist(dist), ['sw.js does not precache data/cty.json', `sw.js precaches data/${manifest.sources.sota.entry}, which loads only when its feature is on`]);
   sw(['data/manifest.json', 'data/cty.json']);
   const index = JSON.parse(readFileSync(join(dist, 'data', manifest.sources.pota.entry), 'utf8'));
   rmSync(join(dist, 'data', 'pota', index.shards[0].file));
@@ -282,7 +279,7 @@ test('verify-dist: a build without the country file fails', async () => {
   const { verifyDist } = await import('./verify-dist.mjs');
   const { cpSync } = await import('node:fs');
   const d = dirs();
-  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['lotw'] });
+  await buildAll({ ...d, now: DAY1, fetch: fakeFetch(network()), only: ['pota'] });
   const dist = join(tempDir('dist'), 'dist');
   cpSync(d.outDir, join(dist, 'data'), { recursive: true });
   writeFileSync(join(dist, 'sw.js'), 'precacheAndRoute([{url:"data/manifest.json",revision:"1"},{url:"data/cty.json",revision:"1"}])');

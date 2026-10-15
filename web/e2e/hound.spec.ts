@@ -6,6 +6,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { ci, shot, smallTargets } from './layout-checks';
+import { useTheme } from './theme';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/hound', import.meta.url));
 const SLOT = 15_000;
@@ -49,7 +50,7 @@ for (const theme of ['light', 'dark'] as const) {
         document.head.append(s);
       });
     }, INSETS[page.viewportSize()!.width]);
-    await page.emulateMedia({ colorScheme: theme });
+    await useTheme(page, theme);
     await page.goto('./#/settings');
     for (const [name, value] of [
       ['Callsign', '9V1NE'],

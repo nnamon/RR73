@@ -29,6 +29,7 @@ import {
   updateQso,
 } from './log.svelte';
 import { SEND_AUTOMATICALLY_OFF } from './migrations';
+import { activationPatch } from './qso';
 import { loadSnapshot } from './store';
 import type { LogQsoRecord } from './types';
 import type { FetchLike } from './wavelog';
@@ -330,5 +331,18 @@ describe('the log store', () => {
     settings.features.activations = true;
     expect(log.current?.id).toBe(a.id);
     expect((await addQso({ ...RECORD, call: 'ZL1TQK' })).activationId).toBe(a.id);
+  });
+
+  it('moves a logged QSO into the running activation and out again, keeping what went on air', async () => {
+    const a = log.current!;
+    const q = log.live.find((x) => x.call === 'JA1KXM')!;
+    expect(q.activationId).toBeNull();
+    const day = new Date(q.start).toISOString().slice(0, 10).replace(/-/g, '');
+    const joined = await updateQso(q.id, activationPatch(a));
+    expect(joined).toMatchObject({ activationId: a.id, mySig: 'POTA', mySigInfo: 'VK-0921', myPotaRef: 'VK-0921', stationCallsign: '9V1NE', myGridsquare: q.myGridsquare });
+    expect(entry(q.id, 'pota-file')).toMatchObject({ state: 'file-ready', parts: [{ key: `pota|VK-0921|${day}`, submittedAt: null }] });
+    const left = await updateQso(q.id, activationPatch(null));
+    expect(left).toMatchObject({ activationId: null, mySig: '', mySigInfo: '', myPotaRef: '' });
+    expect(entry(q.id, 'pota-file')?.parts ?? []).toEqual([]);
   });
 });

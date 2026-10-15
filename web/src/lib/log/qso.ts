@@ -68,6 +68,15 @@ export function activationFields(a: Pick<Activation, 'refs'> | null): MyRefs {
   };
 }
 
+/**
+ * The change that puts a logged QSO into an activation, or takes it out with null: the link and
+ * the activation's references. The station callsign, operator and grid stay as logged, since they
+ * went on air.
+ */
+export function activationPatch(a: Pick<Activation, 'id' | 'refs'> | null): MyRefs & { activationId: string | null } {
+  return { activationId: a?.id ?? null, ...activationFields(a) };
+}
+
 /** SIG, SIG_INFO and the reference fields for the other station's references. */
 export function theirFields(refs: readonly Reference[]): TheirRefs {
   const pota = refsOf(refs, 'POTA');

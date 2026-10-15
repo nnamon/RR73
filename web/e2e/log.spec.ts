@@ -350,6 +350,44 @@ test('starts an activation from Spots, counts its QSOs and ends it', async ({ pa
   await expect(page.locator('li.lr')).toHaveCount(3);
 });
 
+test('a logged QSO joins the running activation from Edit QSO and leaves it again', async ({ page }) => {
+  await start(page, '#/log', activations(mockupLog({ running: true })));
+  const fields = () =>
+    page.evaluate(
+      () =>
+        new Promise<{ activationId: string | null; myPotaRef: string; stationCallsign: string } | undefined>((resolve) => {
+          const req = indexedDB.open('rr73');
+          req.onsuccess = () => {
+            const all = req.result.transaction('qsos').objectStore('qsos').getAll();
+            all.onsuccess = () => resolve((all.result as { call: string; activationId: string | null; myPotaRef: string; stationCallsign: string }[]).find((q) => q.call === 'JA1KXM'));
+          };
+        }),
+    );
+  // JA1KXM was logged as 9V1NE, outside the activation running as VK3/9V1NE.
+  await row(page, 'JA1KXM').getByRole('button', { name: /JA1KXM/ }).click();
+  const edit = page.getByRole('dialog', { name: 'Edit QSO' });
+  const part = edit.getByRole('switch', { name: /^Part of the activation/ });
+  await expect(part).not.toBeChecked();
+  await expect(edit.getByText('POTA VK-0921 · SOTA VK3/VC-012, made as 9V1NE')).toBeVisible();
+  await part.check();
+  await edit.getByRole('button', { name: 'Save QSO' }).click();
+  await expect(edit).toBeHidden();
+  await expect.poll(fields).toMatchObject({ activationId: 'act-live', myPotaRef: 'VK-0921', stationCallsign: '9V1NE' });
+  await page.goto('./#/spots');
+  await expect(page.getByRole('progressbar', { name: /POTA VK-0921/ })).toHaveAttribute('aria-valuenow', '8');
+
+  // Wavelog already holds it: the change waits for the operator to make it there too.
+  await page.goto('./#/log');
+  await expect(row(page, 'JA1KXM')).toContainText('Wavelog: changed');
+  await row(page, 'JA1KXM').getByRole('button', { name: /^JA1KXM/ }).click();
+  await expect(part).toBeChecked();
+  await part.uncheck();
+  await edit.getByRole('button', { name: 'Save QSO' }).click();
+  await expect.poll(fields).toMatchObject({ activationId: null, myPotaRef: '', stationCallsign: '9V1NE' });
+  await page.goto('./#/spots');
+  await expect(page.getByRole('progressbar', { name: /POTA VK-0921/ })).toHaveAttribute('aria-valuenow', '7');
+});
+
 test('exports a POTA file by download, marks it submitted, and shares through the share sheet where it can', async ({ page }) => {
   await page.addInitScript(() => {
     // Chromium on Linux has no Web Share; make that certain so the download path runs.

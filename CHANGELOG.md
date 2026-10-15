@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Light is the default theme. A theme left at System changes to Light once. Light and Dark stay.
+- Edit QSO puts a logged QSO into the running activation, or takes it out.
+- The LoTW users switch is gone from Settings › Optional features. It marked nothing.
+
 ## 0.19.5 · 2026-10-14
 
 - Settings › Web SDR offers only the receivers the relay lists. Receivers added by address are gone.

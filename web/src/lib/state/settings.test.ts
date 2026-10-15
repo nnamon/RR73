@@ -21,7 +21,8 @@ describe('settings', () => {
     expect(DEFAULTS.callsign).toBe('');
     expect(DEFAULTS.band).toBe('20m');
     expect(DEFAULTS.mode).toBe('FT8');
-    expect(DEFAULTS.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false, lotw: false });
+    expect(DEFAULTS.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false });
+    expect(DEFAULTS.theme).toBe('light');
   });
 
   it('normalises callsigns', () => {
@@ -92,9 +93,9 @@ describe('the optional features migration', () => {
   });
 
   it('keeps the features of a current record', async () => {
-    await setKv('settings', { callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true, lotw: true }, schema: SETTINGS_SCHEMA });
+    await setKv('settings', { callsign: '9V1NE', features: { ...FEATURES_OFF, activations: true }, schema: SETTINGS_SCHEMA });
     await loadSettings();
-    expect(settings.features).toEqual({ ...FEATURES_OFF, activations: true, lotw: true });
+    expect(settings.features).toEqual({ ...FEATURES_OFF, activations: true });
     expect(migration(await getKv('settings'))).toEqual({});
   });
 
@@ -166,6 +167,25 @@ describe('the colour scheme migration', () => {
     const moved = [SHIPPED[1], SHIPPED[0], ...SHIPPED.slice(2)];
     const switched = SHIPPED.map((e) => (e.id === 'worked' ? { ...e, on: false } : e));
     for (const highlights of [recoloured, moved, switched]) expect(migration({ highlights, schema: 9 })).toEqual({ schema: SETTINGS_SCHEMA });
+  });
+});
+
+describe('the light theme migration', () => {
+  it('turns a stored System into Light once, and keeps Light and Dark', async () => {
+    // 0.5.0 and earlier stored the whole record, System included, for everyone who changed a setting.
+    const stored = { callsign: '9V1NE', theme: 'system', schema: 10 };
+    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, theme: 'light' });
+    expect(migration({ theme: 'dark', schema: 10 })).toEqual({ schema: SETTINGS_SCHEMA });
+    expect(migration({ theme: 'light', schema: 10 })).toEqual({ schema: SETTINGS_SCHEMA });
+    expect(migration({ theme: 'system', schema: SETTINGS_SCHEMA })).toEqual({});
+    await setKv('settings', stored);
+    await loadSettings();
+    expect(settings.theme).toBe('light');
+    await expect.poll(() => getKv('settings')).toEqual({ ...stored, theme: 'light', schema: SETTINGS_SCHEMA });
+  });
+
+  it('drops the LoTW users switch an older phone stored', () => {
+    expect(validate({ features: { activations: true, lotw: true } }).features).toEqual({ ...FEATURES_OFF, activations: true });
   });
 });
 
