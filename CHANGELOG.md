@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The filter chips over the decode list and the RTTY macro row scroll sideways only. A vertical drag no longer moves them.
+- The empty decode list says decodes appear 13.5 s into each FT8 slot (6 s into FT4).
+- Callsigns on the waterfall start off. Settings › Radio and audio turns them on.
+- The FT8, FT4 and RTTY dial fields in the band sheet have a reset button that goes back to the band's usual dial.
+
 ## 0.21.3 · 2026-10-15
 
 - FT4 no longer shows the false decodes noise gave about twice in 10000 slots, all reported at −20 dB or weaker.
