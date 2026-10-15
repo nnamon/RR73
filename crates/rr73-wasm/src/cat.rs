@@ -155,6 +155,12 @@ impl CatSimForTests {
         self.sim.transmitting()
     }
 
+    /// Frequency, mode and data mode sets that arrived while the radio transmitted.
+    #[wasm_bindgen(getter)]
+    pub fn sets_while_transmitting(&self) -> u32 {
+        u32::try_from(self.sim.sets_while_transmitting.len()).unwrap_or(u32::MAX)
+    }
+
     /// The app sets port A's DTR and RTS lines, as opening a port and `setSignals` do.
     pub fn set_lines(&mut self, dtr: bool, rts: bool) {
         self.sim.set_lines(dtr, rts);

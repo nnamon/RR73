@@ -19,6 +19,8 @@
 //!   and PTT off (`1C 00 00`) does not end that transmission. Port B's settings key nothing here.
 //! - Echo Back sends back every byte received at once, ahead of the answer.
 //! - It accepts transmit on at any frequency.
+//! - It applies frequency, mode and data mode sets that arrive while it transmits, and keeps them
+//!   in [`SimIc705::sets_while_transmitting`] for tests that check none arrive.
 
 use std::collections::BTreeMap;
 
@@ -47,6 +49,17 @@ pub struct VfoState {
     pub filter: Filter,
 }
 
+/// True for a frame that sets a frequency, a mode or the data mode: `05`, `06`, `1A 06` with data,
+/// and `25` or `26` with data (CI-V guide pp. 3, 14, 15).
+fn is_tuning(f: &Frame) -> bool {
+    matches!(
+        (f.command, f.data.as_slice()),
+        (CMD_SET_FREQUENCY | CMD_SET_MODE, _)
+            | (CMD_SETTINGS, [SUB_DATA_MODE, _, ..])
+            | (CMD_VFO_FREQUENCY | CMD_VFO_MODE, [_, _, ..])
+    )
+}
+
 /// True inside the receiver's coverage, Hz (Basic Manual p. 11-1).
 pub fn in_coverage(hz: u64) -> bool {
     (30_000..=199_999_999).contains(&hz) || (400_000_000..=470_000_000).contains(&hz)
@@ -70,6 +83,9 @@ pub struct SimIc705 {
     pub rts: bool,
     /// Every frame addressed to the radio, oldest first.
     pub received: Vec<Frame>,
+    /// Frequency, mode and data mode sets that arrived while transmitting, oldest first. The guide
+    /// does not say what the radio does with them; RR73 never sends one while it may be keyed.
+    pub sets_while_transmitting: Vec<Frame>,
     settings: BTreeMap<MenuItem, u16>,
     decoder: FrameDecoder,
 }
@@ -108,6 +124,7 @@ impl SimIc705 {
             dtr: false,
             rts: false,
             received: Vec::new(),
+            sets_while_transmitting: Vec::new(),
             settings,
             decoder: FrameDecoder::new(),
         }
@@ -157,6 +174,9 @@ impl SimIc705 {
             let Decoded::Frame(f) = d else { continue };
             if f.to != self.address {
                 continue;
+            }
+            if self.transmitting() && is_tuning(&f) {
+                self.sets_while_transmitting.push(f.clone());
             }
             let reply = self.answer(&f);
             self.received.push(f);

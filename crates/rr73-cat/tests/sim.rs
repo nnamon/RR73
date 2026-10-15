@@ -271,3 +271,55 @@ fn both_vfos_answer() {
         }
     );
 }
+
+#[test]
+fn keeps_the_tuning_sets_that_arrive_while_transmitting() {
+    let mut link = Link::new(SimIc705::new());
+    // In receive: none counted.
+    assert_eq!(link.ask(Request::SetFrequency { hz: 14_075_000 }), Event::Ok);
+    assert!(link.radio.sets_while_transmitting.is_empty());
+    assert_eq!(link.ask(Request::SetTransmit { on: true }), Event::Ok);
+    // Reads, PTT and menu reads are not tuning.
+    link.ask(Request::ReadFrequency);
+    link.ask(Request::ReadDataMode);
+    link.ask(Request::ReadVfoFrequency { vfo: Vfo::Selected });
+    link.ask(Request::ReadVfoMode { vfo: Vfo::Selected });
+    link.ask(Request::ReadSetting {
+        item: MenuItem::UsbSend,
+    });
+    assert!(link.radio.sets_while_transmitting.is_empty());
+    let sets = [
+        Request::SetFrequency { hz: 14_074_000 },
+        Request::SetMode {
+            mode: Mode::Usb,
+            filter: Some(Filter::Fil1),
+        },
+        Request::SetDataMode {
+            on: true,
+            filter: Some(Filter::Fil1),
+        },
+        Request::SetVfoFrequency {
+            vfo: Vfo::Unselected,
+            hz: 7_074_000,
+        },
+        Request::SetVfoMode {
+            vfo: Vfo::Selected,
+            mode: Mode::Usb,
+            data: true,
+            filter: Filter::Fil1,
+        },
+    ];
+    for r in sets {
+        assert_eq!(link.ask(r), Event::Ok);
+    }
+    let commands: Vec<u8> = link
+        .radio
+        .sets_while_transmitting
+        .iter()
+        .map(|f| f.command)
+        .collect();
+    assert_eq!(commands, [0x05, 0x06, 0x1a, 0x25, 0x26]);
+    assert_eq!(link.ask(Request::SetTransmit { on: false }), Event::Ok);
+    assert_eq!(link.ask(Request::SetFrequency { hz: 14_074_000 }), Event::Ok);
+    assert_eq!(link.radio.sets_while_transmitting.len(), 5);
+}
