@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.6 · 2026-10-15
 
 - The dial reset button in the band sheet is a round button the height of the digits. On a 375 pt wide screen, such as the iPhone SE, a dial such as 14.0850 shows in full beside it.
 
