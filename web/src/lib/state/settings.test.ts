@@ -87,6 +87,13 @@ describe('settings', () => {
     expect(validate(null)).toEqual(DEFAULTS);
   });
 
+  it('keeps the rig control radio and the KX2’s baud rate, the IC-705 and 4800 by default, and drops unknown ones', () => {
+    expect(DEFAULTS.cat).toMatchObject({ radio: 'ic705', kx2Baud: 4800, keyPtt: false });
+    expect(validate({ cat: { radio: 'kx2', kx2Baud: 38400 } }).cat).toMatchObject({ radio: 'kx2', kx2Baud: 38400 });
+    expect(validate({ cat: { radio: 'ft991', kx2Baud: 115200 } }).cat).toMatchObject({ radio: 'ic705', kx2Baud: 4800 });
+    expect(validate({ cat: { radio: 7, kx2Baud: '9600' } }).cat).toMatchObject({ radio: 'ic705', kx2Baud: 4800 });
+  });
+
   it('stores the callsign in IndexedDB and loads it back', async () => {
     await updateSettings({ callsign: '9V1NE' });
     expect(settings.callsign).toBe('9V1NE');

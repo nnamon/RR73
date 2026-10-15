@@ -171,6 +171,21 @@ describe('connecting a KX2', () => {
     expect(settings.cat).toMatchObject({ radio: 'kx2', connect: true, keyPtt: false });
   });
 
+  it('drops what arrived before the 100 ms wait ended', async () => {
+    await initCat();
+    const done = connectRadio();
+    await vi.advanceTimersByTimeAsync(0);
+    // An answer of another dial in the first 100 ms, as from a program before RR73: nobody listens yet.
+    chosen.send(new TextEncoder().encode('FA00007074000;'));
+    await run(OPEN_SETTLE_MS / 2);
+    expect(rig.hz).toBeNull();
+    await run(OPEN_SETTLE_MS + 400);
+    await done;
+    expect(rig.hz).toBe(14_074_000);
+    expect(settings.band).toBe('20m');
+    expect(rig.status).toBe('connected');
+  });
+
   it('with MIC BTN OFF, opening the port keys nothing', async () => {
     chosen.sim.mic_btn = 0;
     await connect();
