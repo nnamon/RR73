@@ -180,6 +180,10 @@ pub enum DemodKind {
     /// ft8_lib: per bit, the largest dB magnitude among tones with the bit set minus the
     /// largest among tones with it clear, then scaled to a fixed variance.
     MaxLog,
+    /// Noncoherent detection of blocks of symbols on complex tone amplitudes at a refined
+    /// start and frequency (`crate::block`, experiment 0008): one set of LLRs per block
+    /// length, tried in turn.
+    Block,
 }
 
 /// Demodulator parameters.
@@ -194,6 +198,63 @@ pub struct DemodParams {
     /// of the variance (`crate::silence`).
     #[serde(default)]
     pub skip_silent_frames: bool,
+    /// With `block`: try the spectrogram's single-symbol LLRs (`max-log`) first and the block
+    /// sets only when they give no message.
+    #[serde(default)]
+    pub spectrogram_first: bool,
+    /// With `block`: block lengths tried in turn on FT8 candidates, 1 to 4 symbols each.
+    #[serde(default = "default_ft8_blocks")]
+    pub ft8_blocks: Vec<u8>,
+    /// With `block`: block lengths tried in turn on FT4 candidates, 1 to 4 symbols each.
+    #[serde(default = "default_ft4_blocks")]
+    pub ft4_blocks: Vec<u8>,
+    /// With `block`: block lengths whose soft bits get belief propagation only, without the
+    /// ordered-statistics decoding that `ldpc.kind=bp-osd` adds.
+    #[serde(default)]
+    pub bp_only_blocks: Vec<u8>,
+    /// With `block`: the score each tone sequence gets, `amplitude` or `log`.
+    #[serde(default)]
+    pub block_score: crate::block::BlockScore,
+    /// With `block`: the fewest FT8 sync symbols (of 21) whose strongest tone at the refined
+    /// start and frequency is the sent one, for a candidate to get the block sets; 0 tries
+    /// every candidate.
+    #[serde(default)]
+    pub ft8_min_sync: u8,
+    /// With `block`: the same for FT4 (of 16 sync symbols).
+    #[serde(default)]
+    pub ft4_min_sync: u8,
+}
+
+fn default_ft8_blocks() -> Vec<u8> {
+    vec![1, 2, 3]
+}
+
+fn default_ft4_blocks() -> Vec<u8> {
+    vec![1, 2, 4]
+}
+
+impl DemodParams {
+    /// Block lengths tried on candidates of `mode` (empty unless `kind` is `block`).
+    pub fn blocks(&self, mode: Mode) -> &[u8] {
+        match (self.kind, mode) {
+            (DemodKind::MaxLog, _) => &[],
+            (DemodKind::Block, Mode::Ft8) => &self.ft8_blocks,
+            (DemodKind::Block, Mode::Ft4) => &self.ft4_blocks,
+        }
+    }
+
+    /// The fewest sync symbols a candidate of `mode` needs for the block sets.
+    pub fn min_sync(&self, mode: Mode) -> usize {
+        usize::from(match mode {
+            Mode::Ft8 => self.ft8_min_sync,
+            Mode::Ft4 => self.ft4_min_sync,
+        })
+    }
+
+    /// `true` when the spectrogram's single-symbol LLRs are tried.
+    pub fn uses_spectrogram(&self) -> bool {
+        self.kind == DemodKind::MaxLog || self.spectrogram_first
+    }
 }
 
 /// LDPC decoder implementations.
@@ -338,6 +399,13 @@ impl DecoderConfig {
                 kind: DemodKind::MaxLog,
                 llr_variance: 24.0,
                 skip_silent_frames: false,
+                spectrogram_first: false,
+                ft8_blocks: default_ft8_blocks(),
+                ft4_blocks: default_ft4_blocks(),
+                bp_only_blocks: Vec::new(),
+                block_score: crate::block::BlockScore::Amplitude,
+                ft8_min_sync: 0,
+                ft4_min_sync: 0,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,
@@ -444,6 +512,20 @@ impl DecoderConfig {
         }
         if !(self.demod.llr_variance > 0.0 && self.demod.llr_variance.is_finite()) {
             return bad("llr_variance must be positive");
+        }
+        let blocks = [&self.demod.ft8_blocks, &self.demod.ft4_blocks];
+        if blocks.iter().any(|b| {
+            b.len() > 8
+                || b.iter()
+                    .any(|&n| n == 0 || usize::from(n) > crate::block::MAX_BLOCK)
+                || (self.demod.kind == DemodKind::Block && b.is_empty())
+        }) {
+            return bad(
+                "demod.ft8_blocks and demod.ft4_blocks must list 1 to 8 block lengths of 1 to 4 symbols",
+            );
+        }
+        if self.demod.ft8_min_sync > 21 || self.demod.ft4_min_sync > 16 {
+            return bad("demod.ft8_min_sync must be at most 21 and demod.ft4_min_sync at most 16");
         }
         if self.ldpc.max_iterations > 10_000
             || !(self.ldpc.min_sum_scale > 0.0 && self.ldpc.min_sum_scale <= 1.0)
@@ -589,6 +671,50 @@ mod tests {
             .with_overrides(&["spectrogram.freq_osr=4", "spectrogram.window_symbols=2"])
             .expect("padded window");
         assert_eq!(padded.spectrogram.window_symbols, Some(2));
+        let block = base
+            .with_overrides(&[
+                "demod.kind=block",
+                "demod.ft8_blocks=[1,3]",
+                "demod.spectrogram_first=true",
+            ])
+            .expect("block demodulator");
+        assert_eq!(block.demod.blocks(Mode::Ft8), &[1, 3]);
+        assert_eq!(block.demod.blocks(Mode::Ft4), &[1, 2, 4]);
+        assert_eq!(block.demod.min_sync(Mode::Ft8), 0);
+        assert!(block.demod.uses_spectrogram());
+        assert!(base.demod.blocks(Mode::Ft8).is_empty());
+        for bad in [
+            "demod.ft8_blocks=[0]",
+            "demod.ft4_blocks=[5]",
+            "demod.ft8_blocks=[]",
+            "demod.ft8_blocks=3",
+            "demod.ft8_min_sync=22",
+            "demod.ft4_min_sync=17",
+        ] {
+            assert!(
+                matches!(
+                    base.with_overrides(&["demod.kind=block", bad]),
+                    Err(ConfigError::Invalid(_))
+                ),
+                "{bad}"
+            );
+        }
+        // Results written before the block demodulator existed still parse.
+        let mut old = serde_json::to_value(&base).expect("json");
+        let demod = old["demod"].as_object_mut().expect("demod");
+        for key in [
+            "spectrogram_first",
+            "ft8_blocks",
+            "ft4_blocks",
+            "bp_only_blocks",
+            "block_score",
+            "ft8_min_sync",
+            "ft4_min_sync",
+        ] {
+            demod.remove(key);
+        }
+        let back: DecoderConfig = serde_json::from_value(old).expect("old config");
+        assert_eq!(back, base);
         for bad in ["spectrogram.window_symbols=0", "spectrogram.window_symbols=3"] {
             assert!(
                 matches!(base.with_overrides(&[bad]), Err(ConfigError::Invalid(_))),

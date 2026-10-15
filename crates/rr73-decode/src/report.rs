@@ -36,6 +36,10 @@ pub struct Decode {
     /// The a priori knowledge that found it, for AP decodes (`crate::ap`).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ap: Option<crate::ap::ApKind>,
+    /// For decodes from block soft bits (`crate::block`), the block length in symbols;
+    /// `None` for the spectrogram's single-symbol LLRs.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub block: Option<u8>,
 }
 
 /// Counters for one slot.
@@ -82,6 +86,9 @@ pub struct StageTimings {
     pub validate_s: f64,
     /// Signal subtraction.
     pub subtract_s: f64,
+    /// Slot transforms for block detection (`crate::block`), one per pass.
+    #[serde(default)]
+    pub baseband_s: f64,
     /// The whole call.
     pub total_s: f64,
 }

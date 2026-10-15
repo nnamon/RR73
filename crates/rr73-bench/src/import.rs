@@ -170,6 +170,7 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
                     osd: false,
                     osd_distance: 0.0,
                     ap: None,
+                    block: None,
                     stage: 0,
                     drift_hz_per_s: None,
                 })

@@ -506,3 +506,79 @@ fn a_priori_decoding_finds_weak_qso_messages_and_nothing_in_noise() {
         );
     }
 }
+
+/// Block soft bits (experiment 0008) decode weak FT8 and FT4 signals that the spectrogram's
+/// single-symbol LLRs miss, mark those decodes with the block length, and decode nothing from
+/// noise with every candidate sent to the decoder.
+#[test]
+fn block_soft_bits_decode_weak_signals_and_nothing_from_noise() {
+    let shipped = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let block = shipped
+        .with_overrides(&[
+            "demod.kind=block",
+            "demod.ft8_blocks=[1,3]",
+            "demod.ft4_blocks=[1,4]",
+        ])
+        .expect("block");
+    let texts = [
+        "CQ K1ABC FN42",
+        "W9XYZ K1ABC -15",
+        "K1ABC W9XYZ R-08",
+        "9V1NE JA1KXM PM95",
+        "JH1RRT YB0AZK RR73",
+    ];
+    for (mode, snr) in [(Mode::Ft8, -20.5), (Mode::Ft4, -16.0)] {
+        let (mut before, mut after) = (0, 0);
+        for i in 0..10u64 {
+            let text = texts[i as usize % texts.len()];
+            let scene = scene(
+                mode,
+                vec![SimSignal::new(text, 700.0 + 150.0 * i as f64, 0.1, snr)],
+            );
+            let (audio, _) = rr73_chansim::render(&scene, 700 + i).expect("render");
+            let slot = SlotAudio::new(&audio, mode);
+            let old = decode(&slot, &shipped, &mut DecodeContext::new());
+            let new = decode(&slot, &block, &mut DecodeContext::new());
+            before += old.decodes.iter().filter(|d| d.text == text).count();
+            after += new.decodes.iter().filter(|d| d.text == text).count();
+            assert!(
+                new.decodes.iter().all(|d| d.text == text),
+                "{mode:?}: {:?}",
+                new.decodes
+            );
+            assert!(
+                new.decodes
+                    .iter()
+                    .all(|d| matches!(d.block, Some(1) | Some(3) | Some(4)))
+            );
+            assert!(old.decodes.iter().all(|d| d.block.is_none()));
+        }
+        assert!(
+            after >= before + 3,
+            "{mode:?} at {snr} dB: {before} of 10 before, {after} after"
+        );
+
+        let (noise, _) = rr73_chansim::render(&rr73_chansim::noise_only(mode), 31).expect("render");
+        let stress = block.with_overrides(&["search.min_score_db=0"]).expect("stress");
+        let r = decode(&SlotAudio::new(&noise, mode), &stress, &mut DecodeContext::new());
+        assert!(r.decodes.is_empty(), "{mode:?}: {:?}", r.decodes);
+        assert!(
+            r.stats.ldpc_attempts >= 2 * r.stats.candidates && r.stats.candidates >= 100,
+            "{mode:?}: {} attempts for {} candidates",
+            r.stats.ldpc_attempts,
+            r.stats.candidates
+        );
+        // The sync gate sends few noise candidates to the decoder.
+        let gated = stress
+            .with_overrides(&["demod.ft8_min_sync=6", "demod.ft4_min_sync=7"])
+            .expect("gate");
+        let g = decode(&SlotAudio::new(&noise, mode), &gated, &mut DecodeContext::new());
+        assert!(g.decodes.is_empty(), "{mode:?}: {:?}", g.decodes);
+        assert!(
+            g.stats.candidates == r.stats.candidates && g.stats.ldpc_attempts < r.stats.ldpc_attempts / 2,
+            "{mode:?}: {} attempts gated, {} without",
+            g.stats.ldpc_attempts,
+            r.stats.ldpc_attempts
+        );
+    }
+}

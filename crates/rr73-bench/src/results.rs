@@ -165,6 +165,9 @@ pub struct DecodeRecord {
     /// `seventy_three`).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ap: Option<rr73_decode::ApKind>,
+    /// Decodes from block soft bits (experiment 0008): the block length in symbols.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub block: Option<u8>,
 }
 
 fn is_zero_u32(x: &u32) -> bool {
@@ -270,6 +273,9 @@ pub struct StageMs {
     pub validate: f64,
     /// Subtraction.
     pub subtract: f64,
+    /// Slot transforms for block detection (experiment 0008).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub baseband: f64,
     /// Whole decode call.
     pub total: f64,
 }
@@ -316,6 +322,7 @@ fn summarise_set(slots: &[&SlotResult]) -> SetSummary {
         stage.ldpc_s += st.ldpc_s;
         stage.validate_s += st.validate_s;
         stage.subtract_s += st.subtract_s;
+        stage.baseband_s += st.baseband_s;
         stage.total_s += st.total_s;
         if s.kind == SlotKind::Synthetic {
             points.extend(s.entries.iter().map(|e| (e.snr_db, e.matched)));
@@ -337,6 +344,7 @@ fn summarise_set(slots: &[&SlotResult]) -> SetSummary {
         ldpc: stage.ldpc_s * ms,
         validate: stage.validate_s * ms,
         subtract: stage.subtract_s * ms,
+        baseband: stage.baseband_s * ms,
         total: stage.total_s * ms,
     };
     sum

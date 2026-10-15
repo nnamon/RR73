@@ -243,3 +243,35 @@ fn plans_parse_stage_specs() {
     assert!(Stage::plan("baseline; nope").is_err());
     assert!(Stage::parse("baseline passes").is_err());
 }
+
+#[test]
+fn block_stages_transform_each_pass_and_match_decode() {
+    let audio = crowded();
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let spec = "subtract-3-osd2 demod.kind=block demod.ft8_blocks=[1,3]";
+    let stage = Stage::parse(spec).expect("stage");
+    let one_shot = decode(&slot, &stage.config, &mut DecodeContext::new());
+    let mut session = DecodeSession::new(&slot, vec![stage]);
+    let mut kinds = Vec::new();
+    while !session.is_done() {
+        kinds.push(session.next_step_kind());
+        session.step();
+    }
+    let passes = session.decodes().iter().map(|d| d.pass).max().unwrap_or(0) as usize;
+    let transforms = kinds.iter().filter(|&&k| k == "baseband").count();
+    assert!(
+        transforms >= passes && transforms <= passes + 1,
+        "{transforms} for {passes} passes"
+    );
+    assert_eq!(texts(session.decodes()), texts(&one_shot.decodes));
+    // Every message the shipped preset finds, and the -18 dB one it may miss.
+    let shipped = decode(
+        &slot,
+        &DecoderConfig::preset("subtract-3-osd2").expect("preset"),
+        &mut DecodeContext::new(),
+    );
+    for t in texts(&shipped.decodes) {
+        assert!(texts(session.decodes()).contains(&t), "{t}");
+    }
+    assert!(texts(session.decodes()).contains(&"CQ EA4XYZ IN80".to_string()));
+}

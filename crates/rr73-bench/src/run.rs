@@ -430,6 +430,7 @@ fn run_decoder(
                         osd: d.osd,
                         osd_distance: round(f64::from(d.osd_distance), 4),
                         ap: d.ap,
+                        block: d.block,
                         stage: stage as u32,
                         drift_hz_per_s: None,
                     })
@@ -471,6 +472,7 @@ fn run_decoder(
                         osd: false,
                         osd_distance: 0.0,
                         ap: None,
+                        block: None,
                         stage: 0,
                         drift_hz_per_s: Some(round(f64::from(d.drift_hz_per_s), 5)),
                     })

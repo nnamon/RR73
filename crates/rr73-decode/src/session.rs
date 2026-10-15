@@ -8,22 +8,23 @@
 //! stage gives exactly what [`crate::decode`] gives for that configuration.
 //!
 //! [`DecodeSession::step`] does one bounded unit of work: set up a stage or a pass, compute
-//! 32 spectrogram frames, search 8 frames of candidate positions, try 16 candidates, or
-//! subtract 2 decodes. A caller that must stop for a new slot stops between steps; everything already
-//! returned stays valid.
+//! 32 spectrogram frames, transform the pass's audio for the block demodulator, search 8
+//! frames of candidate positions, try 16 candidates (16 sets of soft bits with the block
+//! demodulator, which tries several per candidate), or subtract 2 decodes. A caller that
+//! must stop for a new slot stops between steps; everything already returned stays valid.
 
 use rr73_dsp::{SpectrogramConfig, SpectrogramPlan};
 use rr73_ft8::Mode;
 
 use crate::ap::{self, ApKind, Hypothesis};
 use crate::clock::Stopwatch;
-use crate::config::{DecoderConfig, SubtractKind};
+use crate::config::{DecoderConfig, DemodKind, SubtractKind};
 use crate::layout::FrameLayout;
-use crate::ldpc::ParityGraph;
+use crate::ldpc::{LdpcDecoder, LdpcOutcome, LdpcScratch, ParityGraph};
 use crate::pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, layout};
 use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
 use crate::snr::SnrScale;
-use crate::validate::Rejection;
+use crate::validate::{Rejection, Validated};
 use crate::view::{Candidate, SymbolView, frame_range};
 
 /// Spectrogram frames computed per step (even, so frames pair as in one pass).
@@ -104,6 +105,8 @@ enum Phase {
     StartPass,
     /// Compute spectrogram frames from this one onward.
     Spectrogram(usize),
+    /// Transform the pass's audio for block detection (`crate::block`).
+    Baseband,
     /// Search candidate frames from this frame onward.
     Search(i32),
     /// Try candidates from this index onward.
@@ -239,6 +242,7 @@ impl DecodeSession {
             Phase::StartStage => "start-stage",
             Phase::StartPass => "start-pass",
             Phase::Spectrogram(_) => "spectrogram",
+            Phase::Baseband => "baseband",
             Phase::Search(_) => "search",
             Phase::Candidates(_) => "candidates",
             Phase::Subtract(_) => "subtract",
@@ -331,6 +335,7 @@ impl DecodeSession {
             Phase::StartStage => self.start_stage(),
             Phase::StartPass => self.start_pass(),
             Phase::Spectrogram(from) => self.spectrogram(from),
+            Phase::Baseband => self.baseband(),
             Phase::Search(from) => self.search(from),
             Phase::Candidates(from) => self.candidates(from, &mut out.decodes),
             Phase::Subtract(from) => self.subtract(from),
@@ -470,9 +475,24 @@ impl DecodeSession {
         self.timings.spectrogram_s += sw.elapsed_s();
         self.phase = if to < g.frames {
             Phase::Spectrogram(to)
+        } else if self.stages[self.stage].config.demod.kind == DemodKind::Block {
+            Phase::Baseband
         } else {
             Phase::Search(g.first_frame)
         };
+    }
+
+    /// Transforms the pass's audio once for the block demodulator.
+    fn baseband(&mut self) {
+        let Some(g) = self.geometry else {
+            self.finish_stage();
+            return;
+        };
+        let sw = Stopwatch::start();
+        let ws = &mut self.ctx.ws;
+        ws.block.prepare(self.layout, &self.audio, &mut ws.plans);
+        self.timings.baseband_s += sw.elapsed_s();
+        self.phase = Phase::Search(g.first_frame);
     }
 
     /// The spectrogram as the search reads it.
@@ -525,18 +545,23 @@ impl DecodeSession {
         }
     }
 
-    /// Tries up to [`CANDIDATES_PER_STEP`] candidates.
+    /// Tries up to [`CANDIDATES_PER_STEP`] candidates, fewer when each tries several sets of
+    /// soft bits.
     fn candidates(&mut self, from: usize, found: &mut Vec<Decode>) {
         let Some(g) = self.geometry else {
             self.finish_stage();
             return;
         };
         let total = self.ctx.ws.candidates.len();
-        let to = (from + CANDIDATES_PER_STEP).min(total);
         let stage = &self.stages[self.stage];
         let config = &stage.config;
         let pipeline = &stage.pipeline;
         let sp = &config.spectrogram;
+        let blocks = config.demod.blocks(self.layout.mode);
+        let spectrogram_llrs = config.demod.uses_spectrogram();
+        let sets = usize::from(spectrogram_llrs) + blocks.len();
+        let min_sync = config.demod.min_sync(self.layout.mode);
+        let to = (from + (CANDIDATES_PER_STEP / sets.max(1)).max(1)).min(total);
         let DecodeContext {
             hashes,
             ap: ap_ctx,
@@ -557,40 +582,91 @@ impl DecodeSession {
         };
         let stats = &mut self.stats;
         let timings = &mut self.timings;
+        let mode = self.layout.mode;
         for i in from..to {
             let mut cand: Candidate = ws.candidates[i];
             let sw = Stopwatch::start();
             pipeline.refine.refine(&view, &mut cand);
             timings.refine_s += sw.elapsed_s();
 
-            let sw = Stopwatch::start();
-            pipeline.demod.llrs(&view, &cand, &mut ws.llr);
-            timings.demod_s += sw.elapsed_s();
-
-            let sw = Stopwatch::start();
-            stats.ldpc_attempts += 1;
-            let mut outcome = pipeline
-                .ldpc
-                .decode(self.graph, &ws.llr, &mut ws.ldpc, &mut ws.codeword);
-            timings.ldpc_s += sw.elapsed_s();
+            // The first set of soft bits goes to `ws.llr`, which a priori decoding reads;
+            // later sets to `ws.llr_alt`.
+            let mut outcome = LdpcOutcome::default();
             let mut valid = None;
-            if outcome.converged {
-                stats.ldpc_converged += 1;
-                stats.osd_codewords += u32::from(outcome.osd);
+            let mut by_block = None;
+            if spectrogram_llrs {
                 let sw = Stopwatch::start();
-                match pipeline
-                    .validator
-                    .validate(self.layout.mode, &ws.codeword, &outcome, hashes)
-                {
-                    Ok(v) => valid = Some(v),
-                    Err(r) => match r {
-                        Rejection::Crc => stats.crc_failures += 1,
-                        Rejection::ZeroPayload => stats.zero_payloads += 1,
-                        Rejection::Unpack(_) => stats.unpack_failures += 1,
-                        Rejection::Implausible => stats.implausible += 1,
-                    },
+                pipeline.demod.llrs(&view, &cand, &mut ws.llr);
+                timings.demod_s += sw.elapsed_s();
+                (outcome, valid) = attempt(
+                    pipeline,
+                    pipeline.ldpc.as_ref(),
+                    self.graph,
+                    mode,
+                    &ws.llr,
+                    &mut ws.ldpc,
+                    &mut ws.codeword,
+                    hashes,
+                    stats,
+                    timings,
+                );
+            }
+            if valid.is_none() && !blocks.is_empty() {
+                let sw = Stopwatch::start();
+                let start_s = view.dt_s(&cand) + self.layout.start_offset_s;
+                // Search one grid step either way.
+                let reach = (1.0 / sp.time_osr as f32, 1.0 / sp.freq_osr as f32);
+                // Candidates whose sync symbols mostly lose to other tones get no block sets.
+                let ready = ws
+                    .block
+                    .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach)
+                    .is_some_and(|r| r.sync_matched >= min_sync);
+                timings.refine_s += sw.elapsed_s();
+                if !ready && !spectrogram_llrs {
+                    // No soft bits, so nothing for a priori decoding either.
+                    continue;
                 }
-                timings.validate_s += sw.elapsed_s();
+                for (k, &n) in blocks
+                    .iter()
+                    .enumerate()
+                    .take(if ready { blocks.len() } else { 0 })
+                {
+                    let llr = if k == 0 && !spectrogram_llrs {
+                        &mut ws.llr
+                    } else {
+                        &mut ws.llr_alt
+                    };
+                    let sw = Stopwatch::start();
+                    ws.block.llrs(
+                        self.layout,
+                        usize::from(n),
+                        config.demod.block_score,
+                        config.demod.llr_variance,
+                        llr,
+                    );
+                    timings.demod_s += sw.elapsed_s();
+                    let ldpc: &dyn LdpcDecoder = if config.demod.bp_only_blocks.contains(&n) {
+                        &pipeline.bp_only
+                    } else {
+                        pipeline.ldpc.as_ref()
+                    };
+                    (outcome, valid) = attempt(
+                        pipeline,
+                        ldpc,
+                        self.graph,
+                        mode,
+                        llr,
+                        &mut ws.ldpc,
+                        &mut ws.codeword,
+                        hashes,
+                        stats,
+                        timings,
+                    );
+                    if valid.is_some() {
+                        by_block = Some(n);
+                        break;
+                    }
+                }
             }
             // A candidate that did not decode is tried with what the QSO under way lets the
             // decoder expect.
@@ -656,6 +732,7 @@ impl DecodeSession {
                 osd: outcome.osd,
                 osd_distance: outcome.distance,
                 ap: found_by,
+                block: if found_by.is_some() { None } else { by_block },
             };
             found.push(decode.clone());
             self.decodes.push(decode);
@@ -697,4 +774,45 @@ impl DecodeSession {
             Phase::StartPass
         };
     }
+}
+
+/// Decodes one set of soft bits with `decoder`, then validates a codeword with the stage's
+/// validator.
+#[allow(clippy::too_many_arguments)]
+fn attempt(
+    pipeline: &Pipeline,
+    decoder: &dyn LdpcDecoder,
+    graph: &ParityGraph,
+    mode: Mode,
+    llr: &[f32; crate::layout::CODEWORD_BITS],
+    ldpc: &mut LdpcScratch,
+    codeword: &mut [u8; crate::layout::CODEWORD_BITS],
+    hashes: &mut rr73_ft8::CallsignHashes,
+    stats: &mut DecodeStats,
+    timings: &mut StageTimings,
+) -> (LdpcOutcome, Option<Validated>) {
+    let sw = Stopwatch::start();
+    stats.ldpc_attempts += 1;
+    let outcome = decoder.decode(graph, llr, ldpc, codeword);
+    timings.ldpc_s += sw.elapsed_s();
+    if !outcome.converged {
+        return (outcome, None);
+    }
+    stats.ldpc_converged += 1;
+    stats.osd_codewords += u32::from(outcome.osd);
+    let sw = Stopwatch::start();
+    let valid = match pipeline.validator.validate(mode, codeword, &outcome, hashes) {
+        Ok(v) => Some(v),
+        Err(r) => {
+            match r {
+                Rejection::Crc => stats.crc_failures += 1,
+                Rejection::ZeroPayload => stats.zero_payloads += 1,
+                Rejection::Unpack(_) => stats.unpack_failures += 1,
+                Rejection::Implausible => stats.implausible += 1,
+            }
+            None
+        }
+    };
+    timings.validate_s += sw.elapsed_s();
+    (outcome, valid)
 }

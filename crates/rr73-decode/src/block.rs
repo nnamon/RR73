@@ -106,6 +106,8 @@ pub struct Refined {
     pub freq_hz: f64,
     /// Start of symbol 0, in seconds from the slot start.
     pub start_s: f64,
+    /// Sync symbols inside the audio whose strongest tone is the sent one.
+    pub sync_matched: usize,
 }
 
 /// Buffers for block detection, reused across candidates and slots. Sized on first use.
@@ -322,11 +324,27 @@ impl BlockWorkspace {
         let starts = (2 * start_steps + 1) as usize;
         self.sync_corr.clear();
         self.sync_corr.resize(starts * nsync, Complex32::new(0.0, 0.0));
-        for (i, tau) in (-start_steps..=start_steps).enumerate() {
-            for (j, &(s, tone, _)) in self.sync.iter().enumerate() {
-                let at = n0 + tau + sps * s as isize;
-                let tw = &self.tone_twiddles[usize::from(tone) * SAMPLES_PER_SYMBOL..][..SAMPLES_PER_SYMBOL];
-                self.sync_corr[i * nsync + j] = correlate(&self.baseband, at, tw);
+        // A sliding transform: moving the window one sample later drops the first sample,
+        // adds the next and turns tone `t` by `e^{j2π t / 30}`.
+        let sample = |i: isize| -> Complex32 {
+            usize::try_from(i)
+                .ok()
+                .and_then(|i| self.baseband.get(i))
+                .copied()
+                .unwrap_or_default()
+        };
+        for (j, &(s, tone, _)) in self.sync.iter().enumerate() {
+            let t = usize::from(tone);
+            let tw = &self.tone_twiddles[t * SAMPLES_PER_SYMBOL..][..SAMPLES_PER_SYMBOL];
+            let turn = self.tone_twiddles[t * SAMPLES_PER_SYMBOL + 1].conj();
+            let mut at = n0 - start_steps + sps * s as isize;
+            let mut c = correlate(&self.baseband, at, tw);
+            for i in 0..starts {
+                if i > 0 {
+                    c = (c - sample(at) + sample(at + sps)) * turn;
+                    at += 1;
+                }
+                self.sync_corr[i * nsync + j] = c;
             }
         }
         let groups = layout.sync.len();
@@ -406,6 +424,7 @@ impl BlockWorkspace {
             .resize(layout.symbols, [Complex32::new(0.0, 0.0); MAX_TONES]);
         self.erased.clear();
         self.erased.resize(layout.symbols, true);
+        let mut sync_matched = 0;
         for s in 0..layout.symbols {
             let b = first + sps * s as isize;
             let audio_from = b as f64 * g.audio_per_sample();
@@ -416,24 +435,26 @@ impl BlockWorkspace {
             self.erased[s] = false;
             let a = -std::f64::consts::TAU * q * s as f64;
             let rot = Complex32::new(a.cos() as f32, a.sin() as f32);
-            // A sync symbol enters blocks with its known tone only.
-            let (from, to) = match self.known[s] {
-                Some(k) => (usize::from(k).min(tones - 1), usize::from(k).min(tones - 1) + 1),
-                None => (0, tones),
-            };
-            for t in from..to {
+            for t in 0..tones {
                 let tw = &self.twiddles[t * SAMPLES_PER_SYMBOL..(t + 1) * SAMPLES_PER_SYMBOL];
                 self.amps[s][t] = correlate(&self.baseband, b, tw) * rot;
+            }
+            if let Some(k) = self.known[s] {
+                let own = self.amps[s][usize::from(k).min(tones - 1)].norm_sqr();
+                if own > 0.0 && self.amps[s][..tones].iter().all(|a| a.norm_sqr() <= own) {
+                    sync_matched += 1;
+                }
             }
         }
         Some(Refined {
             freq_hz: k0 as f64 * df + q * spacing,
             start_s: (first as f64 + late) / rate,
+            sync_matched,
         })
     }
 
     /// Complex amplitude of each tone in each channel symbol, from the last call to
-    /// [`BlockWorkspace::amplitudes`]; sync symbols hold their known tone only.
+    /// [`BlockWorkspace::amplitudes`]. Blocks read only the known tone of a sync symbol.
     pub fn amps(&self) -> &[[Complex32; MAX_TONES]] {
         &self.amps
     }
@@ -654,6 +675,8 @@ mod tests {
                 "{mode:?}: start {} against {true_start}",
                 r.start_s
             );
+            let sync: usize = l.sync.iter().map(|g| g.tones.len()).sum();
+            assert_eq!(r.sync_matched, sync, "{mode:?}");
             let amps = ws.amps();
             let sent = |s: usize| amps[s][usize::from(tones[s])];
             // Phase step between consecutive symbols, all 79 or 105 of them.
@@ -735,6 +758,43 @@ mod tests {
             assert!(
                 (block as f64) < 0.8 * single as f64,
                 "{mode:?}: {single} errors with 1 symbol, {block} with {long}"
+            );
+        }
+    }
+
+    /// A weak signal keeps most sync symbols on their sent tone; refined positions in noise
+    /// keep few, though the refinement picks the best of about a thousand trials.
+    #[test]
+    fn sync_count_separates_signals_from_noise() {
+        for (mode, snr) in [(Mode::Ft8, -20.0), (Mode::Ft4, -16.0)] {
+            let l = layout(mode);
+            let mut ws = BlockWorkspace::default();
+            let mut plans = FftPlans::new();
+            let audio = slot(mode, "CQ K1ABC FN42", 1500.0, 0.0, Some(snr), 9);
+            ws.prepare(l, &audio, &mut plans);
+            let signal = ws
+                .amplitudes(l, &mut plans, 1500.0, l.start_offset_s, (0.5, 0.5))
+                .expect("signal")
+                .sync_matched;
+            ws.prepare(l, &crate::testsig::noise(l.slot_samples(), 21), &mut plans);
+            let noise: Vec<usize> = (0..40)
+                .filter_map(|k| {
+                    let f = 300.0 + 55.0 * k as f32;
+                    let t = l.start_offset_s + 0.04 * (k % 7) as f32 - 0.12;
+                    ws.amplitudes(l, &mut plans, f, t, (0.5, 0.5))
+                })
+                .map(|r| r.sync_matched)
+                .collect();
+            // Chance alone matches 1 in 8 FT8 or 1 in 4 FT4 sync symbols: 2.6 or 4 of them.
+            let mean = noise.iter().sum::<usize>() as f64 / noise.len() as f64;
+            let (signal_min, noise_mean) = match mode {
+                Mode::Ft8 => (10, 4.0),
+                Mode::Ft4 => (11, 6.0),
+            };
+            assert_eq!(noise.len(), 40);
+            assert!(
+                signal >= signal_min && noise.iter().all(|&n| n < signal) && mean < noise_mean,
+                "{mode:?}: signal {signal}, noise {noise:?}"
             );
         }
     }

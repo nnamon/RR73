@@ -101,6 +101,9 @@ pub(crate) struct Workspace {
     pub(crate) spec: Spectrogram,
     pub(crate) candidates: Vec<Candidate>,
     pub(crate) llr: [f32; CODEWORD_BITS],
+    /// LLRs of the block sets after the first one tried (`crate::block`).
+    pub(crate) llr_alt: [f32; CODEWORD_BITS],
+    pub(crate) block: crate::block::BlockWorkspace,
     /// The LLRs with a hypothesis' known bits set, for a priori decoding.
     pub(crate) ap_llr: [f32; CODEWORD_BITS],
     pub(crate) codeword: [u8; CODEWORD_BITS],
@@ -122,6 +125,8 @@ impl Default for Workspace {
             spec: Spectrogram::new(),
             candidates: Vec::new(),
             llr: [0.0; CODEWORD_BITS],
+            llr_alt: [0.0; CODEWORD_BITS],
+            block: crate::block::BlockWorkspace::default(),
             ap_llr: [0.0; CODEWORD_BITS],
             codeword: [0; CODEWORD_BITS],
             ldpc: LdpcScratch::default(),
@@ -146,6 +151,8 @@ pub struct Pipeline {
     pub demod: Box<dyn Demodulator>,
     /// LDPC decoder.
     pub ldpc: Box<dyn LdpcDecoder>,
+    /// Belief propagation alone, for the block soft bits listed in `demod.bp_only_blocks`.
+    pub bp_only: SumProduct,
     /// Validator.
     pub validator: Box<dyn Validator>,
     /// Subtractor.
@@ -177,8 +184,10 @@ impl Pipeline {
         let refine: Box<dyn SyncRefine> = match config.refine.kind {
             RefineKind::None => Box::new(NoRefine),
         };
+        // The block demodulator runs in the session; this one gives the spectrogram LLRs
+        // that `demod.spectrogram_first` tries first.
         let demod: Box<dyn Demodulator> = match config.demod.kind {
-            DemodKind::MaxLog => Box::new(MaxLogDemod {
+            DemodKind::MaxLog | DemodKind::Block => Box::new(MaxLogDemod {
                 variance: config.demod.llr_variance,
             }),
         };
@@ -221,6 +230,9 @@ impl Pipeline {
             refine,
             demod,
             ldpc,
+            bp_only: SumProduct {
+                max_iterations: config.ldpc.max_iterations,
+            },
             validator,
             subtractor,
         }

@@ -391,6 +391,7 @@ mod tests {
             osd: false,
             osd_distance: 0.0,
             ap: None,
+            block: None,
         }
     }
 
