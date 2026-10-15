@@ -56,7 +56,7 @@ test('Test keying keys the radio for 1 s and releases it, with Key the radio wit
   await installFakeIc705(page);
   await page.goto('./');
   await connect(page);
-  await expect(page.getByRole('switch', { name: /Key the radio with CAT/ })).not.toBeChecked();
+  await expect(page.getByRole('switch', { name: /^Key the radio with CAT/ })).not.toBeChecked();
   await page.getByRole('button', { name: 'Test keying' }).click();
   await expect(page.getByTestId('rig-test')).toHaveText(/^Keyed and released at \d\d:\d\d:\d\d UTC\.$/, { timeout: 5000 });
   const p = await ptt(page);
@@ -84,4 +84,31 @@ test('a radio that keeps transmitting after PTT off: Test keying says to unkey i
   await page.evaluate(() => (window.__rig.ignorePttOff = false));
   await expect(page.getByRole('link', { name: /Rig control/ })).toContainText('Connected', { timeout: 3000 });
   expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
+});
+
+test('Keep Tx audio centred is off by default and works only with Key the radio with CAT on', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./');
+  await connect(page);
+  const keying = page.getByRole('switch', { name: /^Key the radio with CAT/ });
+  const shift = page.getByRole('switch', { name: /^Keep Tx audio centred/ });
+  await expect(shift).not.toBeChecked();
+  await expect(shift).toBeDisabled();
+  await expect(page.getByTestId('rig-shift')).toHaveText('Needs Key the radio with CAT');
+  await keying.click();
+  await expect(shift).toBeEnabled();
+  await expect(page.getByTestId('rig-shift')).toHaveText('Off: the dial stays put');
+  await shift.click();
+  await expect(shift).toBeChecked();
+  await expect(page.getByTestId('rig-shift')).toHaveText('Signal stays on your Tx frequency');
+  // Kept across a reload; with keying off it stays on and does nothing.
+  await page.waitForTimeout(500);
+  await page.reload();
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await expect(shift).toBeChecked();
+  await keying.click();
+  await expect(shift).toBeDisabled();
+  await expect(page.getByTestId('rig-shift')).toHaveText('Needs Key the radio with CAT');
+  // Turning it on sends nothing to the radio.
+  expect(rigFrames(await rigLog(page)).filter((f) => f.body.startsWith('05 '))).toEqual([]);
 });

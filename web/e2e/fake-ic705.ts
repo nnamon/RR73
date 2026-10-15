@@ -32,6 +32,8 @@ export interface FakeRig {
   ctx: AudioContext | null;
   /** The radio ignores PTT off: no answer, and it keeps transmitting. */
   ignorePttOff: boolean;
+  /** After the OK to a frequency set, the radio also sends a transceive frame of the new dial. Unverified: the CI-V guide does not say whether it does. */
+  transceiveSets: boolean;
   /** The operator turns the dial: a transceive frame to address 00. */
   turnDial(hz: number): void;
   /** The cable comes out. */
@@ -75,6 +77,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
         menu: { '0125': 0, '0119': 1, '0043': 2 },
         ignorePttOff: false,
+        transceiveSets: false,
         ctx: null,
         turnDial(f) {
           rig.hz = f;
@@ -109,7 +112,9 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         if (cmd === 0x04 && !d.length) return reply([0x04, rig.mode, rig.filter]);
         if (cmd === 0x05 && d.length === 5) {
           rig.hz = fromBytes(d);
-          return ok();
+          ok();
+          if (rig.transceiveSets) send([0xfe, 0xfe, 0x00, 0xa4, 0x00, ...freqBytes(rig.hz), 0xfd]);
+          return;
         }
         if (cmd === 0x06 && d.length >= 1) {
           rig.mode = d[0];
@@ -218,7 +223,7 @@ export async function connect(page: Page) {
 /** Turns Key the radio with CAT on or off in Settings › Rig control. */
 export async function setKeying(page: Page, on: boolean) {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
-  const sw = page.getByRole('switch', { name: /Key the radio with CAT/ });
+  const sw = page.getByRole('switch', { name: /^Key the radio with CAT/ });
   if ((await sw.isChecked()) !== on) await sw.click();
   await expect(sw).toBeChecked({ checked: on });
 }

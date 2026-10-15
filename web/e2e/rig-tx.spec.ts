@@ -1,7 +1,8 @@
 // Rig control's transmissions end to end in Chromium (docs/design/cat.md), with navigator.serial
 // replaced by a fake IC-705 (fake-ic705.ts) and the app's output recorded in the page (tap.ts): PTT
-// around a CQ with Key the radio with CAT off and on, Halt, Tune, RTTY, audio stopping and a lost
-// port. They run in the tx-cq project, after the rest of the suite, as the other transmit tests do.
+// around a CQ with Key the radio with CAT off and on, Halt, Tune, RTTY, audio stopping, a lost
+// port, and the dial shift of Keep Tx audio centred around a CQ and Tune. They run in the tx-cq
+// project, after the rest of the suite, as the other transmit tests do.
 //
 // PTT is timed against the audio on the audio clock: the fake radio notes AudioContext.currentTime
 // as each frame arrives, and the tap notes the frames of the first and the last sound. Only the
@@ -14,9 +15,10 @@
 // measurement when it fell behind, as decode.spec does; on GitHub Actions it fails. With that check
 // the tests need no retries.
 import { expect, test, type Page } from '@playwright/test';
-import { connect, installFakeIc705, ptt, setKeying, type rigFrames } from './fake-ic705';
+import { connect, installFakeIc705, ptt, rigFrames, rigLog, setKeying } from './fake-ic705';
 import { prepare, waitForTransmissions } from './txhelp';
-import { installTap, SLOT_MS } from './tap';
+import { decodeCaptured, installTap, SLOT_MS } from './tap';
+import { loadWasm } from './wasm';
 
 test.describe.configure({ retries: 0 });
 
@@ -258,4 +260,126 @@ test('audio stopping during a transmission sends PTT off at once and turns Tx of
   expect(off.at - stoppedAt).toBeLessThan(150);
   await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
   expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
+});
+
+/** Turns Keep Tx audio centred on in Settings › Rig control; Key the radio with CAT must be on. */
+async function setShift(page: Page) {
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  const sw = page.getByRole('switch', { name: /Keep Tx audio centred/ });
+  await sw.click();
+  await expect(sw).toBeChecked();
+}
+
+/** Sets the Tx frequency on Operate's waterfall, Hz. */
+async function setTxHz(page: Page, hz: number) {
+  await page.evaluate(() => (location.hash = '#/'));
+  const slider = page.getByRole('slider', { name: 'Transmit frequency, Hz' });
+  await slider.fill(String(hz));
+  await expect(slider).toHaveValue(String(hz));
+}
+
+/** The dial sets and PTT frames from `from` on. */
+const dialAndPtt = async (page: Page, from: number) => rigFrames(await rigLog(page), from).filter((f) => f.body.startsWith('05 ') || f.body === '1C 00 01' || f.body === '1C 00 00');
+
+/** The frequency of a steady tone from its zero crossings, Hz, over its sounding frames (the tap keeps 0.5 s of silence after them). */
+function toneHz(t: { samples: Float32Array; frames: number; sampleRate: number }): number {
+  let crossings = 0;
+  for (let i = 1; i < t.frames; i++) if (t.samples[i - 1] < 0 !== t.samples[i] < 0) crossings++;
+  return crossings / 2 / (t.frames / t.sampleRate);
+}
+
+const TX_DIAL = '05 00 50 07 14 00';
+const RX_DIAL = '05 00 40 07 14 00';
+
+test('with Keep Tx audio centred, a CQ at 2800 Hz sets the dial 1000 Hz up, keys, plays at 1800 Hz on time, unkeys and sets the receive dial back', async ({ page }) => {
+  test.setTimeout(150_000);
+  await installFakeIc705(page);
+  const dock = await prepare(page);
+  await connect(page);
+  await setKeying(page, true);
+  await setShift(page);
+  // The fake radio also reports each dial set by transceive: RR73 must keep showing the receive dial.
+  await page.evaluate(() => (window.__rig.transceiveSets = true));
+  await startAudio(page);
+  await setTxHz(page, 2800);
+  await waitForOddSlot(page);
+  const from = (await rigLog(page)).length;
+  await dock.getByRole('button', { name: 'CQ', exact: true }).click();
+  // Mid-transmission the radio is on the Tx dial, and Operate shows the receive dial.
+  await expect(dock.getByText('On air')).toBeVisible({ timeout: 30_000 });
+  await page.waitForTimeout(3000);
+  expect(await page.evaluate(() => [window.__rig.hz, window.__rig.transmit])).toEqual([14_075_000, true]);
+  await expect(page.getByRole('button', { name: /^Change band/ })).toContainText('14.074');
+  const [t] = await waitForTransmissions(page, 1, 20_000);
+  await expect.poll(async () => (await dialAndPtt(page, from)).length, { timeout: 3000 }).toBeGreaterThanOrEqual(4);
+  const [dial, on, off, back] = await dialAndPtt(page, from);
+  expect([dial.body, on.body, off.body, back.body]).toEqual([TX_DIAL, '1C 00 01', '1C 00 00', RX_DIAL]);
+  requireRealTimeAudio(on, off);
+  const slot = Math.round((t.startUtc - 500) / SLOT_MS) * SLOT_MS;
+  const timing = {
+    startErrorMs: Math.round(t.startUtc - (slot + 500)),
+    dialAfterSlotMs: Math.round(dial.at - slot),
+    dialBeforePttMs: Math.round((on.ctxS! - dial.ctxS!) * 1000),
+    pttBeforeAudioMs: Math.round((t.startS - on.ctxS!) * 1000),
+    offAfterAudioMs: Math.round((off.ctxS! - t.endS) * 1000),
+    rxDialAfterOffMs: Math.round((back.ctxS! - off.ctxS!) * 1000),
+  };
+  test.info().annotations.push({ type: 'shift', description: JSON.stringify(timing) });
+  // The dial goes out at the pre-roll, at the slot edge, and PTT on after its OK; the audio still
+  // starts at slot + 0.5 s on the audio clock, as without the shift.
+  expect(Math.abs(t.startUtc - (slot + 500))).toBeLessThanOrEqual(150);
+  expect(dial.ctxS!).toBeLessThan(on.ctxS!);
+  expect(timing.dialBeforePttMs).toBeLessThan(100);
+  expect(timing.pttBeforeAudioMs).toBeGreaterThanOrEqual(300);
+  expect(timing.pttBeforeAudioMs).toBeLessThanOrEqual(700);
+  expect(timing.offAfterAudioMs).toBeGreaterThanOrEqual(50);
+  expect(timing.offAfterAudioMs).toBeLessThanOrEqual(600);
+  // The receive dial goes back after PTT off is confirmed, long before the next slot.
+  expect(back.ctxS!).toBeGreaterThan(off.ctxS!);
+  expect(timing.rxDialAfterOffMs).toBeLessThan(200);
+  // The audio is the CQ at 1800 Hz: on the Tx dial, the same RF as 2800 Hz on the receive dial.
+  const decodes = decodeCaptured((await loadWasm())!, t);
+  expect(decodes.map((d) => d.text)).toEqual(['CQ 9V1NE OJ11']);
+  expect(Math.abs(decodes[0].freq_hz - 1800)).toBeLessThanOrEqual(3);
+  expect(await page.evaluate(() => [window.__rig.hz, window.__rig.transmit])).toEqual([14_074_000, false]);
+  await expect(page.getByRole('button', { name: /^Change band/ })).toContainText('14.074');
+  // Halt during the repeated CQ: PTT off at once, then the receive dial.
+  await expect(dock.getByText('On air')).toBeVisible({ timeout: 35_000 });
+  await page.waitForTimeout(2000);
+  const n = (await dialAndPtt(page, from)).length;
+  await dock.getByRole('button', { name: 'Halt' }).click();
+  // The transmission's release and Halt's own PTT off may both go out, then the receive dial.
+  await expect.poll(async () => (await dialAndPtt(page, from)).at(-1)!.body).toBe(RX_DIAL);
+  const halted = (await dialAndPtt(page, from)).slice(n);
+  expect(halted.slice(0, -1).map((f) => f.body)).toContain('1C 00 00');
+  expect(halted.slice(0, -1).every((f) => f.body === '1C 00 00')).toBe(true);
+  const haltAt = await page.evaluate(() => window.__haltAt);
+  expect(halted[0].at - haltAt).toBeLessThan(50);
+  expect(await page.evaluate(() => [window.__rig.hz, window.__rig.transmit])).toEqual([14_074_000, false]);
+});
+
+test('with Keep Tx audio centred, Tune at a Tx frequency of 2800 Hz plays 1800 Hz on the dial 1000 Hz up, and Halt unkeys and sets the receive dial back', async ({ page }) => {
+  test.setTimeout(90_000);
+  await installFakeIc705(page);
+  await prepare(page);
+  await connect(page);
+  await setKeying(page, true);
+  await setShift(page);
+  await setTxHz(page, 2800);
+  const from = (await rigLog(page)).length;
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
+  const sheet = page.getByRole('dialog', { name: 'Tuning' });
+  await expect(sheet).toBeVisible();
+  await expect.poll(async () => (await dialAndPtt(page, from)).map((f) => f.body)).toEqual([TX_DIAL, '1C 00 01']);
+  await page.waitForTimeout(2000);
+  expect(await page.evaluate(() => window.__rig.hz)).toBe(14_075_000);
+  await sheet.getByRole('button', { name: 'Halt' }).click();
+  await expect.poll(async () => (await dialAndPtt(page, from)).at(-1)!.body).toBe(RX_DIAL);
+  const frames = (await dialAndPtt(page, from)).map((f) => f.body);
+  expect(frames.slice(0, 3)).toEqual([TX_DIAL, '1C 00 01', '1C 00 00']);
+  expect(frames.slice(2, -1).every((b) => b === '1C 00 00')).toBe(true);
+  const [tone] = await waitForTransmissions(page, 1, 5000);
+  expect(Math.abs(toneHz(tone) - 1800)).toBeLessThan(5);
+  expect(await page.evaluate(() => [window.__rig.hz, window.__rig.transmit])).toEqual([14_074_000, false]);
 });
