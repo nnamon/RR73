@@ -172,7 +172,24 @@ test('the band sheet takes an FT8 dial of the operator’s own per band, and an 
   await expect(sheet).toContainText('Usual FT8 dial on 60m: 5.357 MHz. Clear the field to go back to it.');
   await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.313');
 
-  // A reload keeps it.
+  // A reload keeps it, once it is stored.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          new Promise<unknown>((resolve) => {
+            const r = indexedDB.open('rr73');
+            r.onsuccess = () => {
+              const get = r.result.transaction('kv').objectStore('kv').get('settings');
+              get.onsuccess = () => {
+                r.result.close();
+                resolve((get.result?.value as { ftDialHz?: { FT8?: Record<string, number> } } | undefined)?.ftDialHz?.FT8?.['60m'] ?? null);
+              };
+            };
+          }),
+      ),
+    )
+    .toBe(5_313_000);
   await page.reload();
   await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.313');
   await top.getByRole('button', { name: /^Change band/ }).click();

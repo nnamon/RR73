@@ -62,7 +62,15 @@ function rowsOnScreen(page: Page): Promise<number> {
   });
 }
 
-const rowBoxes = (page: Page) => page.locator('[data-testid=decode-list] button.dr').evaluateAll((els) => els.map((el) => JSON.stringify(el.getBoundingClientRect())));
+/** Each row's box relative to the first row's: a new slot's bar above them all moves none of them. */
+const rowBoxes = (page: Page) =>
+  page.locator('[data-testid=decode-list] button.dr').evaluateAll((els) => {
+    const top = els[0]?.getBoundingClientRect().top ?? 0;
+    return els.map((el) => {
+      const r = el.getBoundingClientRect();
+      return JSON.stringify({ x: r.x, y: r.top - top, width: r.width, height: r.height });
+    });
+  });
 
 for (const theme of ['light', 'dark'] as const) {
   test(`decode colours screen and sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
