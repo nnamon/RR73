@@ -16,7 +16,7 @@
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { PRESETS, category, defaultHighlights, highlightDecode, isBackground, moveBackground, presetHighlights, presetOf, type HighlightEntry, type HighlightId, type PresetId } from '../lib/decode/highlight';
-  import { inkFor } from '../lib/decode/highlight-colour';
+  import { inkFor, sunTint } from '../lib/decode/highlight-colour';
   import { toYou } from '../lib/decode/focus';
   import { markDecode } from '../lib/decode/marking';
   import { buildLogIndex } from '../lib/log/worked';
@@ -240,7 +240,7 @@
       {#each backgrounds as e, i (e.id)}
         {@const c = category(e.id)}
         <li class="hl-row" class:lifted={drag?.id === e.id} style:transform={shift(i)} data-id={e.id}>
-          <button type="button" class="swatch rr-hl hl-background" style:--rr-hl={e.colour} aria-label="Change colour: {c.label}" onclick={() => openSheet(e.id)}>
+          <button type="button" class="swatch rr-hl hl-background" style:--rr-hl={e.colour} style:--rr-hl-sun={sunTint(e.colour)} aria-label="Change colour: {c.label}" onclick={() => openSheet(e.id)}>
             <span class="chip" aria-hidden="true"></span>
           </button>
           <label class="hl-main">
@@ -265,7 +265,7 @@
         {@const c = category(e.id)}
         {@const ink = inkFor(e.colour, null)}
         <li class="hl-row" data-id={e.id}>
-          <button type="button" class="swatch rr-ink hl-ink" style:--rr-ink-light={ink.light} style:--rr-ink-dark={ink.dark} aria-label="Change colour: {c.label}" onclick={() => openSheet(e.id)}>
+          <button type="button" class="swatch rr-ink hl-ink" style:--rr-ink-light={ink.light} style:--rr-ink-dark={ink.dark} style:--rr-ink-sun={ink.sun} aria-label="Change colour: {c.label}" onclick={() => openSheet(e.id)}>
             <span class="chip" aria-hidden="true">Aa</span>
           </button>
           <label class="hl-main end">

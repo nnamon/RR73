@@ -16,7 +16,8 @@ import { RTTY_DEFAULTS, validateRtty, type RttySettings } from '../rtty/settings
 import { keyboardDefaults, validateKeyboard, type KeyboardSettings } from '../keyboard/settings';
 import { fixShippedReport, normaliseMacros } from '../keyboard/macros';
 
-export type Theme = 'system' | 'light' | 'dark';
+/** Sun: light with the most contrast, for direct sunlight (tokens.css). */
+export type Theme = 'system' | 'light' | 'dark' | 'sun';
 
 /** The VOX checklist items the operator ticks; RR73 cannot read these phone settings. */
 export interface Checklist {
@@ -282,7 +283,7 @@ export function validate(raw: unknown): Settings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const s = structuredClone(DEFAULTS);
   if (typeof r.callsign === 'string') s.callsign = normaliseCallsign(r.callsign);
-  if (r.theme === 'light' || r.theme === 'dark' || r.theme === 'system') s.theme = r.theme;
+  if (r.theme === 'light' || r.theme === 'dark' || r.theme === 'sun' || r.theme === 'system') s.theme = r.theme;
   if (isBand(r.band)) s.band = r.band;
   if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';

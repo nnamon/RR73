@@ -1,8 +1,8 @@
-// Layout on iPhone viewports in WebKit, light and dark: nothing overflows sideways, Operate fits
+// Layout on iPhone viewports in WebKit, light, dark and Sun: nothing overflows sideways, Operate fits
 // with its top bar, waterfall, filters, list and bottom bar, every control is at least 44 px,
 // pushed screens start with a 44 pt back bar, and each screen is captured for the visual review.
 // CI runs the light theme, at 375 x 667 unless the check depends on the screen size (ci() in
-// layout-checks.ts); the review projects run both themes at both sizes and save the screenshots.
+// layout-checks.ts); the review projects run every theme at both sizes and save the screenshots.
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
 import { checkLayout, ci, shot, smallTargets } from './layout-checks';
@@ -38,7 +38,7 @@ function barInks(page: Page) {
  */
 const SCREENSHOT_ONLY = new Set(['operate', 'operate-running', 'settings-features']);
 
-for (const theme of ['light', 'dark'] as const) {
+for (const theme of ['light', 'dark', 'sun'] as const) {
   for (const s of SCREENS) {
     test(`${s.name} in ${theme}`, SCREENSHOT_ONLY.has(s.name) ? ci(theme) : ci(theme, 375), async ({ page }, info) => {
       await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk, s.heard);

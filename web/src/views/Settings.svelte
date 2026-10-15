@@ -129,6 +129,7 @@
   const themes: { id: Theme; label: string }[] = [
     { id: 'light', label: 'Light' },
     { id: 'dark', label: 'Dark' },
+    { id: 'sun', label: 'Sun' },
     { id: 'system', label: 'System' },
   ];
 </script>

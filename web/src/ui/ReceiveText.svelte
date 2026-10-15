@@ -11,7 +11,8 @@
   import { tick } from 'svelte';
   import Icon from './Icon.svelte';
   import type { Line } from '../lib/keyboard/transcript';
-  import { tokens, type CallColour, type Token } from '../lib/keyboard/render';
+  import { tokens, type CallColour } from '../lib/keyboard/render';
+  import { sunTint } from '../lib/decode/highlight-colour';
 
   let {
     lines,
@@ -122,12 +123,6 @@
     press = null;
     swipe = null;
   }
-
-  function style(t: Token): string | undefined {
-    if (!t.call) return undefined;
-    const c = colourOf(t.call);
-    return c.bg ? `--rr-hl: ${c.bg}` : undefined;
-  }
 </script>
 
 <div class="wrap">
@@ -138,7 +133,7 @@
         {#if line.kind === 'divider'}
           <div class="dv" role="separator">{line.text}</div>
         {:else}
-          <div class="ln">{#each tokens(line, resolves) as t (t.at)}{#if t.space}{t.text}{:else if t.rx}{@const c = t.call ? colourOf(t.call) : null}<span class="w" class:call={!!t.call} class:rr-hl={!!c?.bg} class:hl={!!c?.bg} class:worked={!!c?.worked && !c?.bg} class:marked={marked?.line === line.id && marked.at === t.at} style={style(t)} data-w={t.text} data-call={t.call ?? ''} data-line={line.id} data-at={t.at}>{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}</span>{:else}{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}{/if}{/each}</div>
+          <div class="ln">{#each tokens(line, resolves) as t (t.at)}{#if t.space}{t.text}{:else if t.rx}{@const c = t.call ? colourOf(t.call) : null}<span class="w" class:call={!!t.call} class:rr-hl={!!c?.bg} class:hl={!!c?.bg} class:worked={!!c?.worked && !c?.bg} class:marked={marked?.line === line.id && marked.at === t.at} style:--rr-hl={c?.bg ?? null} style:--rr-hl-sun={c?.bg ? sunTint(c.bg) : null} data-w={t.text} data-call={t.call ?? ''} data-line={line.id} data-at={t.at}>{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}</span>{:else}{#each t.runs as r, i (i)}<span class="k-{r.kind}">{r.text}</span>{/each}{/if}{/each}</div>
         {/if}
       {/each}
     </div>

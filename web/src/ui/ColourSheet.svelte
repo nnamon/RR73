@@ -7,7 +7,7 @@
   import Icon from './Icon.svelte';
   import Sheet from './Sheet.svelte';
   import { PALETTE, category, normaliseColour, type HighlightEntry } from '../lib/decode/highlight';
-  import { inkFor } from '../lib/decode/highlight-colour';
+  import { inkFor, sunTint } from '../lib/decode/highlight-colour';
 
   let { open = $bindable(false), entry, onpick }: { open: boolean; entry: HighlightEntry | null; onpick: (colour: string) => void } = $props();
 
@@ -29,8 +29,10 @@
           type="button"
           class="sw {style === 'text' ? 'rr-ink hl-ink' : 'rr-hl hl-background'}"
           style:--rr-hl={p.colour}
+          style:--rr-hl-sun={style === 'text' ? null : sunTint(p.colour)}
           style:--rr-ink-light={ink?.light}
           style:--rr-ink-dark={ink?.dark}
+          style:--rr-ink-sun={ink?.sun}
           aria-label={p.name}
           aria-pressed={entry.colour === p.colour}
           onclick={() => pick(p.colour)}

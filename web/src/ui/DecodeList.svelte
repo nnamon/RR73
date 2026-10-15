@@ -42,7 +42,7 @@
   import { parseExchange, sameCall } from '../lib/qso/messages';
   import type { ChaseMark } from '../lib/state/spots.svelte';
   import { category, defaultHighlights, type HighlightEntry, type HighlightId } from '../lib/decode/highlight';
-  import { inkFor, oldInkFor } from '../lib/decode/highlight-colour';
+  import { inkFor, oldInkFor, sunTint, type Theme } from '../lib/decode/highlight-colour';
   import { outText, type RowItem } from '../lib/decode/list';
   import { splitKey, type DecodeRowData, type TextParts } from '../lib/decode/marking';
   import type { DxccIndex } from '../lib/reference';
@@ -133,8 +133,8 @@
   }
 
   // Text colours per pair of text colour and tint, worked out once each (highlight-colour.ts).
-  const inks = new Map<string, { light: string; dark: string }>();
-  function inkOf(item: RowItem): { light: string; dark: string } | null {
+  const inks = new Map<string, Record<Theme, string>>();
+  function inkOf(item: RowItem): Record<Theme, string> | null {
     const r = item.row;
     const bg = r.hl ? (colours.get(r.hl) ?? null) : null;
     if (item.old && bg) {
@@ -241,8 +241,10 @@
           <div
             class={rowClass(item, false)}
             style:--rr-hl={colour}
+            style:--rr-hl-sun={colour ? sunTint(colour) : null}
             style:--rr-ink-light={ink?.light}
             style:--rr-ink-dark={ink?.dark}
+            style:--rr-ink-sun={ink?.sun}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
             data-testid={next ? 'next-row' : undefined}
@@ -255,8 +257,10 @@
             type="button"
             class={rowClass(item, selectedId === item.id)}
             style:--rr-hl={colour}
+            style:--rr-hl-sun={colour ? sunTint(colour) : null}
             style:--rr-ink-light={ink?.light}
             style:--rr-ink-dark={ink?.dark}
+            style:--rr-ink-sun={ink?.sun}
             data-hl={r.hl ?? undefined}
             data-ink={r.ink ?? undefined}
             aria-label={spoken(item, o, country, lostRow, queued, chased)}
@@ -464,7 +468,7 @@
   }
 
   .hl-background .c-tag {
-    color: color-mix(in srgb, var(--rr-hl) 35%, var(--rr-label));
+    color: color-mix(in srgb, var(--rr-hl) var(--rr-hl-tag-mix), var(--rr-label));
   }
 
   .dr.next {

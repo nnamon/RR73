@@ -70,6 +70,15 @@ RR73's colours are the Okabe–Ito palette, designed to stay apart with colour b
 - 30% in dark leaves room for grey text over a tint: on the CQ tint the default grey stays 1.5:1 or more apart from the row text.
 - `highlight-contrast.test.ts` checks every default and palette colour, and a sweep of 4096 colours, in both themes.
 
+## Colours in Sun
+
+Sun, the theme for direct sunlight (Settings › Appearance), asks 7:1 of text and stronger tints.
+
+- A tint is the colour mixed with #FFF at the most share, up to 60%, that keeps its luminance at 0.4 (`sunTint` in `highlight-colour.ts`, set on the row in `--rr-hl-sun`). Black row text keeps 9:1 on any colour; RR73's colours take 50% to 60%, against 45% in light; black takes 34%. A fixed share stronger than light's cannot keep 7:1 for every colour: at 60%, black text on a tint of black falls to 3.7:1.
+- Worked-before text keeps 7:1 on a plain row and 4.5:1 on a tint. At 7:1 on a tint it would be near black, as dark as the row text; at 4.5:1 it stays 1.9:1 or more apart from it on every tint of RR73's scheme.
+- Rows of older slots take 30% of their colour, and their grey text keeps 7:1.
+- The closest pair of RR73's categories, over every vision, is 8.6 ΔE apart in Sun, against 6.4 in light, and the closest to a plain row 13.7, against 10.2 (`highlight-cvd.test.ts`).
+
 ## Alternatives rejected
 
 - Worked before as the last category in the order. With every category on, CQ in the message and Ending a QSO take every message it could match, so it never showed.

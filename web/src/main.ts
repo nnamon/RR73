@@ -41,7 +41,7 @@ window.addEventListener(
 // The Playwright tests pin the theme before the app starts (e2e/theme.ts); other builds leave it out.
 if (import.meta.env.VITE_E2E === '1') {
   const theme = (window as { __rr73Theme?: unknown }).__rr73Theme;
-  if (theme === 'light' || theme === 'dark' || theme === 'system') void updateSettings({ theme });
+  if (theme === 'light' || theme === 'dark' || theme === 'sun' || theme === 'system') void updateSettings({ theme });
 }
 const practiceLoaded = loadPractice();
 const relayLoaded = loadRelay();

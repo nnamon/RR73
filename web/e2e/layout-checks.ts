@@ -1,14 +1,15 @@
 // Layout checks shared by the layout and screen-state tests, and the tags and screenshots that
 // split them between CI and the visual review.
 import { expect, type Page, type TestInfo } from '@playwright/test';
+import type { TestTheme } from './theme';
 
 /**
  * Tags a WebKit layout test for the CI projects (playwright.config.ts). CI runs the light theme
- * only, as dark changes colours and nothing else (tokens.css): at 375 x 667, where checks that do
+ * only, as dark and Sun change colours and nothing else (tokens.css): at 375 x 667, where checks that do
  * not depend on the screen size are strictest, and at 393 x 852 as well where the size matters.
  * No widths leaves the test to the review projects.
  */
-export function ci(theme: 'light' | 'dark', ...widths: (375 | 393)[]) {
+export function ci(theme: TestTheme, ...widths: (375 | 393)[]) {
   return { tag: theme === 'light' ? widths.map((w) => `@ci-${w}`) : [] };
 }
 

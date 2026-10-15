@@ -6,7 +6,7 @@ import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
 import { RELAY_SET_UP, routeRelay } from './relay-stand-in';
 import { feedSpot, publish, routeFeed } from './feed-stand-in';
 import { FIXED_TIME } from './time';
-import { useTheme } from './theme';
+import { useTheme, type TestTheme } from './theme';
 
 export { FIXED_TIME };
 
@@ -70,7 +70,7 @@ export const SCREENS: readonly Screen[] = [
  * Opens a screen, after writing the seed and the features into the app's storage. The seed goes
  * in first: a path such as Spots leads elsewhere while its features are off.
  */
-export async function open(page: Page, path: string, theme: 'light' | 'dark', withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false, psk = false, heard = false) {
+export async function open(page: Page, path: string, theme: TestTheme, withSeed?: SeedName, features?: Partial<Features>, practice = false, relay = false, psk = false, heard = false) {
   await useTheme(page, theme);
   await page.clock.setFixedTime(FIXED_TIME);
   if (relay) await routeRelay(page);

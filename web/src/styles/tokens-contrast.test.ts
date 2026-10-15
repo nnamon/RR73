@@ -1,25 +1,38 @@
-// Text contrast of every text token on what it sits on, in light and dark, WCAG 2. Text needs 4.5:1;
-// glyphs that carry no text (chevrons) need 3:1. Values come from tokens.css: light-dark() picks
-// the theme, var() references resolve, and translucent layers composite in sRGB over the ground
-// beneath them, as the browser draws them. Decode colours have their own test
+// Text contrast of every text token on what it sits on, in light, dark and Sun, WCAG 2. Text needs
+// 4.5:1 and glyphs that carry no text (chevrons) 3:1; in Sun, 7:1 and 4.5:1. Values come from
+// tokens.css: light-dark() picks the theme, Sun takes its own block over the light values, var()
+// references resolve, and translucent layers composite in sRGB over the ground beneath them, as
+// the browser draws them. Decode colours have their own test
 // (lib/decode/highlight-contrast.test.ts).
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-type Theme = 'light' | 'dark';
+type Theme = 'light' | 'dark' | 'sun';
 type Rgba = [number, number, number, number];
+
+const THEMES: readonly Theme[] = ['light', 'dark', 'sun'];
 
 const css = readFileSync(join(__dirname, 'tokens.css'), 'utf8');
 
-/** The custom properties of the :root block. */
-const TOKENS: Map<string, string> = (() => {
-  const start = css.indexOf(':root {');
-  const body = css.slice(start, css.indexOf('\n}', start));
+/** The block that starts with `head`, up to its closing brace. */
+function block(head: string): string {
+  const start = css.indexOf(head);
+  if (start < 0) throw new Error(`no ${head} in tokens.css`);
+  return css.slice(start, css.indexOf('\n}', start));
+}
+
+/** A block's custom properties. */
+function properties(body: string): Map<string, string> {
   const out = new Map<string, string>();
   for (const m of body.matchAll(/--(rr-[a-z0-9-]+):\s*([^;]+);/g)) out.set(m[1], m[2].trim());
   return out;
-})();
+}
+
+const TOKENS = properties(block(':root {'));
+/** Sun's own values; every other token takes its light value. */
+const SUN_BLOCK = block(":root[data-theme='sun'] {");
+const SUN = properties(SUN_BLOCK);
 
 /** Splits a function's arguments at top-level commas. */
 function args(s: string): string[] {
@@ -53,7 +66,7 @@ function parseColour(s: string): Rgba {
 
 /** A token's colour in a theme. */
 function colour(name: string, theme: Theme): Rgba {
-  const raw = TOKENS.get(name);
+  const raw = (theme === 'sun' ? SUN.get(name) : undefined) ?? TOKENS.get(name);
   if (raw === undefined) throw new Error(`no --${name} in tokens.css`);
   return valueOf(raw, theme);
 }
@@ -64,7 +77,8 @@ function valueOf(raw: string, theme: Theme): Rgba {
   if (ref) return colour(ref[1], theme);
   if (v.startsWith('light-dark(')) {
     const [light, dark] = args(v.slice('light-dark('.length, -1));
-    return valueOf(theme === 'light' ? light : dark, theme);
+    // Sun pins color-scheme to light.
+    return valueOf(theme === 'dark' ? dark : light, theme);
   }
   return parseColour(v);
 }
@@ -175,22 +189,76 @@ add('rr-wf-ruler-text', [['rr-wf-ruler-veil', 'rr-wf-bg']], 'waterfall ruler');
 add('rr-slot-quiet-strong', [['rr-slot-quiet']], 'the bar for a run of empty slots');
 add('rr-slot-quiet-text', [['rr-slot-quiet']], 'the bar for a run of empty slots');
 
+/**
+ * Sun only: the waterfall's labels in direct sunlight, on their tags over the brightest signal
+ * any palette draws (white), where light and dark let the picture show through.
+ */
+const sunPairs: Pair[] = [];
+const BRIGHTEST = 'rr-wf-grey-c8';
+for (const [text, on, where] of [
+  ['rr-wf-text', ['rr-wf-tag-bg', BRIGHTEST], 'callsigns on the waterfall, the hint'],
+  ['rr-wf-text', ['rr-wf-time-bg', BRIGHTEST], 'slot times on the waterfall'],
+  ['rr-wf-text', ['rr-wf-scrim', BRIGHTEST], 'the no-audio notice on the waterfall'],
+  ['rr-wf-ruler-text', ['rr-wf-ruler-veil', BRIGHTEST], 'waterfall ruler'],
+] as const)
+  sunPairs.push({ text, on: [...on], min: 4.5, where });
+
+/** Sun's limit for a pair: 7:1 for text, 4.5:1 for glyphs. */
+const sunMin = (p: Pair) => (p.min === 3 ? 4.5 : 7);
+
+function low(list: Pair[], theme: Theme, min: (p: Pair) => number): string[] {
+  return list
+    .map((p) => {
+      const under = ground(p.on, theme);
+      return { p, r: contrast(over(colour(p.text, theme), under), under) };
+    })
+    .filter(({ p, r }) => r < min(p))
+    .map(({ p, r }) => `--${p.text} on ${p.on.map((l) => `--${l}`).join(' over ')}: ${r.toFixed(2)}:1, under ${min(p)}:1 (${p.where})`);
+}
+
+/** The lowest contrast of text and of glyphs among the pairs, in a theme. */
+function lowest(list: Pair[], theme: Theme): { text: number; glyph: number } {
+  const r = (p: Pair) => {
+    const under = ground(p.on, theme);
+    return contrast(over(colour(p.text, theme), under), under);
+  };
+  return { text: Math.min(...list.filter((p) => p.min > 3).map(r)), glyph: Math.min(...list.filter((p) => p.min === 3).map(r)) };
+}
+
 describe('token contrast', () => {
   it('reads every token it checks from tokens.css', () => {
-    for (const p of pairs) for (const t of [p.text, ...p.on]) for (const theme of ['light', 'dark'] as const) expect(() => colour(t, theme), t).not.toThrow();
+    for (const p of pairs) for (const t of [p.text, ...p.on]) for (const theme of THEMES) expect(() => colour(t, theme), t).not.toThrow();
+    for (const p of sunPairs) for (const t of [p.text, ...p.on]) expect(() => colour(t, 'sun'), t).not.toThrow();
   });
 
   for (const theme of ['light', 'dark'] as const) {
     it(`keeps text at 4.5:1 and glyphs at 3:1 in ${theme}`, () => {
-      const low = pairs
-        .map((p) => {
-          const under = ground(p.on, theme);
-          const r = contrast(over(colour(p.text, theme), under), under);
-          return { p, r };
-        })
-        .filter(({ p, r }) => r < p.min)
-        .map(({ p, r }) => `--${p.text} on ${p.on.map((l) => `--${l}`).join(' over ')}: ${r.toFixed(2)}:1, under ${p.min}:1 (${p.where})`);
-      expect(low).toEqual([]);
+      expect(low(pairs, theme, (p) => p.min)).toEqual([]);
     });
   }
+
+  it('keeps text at 7:1 and glyphs at 4.5:1 in Sun', () => {
+    expect(low(pairs, 'sun', sunMin)).toEqual([]);
+    expect(low(sunPairs, 'sun', sunMin)).toEqual([]);
+    // Sun is a step above light everywhere it matters: its lowest text and glyph contrasts.
+    const [light, sun] = [lowest(pairs, 'light'), lowest(pairs, 'sun')];
+    expect(sun.text).toBeGreaterThan(light.text);
+    expect(sun.glyph).toBeGreaterThan(light.glyph);
+  });
+
+  it('keeps rows unrelated to the QSO under way at 7:1 in Sun', () => {
+    const dim = Number(SUN.get('rr-focus-dim'));
+    const plain = colour('rr-plain', 'sun');
+    const text = colour('rr-label', 'sun');
+    expect(contrast(over([text[0], text[1], text[2], dim], plain), plain)).toBeGreaterThanOrEqual(7);
+    // Still dimmer than the rest of the list.
+    expect(dim).toBeLessThan(0.75);
+  });
+
+  it('sets only tokens of the light theme, and pins color-scheme to light, in Sun', () => {
+    expect([...SUN.keys()].filter((k) => !TOKENS.has(k))).toEqual([]);
+    expect(SUN_BLOCK).toMatch(/\n\s*color-scheme: light;/);
+    // Every colour of Sun is a plain value: no light-dark(), which would follow the system.
+    expect([...SUN.values()].filter((v) => v.includes('light-dark('))).toEqual([]);
+  });
 });

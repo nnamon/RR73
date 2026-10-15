@@ -8,12 +8,14 @@
  * 44 pt rows, a 51 x 31 pt switch, sheets with 10 pt corners (Unverified, not measured).
  *
  * Each colour is light-dark(light, dark). The theme follows the system unless Settings sets
- * data-theme on the root element, which pins color-scheme.
+ * data-theme on the root element, which pins color-scheme. Sun, for direct sunlight, is light with
+ * its own values for the colours at the end of this file.
  *
- * Text keeps 4.5:1 on what it sits on, in both themes; glyphs such as chevrons 3:1.
- * tokens-contrast.test.ts checks every pair. Where an Apple colour falls short as text, its token
- * takes the Increased Contrast value, darkened in light or lightened in dark only as far as 4.5:1
- * needs (the readableOn() rule in lib/decode/highlight-colour.ts).
+ * Text keeps 4.5:1 on what it sits on, in light and dark; glyphs such as chevrons 3:1. In Sun,
+ * text keeps 7:1 and glyphs 4.5:1. tokens-contrast.test.ts checks every pair. Where an Apple
+ * colour falls short as text, its token takes the Increased Contrast value, darkened in light or
+ * lightened in dark only as far as 4.5:1 needs (the readableOn() rule in
+ * lib/decode/highlight-colour.ts).
  */
 
 :root {
@@ -225,13 +227,19 @@
    *   6.2:1 or more;
    * - dark: at most 30% colour over #000, so every channel is 77 or less, and #FFF text is
    *   8.4:1 or more. 30% leaves room for worked-before grey text over a tint.
-   * lib/decode/highlight-colour.ts mirrors these four values for the worked-before text colour.
+   * - Sun: as much colour as keeps the tint's luminance at 0.4, up to 60%, over #FFF, worked out
+   *   for each colour in highlight-colour.ts (sunTint) and set in --rr-hl-sun. #000 text is 9:1
+   *   or more.
+   * lib/decode/highlight-colour.ts mirrors these values for the worked-before text colour.
    */
   --rr-hl-tint-light: 45%;
   --rr-hl-tint-dark: 30%;
   /* Rows of older slots fade: a lighter tint, and grey text kept at 4.5:1 (highlight-colour.ts). */
   --rr-hl-tint-old-light: 25%;
   --rr-hl-tint-old-dark: 18%;
+  --rr-hl-tint-old-sun: 30%;
+  /* Our transmission's tag on a tint: the row's colour in the label colour. */
+  --rr-hl-tag-mix: 35%;
   --rr-old-text: light-dark(#6E7684, #8C93A0);
   --rr-hl-base-light: #FFF;
   --rr-hl-base-dark: #000000;
@@ -282,15 +290,17 @@
   --rr-night-line: rgb(217 54 43 / 45%);
 
   /*
-   * Colour: waterfall. The same in both themes. The colormap stops of each palette (Settings ›
-   * Radio and audio › Waterfall colours) are read by lib/waterfall/colormap.ts and handed to the
-   * waterfall worker, so they stay plain hex.
+   * Colour: waterfall. The same in light and dark; Sun puts the labels on darker tags. The
+   * colormap stops of each palette (Settings › Radio and audio › Waterfall colours) are read by
+   * lib/waterfall/colormap.ts and handed to the waterfall worker, so they stay plain hex.
    */
   --rr-wf-bg: #04060A;
   --rr-wf-line: rgb(255 255 255 / 18%);
   --rr-wf-text: rgb(255 255 255 / 78%);
   --rr-wf-tag-bg: rgb(4 6 10 / 62%);
   --rr-wf-scrim: rgb(4 6 10 / 75%);
+  /* Behind the slot times: none, so the picture shows through; Sun sets one. */
+  --rr-wf-time-bg: transparent;
   --rr-wf-rx: #30D158;
   --rr-wf-tx: #FF4245;
   --rr-wf-rx-band: rgb(48 209 88 / 20%);
@@ -380,4 +390,102 @@
 
 :root[data-theme='dark'] {
   color-scheme: dark;
+}
+
+/*
+ * Sun: light, for direct sunlight. Text keeps 7:1 on what it sits on and glyphs 4.5:1
+ * (tokens-contrast.test.ts); the grouped background is a step darker, so groups stand out;
+ * separators, fills and tints are stronger, and the waterfall's labels sit on dark tags that keep
+ * 7:1 over the brightest signal. Colours not set here take their light value.
+ */
+:root[data-theme='sun'] {
+  color-scheme: light;
+
+  --rr-bg: #E5E5EA;
+  --rr-surface: #FFF;
+  --rr-plain: #FFF;
+  /* Opaque bars: nothing shows through them. */
+  --rr-dock: #F9F9F9;
+  --rr-fill: rgb(120 120 128 / 30%);
+  --rr-fill-bg: rgb(120 120 128 / 26%);
+  --rr-fill3: rgb(118 118 128 / 20%);
+  --rr-sep: rgb(0 0 0 / 45%);
+  --rr-sep-strong: #8E8E93;
+  --rr-sheet: #E5E5EA;
+  --rr-sheet-card: #FFF;
+  --rr-grab: rgb(0 0 0 / 45%);
+  --rr-dim: rgb(0 0 0 / 30%);
+
+  --rr-label: #000000;
+  --rr-label2: #3A3A3C;
+  --rr-label3: #48484A;
+  --rr-chev: #636366;
+
+  --rr-accent: #003688;
+  --rr-accent-fill: #0050C8;
+  --rr-accent-soft: rgb(0 100 230 / 16%);
+  --rr-tx: #D70015;
+  --rr-tx-text: #770012;
+  --rr-tx-fill: #AE001C;
+  --rr-tx-soft: rgb(215 0 21 / 12%);
+  --rr-cq: #248A3D;
+  --rr-amber: #C55300;
+  --rr-mag: #7A1F8A;
+  --rr-teal: #00546A;
+  --rr-ok: #004F1A;
+  --rr-ok-bar: #248A3D;
+  --rr-run: #00602A;
+  --rr-ok-soft: rgb(36 138 61 / 20%);
+  --rr-warn: #7A3300;
+  --rr-warn-soft: rgb(255 141 40 / 26%);
+
+  --rr-old-text: #4B515C;
+  --rr-hl-tag-mix: 0%;
+  --rr-sel-tint: rgb(0 100 230 / 22%);
+  --rr-hover: rgb(0 0 0 / 8%);
+
+  --rr-slot-even: #E5E5EA;
+  --rr-slot-even-rule: #636366;
+  --rr-slot-even-strong: #000000;
+  --rr-slot-even-text: #3A3A3C;
+  --rr-slot-odd: #CCE4FF;
+  --rr-slot-odd-rule: #0060DF;
+  --rr-slot-odd-strong: #003688;
+  --rr-slot-odd-text: #2C2C2E;
+  --rr-slot-quiet: #E5E5EA;
+
+  --rr-switch-on: #248A3D;
+  --rr-toast: #1C1C1E;
+  --rr-toast-link: #8FD0FF;
+  --rr-ic-blue: #0060DF;
+  --rr-ic-green: #1E7A34;
+  --rr-ic-orange: #B04A00;
+  --rr-ic-grey: #636366;
+  --rr-ic-indigo: #3634A3;
+  --rr-ic-teal: #00707A;
+  --rr-shadow-seg: rgb(0 0 0 / 25%);
+  --rr-shadow-thumb: rgb(0 0 0 / 30%);
+
+  /* Rows unrelated to the QSO under way keep 7:1. */
+  --rr-focus-dim: 0.66;
+
+  --rr-wf-text: #FFF;
+  --rr-wf-tag-bg: rgb(4 6 10 / 85%);
+  --rr-wf-scrim: rgb(4 6 10 / 88%);
+  --rr-wf-time-bg: rgb(4 6 10 / 85%);
+  --rr-wf-ruler-veil: rgb(4 6 10 / 85%);
+  --rr-wf-ruler-text: #FFF;
+  --rr-wf-tick: rgb(255 255 255 / 80%);
+  --rr-wf-tick-major: #FFF;
+}
+
+/* Sun's decode tints, worked out for each colour (highlight-colour.ts) and set beside --rr-hl. */
+:root[data-theme='sun'] .rr-hl {
+  --rr-hl-bg: var(--rr-hl-sun, color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-light), var(--rr-hl-base-light)));
+  --rr-hl-bg-old: color-mix(in srgb, var(--rr-hl) var(--rr-hl-tint-old-sun), var(--rr-hl-base-light));
+  --rr-hl-old-ink: var(--rr-ink-sun);
+}
+
+:root[data-theme='sun'] .rr-ink {
+  --rr-hl-ink: var(--rr-ink-sun);
 }

@@ -1,5 +1,5 @@
-// Decode colours on iPhone viewports in WebKit, light and dark: the Decode colours screen and its
-// colour sheet, and Operate with a decode of every category on screen. Operate keeps 32 pt rows,
+// Decode colours on iPhone viewports in WebKit, light, dark and Sun: the Decode colours screen and
+// its colour sheet, and Operate with a decode of every category on screen. Operate keeps 32 pt rows,
 // shows 13 rows at 393 x 852 (10 at 375 x 667), and a colour change moves no row. The review
 // projects save the screens to test-results/screens/colours; CI runs the light theme (ci() in
 // layout-checks.ts). The status bar and home indicator insets are applied, as in states.spec.ts.
@@ -72,7 +72,7 @@ const rowBoxes = (page: Page) =>
     });
   });
 
-for (const theme of ['light', 'dark'] as const) {
+for (const theme of ['light', 'dark', 'sun'] as const) {
   test(`decode colours screen and sheet in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     mkdirSync(SHOTS, { recursive: true });
     await useTheme(page, theme);

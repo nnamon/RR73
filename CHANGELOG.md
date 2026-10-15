@@ -5,6 +5,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - Settings › Radio and audio › Waterfall colours sets the waterfall in RR73’s colours, Fire or Grey. Fire and Grey get lighter in even steps from the noise to the strongest signals.
+- Settings › Appearance has Sun, a light theme for direct sunlight. Text keeps 7:1 contrast or more, decode colours are stronger, and the waterfall’s times and callsigns sit on dark tags.
 
 ## 0.21.9 · 2026-10-15
 

@@ -19,7 +19,7 @@
   import { TX_OFFSET_S, TX_SECONDS } from '../lib/wspr/schedule';
   import type { WsprItem } from '../lib/wspr/list';
   import type { Spot } from '../lib/wspr/spots';
-  import { oldInkFor } from '../lib/decode/highlight-colour';
+  import { oldInkFor, sunTint } from '../lib/decode/highlight-colour';
 
   let {
     items,
@@ -69,7 +69,7 @@
   }
 
   const TAG = { next: 'Next', sending: 'Sending', sent: 'Sent' } as const;
-  /** Text colours on the faded Sent tint, light and dark, kept at 4.5:1 (highlight-colour.ts). */
+  /** Text colours on the faded Sent tint in each theme, kept at 4.5:1, 7:1 in Sun (highlight-colour.ts). */
   const oldInk = $derived(sentColour ? oldInkFor(sentColour) : null);
 
   let press: { id: string; x: number; y: number; held: boolean; timer: ReturnType<typeof setTimeout> } | null = null;
@@ -126,7 +126,7 @@
     {:else if item.kind === 'tx'}
       {@const m = txMeta(item)}
       <li class="sr-item">
-        <div class="sr tx {item.stage}" class:old={item.old} class:rr-hl={!!sentColour && item.stage !== 'next'} style:--rr-hl={item.stage !== 'next' ? sentColour : null} style:--rr-ink-light={item.old ? oldInk?.light : null} style:--rr-ink-dark={item.old ? oldInk?.dark : null} data-testid="wspr-{item.stage}">
+        <div class="sr tx {item.stage}" class:old={item.old} class:rr-hl={!!sentColour && item.stage !== 'next'} style:--rr-hl={item.stage !== 'next' ? sentColour : null} style:--rr-hl-sun={item.stage !== 'next' && sentColour ? sunTint(sentColour) : null} style:--rr-ink-light={item.old ? oldInk?.light : null} style:--rr-ink-dark={item.old ? oldInk?.dark : null} style:--rr-ink-sun={item.old ? oldInk?.sun : null} data-testid="wspr-{item.stage}">
           <span class="tag">{TAG[item.stage]}</span>
           <span class="msg">{item.text}</span>
           <span class="meta" class:when={item.stage === 'next'}>{m.text}</span>
@@ -144,6 +144,7 @@
           class:rr-hl={s.mine && !!myCallColour}
           class:sel={selectedId === s.id}
           style:--rr-hl={s.mine ? myCallColour : null}
+          style:--rr-hl-sun={s.mine && myCallColour ? sunTint(myCallColour) : null}
           aria-label={spoken(s)}
           aria-pressed={selectedId === s.id}
           data-testid="spot-row"
@@ -451,7 +452,7 @@
   }
 
   .tx.rr-hl .tag {
-    color: color-mix(in srgb, var(--rr-hl) 35%, var(--rr-label));
+    color: color-mix(in srgb, var(--rr-hl) var(--rr-hl-tag-mix), var(--rr-label));
   }
 
   .msg {

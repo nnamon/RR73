@@ -2,7 +2,7 @@
 // operate.spec.ts (CI, decodes injected): the device's insets, two busy slots, and the checks on
 // the decode list's rows. Decodes come through the screen-review hooks (src/lib/testing/e2e-hooks.ts).
 import { expect, type Locator, type Page } from '@playwright/test';
-import { useTheme } from './theme';
+import { useTheme, type TestTheme } from './theme';
 
 export const SLOT = 15_000;
 
@@ -120,7 +120,7 @@ export function rowsOnScreen(page: Page): Promise<number> {
 }
 
 /** Operate with the device's insets, in `theme`, with callsign and grid set and audio on. */
-export async function openOperate(page: Page, theme: 'light' | 'dark') {
+export async function openOperate(page: Page, theme: TestTheme) {
   await page.addInitScript((i) => {
     document.addEventListener('DOMContentLoaded', () => {
       const s = document.createElement('style');

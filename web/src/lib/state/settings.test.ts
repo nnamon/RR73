@@ -157,6 +157,15 @@ describe('schema 11', () => {
     expect(validate({}).theme).toBe('light');
   });
 
+  it('keeps Sun as the theme without a migration, and drops an unknown theme', async () => {
+    expect(validate({ theme: 'sun' }).theme).toBe('sun');
+    for (const t of ['Sun', 'sunlight', 'high-contrast', 1]) expect(validate({ theme: t }).theme).toBe('light');
+    expect(migration({ theme: 'sun', schema: SETTINGS_SCHEMA })).toEqual({});
+    await setKv('settings', { theme: 'sun', schema: SETTINGS_SCHEMA });
+    await loadSettings();
+    expect(settings.theme).toBe('sun');
+  });
+
   it('drops the LoTW users switch an older phone stored', () => {
     expect(validate({ features: { activations: true, lotw: true } }).features).toEqual({ ...FEATURES_OFF, activations: true });
   });

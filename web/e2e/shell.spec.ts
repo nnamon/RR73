@@ -128,6 +128,16 @@ test('the app starts in light whatever the system, and Settings › Theme change
   await page.getByText('Dark', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await bg()).not.toBe(light);
+
+  // Sun: light with its own colours, whatever the system, and kept after a reload.
+  await page.getByText('Sun', { exact: true }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
+  expect(await bg()).toBe('rgb(229, 229, 234)');
+  expect(await page.evaluate(() => getComputedStyle(document.querySelector('.section-head')!).color)).toBe('rgb(58, 58, 60)');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
+  await expect(page.getByRole('radiogroup', { name: 'Appearance' }).getByRole('radio', { name: 'Sun' })).toBeChecked();
 });
 
 test('Settings shows the version, and it opens the version history', async ({ page }) => {

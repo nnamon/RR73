@@ -1,12 +1,12 @@
-// Contrast of decode rows in their decode colours, in light and dark, WCAG 2, 4.5:1 for the row's
-// text. Tints come from the values in tokens.css with the arithmetic of its .rr-hl rule
-// (color-mix() in sRGB); worked-before text colours from highlight-colour.ts, over a plain row or
-// any tint.
+// Contrast of decode rows in their decode colours, WCAG 2: 4.5:1 for the row's text in light and
+// dark, 7:1 in Sun. Tints come from the values in tokens.css with the arithmetic of its .rr-hl rule
+// (color-mix() in sRGB), and Sun's from highlight-colour.ts (sunTint); worked-before text colours
+// from highlight-colour.ts, over a plain row or any tint.
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { CATEGORIES, PALETTE } from './highlight';
-import { BASE as TS_BASE, GROUND, OLD_TEXT, TINT as TS_TINT, TINT_OLD, inkFor, oldInkFor, rgb, tintOf } from './highlight-colour';
+import { BASE as TS_BASE, GROUND, OLD_TEXT, SUN_TINT_MAX, TINT as TS_TINT, TINT_OLD, inkFor, oldInkFor, rgb, sunShare, sunTint, tintOf } from './highlight-colour';
 
 const css = readFileSync(join(__dirname, '../../styles/tokens.css'), 'utf8');
 
@@ -108,7 +108,7 @@ describe('rows of older slots', () => {
   const colours = [...new Set([...CATEGORIES.map((c) => c.colour), ...PALETTE.map((p) => p.colour), '#000000', '#FFFFFF', '#808080', '#0000FF'])];
 
   it('take their faded tint and grey text from tokens.css', () => {
-    expect(TINT_OLD).toEqual({ light: pct('rr-hl-tint-old-light'), dark: pct('rr-hl-tint-old-dark') });
+    expect(TINT_OLD).toEqual({ light: pct('rr-hl-tint-old-light'), dark: pct('rr-hl-tint-old-dark'), sun: pct('rr-hl-tint-old-sun') });
     const text = pair('rr-old-text');
     expect([rgb(OLD_TEXT.light), rgb(OLD_TEXT.dark)]).toEqual([text.light, text.dark]);
     expect(TINT_OLD.light).toBeLessThan(TS_TINT.light);
@@ -127,6 +127,68 @@ describe('rows of older slots', () => {
   });
 
   it('stay the old grey on a plain row', () => {
-    expect([rgb(OLD_TEXT.light), rgb(OLD_TEXT.dark)].map((c) => Math.max(...c) - Math.min(...c) < 24)).toEqual([true, true]);
+    expect([rgb(OLD_TEXT.light), rgb(OLD_TEXT.dark), rgb(OLD_TEXT.sun)].map((c) => Math.max(...c) - Math.min(...c) < 24)).toEqual([true, true, true]);
+  });
+});
+
+describe('decode colours in Sun', () => {
+  /** A token's value in Sun: its own, or light's. */
+  const SUN_BLOCK = css.slice(css.indexOf(":root[data-theme='sun'] {"), css.indexOf('\n}', css.indexOf(":root[data-theme='sun'] {")));
+  const sunHex = (name: string): Rgb => {
+    const m = new RegExp(`--${name}:\\s*(#[0-9A-F]+);`, 'i').exec(SUN_BLOCK);
+    return m ? hex(m[1]) : pair(name).light;
+  };
+  const label = sunHex('rr-label');
+  const grounds = [sunHex('rr-plain'), sunHex('rr-surface')];
+  /** Sun's tint as CSS gets it: --rr-hl-sun, whole channel values. */
+  const sunTintOf = (c: string): Rgb => hex(sunTint(c));
+  const ALL = [...SWATCHES, ...SWEEP];
+  const rr73 = CATEGORIES.filter((c) => c.style === 'background').map((c) => c.colour);
+
+  it('works out text colours from the grounds and old grey of tokens.css', () => {
+    expect([hex(GROUND.sun), hex(TS_BASE.sun)]).toEqual([grounds[0], hex('#FFFFFF')]);
+    expect(grounds[1]).toEqual(grounds[0]);
+    expect(rgb(OLD_TEXT.sun)).toEqual(sunHex('rr-old-text'));
+    expect(label).toEqual([0, 0, 0]);
+  });
+
+  it('keeps row text at 7:1 on the tint of any colour, 9:1 within rounding', () => {
+    const lowest = Math.min(...ALL.map((s) => contrast(label, sunTintOf(s))));
+    expect(lowest).toBeGreaterThanOrEqual(7);
+    expect(lowest).toBeGreaterThan(8.99);
+  });
+
+  it('tints RR73’s colours with more colour than light, up to 60%', () => {
+    for (const c of rr73) {
+      expect(sunShare(c), c).toBeGreaterThanOrEqual(TS_TINT.light);
+      expect(sunShare(c), c).toBeLessThanOrEqual(SUN_TINT_MAX);
+    }
+    // Black, the darkest colour there is, still shows: a grey a third of the way to black.
+    expect(sunShare('#000000')).toBeGreaterThan(0.3);
+  });
+
+  it('keeps worked-before text at 7:1 on a plain row, and 4.5:1 on every tint', () => {
+    const low: string[] = [];
+    for (const i of [...SWATCHES, ...SWEEP]) {
+      const t = hex(inkFor(i, null).sun);
+      if (grounds.some((g) => contrast(t, g) < 7)) low.push(`${i} on plain`);
+    }
+    for (const i of SWATCHES) for (const b of SWATCHES) if (contrast(hex(inkFor(i, b).sun), sunTintOf(b)) < 4.5) low.push(`${i} on ${b}`);
+    for (const b of SWEEP) if (contrast(hex(inkFor(GREY, b).sun), sunTintOf(b)) < 4.5) low.push(`${GREY} on ${b}`);
+    expect(low).toEqual([]);
+  });
+
+  it('keeps the default worked-before grey apart from the row text', () => {
+    const ground = grounds[0];
+    expect(contrast(hex(inkFor(GREY, null).sun), ground)).toBeLessThan(contrast(label, ground) / 2);
+    // On every tint of RR73's scheme the grey and the row text differ by 1.9:1 or more.
+    for (const c of rr73) expect(contrast(hex(inkFor(GREY, c).sun), label), c).toBeGreaterThanOrEqual(1.9);
+  });
+
+  it('keeps 7:1 in rows of older slots, on a plain row and on every faded tint', () => {
+    expect(contrast(rgb(OLD_TEXT.sun), grounds[0])).toBeGreaterThanOrEqual(7);
+    const colours = [...new Set([...SWATCHES, '#000000', '#FFFFFF', '#808080', '#0000FF'])];
+    for (const c of colours) expect(contrast(rgb(oldInkFor(c).sun), tintOf(c, 'sun', TINT_OLD.sun)), c).toBeGreaterThanOrEqual(7);
+    expect(TINT_OLD.sun).toBeLessThan(TS_TINT.light);
   });
 });

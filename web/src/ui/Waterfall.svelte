@@ -490,8 +490,12 @@
     white-space: nowrap;
   }
 
+  /* In Sun the time sits on a dark tag, 2 px wider all round, which leaves its place as it is. */
   .tl {
     left: 6px;
+    border-radius: var(--rr-radius-xs);
+    background: var(--rr-wf-time-bg);
+    box-shadow: 0 0 0 var(--rr-space-half) var(--rr-wf-time-bg);
     color: var(--rr-wf-text);
   }
 

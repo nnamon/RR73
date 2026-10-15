@@ -1,6 +1,6 @@
-// Accessibility: axe-core (WCAG 2.0 to 2.2, A and AA) on every screen and sheet in both themes.
-// Dark adds the colour contrast of the dark theme. audio.spec.ts scans the Save slot sheet, which
-// needs recorded slots, and decode.spec.ts the list with decodes.
+// Accessibility: axe-core (WCAG 2.0 to 2.2, A and AA) on every screen and sheet in light, dark and
+// Sun. Dark and Sun add the colour contrast of their own colours. audio.spec.ts scans the Save slot
+// sheet, which needs recorded slots, and decode.spec.ts the list with decodes.
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { LOG_SHEETS, SCREENS, open } from './screens';
@@ -13,7 +13,7 @@ async function axe(page: Page) {
 // settings-features is Settings scrolled to Optional features: the same page as settings.
 const PAGES = SCREENS.filter((s) => s.name !== 'settings-features');
 
-for (const theme of ['light', 'dark'] as const) {
+for (const theme of ['light', 'dark', 'sun'] as const) {
   for (const s of PAGES) {
     test(`${s.name} in ${theme}`, async ({ page }) => {
       await open(page, s.path, theme, s.seed, s.features, s.practice, s.relay, s.psk, s.heard);

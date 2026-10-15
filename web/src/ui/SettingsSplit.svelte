@@ -29,7 +29,7 @@
     value?: string;
   }
 
-  const THEMES = { system: 'System', light: 'Light', dark: 'Dark' } as const;
+  const THEMES = { system: 'System', light: 'Light', dark: 'Dark', sun: 'Sun' } as const;
 
   const groups = $derived<Item[][]>([
     [

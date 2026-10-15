@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import DecodeList, { type DecodeListItem } from './DecodeList.svelte';
 import { markDecode, type DecodeRowData } from '../lib/decode/marking';
 import type { Decode } from '../lib/decode/types';
+import { category } from '../lib/decode/highlight';
+import { inkFor, oldInkFor, sunTint } from '../lib/decode/highlight-colour';
 
 const MY = '9V1NE';
 const d = (text: string, snr_db: number, dt_s: number, freq_hz: number): Decode => ({ text, snr_db, dt_s, freq_hz });
@@ -193,6 +195,7 @@ describe('our transmission and older slots', () => {
     const [a, b, c] = [...el.querySelectorAll<HTMLElement>('button.dr')];
     expect([a, b, c].map((r) => r.classList.contains('old'))).toEqual([true, true, false]);
     expect(a.style.getPropertyValue('--rr-ink-light')).toMatch(/^#[0-9A-F]{6}$/);
+    expect(a.style.getPropertyValue('--rr-ink-sun')).toBe(oldInkFor('#009E73').sun);
     expect(c.style.getPropertyValue('--rr-ink-light')).toBe('');
   });
 });
@@ -261,6 +264,10 @@ describe('decode colours', () => {
     expect(a.classList.contains('hl-background') && a.classList.contains('hl-ink')).toBe(true);
     expect(a.style.getPropertyValue('--rr-hl')).toBe('#009E73');
     expect(a.style.getPropertyValue('--rr-ink-light')).toMatch(/^#[0-9A-F]{6}$/);
+    // Sun's tint and text colour, worked out for the row (highlight-colour.ts).
+    expect(a.style.getPropertyValue('--rr-hl-sun')).toBe(sunTint('#009E73'));
+    expect(a.style.getPropertyValue('--rr-ink-sun')).toBe(inkFor(category('worked').colour, '#009E73').sun);
+    expect(c.style.getPropertyValue('--rr-hl-sun')).toBe('');
     expect(a.getAttribute('aria-label')).toContain('calling CQ, worked before');
     expect(b.dataset.ink).toBeUndefined();
     expect(b.getAttribute('aria-label')).toContain('new grid');
