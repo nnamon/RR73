@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.6 · 2026-10-15
 
 - Light is the default theme. A theme left at System changes to Light once. Light and Dark stay.
 - Edit QSO puts a logged QSO into the running activation, or takes it out.
