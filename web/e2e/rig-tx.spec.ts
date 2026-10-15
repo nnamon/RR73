@@ -328,14 +328,16 @@ test('with Keep Tx audio centred, a CQ at 2800 Hz sets the dial 1000 Hz up, keys
   // The dial goes out at the pre-roll, at the slot edge, and PTT on after its OK; the audio still
   // starts at slot + 0.5 s on the audio clock, as without the shift.
   expect(Math.abs(t.startUtc - (slot + 500))).toBeLessThanOrEqual(150);
-  expect(dial.ctxS!).toBeLessThan(on.ctxS!);
+  // The frame order above already says the dial came first; on the audio clock both frames can
+  // fall in the same render quantum (128 samples) and carry the same time.
+  expect(dial.ctxS!).toBeLessThanOrEqual(on.ctxS!);
   expect(timing.dialBeforePttMs).toBeLessThan(100);
   expect(timing.pttBeforeAudioMs).toBeGreaterThanOrEqual(300);
   expect(timing.pttBeforeAudioMs).toBeLessThanOrEqual(700);
   expect(timing.offAfterAudioMs).toBeGreaterThanOrEqual(50);
   expect(timing.offAfterAudioMs).toBeLessThanOrEqual(600);
   // The receive dial goes back after PTT off is confirmed, long before the next slot.
-  expect(back.ctxS!).toBeGreaterThan(off.ctxS!);
+  expect(back.ctxS!).toBeGreaterThanOrEqual(off.ctxS!);
   expect(timing.rxDialAfterOffMs).toBeLessThan(200);
   // The audio is the CQ at 1800 Hz: on the Tx dial, the same RF as 2800 Hz on the receive dial.
   const decodes = decodeCaptured((await loadWasm())!, t);
