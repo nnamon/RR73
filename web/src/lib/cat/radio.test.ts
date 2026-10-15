@@ -231,6 +231,121 @@ describe('CatRadio', () => {
     expect(port.sent('03').length).toBeGreaterThan(polls);
   });
 
+  it('sends PTT on and off ahead of requests waiting in the queue', async () => {
+    const { timers, port, radio } = setup();
+    port.delayMs = 40;
+    const reads = [radio.request({ type: 'read_frequency' }), radio.request({ type: 'read_mode' }), radio.request({ type: 'read_data_mode' })];
+    await timers.advance(5);
+    const k = radio.key(15_000);
+    await timers.advance(1);
+    // The read in flight, then PTT on; the two queued reads wait.
+    expect(port.written.map((w) => w.frame)).toEqual(['FE FE A4 E0 03 FD', 'FE FE A4 E0 1C 00 01 FD']);
+    await timers.advance(200);
+    expect(await k.result).toBe('ok');
+    for (const r of reads) expect(await r).toMatchObject({ ok: true });
+    // Keyed: reads queue behind one in flight, and PTT off goes before them.
+    const more = [radio.request({ type: 'read_transmit' }), radio.request({ type: 'read_setting', item: 'usb_send' })];
+    await timers.advance(5);
+    const n = port.written.length;
+    k.release();
+    await timers.advance(1);
+    expect(port.written.slice(n - 1).map((w) => w.frame)).toEqual(['FE FE A4 E0 1C 00 FD', 'FE FE A4 E0 1C 00 00 FD']);
+    await timers.advance(500);
+    for (const r of more) expect(await r).toMatchObject({ ok: true });
+  });
+
+  it('reads a menu setting again every 5 s until the radio answers it, and not one it refused', async () => {
+    const { timers, port, radio } = setup();
+    // The first read of USB SEND goes unanswered.
+    const write = port.write.bind(port);
+    let dropped = 0;
+    port.write = async (bytes) => {
+      if (hex(bytes) === 'FE FE A4 E0 1A 05 01 25 FD' && dropped++ === 0) {
+        port.written.push({ at: timers.t, frame: hex(bytes) });
+        return;
+      }
+      return write(bytes);
+    };
+    radio.start();
+    await timers.advance(2000);
+    expect(radio.state.settings.usb_send).toBeUndefined();
+    expect(radio.state.settings).toMatchObject({ data_mod: 1, time_out_timer: 2 });
+    await timers.advance(4 * POLL_MS);
+    expect(radio.state.settings.usb_send).toBe(0);
+    expect(port.sent('1A 05 01 25')).toHaveLength(2);
+    // Read once each after that.
+    await timers.advance(10 * POLL_MS);
+    expect(port.sent('1A 05 01 25')).toHaveLength(2);
+    expect(port.sent('1A 05 01 19')).toHaveLength(1);
+  });
+
+  it('resolves unkeyed() once a read confirms receive, and false when PTT off goes unconfirmed', async () => {
+    const ok = setup();
+    expect(await ok.radio.unkeyed()).toBe(true);
+    const k = ok.radio.key(15_000);
+    await ok.timers.advance(50);
+    expect(k.held).toBe(true);
+    k.release();
+    expect(k.held).toBe(false);
+    const confirmed = ok.radio.unkeyed();
+    await ok.timers.advance(100);
+    expect(await confirmed).toBe(true);
+    const lost = setup();
+    const k2 = lost.radio.key(15_000);
+    await lost.timers.advance(50);
+    lost.port.silent = true;
+    k2.release();
+    const unconfirmed = lost.radio.unkeyed();
+    await lost.timers.advance(UNKEY_TRIES * UNKEY_ACK_MS + DRAIN_MS + REPLY_MS + 100);
+    expect(await unconfirmed).toBe(false);
+    expect(lost.radio.state.unkeyFailed).toBe(true);
+  });
+
+  it('a keying is no longer held after Halt’s PTT off or the link ending', async () => {
+    const { timers, port, radio } = setup();
+    const a = radio.key(15_000);
+    await timers.advance(50);
+    radio.unkeyAll();
+    expect(a.held).toBe(false);
+    const b = radio.key(15_000);
+    await timers.advance(50);
+    expect(b.held).toBe(true);
+    port.end('lost');
+    expect(b.held).toBe(false);
+  });
+
+  it('takes no receive reading as a fault in the 100 ms after the OK, while the radio switches over', async () => {
+    const { timers, port, radio } = setup();
+    const faults: string[] = [];
+    radio.onFault((f) => faults.push(f));
+    radio.start();
+    await timers.advance(400);
+    // A radio slow to switch: it says receive for a while after its OK.
+    const write = port.write.bind(port);
+    let lagUntil = 0;
+    port.write = async (bytes) => {
+      if (hex(bytes) === 'FE FE A4 E0 1C 00 FD' && timers.t < lagUntil) {
+        port.written.push({ at: timers.t, frame: hex(bytes) });
+        port.send(Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0x1c, 0x00, 0x00, 0xfd]));
+        return;
+      }
+      return write(bytes);
+    };
+    // Keyed 50 ms before the poll at 1000 ms: the OK comes at 965 ms, and the radio says receive
+    // until 1030 ms.
+    await timers.advance(950 - 400);
+    const k = radio.key(15_000);
+    lagUntil = timers.t + 80;
+    await timers.advance(60);
+    expect(port.sent('1C 00 FD').filter((w) => w.at >= 950)).toEqual([]);
+    expect(faults).toEqual([]);
+    // The next poll reads transmit.
+    await timers.advance(POLL_MS);
+    expect(port.sent('1C 00 FD').filter((w) => w.at >= 950).map((w) => w.at)).toEqual([2000]);
+    expect(faults).toEqual([]);
+    expect(k.held).toBe(true);
+  });
+
   it('says why PTT on failed: no answer in 300 ms, or NG', async () => {
     const silent = setup();
     silent.port.silent = true;

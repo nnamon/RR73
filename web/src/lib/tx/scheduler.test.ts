@@ -59,6 +59,7 @@ class FakeKeyer implements Keyer {
   log: string[] = [];
   keyed = false;
   maxMs: number[] = [];
+  last: (Keying & { taken: boolean }) | null = null;
   constructor(
     private readonly clock: FakeClock,
     public answer: KeyResult = 'ok',
@@ -76,7 +77,7 @@ class FakeKeyer implements Keyer {
       const wait = this.answer === 'timeout' ? PTT_TIMEOUT_MS : this.delayMs;
       this.clock.timers.push({ at: this.clock.currentTime + wait / 1000, fn: () => resolve(this.answer) });
     });
-    return {
+    const keying = {
       result,
       release: (tailMs = 0) => {
         if (released) return;
@@ -84,7 +85,14 @@ class FakeKeyer implements Keyer {
         this.log.push(`off@${this.utc()}+${tailMs}`);
         this.keyed = false;
       },
+      get held() {
+        return !released && !keying.taken;
+      },
+      /** PTT taken back from outside, as Halt's PTT off does. */
+      taken: false,
     };
+    this.last = keying;
+    return keying;
   }
 }
 
@@ -502,6 +510,19 @@ describe('TxScheduler keying the radio', () => {
     expect(keyer.log).toEqual([`on@${15000}`, `off@${15100}+0`, `on@${45000}`, `off@${45100}+0`, `on@${45100}`]);
     expect(keyer.keyed).toBe(true);
     expect(clock.played.at(-1)!.when).toBeCloseTo(clock.toContextTime(T0 + 45500)!, 9);
+  });
+
+  it('plays nothing when PTT was taken back before the OK arrived', async () => {
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 100 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15050);
+    keyer.last!.taken = true;
+    await runTo(clock, T0 + 16000);
+    await done;
+    expect(clock.played).toEqual([]);
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'busy' }]);
+    expect(sched.busy).toBe(false);
   });
 
   it('keys nothing without a keyer', async () => {

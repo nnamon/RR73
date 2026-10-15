@@ -197,6 +197,13 @@ export class TxScheduler {
         refuse(keyFailedText(answer));
         return;
       }
+      // PTT taken back meanwhile (Tune or Test keying keyed the radio, or PTT off from elsewhere):
+      // no audio plays without it.
+      if (!keying.held) {
+        keying.release();
+        this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'busy' });
+        return;
+      }
       now = this.audio();
       target = now?.toContextTime(startUtc) ?? null;
       if (!now || target === null || this.gate()) {

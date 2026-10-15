@@ -46,6 +46,11 @@ export interface Keying {
   /** Resolves with the radio's answer to PTT on. */
   readonly result: Promise<KeyResult>;
   /**
+   * True while this keying holds PTT on: false once released, by its limit, or by Halt, a fault
+   * or the link ending. Audio starts only while it is true.
+   */
+  readonly held: boolean;
+  /**
    * PTT off, now or after `tailMs`, unless a later keying holds PTT by then. Safe to call more
    * than once.
    */

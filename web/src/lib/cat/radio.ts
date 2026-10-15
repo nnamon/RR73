@@ -19,11 +19,14 @@
  * an OK within PTT_TIMEOUT_MS sends PTT off at once. While RR73 holds PTT on, the dial is not
  * polled: transmit or receive is read every POLL_MS instead, and a radio that says receive or stops
  * answering is a fault (onFault), on which the app stops the transmission and sends PTT off.
+ *
+ * The menu settings are read on connecting, and those still unread every 5 s after, until the
+ * radio answers or refuses each.
  */
 
 import type { LinkEnd } from './serial';
 import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, MenuItemId } from './protocol';
-import { PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
+import { PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
 
 /** The serial link as the radio uses it. */
 export interface CatTransport {
@@ -163,12 +166,18 @@ export class CatRadio implements Keyer {
   private afterDrain: (() => void)[] = [];
   /** The keying that holds PTT on now; null when none does. */
   private holder: object | null = null;
+  /** When the radio answered OK to the holder's PTT on, CatTimers.now() ms; null before. */
+  private okAt: number | null = null;
   /** PTT on went out and no read has confirmed receive since. */
   private mayBeKeyed = false;
   private endedKeyedValue = false;
   /** Bumped by every PTT on and off, so an older PTT off and its confirmation stop. */
   private pttGen = 0;
   private tailTimer: unknown = null;
+  /** Waiting for PTT off to be confirmed (true) or reported unconfirmed (false). */
+  private unkeyWaiters: ((confirmed: boolean) => void)[] = [];
+  /** Menu settings the radio answered NG: not read again. */
+  private readonly menuRefused = new Set<MenuItemId>();
 
   constructor(opts: { codec: CatCodec; transport: CatTransport; timers?: CatTimers }) {
     this.codec = opts.codec;
@@ -230,8 +239,32 @@ export class CatRadio implements Keyer {
       }
     });
     void this.readDial(true);
-    for (const item of CONNECT_SETTINGS) void this.request({ type: 'read_setting', item });
+    this.readSettings();
     this.schedulePoll();
+  }
+
+  /** Reads the menu settings not read yet, except those the radio refused. */
+  private readSettings() {
+    for (const item of CONNECT_SETTINGS) {
+      if (item in this.stateValue.settings || this.menuRefused.has(item)) continue;
+      void this.request({ type: 'read_setting', item }).then((r) => {
+        if (!r.ok && r.why === 'ng') this.menuRefused.add(item);
+      });
+    }
+  }
+
+  /**
+   * Resolves true once a read confirms receive after PTT off (at once when RR73 holds no PTT), or
+   * false when PTT off goes unconfirmed or the link ends first.
+   */
+  unkeyed(): Promise<boolean> {
+    if (!this.mayBeKeyed) return Promise.resolve(true);
+    if (this.over) return Promise.resolve(false);
+    return new Promise((resolve) => this.unkeyWaiters.push(resolve));
+  }
+
+  private settleUnkey(confirmed: boolean) {
+    for (const w of this.unkeyWaiters.splice(0)) w(confirmed);
   }
 
   /** Reads the frequency, and the mode and data mode with `all`. */
@@ -283,6 +316,7 @@ export class CatRadio implements Keyer {
   key(maxMs: number): Keying {
     const token = {};
     this.holder = token;
+    this.okAt = null;
     this.clearTail();
     this.pttGen++;
     this.mayBeKeyed = true;
@@ -305,10 +339,18 @@ export class CatRadio implements Keyer {
     };
     const result: Promise<KeyResult> = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS).then((r) => {
       const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
+      if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
       if (answer !== 'ok') release();
       return answer;
     });
-    return { result, release };
+    const held = () => !released && this.holder === token && !this.over;
+    return {
+      result,
+      release,
+      get held() {
+        return held();
+      },
+    };
   }
 
   /** PTT off at once, whoever keyed: Halt, the page going, an error. Sends it even when RR73 holds no PTT. */
@@ -340,6 +382,7 @@ export class CatRadio implements Keyer {
     }
     for (const u of this.unsubscribe.splice(0)) u();
     this.patch({ status, keyed: false });
+    this.settleUnkey(!this.mayBeKeyed);
   }
 
   private ended(end: LinkEnd) {
@@ -370,13 +413,17 @@ export class CatRadio implements Keyer {
     const read = await this.sendNow({ type: 'read_transmit' }, REPLY_MS);
     if (this.over || gen !== this.pttGen) return;
     if (read.ok && read.event.type === 'transmit' && !read.event.on) this.confirmed();
-    else if (this.mayBeKeyed) this.patch({ unkeyFailed: true });
+    else if (this.mayBeKeyed) {
+      this.patch({ unkeyFailed: true });
+      this.settleUnkey(false);
+    }
   }
 
   /** A read said receive with RR73 holding no PTT. */
   private confirmed() {
     this.mayBeKeyed = false;
     if (this.stateValue.unkeyFailed) this.patch({ unkeyFailed: false });
+    this.settleUnkey(true);
   }
 
   /**
@@ -526,7 +573,9 @@ export class CatRadio implements Keyer {
     // A poll still waiting from the last round is enough.
     if (this.waiting.length || this.inFlight.some((f) => !f.now)) return;
     if (this.holder) {
-      // On the air: the radio must still say transmit.
+      // On the air: the radio must still say transmit. Not before its OK, nor in the PTT_SETTLE_MS
+      // after it, while it may still be switching over.
+      if (this.okAt === null || this.timers.now() - this.okAt < PTT_SETTLE_MS) return;
       const holder = this.holder;
       void this.request({ type: 'read_transmit' }).then((r) => {
         if (this.holder === holder && r.ok && r.event.type === 'transmit' && !r.event.on) this.fault('receive');
@@ -542,7 +591,10 @@ export class CatRadio implements Keyer {
     }
     if (this.stateValue.keyed) return;
     this.polls++;
-    void this.readDial(this.polls % MODE_EVERY === 0);
+    const all = this.polls % MODE_EVERY === 0;
+    void this.readDial(all);
+    // A menu setting that went unanswered on connecting is read again: USB SEND gates Tx.
+    if (all) this.readSettings();
   }
 
   private patch(p: Partial<RadioState>) {
