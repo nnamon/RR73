@@ -432,6 +432,7 @@
    * SF Pro's line box sets 1 to 2 pt low.
    */
   .reset {
+    position: relative;
     display: flex;
     flex: none;
     align-items: center;
@@ -443,10 +444,10 @@
     translate: 0 var(--rr-space-half);
   }
 
+  /* No radius on the glyph itself: an SVG clips its content to its corners, and the arrowhead sits in one. */
   .reset :global(.reset-i) {
     width: var(--rr-dial-reset);
     height: var(--rr-dial-reset);
-    border-radius: var(--rr-radius-pill);
   }
 
   /* The ring goes round the glyph: round the 44 pt target it would touch the unit. */
@@ -454,9 +455,13 @@
     outline: none;
   }
 
-  .reset:focus-visible :global(.reset-i) {
+  .reset:focus-visible::after {
+    position: absolute;
+    width: calc(var(--rr-dial-reset) + 4px);
+    height: calc(var(--rr-dial-reset) + 4px);
+    border-radius: var(--rr-radius-pill);
     outline: 2px solid var(--rr-accent);
-    outline-offset: 2px;
+    content: '';
   }
 
   .note {

@@ -173,6 +173,8 @@ test('the band sheet takes an FT8 dial of the operator’s own per band, and Res
   await dial.press('Enter');
   await expect(sheet.getByRole('alert')).toHaveCount(0);
   await expect(reset).toHaveAccessibleName('Reset to 5.357 MHz');
+  // An SVG clips its content to rounded corners, which cut off the arrowhead: the glyph has none.
+  expect(await reset.locator('svg').evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe('0px');
   await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.313');
 
   // A reload keeps it, once it is stored.
