@@ -1,8 +1,8 @@
 # Rig control
 
-RR73 controls the radio over Web Serial in desktop Chrome and Edge, inside the same app. The Icom IC-705 comes first, over its USB cable; the Elecraft KX2 follows. The iPhone keeps VOX: Safari has no Web Serial, so the rig control settings never show there.
+RR73 controls the radio over Web Serial in desktop Chrome and Edge, inside the same app. The Icom IC-705 comes first, over its USB cable; the Elecraft KX2 follows, through a Digirig (Elecraft KX2, below). The iPhone keeps VOX: Safari has no Web Serial, so the rig control settings never show there.
 
-Two branches built it. The first (0.21.7) added the protocol and the pieces under it: the CI-V crate (`crates/rr73-cat`), its WebAssembly exports (`crates/rr73-wasm/src/cat.rs`), the serial link (`web/src/lib/cat/serial.ts`) and the choice of audio output. The second added Settings › Rig control, the link to the radio (`web/src/lib/cat/radio.ts`, `web/src/lib/state/cat.svelte.ts`), PTT for every transmission, the band sheet and the dial QSOs log, and the input device remembered by name. A third added Keep Tx audio centred, the dial shift that keeps FT8 and FT4 transmit audio in the middle of the transmit passband (Passband shift, below).
+Two branches built it. The first (0.21.7) added the protocol and the pieces under it: the CI-V crate (`crates/rr73-cat`), its WebAssembly exports (`crates/rr73-wasm/src/cat.rs`), the serial link (`web/src/lib/cat/serial.ts`) and the choice of audio output. The second added Settings › Rig control, the link to the radio (`web/src/lib/cat/radio.ts`, `web/src/lib/state/cat.svelte.ts`), PTT for every transmission, the band sheet and the dial QSOs log, and the input device remembered by name. A third added Keep Tx audio centred, the dial shift that keeps FT8 and FT4 transmit audio in the middle of the transmit passband (Passband shift, below). A fourth added the KX2: Elecraft's text commands in the same crate, and the radio's traits that the one link takes (`web/src/lib/cat/radios.ts`).
 
 ## Decision
 
@@ -353,3 +353,225 @@ Not tested on a device: everything above ran against the simulator and a fake ra
 - Unverified: `05` with the radio in split, memory mode or with XIT on. RR73 reads none of these. With split on, the radio may transmit on the other VFO, unshifted.
 - A dial the operator turns on the radio during a shifted transmission is set back to the receive dial afterwards.
 - RTTY transmits unshifted: a pair tuned within about 100 Hz of a passband edge, or below 1350 Hz with its harmonics in the passband, goes out attenuated or with them. Not measured on a device.
+
+## Elecraft KX2
+
+Settings › Rig control › Radio offers the Elecraft KX2 beside the IC-705, which stays the default. The owner's KX2 reaches a Windows tablet (Edge or Chrome) through a Digirig Mobile, a USB interface that the computer sees as a USB sound card and a USB serial port.
+
+### Decision
+
+- One link drives both radios. `CatRadio` (`lib/cat/radio.ts`) takes a codec and the radio's traits (`lib/cat/radios.ts`): the requests that set the data mode, the reads of the mode, the settings read on connecting, the answers that take longer, and how PTT on is confirmed. The safety paths above hold for the KX2, with its commands in place of CI-V's. Two have no KX2 counterpart: USB SEND, and the dial shift (Passband shift, below).
+- Elecraft's text protocol in `crates/rr73-cat/src/elecraft.rs`, a simulated KX2 behind a Digirig in `sim_kx2.rs`, and their WebAssembly exports in `crates/rr73-wasm/src/cat_kx2.rs` (`cat_kx2_encode`, `cat_kx2_answers`, `cat_kx2_accepts`, `CatKx2Parser`, `CatKx2SimForTests`).
+- Transmit keyed by `TX;` and released by `RX;`, each followed by `TQ;`, and only with Key the radio with CAT on, off by default as for the IC-705. Audio both ways through the Digirig's sound card.
+- RR73 never keys the KX2 through the Digirig's RTS line, and holds RTS low.
+- Connecting sends no `TX;` and no set, and changes no menu setting. It reads the radio, MIC BTN included, and says what to change.
+- Keep Tx audio centred stays with the IC-705 (Passband shift, below).
+- The KX2's protocol and hardware facts come only from Elecraft's and Digirig's published documents, listed below. No other rig-control program's source is read.
+
+### Reason
+
+- The Digirig and its KX cable are the owner's interface. Its serial port carries CAT to the KX2's ACC jack, and its sound card the audio to the PHONES and MIC jacks.
+- `TX;` and `TQ;` give the same keying and confirmation as the IC-705's `1C 00`: RR73 knows when the radio transmits. Keying by the Digirig's RTS gives no confirmation and depends on MIC BTN (below).
+- One link keeps one set of safety paths and one set of tests.
+
+### Sources
+
+Downloaded on 16 October 2026. Page numbers are the printed numbers.
+
+| Document | Revision, date | Where | Used for |
+| --- | --- | --- | --- |
+| Elecraft K3S/K3/KX3/KX2 Programmer's Reference | Rev. G5, 20 February 2019 | elecraft.com, KX2 manuals | Command format, `?;`, response time, auto-info, every command below, the KX2's menu numbers |
+| Elecraft KX2 Owner's Manual | Rev. B2, 22 March 2023 | elecraft.com, KX2 manuals | Jacks and pinouts, MENU entries and defaults, data modes, VOX, specifications |
+| Elecraft KX Digirig Cable Set (product page and its wiring diagram) | Image of January 2022 | digirig.net | The KX cable's wiring: serial plug, PHONES plug, MIC plug with PTT |
+| Digirig Mobile Rev 1.9 | 19 April 2022, updated 29 September 2023 | digirig.net | The PTT switch, the RS-232 configuration |
+| Digirig Mobile 1.9 schematic | Rev 1.9 | digirig.net | The PTT transistors on RTS, DTR unconnected |
+| Getting Started with Digirig Mobile | 24 August 2022, updated 30 August 2024 | digirig.net | PTT by RTS, the Windows device names |
+| Selecting Digirig Mobile Serial Configuration | 22 February 2024, updated 5 September 2024 | digirig.net | The KX2 needs the RS-232 configuration |
+| Understanding Rig Control Options | 16 September 2021, updated 29 September 2023 | digirig.net | RS-232 levels, the PTT driver |
+| Troubleshooting Digital Modes | 30 November 2021, updated 25 March 2025 | digirig.net | RTS used for flow control causes unwanted transmission |
+| Digirig Mobile (product page) | Revision 1.11 listing | digirig.net | The PTT switch on RTS in the current revision |
+
+### Connection
+
+- CAT goes through the KX2's 3.5 mm ACC jack: tip RX Data, ring 1 TX Data, ring 2 Key Out, sleeve ground (Owner's Manual p. 9). Its levels are those of RS-232 or USB "depending on selected adapter" (p. 69); Elecraft's own cables are KXUSB for USB and KXSER for RS-232 (p. 34).
+- The Digirig's serial socket connects to the ACC jack through the black plug of Digirig's KX cable: the Digirig's RIG_RXD to the tip, RIG_TXD to the ring, ground to the sleeve; its 3.3 V pin is not connected (the cable's wiring diagram). A 3-circuit plug in the ACC jack shorts Key Out to ground, which does no damage (Owner's Manual p. 9).
+- The cable "requires Digirig Mobile Revision 1.6 or later preconfigured for RS-232" (KX cable product page); Digirig gives the KX2 the RS-232 configuration, lines between −12 V and +12 V (Selecting Digirig Mobile Serial Configuration; Digirig Mobile Rev 1.9). A Digirig left at its default logic levels does not talk to the KX2.
+- Windows lists the Digirig as "Silicon Labs CP210x USB to UART Bridge (COMx)" and "USB PnP Sound Device" or "USB audio device" (Getting Started with Digirig Mobile; Troubleshooting Digital Modes). The Silicon Labs driver may be needed (Getting Started). Rig control says to choose the Digirig's CP210x serial port. Unverified: the name Chromium's chooser gives it.
+
+### Port settings
+
+- Baud rate: MENU › RS232, "the RS232 (or USB) communications rate", default 4800 (Owner's Manual p. 49); the rates are 4800, 9600, 19200 and 38400 (`BR`, Programmer's Reference p. 8). Rig control's Baud rate offers those four, 4800 by default, so a KX2 as delivered needs no menu change. A new rate closes the port and opens it again, PTT off confirmed first. RR73 never sends `BR`.
+- 8 data bits, no parity, 1 stop bit, no flow control (`kx2Port` in `lib/cat/serial.ts`). Elecraft's documents give the rate only. Unverified.
+- Chromium on Windows asserts DTR and RTS while it opens a port (Port settings, above). RR73 lowers both as soon as `open()` resolves, before any write, as for the IC-705, and closes the port if it cannot. Wait 100 ms and drop the input, as above.
+
+### The Digirig's PTT
+
+- The Digirig Mobile has "an open-collector BJT transistor shorting PTT line to the ground when RTS signal of the serial port is activated" (Digirig Mobile Rev 1.9). On the schematic the CP2102N's RTS pin drives Q1, which drives Q2 to ground the PTT line; DTR is not connected (Digirig Mobile 1.9 schematic). Since revision 1.6 the PTT line is on ring 2 of the audio socket, whatever the serial configuration (Rev 1.9 page; Understanding Rig Control Options), and the revision 1.11 listing still has the PTT switch on RTS (product page).
+- Digirig's KX cable takes that PTT line to the ring of the red MIC plug, with the Digirig's audio output on its tip (the cable's wiring diagram). In the KX2's MIC jack the ring is Ring 1, "PTT/UP/DN" (Owner's Manual p. 8). MENU › MIC BTN decides whether the KX2 reads it: default PTT UP.DN; OFF for a mic without a KX2-compatible PTT (p. 48). The ACC jack has no PTT input (p. 9).
+- So with Digirig's KX cable and MIC BTN at its default, RTS asserted grounds the KX2's PTT line. Elecraft's documents do not state the line's active level; Digirig wires the cable for PTT, and says a PTT line is "typically pulled up ... and a button, relay or an electronic switch shorts it to ground to initiate the transmit" (Understanding Rig Control Options). RR73 takes it as keying. Digirig's own warning: RTS used for handshake or flow control "will cause unwanted transmission" (Troubleshooting Digital Modes).
+- Verdict: the hazard is real in the owner's likely setup. Chromium raises RTS in `open()`, so the KX2 may transmit from then until RR73 lowers RTS, on every Connect radio, every reopen when the app opens, and every baud rate change. RR73 lowers DTR and RTS before any write, as for the IC-705's USB SEND, and refuses to go on if it cannot. Web Serial cannot close the gap. Not measured on a device.
+- What the operator does: set MENU › MIC BTN to OFF before the first Connect radio (First session, below). The KX2 then ignores the MIC plug's ring, RTS keys nothing, and RR73 keys by `TX;` or the KX2 by VOX. Rig control reads MIC BTN and says so while it reads PTT.
+- RR73 does not refuse to transmit while MIC BTN reads PTT, unlike USB SEND on the IC-705. The IC-705 refusal covers a line level Icom does not document; Digirig documents the level (RTS asserted keys), and RR73 holds RTS de-asserted, which keys nothing.
+
+### Commands
+
+| Purpose | Sent | Answer | Programmer's Reference |
+| --- | --- | --- | --- |
+| Read VFO A | `FA;` | `FA` and 11 digits, Hz | p. 11 |
+| Set VFO A | `FA00014074000;FA;` | as the read | p. 11 |
+| Read the mode | `MD;` | `MD` and a digit: 1 LSB, 2 USB, 3 CW, 4 FM, 5 AM, 6 DATA, 7 CW-REV, 9 DATA-REV | p. 16 |
+| Set the mode | `MD6;MD;` | as the read | p. 16 |
+| Read the data sub-mode | `DT;` | `DT` and a digit: 0 DATA A, 1 AFSK A, 2 FSK D, 3 PSK D | p. 11 |
+| Set the data sub-mode | `DT0;DT;` | as the read | p. 11 |
+| Transmit | `TX;TQ;` | `TQ1;` | p. 28, p. 27 |
+| Receive | `RX;TQ;` | `TQ0;` | p. 23, p. 27 |
+| Read transmit or receive | `TQ;` | `TQ0;` receive, `TQ1;` transmit | p. 27 |
+| Read the option modules and product | `OM;` | `OM`, a space, 12 characters, the last two 01 on a KX2 | p. 21 |
+| Read VOX in the present mode | `VX;` | `VX0;`, `VX1;` | p. 28 |
+| Read the menu entry shown | `MN;` | `MN255;` with no menu | p. 17 |
+| Read MIC BTN | `MN082;MP;MN255;` | `MP` and 3 digits: bit 0 PTT, bit 2 UP/DN | pp. 17, 19, 20 |
+| General information, by itself with auto-info | none | `IF`, 11 frequency digits, ..., the transmit flag and the mode at characters 27 and 28 | p. 14, p. 4 |
+
+- A command is 2 or 3 letters, optional data and a semicolon; a read is the letters alone, and its answer has the set's format (p. 3). Answers are upper case (p. 3).
+- A set has no answer of its own. RR73 sends each set with the read of the same command, and the read-back decides: equal to the set, the set is taken; anything else, refused (`accepted_by` in `elecraft.rs`). VFO A counts as taken to 10 Hz: "The Hz digit is ignored if the K3 is not in FINE mode" (p. 11). The read-back also covers a set the radio carries out differently: a frequency outside its ranges moves the KX2 to the nearest amateur band (p. 11).
+- `?;`: "If a command cannot respond due to such a condition [a busy state, such as transmit, or a limited-access state], the K3 will return ?;" (p. 3). It carries no command, as NG carries none, and it may answer the set of a set and its read, with the read's answer after it. RR73 takes `?;` as the answer to the oldest request in flight, refused, and starts the 250 ms drain: what arrives in it is dropped.
+- `TQ1` also covers TX TEST and the radio armed to transmit (p. 27). `TX` "is ignored" in FSK D and PSK D (p. 28): in those sub-modes PTT on fails (Transmit, below).
+- `DT` is valid only in DATA (p. 11); RR73 reads it every 5 s with the mode and uses it only while `MD` reads 6 or 9.
+- `OM` names the product (p. 21). The KX2's menu numbers (Table 6A, p. 19) differ from the KX3's and the K3's, so RR73 reads a menu entry only after `OM` reads 01.
+- `MN` opens a menu entry and `MN255` leaves the menu (p. 17). RR73 reads `MN;` first and reads MIC BTN only while it says 255: never while the operator has a menu entry open. A read the operator interrupts leaves the radio in the menu.
+- RR73 never sends `AI`. With MENU › AUTO INF at ANT CTRL the KX2 sends `IF` by itself (Owner's Manual pp. 35 and 44); RR73 reads its frequency and mode as transceive. It never takes the `IF` transmit flag as confirming receive: only `TQ` does. On a band change the radio sends `IF`, `FA`, `FB`, `FR`, `FT` and more by itself (p. 11, note 7); `FA` among them may answer the frequency set, with the same frequency.
+
+### The link
+
+- Response time: "typically ... less than 10 milliseconds. General worst-case latency is around 100 ms, except for commands that change bands, which can take up to 500 ms" (p. 3); "Band changes typically take 0.5 seconds; all command handling is deferred until this process is complete" (p. 11). Requests wait 500 ms as for the IC-705, and a frequency set 1 s (`KX2_BAND_CHANGE_MS`). Unverified on a device.
+- At 4800 baud, `FA;` and its answer are 17 characters, 35 ms on the wire; `TX;TQ;` and `TQ1;` 10, 21 ms.
+- Polling: `FA;` every 1 s; `MD;`, `DT;` and `VX;` every 5 s. While RR73 holds PTT on, `TQ;` every 1 s and nothing else, as for the IC-705. The reference says polling during transmit should not be used unless necessary, and that fast polling (under 100 ms) should be tested (p. 3): the 1 s read of transmit is the confirmation that the radio is still keyed and still answers, and the KX2 answers `TQ` while it transmits (p. 3 points to `TQ` for that).
+- Bytes that are not answers (control characters, bytes above 7E, text that does not start with a letter, 64 bytes without a semicolon) count as noise. A port at another baud rate gives noise only, and Rig control says to match Baud rate to MENU › RS232 and check that the Digirig is set for RS-232.
+
+### The dial
+
+- The band sheet sets VFO A, then `MD6` and `DT0`: DATA A, the KX2's mode for a computer's audio, "Upper sideband is the default" (Owner's Manual p. 28). The frequency goes first so the mode applies on the new band (Programmer's Reference p. 5, note 2). Each set is read back; the first refusal stops the rest. RR73 reads `TQ` first and sets nothing while it says transmit.
+- DATA A makes DATA the mode and DATA A the sub-mode. `MD6` selects "the data sub-mode that was last in effect on the present band" (p. 16), so `DT0` follows it.
+- In DATA-REV, or with MENU › ALT MD at ALT, DATA A goes out on LSB (Owner's Manual p. 43): Rig control and the band sheet show "DATA A REV" and the band sheet says to set DATA A.
+- Rig control and Operate show the mode as the KX2 names it: DATA A, AFSK A, FSK D, PSK D, USB.
+- QSOs log VFO A plus the Tx audio frequency, as for the IC-705. Unverified: that VFO A in DATA A is the suppressed carrier, so VFO A plus the audio is the RF. The Owner's Manual says to refer to the data software's manual "to determine how to set up the KX2's VFO for accurate frequency display" (p. 28), and in AFSK A the VFO shows the mark frequency (p. 28).
+
+### Transmit
+
+With Key the radio with CAT off, the KX2 keys by VOX, as without rig control: VOX in audio data modes "starts transmit when a computer connected to the mic jack outputs an audio signal" (MENU › VOX MD, Owner's Manual p. 53; default OFF in voice and audio data). VOX needs an external audio source in the MIC jack (pp. 20 and 53), as the Digirig is. Rig control reads `VX` and says when VOX is off in DATA with Key the radio with CAT off: nothing would key the radio then.
+
+With it on:
+
+1. At the pre-roll, 500 ms before the audio, `TX;TQ;`. `TQ1` is the KX2's OK. A `TQ0` may come while the radio switches over: RR73 reads `TQ;` again, 50 ms apart (`PTT_READ_MS`), until `TQ1` or 300 ms after `TX;`.
+2. The audio starts 100 ms or more after `TQ1`, as for the IC-705.
+3. `TQ0` for 300 ms, or `?;`: PTT on failed ("Radio refused PTT"), `RX;TQ;` at once, confirmed. No answer within 300 ms: "Radio did not answer PTT", the same.
+4. PTT off: `RX;TQ;`. `TQ0` takes it; `TQ1` or no answer, `RX;TQ;` again, 100 ms apart, 4 times at most, then a `TQ;` that must say receive. Until a read says receive the radio counts as keyed, as for the IC-705: the status line, the badge, Tx refused, and `RX;` again every 1 s while `TQ` says transmit.
+
+Measured with the fake KX2 (5 ms answers) in headless Chromium on 2026-10-16 (`e2e/rig-kx2-tx.spec.ts`, on the audio clock): a CQ started 1 ms early against slot + 0.5 s, with `TX;` 498 ms before its audio and `RX;` 133 ms after it.
+
+Unverified: the time from `TX;` to RF. MENU › TX DLY sets the "delay in milliseconds between key-down and RF output", 5 ms at NOR and up to 20 ms (Owner's Manual pp. 51 and 52). The 100 ms after `TQ1` is a starting value to measure.
+
+### Test keying
+
+As for the IC-705: 1 s on `TX;`, a `TQ;` while keyed, `RX;`, and the result once PTT off is confirmed or not. The KX2's answers:
+
+- "Keyed and released at 13:14:30 UTC."
+- "The KX2 did not key on TX. PTT off was sent and confirmed. It ignores TX in FSK D and PSK D: choose a band to set DATA A." (`TX`, p. 28.)
+- "The KX2 keyed, then returned to receive. Check its screen for a warning, such as high SWR or temperature." The KX2 drops out of transmit by itself at a high PA temperature or a load it cannot drive (Owner's Manual p. 56).
+- "No reply to PTT from the KX2 within 0.3 s. PTT off was sent and confirmed.", "No reply from the KX2 to PTT on or off." and "Keyed. PTT off was not confirmed." as for the IC-705.
+
+### Safety paths
+
+Each path of the IC-705's table holds for the KX2. Their tests against the simulated KX2 (`rr73_cat::sim_kx2`, `CatKx2SimForTests`) and the fake KX2 in the page (`e2e/fake-kx2.ts`):
+
+| Path | What RR73 does | Tests |
+| --- | --- | --- |
+| The port opens | DTR and RTS low before any write: the Digirig's PTT goes off; the port closes again if they cannot be lowered; 100 ms wait, input dropped | `cat-kx2.test.ts` (the simulated KX2 keyed by RTS through MIC BTN at open, unkeyed by the lines going low; MIC BTN OFF keys nothing; lines that fail), `rig-kx2.spec.ts` |
+| PTT on | `TX;TQ;` confirmed by `TQ1`; `TQ0` read again 50 ms apart until 300 ms | `radio-kx2.test.ts` |
+| PTT on fails: `TQ0` for 300 ms (FSK D), `?;`, or no answer | No audio; `RX;TQ;` at once, confirmed; a `?;` or a lost answer starts the drain | `radio-kx2.test.ts`, `cat-kx2.test.ts` (Test keying in FSK D) |
+| PTT off | `RX;TQ;` until `TQ0`, 100 ms apart, 4 times at most, then a `TQ;` that must say receive | `radio-kx2.test.ts`, `cat-kx2.test.ts` |
+| PTT off unconfirmed | Status line, badge, Tx refused; `TQ;` every 1 s and `RX;` again while it says transmit | `radio-kx2.test.ts`, `cat-kx2.test.ts`, `rig-kx2.spec.ts` |
+| A late answer | `?;`, and a request that goes unanswered, start the 250 ms drain; answers in it are dropped | `radio-kx2.test.ts` (`?;` followed by another dial) |
+| PTT and the queue | `TX;` and `RX;` go ahead of queued polls; while keyed only `TQ;` is read | `radio-kx2.test.ts` |
+| Dial and mode sets while keyed | Refused while RR73 may hold PTT and while `TQ` says transmit (the radio's own XMIT); the simulated KX2 counts sets that arrive while it transmits, and the tests expect none | `radio-kx2.test.ts`, `cat-kx2.test.ts`, `rig-kx2-tx.spec.ts` |
+| Halt, and the page going | `RX;` at once | `cat-kx2.test.ts`, `rig-kx2-tx.spec.ts` (Halt during a CQ: `RX;` within 50 ms) |
+| End of a transmission | `RX;` the output latency and 100 ms after the audio, confirmed | `cat-kx2.test.ts`, `rig-kx2-tx.spec.ts` |
+| The keying's limit | `RX;` at the limit, whatever else happens | `radio-kx2.test.ts` |
+| The radio says receive while keyed, or stops answering | Fault: `RX;`, Tx off | `radio-kx2.test.ts` |
+| The port is lost | Tx off, "Radio disconnected · Tx off"; the next connection in the page reads `TQ;` and sends `RX;` if it says transmit | `radio-kx2.test.ts`, `cat-kx2.test.ts` |
+| Disconnect radio while keyed | Halt, `RX;` confirmed before the port closes | `cat-kx2.test.ts` |
+| Key the radio with CAT | Off by default: no `TX;` with it off | `cat-kx2.test.ts`, `rig-kx2-tx.spec.ts` |
+| Connecting | No `TX;`, `RX;` or set; MIC BTN read only on a KX2 with no menu entry open | `radio-kx2.test.ts`, `cat-kx2.test.ts`, `rig-kx2.spec.ts` |
+| Another baud rate | The port closes, PTT off confirmed first, and opens again with the lines lowered | `cat-kx2.test.ts`, `rig-kx2.spec.ts` |
+| Choosing the other radio | Disconnects and forgets the port first: one radio's port never opens with the other's protocol | `cat-kx2.test.ts` |
+
+### Radio settings
+
+On connecting RR73 reads, and shows under Radio settings:
+
+| Row | Read | Suits RR73 | Advice |
+| --- | --- | --- | --- |
+| Model | `OM` | KX2 (01) | Another product: RR73 reads no menu entry; check MIC BTN at the radio |
+| MIC BTN | `MN082;MP;MN255;` | OFF, or UP.DN without PTT | PTT on: set MENU › MIC BTN to OFF (The Digirig's PTT, above) |
+| VOX | `VX`, the present mode | In DATA: on, or any with Key the radio with CAT on | Off in DATA with Key the radio with CAT off: turn one of them on |
+
+A setting that goes unanswered is read again every 5 s; MIC BTN also waits for `OM` and for no menu entry open. RR73 sets none of them. The rest the operator checks in the first session.
+
+### First session
+
+As for the IC-705, in stages, with Key the radio with CAT off until stage 7.
+
+1. Before the first Connect radio, on the KX2: set MENU › MIC BTN to OFF (Owner's Manual p. 48). The Digirig keys the MIC jack's PTT while RTS is asserted, and Chromium asserts it while it opens the port. Check that the Digirig is configured for RS-232 (Selecting Digirig Mobile Serial Configuration) and that MENU › RS232 is the rate under Baud rate, 4800 by default (p. 49).
+2. Plug the Digirig's black serial plug into the ACC jack, the red plug into MIC and the green plug into PHONES (the KX cable's wiring diagram; Owner's Manual p. 28 for the audio). Close any other program that has the Digirig's port open.
+3. In Settings › Rig control choose Elecraft KX2, tap Connect radio and choose the Digirig's CP210x serial port. Check that the Dial row and Operate's top bar show the KX2's frequency and mode, and that Radio settings shows Model KX2 and MIC BTN OFF.
+4. Change band from the band sheet and check that the KX2 follows in DATA A. Turn the KX2's VFO A into another band and check that RR73 follows within about 1 s.
+5. Settings › Radio and audio: Input and Output to the Digirig's sound card ("USB PnP Sound Device" or "USB audio device"). Set PWR to 5 W or lower: "5.0 watts or lower is recommended in all data modes" (Owner's Manual p. 27). Into a dummy load, adjust the transmit level for "no more than 4 to 5 bars of ALC indication" (p. 29).
+6. Tap Test keying. The KX2 transmits for 1 s with no audio, and the screen says "Keyed and released at 13:14:30 UTC."
+7. Only then turn on Key the radio with CAT, and call CQ. Halt (or Esc) sends `RX;` at once. With it on, VOX can stay off.
+
+### Passband shift
+
+Keep Tx audio centred stays with the IC-705: the switch is not shown with the KX2 chosen, and `txShiftHz` gives 0. The shift centres the audio in a transmit passband whose edges the IC-705's documents give. Elecraft's documents give none for DATA A: the Owner's Manual says DATA A "disables compression and RX/TX EQ" (p. 28) and gives TX EQ, with bands up to 3.2 kHz, for voice modes only (pp. 50 and 52), and the specifications give no transmit audio response (pp. 69 and 70). Without edges there is nothing to centre in, and a shift would move the dial before every transmission for no measured gain. Open risk below.
+
+### Audio
+
+- Receive: the KX2's PHONES jack to the Digirig's input through the green plug (Owner's Manual p. 28: "Connect the KX2's PHONES jack to your computer's line-audio input"). Settings › Radio and audio › Input to the Digirig's sound card.
+- Transmit: the Digirig's output to the KX2's MIC jack through the red plug ("Connect your computer's line-audio output to the MIC jack", p. 28). In DATA A or AFSK A an external source must be in the MIC jack, which turns off the built-in mic (p. 63). Settings › Radio and audio › Output to the Digirig's sound card.
+- Digirig's audio input has a −20 dB attenuator option for a radio whose audio is too high (Digirig Mobile Rev 1.9); the Owner's Manual says an attenuator may be needed (p. 28).
+
+### Testing
+
+- `crates/rr73-cat/tests/elecraft_reference.rs`: commands and answers from the Programmer's Reference, its printed examples (`FA00014060000;` p. 11, `MD1;` p. 3, `OM A-F-------02;` p. 21) and the `IF` layout (p. 14), with pages.
+- `crates/rr73-cat/tests/sim_kx2.rs`: each request against the simulated KX2: reads, sets and their read-back, `TX` in FSK D and PSK D, the Digirig's PTT on the MIC jack with MIC BTN and RTS, the menu read, band-change reports, auto-info, and sets while transmitting.
+- `crates/rr73-cat/tests/elecraft_fuzz.rs`: random bytes in any chunks against the parser, answer-shaped input, frequencies through the format, random requests answered once by the simulator in any state, and random bytes to the simulator.
+- `crates/rr73-wasm/src/cat_kx2.rs` and `web/src/lib/cat/wasm.test.ts`: the JSON through the WebAssembly exports.
+- `web/src/lib/cat/radio-kx2.test.ts`: `CatRadio` with the KX2's traits against the simulator on a fake clock: the reads on connecting, polling, auto-info, the menu read and its guard, PTT on and its re-reads, the failures of PTT on, PTT off and its retries, the drain after `?;`, the queue, sets refused while keyed, the band change, a refused dial, noise, the lost port and the recovery, the keying limit and a fault.
+- `web/src/lib/state/cat-kx2.test.ts` (jsdom): Settings › Rig control with the KX2: the lines and the Digirig's PTT at open, the baud rate, choosing the other radio, the dial QSOs log, the band sheet's DATA A, the switch off and on, Halt, page hide, the lost port, Disconnect while keyed, PTT off unconfirmed, and Test keying's answers.
+- `web/e2e/rig-kx2.spec.ts` (Playwright `chromium`) with `e2e/fake-kx2.ts`: choosing the KX2, connecting, the settings read, the band sheet, the dial followed, the baud rate, reopening after a reload, and Test keying with a radio that answers and one that keeps transmitting.
+- `web/e2e/rig-kx2-tx.spec.ts` (Playwright `tx-cq`): `TX;` and `RX;` timed against a CQ's audio on the audio clock, and Halt. It skips, and fails on GitHub Actions, when the audio clock falls behind, as `rig-tx.spec.ts` does.
+
+The simulator's choices where Elecraft's documents are silent are listed in `crates/rr73-cat/src/sim_kx2.rs`.
+
+### Alternatives rejected
+
+- Keying by the Digirig's RTS (PTT by RTS): no confirmation, it depends on MIC BTN, and the line state at open is Chromium's. `TX;` reads back with `TQ`.
+- Auto-info (`AI1`, `AI2`) for the dial: it changes how the radio talks to every program after RR73. RR73 polls, and reads `IF` when the operator has AUTO INF on.
+- Reading the KX2's other menu settings (VOX MD, VOX GN, TX GATE): `MP` reads only the entries marked in Table 6A (p. 19), VOX MD among the unmarked; each read also opens the entry on the radio. `VX` gives VOX in the present mode without the menu.
+- Finding the baud rate by trying each: every open raises RTS, which keys the radio through the MIC jack with MIC BTN on PTT.
+- The passband shift for the KX2 (Passband shift, above).
+
+### Open risks
+
+Not tested on a device: everything above ran against the simulated KX2 and a fake KX2. The first session checks each stage on the radio.
+
+- Unverified: that RTS asserted keys the KX2 through Digirig's KX cable with MIC BTN at PTT, and for how long Chromium leaves RTS asserted before `setSignals` lowers it. Elecraft's documents do not give the MIC jack's PTT level. MIC BTN OFF leaves the line out of keying either way.
+- Unverified: whether Chromium, the CP210x driver or Windows asserts RTS at other times: when the port closes, when the tablet sleeps, when the USB device resets. RR73 cannot hold the line then. MIC BTN OFF covers these too.
+- The KX2 has no transmit time-out in Elecraft's documents (the Owner's Manual and the Programmer's Reference were searched): after a lost port or a crash while keyed by `TX;`, it stays in transmit until RR73 sends `RX;` on the next connection in the same page, or the operator unkeys it or turns it off. With the audio stopped, DATA A transmits the suppressed carrier, more than 50 dB down (Owner's Manual p. 70). Unverified: whether the KX2 leaves transmit by itself when its ACC port goes quiet.
+- Unverified: the character format of the ACC port (8N1 assumed), and Web Serial through the Silicon Labs driver at 4800 baud.
+- Unverified: whether `TQ` says transmit at once after `TX;`. RR73 reads it again until 300 ms; a radio slower than that gets "Radio did not answer PTT" or "Radio refused PTT" on every transmission.
+- Unverified: whether `FA`, `MD` and `DT` sets answer `?;` while the radio transmits, and which answers arrive by themselves on a band change with auto-info off. RR73 sends no set while it may transmit, and reads answers it does not use as unknown.
+- Unverified: that VFO A in DATA A is the suppressed carrier (The dial, above). Were it offset, QSOs would log the RF off by that offset. The first session's stage 4 shows the dial; comparing decodes with another station's reports checks it.
+- Unverified: the KX2's transmit passband in DATA A. Below about 300 Hz or above about 2700 Hz the audio may be attenuated; RR73 does not know. Measure it before offering Keep Tx audio centred for the KX2.
+- Unverified: what MIC BIAS (default ON, Owner's Manual p. 48) does to the Digirig's output on the MIC jack's tip. Digirig puts capacitors in its audio input and output (Understanding Rig Control Options).
+- Unverified: the name Chromium's port chooser gives the Digirig's serial port, and its USB IDs.
+- `MN082;MP;MN255;` opens MIC BTN in the radio's menu for a moment on connecting. A link lost between `MN082` and `MN255` leaves the radio in its menu; the operator leaves it with MENU.
