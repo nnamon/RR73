@@ -11,10 +11,17 @@
  *
  * Transmitting needs running audio, a callsign and a grid; otherwise the request is refused.
  * The scheduler plays through the output only while it transmits.
+ *
+ * With a keyer (rig control keying the radio, lib/tx/keyer.ts), the radio is keyed at the
+ * pre-roll, 0.5 s before the audio. The audio is handed to the graph only after the radio's OK,
+ * to start PTT_SETTLE_MS or more after it; without an OK the transmission is refused. The end of
+ * the audio releases PTT after PTT_TAIL_MS; Halt, cancel and anything that drops a transmission
+ * before it plays release it at once.
  */
 
 import type { SlotMode as Mode } from '../clock/slots';
 import { LATE_S, SHIFT_LIMIT_S } from '../qso/sequencer';
+import { PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TAIL_MS, PTT_TIMEOUT_MS, keyFailedText, type Keyer, type Keying } from './keyer';
 
 /** Where a transmission starts in its slot, s. */
 export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
@@ -80,19 +87,22 @@ export type TxReport =
 
 /** Earliest start after now, s: room for the audio thread to pick the node up. */
 const MIN_LEAD_S = 0.02;
-/** How long before its start a transmission goes to the audio graph, ms. */
-export const PRE_ROLL_MS = 500;
+/** How long before its start a transmission goes to the audio graph, and keys the radio with a keyer, ms. */
+export const PRE_ROLL_MS = PTT_LEAD_MS;
 
 export class TxScheduler {
   private readonly audio: () => TxAudio | null;
   private readonly encoder: Encoder;
   private readonly gate: () => string | null;
   private readonly report: (r: TxReport) => void;
+  private readonly keyer: () => Keyer | null;
   private readonly timer: (fn: () => void, ms: number) => unknown;
   private readonly clear: (h: unknown) => void;
   /** Bumped by cancel and halt so a synthesis still running is dropped when it finishes. */
   private generation = 0;
-  private playing: { slotStartMs: number; text: string; when: number; skippedS: number; handle: Playing; started: boolean; startTimer: unknown } | null = null;
+  private playing: { slotStartMs: number; text: string; when: number; skippedS: number; handle: Playing; started: boolean; startTimer: unknown; keying: Keying | null } | null = null;
+  /** PTT on for a transmission not yet handed to the audio graph. */
+  private keying: Keying | null = null;
   /** The wait before a transmission goes to the audio graph; resolved early by cancel and halt. */
   private preroll: { timer: unknown; release: () => void } | null = null;
 
@@ -102,6 +112,8 @@ export class TxScheduler {
     /** Why transmitting is not allowed now (audio stopped, no callsign), or null. */
     gate: () => string | null;
     report: (r: TxReport) => void;
+    /** The radio's PTT, or null to play the audio alone (VOX). */
+    keyer?: () => Keyer | null;
     timer?: (fn: () => void, ms: number) => unknown;
     clear?: (h: unknown) => void;
   }) {
@@ -109,17 +121,19 @@ export class TxScheduler {
     this.encoder = opts.encoder;
     this.gate = opts.gate;
     this.report = opts.report;
+    this.keyer = opts.keyer ?? (() => null);
     this.timer = opts.timer ?? ((fn, ms) => setTimeout(fn, ms));
     this.clear = opts.clear ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   }
 
   /** True while a transmission is waiting, scheduled or playing. */
   get busy(): boolean {
-    return this.playing !== null || this.preroll !== null;
+    return this.playing !== null || this.preroll !== null || this.keying !== null;
   }
 
   async schedule(req: TxRequest): Promise<void> {
     const gen = ++this.generation;
+    this.dropKeying();
     this.stopPending();
     const why = this.gate();
     const audio = this.audio();
@@ -146,10 +160,12 @@ export class TxScheduler {
       if (gen !== this.generation) return;
     }
     // Checked again: audio may have stopped in the meantime.
-    const now = this.audio();
-    const target = now?.toContextTime(req.slotStartMs + req.startOffsetS * 1000) ?? null;
+    let now = this.audio();
+    const startUtc = req.slotStartMs + req.startOffsetS * 1000;
+    let target = now?.toContextTime(startUtc) ?? null;
+    const refuse = (reason: string | null) => this.report({ type: 'refused', slotStartMs: req.slotStartMs, text: req.text, reason: reason ?? 'Audio is not running.' });
     if (!now || target === null || this.gate()) {
-      this.report({ type: 'refused', slotStartMs: req.slotStartMs, text: req.text, reason: this.gate() ?? 'Audio is not running.' });
+      refuse(this.gate());
       return;
     }
     // A transmission already on air keeps the output: this one waits for another slot.
@@ -158,17 +174,46 @@ export class TxScheduler {
       this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'busy' });
       return;
     }
-    const earliest = now.currentTime + MIN_LEAD_S;
+    let earliestS = MIN_LEAD_S;
+    const keyer = this.keyer();
+    let keying: Keying | null = null;
+    if (keyer) {
+      // PTT goes off by itself once the transmission should long be over.
+      const maxMs = Math.max(0, (target - now.currentTime) * 1000) + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + PTT_TAIL_MS + 1000;
+      keying = keyer.key(maxMs);
+      this.keying = keying;
+      const answer = await keying.result;
+      if (gen !== this.generation || this.keying !== keying) {
+        keying.release();
+        return;
+      }
+      this.keying = null;
+      if (answer !== 'ok') {
+        keying.release();
+        refuse(keyFailedText(answer));
+        return;
+      }
+      now = this.audio();
+      target = now?.toContextTime(startUtc) ?? null;
+      if (!now || target === null || this.gate()) {
+        keying.release();
+        refuse(this.gate());
+        return;
+      }
+      earliestS = PTT_SETTLE_MS / 1000;
+    }
+    const earliest = now.currentTime + earliestS;
     const when = Math.max(target, earliest);
     const lateS = req.startOffsetS - NOMINAL_S[req.mode] + (when - target);
     if (lateS > LATE_LIMIT_S[req.mode] + 1e-3) {
+      keying?.release();
       this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'late' });
       return;
     }
     const skippedS = lateS > SHIFT_S[req.mode] + 1e-3 ? lateS : 0;
     const out = skippedS > 0 ? cutStart(samples, Math.round(skippedS * now.sampleRate), Math.round(CUT_FADE_S * now.sampleRate)) : samples;
     const handle = now.play(out, when, req.level);
-    const entry = { slotStartMs: req.slotStartMs, text: req.text, when, skippedS, handle, started: false, startTimer: null as unknown };
+    const entry = { slotStartMs: req.slotStartMs, text: req.text, when, skippedS, handle, started: false, startTimer: null as unknown, keying };
     this.playing = entry;
     const startUtcMs = now.toUtcMs(when) ?? req.slotStartMs + (req.startOffsetS + (when - target)) * 1000;
     entry.startTimer = this.timer(() => {
@@ -180,6 +225,7 @@ export class TxScheduler {
       if (this.playing !== entry) return;
       this.playing = null;
       this.clear(entry.startTimer);
+      entry.keying?.release(PTT_TAIL_MS);
       if (!entry.started) this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS), skippedS });
       this.report({ type: 'ended', slotStartMs: req.slotStartMs, text: req.text, complete: true });
     };
@@ -189,19 +235,22 @@ export class TxScheduler {
   cancel() {
     this.generation++;
     this.endPreroll();
+    this.dropKeying();
     this.stopPending();
   }
 
-  /** Stops everything at once, on air or not. */
+  /** Stops everything at once, on air or not, and releases PTT at once. */
   halt() {
     this.generation++;
     this.endPreroll();
+    this.dropKeying();
     const p = this.playing;
     if (!p) return;
     this.playing = null;
     this.clear(p.startTimer);
     p.handle.onended = null;
     p.handle.stop();
+    p.keying?.release();
     if (p.started || this.audible(p)) {
       if (!p.started) this.report({ type: 'started', slotStartMs: p.slotStartMs, text: p.text, startUtcMs: this.audio()?.toUtcMs(p.when) ?? Date.now(), lateS: 0, skippedS: p.skippedS });
       this.report({ type: 'ended', slotStartMs: p.slotStartMs, text: p.text, complete: false });
@@ -230,5 +279,13 @@ export class TxScheduler {
     this.clear(p.startTimer);
     p.handle.onended = null;
     p.handle.stop();
+    p.keying?.release();
+  }
+
+  /** Releases PTT held for a transmission still waiting for the radio's OK. */
+  private dropKeying() {
+    const k = this.keying;
+    this.keying = null;
+    k?.release();
   }
 }

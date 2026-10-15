@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRE_ROLL_MS, TxScheduler, cutStart, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
+import { PTT_SETTLE_MS, PTT_TAIL_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from './keyer';
 
 /** Lets promises and the scheduler's async steps run. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -49,8 +50,47 @@ class FakeClock implements TxAudio {
   }
 }
 
-function setup(gate: () => string | null = () => null, encoderDelay = 0) {
+/**
+ * A radio's PTT on the fake clock: it answers PTT on `answer` after `delayMs`, or never for
+ * `timeout`, as the radio link does after PTT_TIMEOUT_MS. `log` records PTT on and off with the
+ * UTC time, and `keyed` says whether PTT is on now.
+ */
+class FakeKeyer implements Keyer {
+  log: string[] = [];
+  keyed = false;
+  maxMs: number[] = [];
+  constructor(
+    private readonly clock: FakeClock,
+    public answer: KeyResult = 'ok',
+    public delayMs = 20,
+  ) {}
+  private utc() {
+    return this.clock.toUtcMs(this.clock.currentTime)! - T0;
+  }
+  key(maxMs: number): Keying {
+    this.keyed = true;
+    this.maxMs.push(maxMs);
+    this.log.push(`on@${this.utc()}`);
+    let released = false;
+    const result = new Promise<KeyResult>((resolve) => {
+      const wait = this.answer === 'timeout' ? PTT_TIMEOUT_MS : this.delayMs;
+      this.clock.timers.push({ at: this.clock.currentTime + wait / 1000, fn: () => resolve(this.answer) });
+    });
+    return {
+      result,
+      release: (tailMs = 0) => {
+        if (released) return;
+        released = true;
+        this.log.push(`off@${this.utc()}+${tailMs}`);
+        this.keyed = false;
+      },
+    };
+  }
+}
+
+function setup(gate: () => string | null = () => null, encoderDelay = 0, keyed?: { answer?: KeyResult; delayMs?: number }) {
   const clock = new FakeClock();
+  const keyer = keyed ? new FakeKeyer(clock, keyed.answer, keyed.delayMs) : null;
   const reports: TxReport[] = [];
   const texts: string[] = [];
   const encoder: Encoder = {
@@ -65,6 +105,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0) {
     encoder,
     gate,
     report: (r) => reports.push(r),
+    keyer: () => keyer,
     timer: (fn, ms) => {
       const t = { at: clock.currentTime + ms / 1000, fn };
       clock.timers.push(t);
@@ -75,7 +116,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0) {
       if (i >= 0) clock.timers.splice(i, 1);
     },
   });
-  return { clock, reports, texts, sched };
+  return { clock, reports, texts, sched, keyer: keyer! };
 }
 
 const req = (over: Partial<Parameters<TxScheduler['schedule']>[0]> = {}) => ({
@@ -328,3 +369,145 @@ describe('TxScheduler in WSPR', () => {
   });
 });
 
+
+describe('TxScheduler keying the radio', () => {
+  /** Runs the fake clock forward in steps so awaited answers and the timers after them run. */
+  async function runTo(clock: FakeClock, ms: number) {
+    const end = clock.toContextTime(ms)!;
+    for (;;) {
+      await settle();
+      const ends = clock.played.filter((p) => p.stoppedAt === null).map((p) => p.when + p.samples / clock.sampleRate);
+      const next = Math.min(end, ...clock.timers.map((t) => t.at), ...ends);
+      clock.advanceTo(clock.toUtcMs(Math.max(next, clock.currentTime))!);
+      await settle();
+      if (next >= end) return;
+    }
+  }
+
+  it('keys 0.5 s ahead, starts the audio on time at slot + 0.5 s, and releases PTT 0.1 s after the end', async () => {
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15000 - 10);
+    expect(keyer.log).toEqual([]);
+    expect(clock.played).toEqual([]);
+    await runTo(clock, T0 + 15100);
+    await done;
+    expect(keyer.log).toEqual([`on@${15000}`]);
+    expect(clock.played).toHaveLength(1);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 15500)!, 9);
+    // PTT stays off by itself after the slot at the latest.
+    expect(keyer.maxMs[0]).toBeGreaterThan(500 + 12_640);
+    expect(keyer.maxMs[0]).toBeLessThan(15_000);
+    await runTo(clock, T0 + 15000 + 13200);
+    expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    expect(keyer.log).toEqual([`on@${15000}`, `off@${15000 + 500 + 12_640}+${PTT_TAIL_MS}`]);
+  });
+
+  it('still starts on time when the OK takes the whole timeout', async () => {
+    const { clock, sched, keyer } = setup(() => null, 0, { delayMs: PTT_TIMEOUT_MS - 10 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15400);
+    await done;
+    expect(keyer.log).toEqual([`on@${15000}`]);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 15500)!, 9);
+    // The audio starts at least PTT_SETTLE_MS after the OK.
+    expect((clock.played[0].when - clock.toContextTime(T0 + 15000 + PTT_TIMEOUT_MS - 10)!) * 1000).toBeGreaterThanOrEqual(PTT_SETTLE_MS);
+  });
+
+  it('plays nothing and says so when the radio does not answer PTT, and releases it', async () => {
+    for (const [answer, text] of [
+      ['timeout', 'Radio did not answer PTT'],
+      ['ng', 'Radio refused PTT'],
+      ['closed', 'Radio not connected'],
+    ] as const) {
+      const { clock, reports, sched, keyer } = setup(() => null, 0, { answer });
+      clock.advanceTo(T0 + 3000);
+      const done = sched.schedule(req());
+      await runTo(clock, T0 + 15500);
+      await done;
+      expect(clock.played, answer).toEqual([]);
+      expect(reports, answer).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: text }]);
+      expect(keyer.keyed, answer).toBe(false);
+      expect(keyer.log.at(-1), answer).toMatch(/^off@\d+\+0$/);
+    }
+  });
+
+  it('a late start keys at once and starts the audio 0.1 s after the OK', async () => {
+    const { clock, sched, keyer } = setup(() => null, 0, { delayMs: 30 });
+    clock.advanceTo(T0 + 15000 + 1000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15000 + 1100);
+    await done;
+    expect(keyer.log).toEqual([`on@${16000}`]);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 16030)! + PTT_SETTLE_MS / 1000, 2);
+  });
+
+  it('Halt while waiting for the OK releases PTT at once and plays nothing', async () => {
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 200 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15050);
+    expect(keyer.keyed).toBe(true);
+    expect(sched.busy).toBe(true);
+    sched.halt();
+    expect(keyer.keyed).toBe(false);
+    expect(keyer.log).toEqual([`on@${15000}`, `off@${15050}+0`]);
+    await runTo(clock, T0 + 16000);
+    await done;
+    expect(clock.played).toEqual([]);
+    expect(reports).toEqual([]);
+    expect(sched.busy).toBe(false);
+  });
+
+  it('Halt on air stops the audio and releases PTT at once', async () => {
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 18000);
+    await done;
+    sched.halt();
+    expect(keyer.log).toEqual([`on@${15000}`, `off@${18000}+0`]);
+    expect(reports.at(-1)).toEqual({ type: 'ended', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', complete: false });
+  });
+
+  it('cancel and a replacement before the start release PTT', async () => {
+    const { clock, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15100);
+    await done;
+    sched.cancel();
+    expect(keyer.keyed).toBe(false);
+    expect(clock.played[0].stoppedAt).not.toBeNull();
+    const again = sched.schedule(req({ slotStartMs: T0 + 45000 }));
+    await runTo(clock, T0 + 45100);
+    await again;
+    expect(keyer.keyed).toBe(true);
+    // A replacement for the same slot stops the first before it starts, and keys again for itself.
+    const replaced = sched.schedule(req({ slotStartMs: T0 + 45000, text: 'JA1KXM 9V1NE R-10' }));
+    await runTo(clock, T0 + 45200);
+    await replaced;
+    expect(keyer.log).toEqual([`on@${15000}`, `off@${15100}+0`, `on@${45000}`, `off@${45100}+0`, `on@${45100}`]);
+    expect(keyer.keyed).toBe(true);
+    expect(clock.played.at(-1)!.when).toBeCloseTo(clock.toContextTime(T0 + 45500)!, 9);
+  });
+
+  it('keys nothing without a keyer', async () => {
+    const { clock, sched } = setup();
+    clock.advanceTo(T0 + 15100);
+    await sched.schedule(req());
+    expect(clock.played).toHaveLength(1);
+  });
+
+  it('keys WSPR 0.5 s before its audio at slot + 1 s', async () => {
+    const { clock, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    clock.advanceTo(T0 + 110_000);
+    const done = sched.schedule(req({ text: '9V1NE OJ11 37', mode: 'WSPR', slotStartMs: T0 + 120_000, startOffsetS: 1 }));
+    await runTo(clock, T0 + 120_600);
+    await done;
+    expect(keyer.log).toEqual([`on@${120_500}`]);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 121_000)!, 9);
+  });
+});
