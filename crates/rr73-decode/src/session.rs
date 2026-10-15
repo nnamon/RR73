@@ -15,6 +15,7 @@
 use rr73_dsp::{SpectrogramConfig, SpectrogramPlan};
 use rr73_ft8::Mode;
 
+use crate::ap::{self, ApKind, Hypothesis};
 use crate::clock::Stopwatch;
 use crate::config::{DecoderConfig, SubtractKind};
 use crate::layout::FrameLayout;
@@ -141,6 +142,8 @@ pub struct DecodeSession {
     stats: DecodeStats,
     timings: StageTimings,
     stage_seconds: Vec<f64>,
+    /// A priori hypotheses from the context's QSO, built once per slot.
+    hyps: Vec<Hypothesis>,
 }
 
 impl std::fmt::Debug for DecodeSession {
@@ -188,6 +191,11 @@ impl DecodeSession {
         residual.clear();
         residual.extend_from_slice(audio.samples);
         let count = stages.len();
+        let hyps = ctx
+            .ap
+            .as_ref()
+            .map(|c| ap::hypotheses(audio.mode, c))
+            .unwrap_or_default();
         Self {
             layout,
             graph,
@@ -210,6 +218,7 @@ impl DecodeSession {
             stats: DecodeStats::default(),
             timings: StageTimings::default(),
             stage_seconds: vec![0.0; count],
+            hyps,
         }
     }
 
@@ -528,7 +537,13 @@ impl DecodeSession {
         let config = &stage.config;
         let pipeline = &stage.pipeline;
         let sp = &config.spectrogram;
-        let DecodeContext { hashes, ws } = &mut self.ctx;
+        let DecodeContext {
+            hashes,
+            ap: ap_ctx,
+            ws,
+        } = &mut self.ctx;
+        let hyps: &[Hypothesis] = if config.ap.enabled { &self.hyps } else { &[] };
+        let dx_hz = ap_ctx.as_ref().and_then(|c| c.dx_hz);
         let view = SymbolView {
             spec: &ws.spec,
             layout: self.layout,
@@ -554,33 +569,60 @@ impl DecodeSession {
 
             let sw = Stopwatch::start();
             stats.ldpc_attempts += 1;
-            let outcome = pipeline
+            let mut outcome = pipeline
                 .ldpc
                 .decode(self.graph, &ws.llr, &mut ws.ldpc, &mut ws.codeword);
             timings.ldpc_s += sw.elapsed_s();
-            if !outcome.converged {
-                continue;
-            }
-            stats.ldpc_converged += 1;
-            stats.osd_codewords += u32::from(outcome.osd);
-
-            let sw = Stopwatch::start();
-            let valid = match pipeline
-                .validator
-                .validate(self.layout.mode, &ws.codeword, &outcome, hashes)
-            {
-                Ok(v) => v,
-                Err(r) => {
-                    match r {
+            let mut valid = None;
+            if outcome.converged {
+                stats.ldpc_converged += 1;
+                stats.osd_codewords += u32::from(outcome.osd);
+                let sw = Stopwatch::start();
+                match pipeline
+                    .validator
+                    .validate(self.layout.mode, &ws.codeword, &outcome, hashes)
+                {
+                    Ok(v) => valid = Some(v),
+                    Err(r) => match r {
                         Rejection::Crc => stats.crc_failures += 1,
                         Rejection::ZeroPayload => stats.zero_payloads += 1,
                         Rejection::Unpack(_) => stats.unpack_failures += 1,
                         Rejection::Implausible => stats.implausible += 1,
-                    }
-                    timings.validate_s += sw.elapsed_s();
-                    continue;
+                    },
                 }
+                timings.validate_s += sw.elapsed_s();
+            }
+            // A candidate that did not decode is tried with what the QSO under way lets the
+            // decoder expect.
+            let mut found_by: Option<ApKind> = None;
+            if valid.is_none() && !hyps.is_empty() {
+                let sw = Stopwatch::start();
+                let near = dx_hz.is_some_and(|hz| (view.freq_hz(&cand) - hz).abs() <= config.ap.width_hz);
+                if let Some((v, o, kind)) = ap::try_hypotheses(
+                    hyps,
+                    &config.ap,
+                    near,
+                    &ws.llr,
+                    &mut ws.ap_llr,
+                    &mut ws.codeword,
+                    self.graph,
+                    pipeline.ldpc.as_ref(),
+                    config.ldpc.max_iterations,
+                    &mut ws.ldpc,
+                    pipeline.validator.as_ref(),
+                    self.layout.mode,
+                    hashes,
+                ) {
+                    valid = Some(v);
+                    outcome = o;
+                    found_by = Some(kind);
+                }
+                timings.ldpc_s += sw.elapsed_s();
+            }
+            let Some(valid) = valid else {
+                continue;
             };
+            let sw = Stopwatch::start();
             if pipeline.validator.is_duplicate(&valid, &ws.seen) {
                 stats.duplicates += 1;
                 timings.validate_s += sw.elapsed_s();
@@ -588,14 +630,18 @@ impl DecodeSession {
             }
             let tones = rr73_ft8::tones::from_payload(self.layout.mode, &valid.payload);
             let snr_db = g.snr.estimate(&view, &cand, &tones, &ws.live, &mut ws.noise);
-            // An OSD codeword claiming an SNR below what decoding reaches is noise.
-            if outcome.osd && snr_db < config.validate.osd_min_snr_db {
+            // An OSD codeword claiming an SNR below what decoding reaches is noise; an AP decode
+            // has its own floor.
+            if (found_by.is_none() && outcome.osd && snr_db < config.validate.osd_min_snr_db)
+                || (found_by.is_some() && snr_db < config.ap.min_snr_db)
+            {
                 stats.implausible += 1;
                 timings.validate_s += sw.elapsed_s();
                 continue;
             }
             ws.seen.push(valid.payload);
             hashes.learn(&valid.message);
+            stats.ap_decodes += u32::from(found_by.is_some());
             let decode = Decode {
                 text: valid.text,
                 message: valid.message,
@@ -609,6 +655,7 @@ impl DecodeSession {
                 score: cand.score,
                 osd: outcome.osd,
                 osd_distance: outcome.distance,
+                ap: found_by,
             };
             found.push(decode.clone());
             self.decodes.push(decode);

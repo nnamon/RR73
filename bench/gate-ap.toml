@@ -1,0 +1,15 @@
+# Thresholds for the a priori decoding gate: subtract-3-osd2 on the ap-sweep set (10 slots per
+# SNR step and subset, 300 noise slots), rendered in memory, against
+# bench/subtract-3-osd2-ap.json. docs/bench.md describes every check.
+#
+# The baseline was recorded on aarch64 and CI runs on x86_64. FFT rounding differs between
+# the two, which can flip a decode at the margin: the signal sets allow 2 of their 130
+# messages. False decodes on noise may not rise at all.
+
+required_sets = ["synthetic/ap-sweep/qso", "synthetic/ap-sweep/callers", "synthetic/ap-sweep/noise"]
+
+[default]
+max_recall_drop = 0.016
+max_false_increase = 0
+max_snr50_rise_db = 0.5
+max_time_ratio = 0

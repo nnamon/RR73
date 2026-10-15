@@ -14,6 +14,18 @@ export interface Decode {
   snr_db: number;
 }
 
+/**
+ * The QSO under way, for a priori decoding (crates/rr73-decode/src/ap.rs): the operator's
+ * callsign, and the other station's callsign and audio frequency during a QSO ('' and 0 when
+ * there is none).
+ */
+export interface QsoContext {
+  myCall: string;
+  dxCall: string;
+  /** Audio frequency of the other station's lowest tone, Hz; 0 when unknown. */
+  dxHz: number;
+}
+
 /** One slot of audio for a decoder. */
 export interface SlotAudio {
   mode: Mode;
@@ -21,6 +33,8 @@ export interface SlotAudio {
   startUtcMs: number;
   /** Exactly one slot at 12000 Hz. */
   samples: Float32Array;
+  /** The QSO under way when the slot ended; a priori decoding is off without it. */
+  qso?: QsoContext;
 }
 
 /** Where the decoder stands. */

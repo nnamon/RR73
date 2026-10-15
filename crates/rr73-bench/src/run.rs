@@ -7,7 +7,9 @@ use std::time::Instant;
 use rayon::prelude::*;
 use rr73_corpus::{Entry, SlotFiles, SlotMeta, SlotMode, Tolerance, discover, match_entries, read_slot, wav};
 use rr73_decode::wspr::{WsprConfig, WsprContext, decode_wspr, is_wspr_preset};
-use rr73_decode::{DecodeContext, DecodeSession, DecodeStats, DecoderConfig, SlotAudio, Stage, StageTimings};
+use rr73_decode::{
+    ApContext, DecodeContext, DecodeSession, DecodeStats, DecoderConfig, SlotAudio, Stage, StageTimings,
+};
 use rr73_ft8::{CallsignHashes, Mode};
 
 use crate::results::{
@@ -45,6 +47,9 @@ pub struct RunOptions {
     /// Later stages, each `"<preset> [key=value ...]"`, run after the preset on the same
     /// slot (see [`rr73_decode::DecodeSession`]). FT8 and FT4 presets only.
     pub then: Vec<String>,
+    /// A QSO context for a priori decoding of every slot, in place of the one a slot's
+    /// metadata gives (`ap` in its source, as the `ap-sweep` set writes).
+    pub ap: Option<ApContext>,
 }
 
 /// The rest of a slot cut short by `--audio-s`.
@@ -69,6 +74,24 @@ struct Plan<'a> {
     audio_s: Option<f64>,
     fill: AudioFill,
     silent_s: Vec<(f64, f64)>,
+    ap: Option<ApContext>,
+}
+
+/// The QSO context for a slot: the run's, else the slot's own (`ap` in its source:
+/// `{"my": "9V1NE", "dx": "K1ABC", "dx_hz": 1500.0}`), else none.
+fn ap_context(meta: &SlotMeta, plan: &Plan<'_>) -> Option<ApContext> {
+    if let Some(c) = &plan.ap {
+        return Some(c.clone());
+    }
+    let v = meta.source.extra.get("ap")?;
+    Some(ApContext {
+        my_call: v.get("my")?.as_str()?.to_string(),
+        dx_call: v.get("dx").and_then(|d| d.as_str()).map(str::to_string),
+        dx_hz: v
+            .get("dx_hz")
+            .and_then(serde_json::Value::as_f64)
+            .map(|f| f as f32),
+    })
 }
 
 /// The decoder a preset names.
@@ -138,6 +161,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         audio_s: opts.audio_s,
         fill: opts.audio_fill,
         silent_s: opts.silent_s.clone(),
+        ap: opts.ap.clone(),
     };
     let files = if opts.paths.is_empty() {
         Vec::new()
@@ -328,6 +352,7 @@ fn run_decoder(
             // Each slot starts from an empty hash table so results do not depend on thread
             // order.
             ctx.ft.hashes = CallsignHashes::new();
+            ctx.ft.ap = ap_context(meta, plan);
             let mut cut = samples.to_vec();
             for &(a, b) in &plan.silent_s {
                 let at = |s: f64| ((s.max(0.0) * 12_000.0).round() as usize).min(cut.len());
@@ -404,6 +429,7 @@ fn run_decoder(
                         matched: false,
                         osd: d.osd,
                         osd_distance: round(f64::from(d.osd_distance), 4),
+                        ap: d.ap,
                         stage: stage as u32,
                         drift_hz_per_s: None,
                     })
@@ -444,6 +470,7 @@ fn run_decoder(
                         matched: false,
                         osd: false,
                         osd_distance: 0.0,
+                        ap: None,
                         stage: 0,
                         drift_hz_per_s: Some(round(f64::from(d.drift_hz_per_s), 5)),
                     })
@@ -641,6 +668,7 @@ mod tests {
             audio_s: None,
             fill: AudioFill::Absent,
             silent_s: Vec::new(),
+            ap: None,
         };
         let r = process_job(job, &plan, &mut Contexts::default());
         assert_eq!((r.expected, r.matched, r.unique), (1, 1, 0), "{:?}", r.decodes);

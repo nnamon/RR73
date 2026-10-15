@@ -96,6 +96,16 @@ enum Command {
         /// Slots per subset in crowded sets rendered with --synth.
         #[arg(long, default_value_t = 20)]
         crowded_count: usize,
+        /// A priori decoding of every slot for this operator's callsign, in place of the
+        /// context a slot's metadata gives.
+        #[arg(long, value_name = "CALL")]
+        ap_my: Option<String>,
+        /// With --ap-my: the other station of the QSO under way.
+        #[arg(long, value_name = "CALL", requires = "ap_my")]
+        ap_dx: Option<String>,
+        /// With --ap-dx: the other station's audio frequency, in Hz.
+        #[arg(long, value_name = "HZ", requires = "ap_dx")]
+        ap_dx_hz: Option<f32>,
         /// Corpus files or directories.
         #[arg(required_unless_present = "synth")]
         paths: Vec<PathBuf>,
@@ -291,6 +301,9 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             noise_count,
             per_step,
             crowded_count,
+            ap_my,
+            ap_dx,
+            ap_dx_hz,
             paths,
         } => {
             let opts = run::RunOptions {
@@ -310,6 +323,11 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 audio_fill,
                 silent_s,
                 then,
+                ap: ap_my.map(|my_call| rr73_decode::ApContext {
+                    my_call,
+                    dx_call: ap_dx,
+                    dx_hz: ap_dx_hz,
+                }),
             };
             let (results, path) = run::run(&opts)?;
             print!("{}", run::summary_table(&results));

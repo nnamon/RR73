@@ -161,6 +161,10 @@ pub struct DecodeRecord {
     /// WSPR decodes: frequency drift, in Hz per second.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub drift_hz_per_s: Option<f64>,
+    /// AP decodes: the a priori knowledge that found it (`my`, `my_dx`, `rrr`, `rr73`,
+    /// `seventy_three`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ap: Option<rr73_decode::ApKind>,
 }
 
 fn is_zero_u32(x: &u32) -> bool {

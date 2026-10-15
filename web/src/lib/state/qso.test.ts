@@ -16,7 +16,7 @@ vi.mock('../audio/unlock', async (importOriginal) => {
 import { silentClipUri } from '../audio/unlock';
 import { slotStart } from '../clock/slots';
 import { decode } from '../testing/qso-sim';
-import { callCq, callStation, clearDecodeList, configNow, dispatch, haltTx, qso, setFrequencies, setHound, setHoundDial, setHunt, setTxEnabled } from './qso.svelte';
+import { callCq, callStation, clearDecodeList, configNow, dispatch, haltTx, qso, qsoContextNow, setFrequencies, setHound, setHoundDial, setHunt, setTxEnabled } from './qso.svelte';
 import { band, deliverDecodes } from './station.svelte';
 import { filterCounts } from '../decode/list';
 import { settings, updateSettings } from './settings.svelte';
@@ -96,6 +96,19 @@ describe('worked before', () => {
       { call: 'JA1KXM', band: '20m', mode: 'FT8', day: '20261013', grid: 'PM95' },
       { call: 'K1ABC', band: '40m', mode: 'FT4', day: '20261013', grid: null },
     ]);
+  });
+});
+
+describe('a priori decoding', () => {
+  it('gives the decoder the operator, and the station being worked at its frequency', async () => {
+    dispatch({ type: 'endQso', nowMs: Date.now() });
+    await updateSettings({ callsign: '', grid: 'OJ11' });
+    expect(qsoContextNow()).toBeNull();
+    await updateSettings({ callsign: '9V1NE' });
+    expect(qsoContextNow()).toEqual({ myCall: '9V1NE', dxCall: '', dxHz: 0 });
+    const { d, slot } = heard(1234);
+    callStation(d, slot);
+    expect(qsoContextNow()).toEqual({ myCall: '9V1NE', dxCall: 'JA1KXM', dxHz: 1234 });
   });
 });
 

@@ -4,7 +4,7 @@
  */
 
 import type { Mode } from '../clock/slots';
-import type { Decode } from './types';
+import type { Decode, QsoContext } from './types';
 import type { WsprDecode } from '../wspr/spots';
 
 /** Why the decoder is not available. */
@@ -35,7 +35,7 @@ export interface DeepStages {
 
 export type ToDecoder =
   | { type: 'load' }
-  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array; deep?: DeepStages }
+  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array; deep?: DeepStages; qso?: QsoContext }
   | { type: 'decodeWspr'; id: number; preset: string; samples: Float32Array }
   | { type: 'pack'; id: number; text: string; mode: Mode }
   | { type: 'synth'; id: number; text: string; mode: Mode; f0Hz: number; sampleRate: number };

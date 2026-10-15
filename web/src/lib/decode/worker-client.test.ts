@@ -68,6 +68,14 @@ describe('WorkerDecoder', () => {
     await expect(a).rejects.toThrow('bad');
   });
 
+  it('sends the QSO under way with the slot', () => {
+    const { d, workers } = setup();
+    void d.decodeSlot({ ...slot(), qso: { myCall: '9V1NE', dxCall: 'K1ABC', dxHz: 1485 } }).catch(() => undefined);
+    void d.decodeSlot(slot()).catch(() => undefined);
+    expect(workers[0].sent[1].m).toMatchObject({ type: 'decode', qso: { myCall: '9V1NE', dxCall: 'K1ABC', dxHz: 1485 } });
+    expect(workers[0].sent[2].m).not.toHaveProperty('qso');
+  });
+
   it('runs the later stages for FT8 slots that ask for them and passes on what they find', async () => {
     const { d, workers } = setup();
     const more: string[][] = [];

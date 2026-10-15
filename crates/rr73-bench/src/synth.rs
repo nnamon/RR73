@@ -6,7 +6,7 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rr73_chansim::{
-    Noise, Scene, SimSignal, Truth, Watterson, WsprScene, WsprSignal, crowded, noise_only, render,
+    Noise, Scene, SimSignal, Truth, Watterson, WsprScene, WsprSignal, crowded, messages, noise_only, render,
     render_wspr, single, wspr_band, wspr_noise_only, wspr_single,
 };
 use rr73_corpus::{Entry, SlotMeta, SlotMode, Source, SourceKind, Timing, TimingReference, write_slot};
@@ -24,7 +24,17 @@ pub const SETS: &[&str] = &[
     "wspr-snr-sweep",
     "wspr-band",
     "late-start",
+    "ap-sweep",
 ];
+
+/// The operator and the QSO partner of the `ap-sweep` set.
+pub const AP_MY: &str = "9V1NE";
+pub const AP_DX: &str = "K1ABC";
+
+/// SNR steps of the `ap-sweep` set, in dB.
+pub fn ap_sweep_steps() -> impl Iterator<Item = i32> {
+    -30..=-18
+}
 
 /// Slow Watterson fading for WSPR sets: 0.1 Hz spread, 1 ms delay. WSPR's 1.46 Hz tone
 /// spacing and 0.68 s symbols make the 0.5 Hz ITU-R moderate profile much harsher than for
@@ -182,6 +192,34 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
         "noise" => {
             for i in 0..opts.noise_count {
                 push("", i, &mut |_| JobScene::Ft(noise_only(Mode::Ft8)));
+            }
+        }
+        "ap-sweep" => {
+            // Messages to AP_MY at -30 to -18 dB, steady in AWGN: from AP_DX, the QSO partner,
+            // ending in turn with a report, an R-report, RRR, RR73 and 73 (qso), and from other
+            // stations with a grid (callers). Noise slots carry the same context, the partner
+            // somewhere in the band, to count false decodes. render_job writes the context.
+            const ENDS: [&str; 5] = ["-15", "R-15", "RRR", "RR73", "73"];
+            let (mut q, mut c) = (0, 0);
+            for snr in ap_sweep_steps() {
+                for k in 0..opts.per_step {
+                    push("qso", q, &mut |r| {
+                        let mut s = single(Mode::Ft8, f64::from(snr), None, r);
+                        s.signals[0].message = format!("{AP_MY} {AP_DX} {}", ENDS[k % ENDS.len()]);
+                        JobScene::Ft(s)
+                    });
+                    q += 1;
+                    push("callers", c, &mut |r| {
+                        let mut s = single(Mode::Ft8, f64::from(snr), None, r);
+                        s.signals[0].message =
+                            format!("{AP_MY} {} {}", messages::callsign(r), messages::grid(r));
+                        JobScene::Ft(s)
+                    });
+                    c += 1;
+                }
+            }
+            for i in 0..opts.noise_count {
+                push("noise", i, &mut |_| JobScene::Ft(noise_only(Mode::Ft8)));
             }
         }
         "snr-sweep" => {
@@ -364,8 +402,25 @@ pub fn render_job(job: &Job) -> Result<(Vec<f32>, SlotMeta, String), String> {
             .with("set", job.set.clone())
             .with("seed", job.seed)
             .with("noise", if noise == Noise::Awgn { "awgn" } else { "none" })
-            .with("signals", signals),
+            .with("signals", signals.clone()),
     );
+    if job.set.starts_with("ap-sweep/") {
+        // The partner's frequency: its signal in `qso`, anywhere for callers (unknown), a
+        // frequency drawn from the seed for noise.
+        let dx_hz = match job.set.as_str() {
+            "ap-sweep/qso" => signals
+                .get(0)
+                .and_then(|s| s.get("freq_hz"))
+                .cloned()
+                .unwrap_or_default(),
+            "ap-sweep/noise" => serde_json::json!(300.0 + (job.seed % 2400) as f64),
+            _ => serde_json::Value::Null,
+        };
+        meta.source.extra.insert(
+            "ap".to_string(),
+            serde_json::json!({ "my": AP_MY, "dx": AP_DX, "dx_hz": dx_hz }),
+        );
+    }
     meta.start_utc = Some(format!(
         "2026-01-01T{h:02}:{m:02}:{s:02}{}Z",
         if mode == SlotMode::Ft4 && job.index % 2 == 1 {
@@ -419,6 +474,10 @@ mod tests {
             Ok(21 * 3 * 2)
         );
         assert_eq!(jobs_for("crowded", base, &opts).map(|j| j.len()), Ok(8));
+        assert_eq!(
+            jobs_for("ap-sweep", base, &opts).map(|j| j.len()),
+            Ok(13 * 3 * 2 + 7)
+        );
         assert_eq!(jobs_for("wspr-smoke", base, &opts).map(|j| j.len()), Ok(25));
         assert_eq!(jobs_for("wspr-noise", base, &opts).map(|j| j.len()), Ok(7));
         assert_eq!(

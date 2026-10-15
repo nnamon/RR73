@@ -444,3 +444,65 @@ fn osd_presets_decode_nothing_from_noise_even_with_every_candidate() {
         );
     }
 }
+
+/// A priori decoding: weak messages from the QSO partner decode with the context and not
+/// without it, nothing changes without a context, and noise gives nothing with one.
+#[test]
+fn a_priori_decoding_finds_weak_qso_messages_and_nothing_in_noise() {
+    let config = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let qso = |dx_hz: f32| rr73_decode::ApContext {
+        my_call: "9V1NE".into(),
+        dx_call: Some("K1ABC".into()),
+        dx_hz: Some(dx_hz),
+    };
+    let (mut with_ap, mut without, mut wrong) = (0, 0, 0);
+    for (i, end) in ["RR73", "RRR", "73", "R-24", "-24"]
+        .iter()
+        .cycle()
+        .take(20)
+        .enumerate()
+    {
+        let text = format!("9V1NE K1ABC {end}");
+        let hz = 600.0 + 90.0 * i as f64;
+        let scene = Scene {
+            mode: Mode::Ft8,
+            signals: vec![SimSignal::new(&text, hz, 0.1, -21.0)],
+            noise: Noise::Awgn,
+        };
+        let (audio, _) = rr73_chansim::render(&scene, 500 + i as u64).expect("render");
+        let mut plain = DecodeContext::new();
+        let off = decode(&SlotAudio::new(&audio, Mode::Ft8), &config, &mut plain);
+        let mut ctx = DecodeContext::new();
+        ctx.ap = Some(qso(hz as f32));
+        let on = decode(&SlotAudio::new(&audio, Mode::Ft8), &config, &mut ctx);
+        without += off.decodes.iter().filter(|d| d.text == text).count();
+        with_ap += on.decodes.iter().filter(|d| d.text == text).count();
+        wrong += on.decodes.iter().filter(|d| d.text != text).count();
+        assert!(off.decodes.iter().all(|d| d.ap.is_none()));
+        assert!(
+            on.decodes
+                .iter()
+                .filter(|d| d.text == text)
+                .all(|d| d.ap.is_some() || off.decodes.iter().any(|o| o.text == text))
+        );
+    }
+    assert!(
+        with_ap >= without + 6,
+        "with AP {with_ap} of 20, without {without}"
+    );
+    assert_eq!(wrong, 0);
+
+    // Noise with the full context, the partner anywhere: no decodes at all.
+    for seed in 0..40u64 {
+        let (noise, _) =
+            rr73_chansim::render(&rr73_chansim::noise_only(Mode::Ft8), 900 + seed).expect("render");
+        let mut ctx = DecodeContext::new();
+        ctx.ap = Some(qso(300.0 + 60.0 * seed as f32));
+        let r = decode(&SlotAudio::new(&noise, Mode::Ft8), &config, &mut ctx);
+        assert!(
+            r.decodes.is_empty(),
+            "seed {seed}: {:?}",
+            r.decodes.iter().map(|d| &d.text).collect::<Vec<_>>()
+        );
+    }
+}

@@ -390,6 +390,7 @@ mod tests {
             score: 0.0,
             osd: false,
             osd_distance: 0.0,
+            ap: None,
         }
     }
 

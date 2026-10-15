@@ -64,6 +64,8 @@ impl<'a> SlotAudio<'a> {
 pub struct DecodeContext {
     /// Callsigns seen in full, used to resolve hashed callsigns. Decoding adds to it.
     pub hashes: CallsignHashes,
+    /// The QSO under way, for a priori decoding; `None` turns it off.
+    pub ap: Option<crate::ap::ApContext>,
     pub(crate) ws: Workspace,
 }
 
@@ -77,6 +79,7 @@ impl std::fmt::Debug for DecodeContext {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("DecodeContext")
             .field("hashes", &self.hashes)
+            .field("ap", &self.ap)
             .finish_non_exhaustive()
     }
 }
@@ -86,6 +89,7 @@ impl DecodeContext {
     pub fn new() -> Self {
         Self {
             hashes: CallsignHashes::new(),
+            ap: None,
             ws: Workspace::default(),
         }
     }
@@ -97,6 +101,8 @@ pub(crate) struct Workspace {
     pub(crate) spec: Spectrogram,
     pub(crate) candidates: Vec<Candidate>,
     pub(crate) llr: [f32; CODEWORD_BITS],
+    /// The LLRs with a hypothesis' known bits set, for a priori decoding.
+    pub(crate) ap_llr: [f32; CODEWORD_BITS],
     pub(crate) codeword: [u8; CODEWORD_BITS],
     pub(crate) ldpc: LdpcScratch,
     pub(crate) noise: Vec<f32>,
@@ -116,6 +122,7 @@ impl Default for Workspace {
             spec: Spectrogram::new(),
             candidates: Vec::new(),
             llr: [0.0; CODEWORD_BITS],
+            ap_llr: [0.0; CODEWORD_BITS],
             codeword: [0; CODEWORD_BITS],
             ldpc: LdpcScratch::default(),
             noise: Vec::new(),

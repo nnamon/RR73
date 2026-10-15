@@ -33,6 +33,9 @@ pub struct Decode {
     /// For OSD decodes, the reliability-weighted distance to the received LLRs as a fraction
     /// of the total reliability; 0 otherwise.
     pub osd_distance: f32,
+    /// The a priori knowledge that found it, for AP decodes (`crate::ap`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ap: Option<crate::ap::ApKind>,
 }
 
 /// Counters for one slot.
@@ -57,6 +60,8 @@ pub struct DecodeStats {
     pub duplicates: u32,
     /// OSD codewords whose message failed the plausibility checks.
     pub implausible: u32,
+    /// Decodes found with a priori knowledge.
+    pub ap_decodes: u32,
 }
 
 /// Wall time per stage for one slot, in seconds, summed over passes and candidates.

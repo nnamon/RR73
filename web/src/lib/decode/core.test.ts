@@ -45,6 +45,21 @@ describe('DecoderCore', () => {
     expect(posted[1]).toEqual({ type: 'decoded', id: 7, decodes: [{ text: 'CQ 9M2TRX OJ02', freq_hz: 1022, dt_s: 0.1, snr_db: -10 }], ms: 25 });
   });
 
+  it('sets the QSO under way before each slot, and clears it for a slot without one', async () => {
+    const calls: string[] = [];
+    const set = vi.fn((my: string, dx: string, hz: number) => calls.push(`${my}|${dx}|${hz}`));
+    const mod = fakeModule({ set_qso_context: set, decode_slot: vi.fn(() => (calls.push('decode'), '[]')) });
+    const { core } = setup(async () => mod);
+    await core.handle({ ...slot(1), qso: { myCall: '9V1NE', dxCall: 'K1ABC', dxHz: 1485 } });
+    await core.handle(slot(2));
+    expect(calls).toEqual(['9V1NE|K1ABC|1485', 'decode', '||0', 'decode']);
+    // A module built before a priori decoding decodes as before.
+    const old = fakeModule();
+    const { core: plain, posted } = setup(async () => old);
+    await plain.handle({ ...slot(3), qso: { myCall: '9V1NE', dxCall: '', dxHz: 0 } });
+    expect(posted[1]).toMatchObject({ type: 'decoded', id: 3 });
+  });
+
   it('answers slots in the order they came, after one load', async () => {
     let finishLoad!: () => void;
     const mod = fakeModule({ default: () => new Promise<void>((r) => (finishLoad = r)) });

@@ -17,6 +17,7 @@
 //! tone); DT in seconds from the nominal start (0.5 s into the slot); SNR in dB in 2500 Hz;
 //! LLRs positive for bit 1. The crate starts no threads; callers parallelise over slots.
 
+pub mod ap;
 mod clock;
 pub mod config;
 pub mod demod;
@@ -38,6 +39,7 @@ pub mod wspr;
 #[cfg(test)]
 mod testsig;
 
+pub use ap::{ApContext, ApKind};
 pub use config::{ConfigError, DecoderConfig, PRESETS};
 pub use layout::FrameLayout;
 pub use pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, decode};

@@ -7,7 +7,7 @@
 
 import { untrack } from 'svelte';
 import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
-import { parseExchange, type TxNum } from '../qso/messages';
+import { bare, parseExchange, type TxNum } from '../qso/messages';
 import { answersDirected } from '../qso/directed';
 import { reference } from '../reference';
 import { STATUS } from '../qso/status';
@@ -27,7 +27,8 @@ import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
-import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, showTx } from './station.svelte';
+import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
+import type { QsoContext } from '../decode/types';
 
 export interface SentRow {
   slotStartMs: number;
@@ -368,10 +369,22 @@ export function directedFor(decodes: readonly Decode[]): string[] {
   return out;
 }
 
+/**
+ * The QSO under way, for a priori decoding: the operator's callsign, and during a QSO the
+ * station being worked at the frequency it was last heard on. Null without a callsign.
+ */
+export function qsoContextNow(): QsoContext | null {
+  const myCall = configNow().myCall;
+  if (!myCall) return null;
+  const p = qso.st.partner;
+  return { myCall, dxCall: p ? bare(p.call) : '', dxHz: p ? p.freqHz : 0 };
+}
+
 /** Wires the runtime to the station. Called once by the app. */
 export function startQso() {
   if (started || typeof window === 'undefined') return;
   started = true;
+  provideQsoContext(qsoContextNow);
   onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, directed: directedFor(decodes), nowMs: Date.now() }));
   onAudioStatus((s) => {
     if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });

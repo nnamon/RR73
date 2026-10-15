@@ -23,6 +23,8 @@ export interface WasmModule {
   pack_wspr: (text: string) => string;
   synthesize_wspr: (text: string, freqHz: number, sampleRate: number) => Float32Array;
   version: () => string;
+  /** Sets the QSO under way for a priori decoding of the next slots (crates/rr73-wasm). */
+  set_qso_context?: (myCall: string, dxCall: string, dxHz: number) => void;
   /** A slot decoded stage by stage (crates/rr73-wasm `DecoderSession`). */
   DecoderSession?: new (samples: Float32Array, mode: string, plan: string) => WasmSession;
 }
@@ -96,6 +98,8 @@ export class DecoderCore {
     if (m.type === 'decode' || m.type === 'decodeWspr') this.stopDeep();
     const t0 = this.now();
     try {
+      // A slot without a QSO context decodes without a priori knowledge.
+      if (m.type === 'decode') mod.set_qso_context?.(m.qso?.myCall ?? '', m.qso?.dxCall ?? '', m.qso?.dxHz ?? 0);
       if (m.type === 'decode' && m.deep && mod.DecoderSession) {
         this.decodeDeep(mod.DecoderSession, m, m.deep, t0);
       } else if (m.type === 'decode') {

@@ -177,12 +177,21 @@ jobs:
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: >-
           cargo run --release -p rr73-bench -- run --preset subtract-3-osd2
-          --then "subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23"
-          --then "subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2"
+          --then "subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ap.my_anywhere=false"
+          --then "subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false"
           --out results/ci-subtract-3-osd2-deep.json corpus/public corpus/synthetic
       - name: Gate the later stages against bench/subtract-3-osd2-deep.json
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3-osd2-deep.json --baseline bench/subtract-3-osd2-deep.json
+      # A priori decoding: the shipped preset on messages to the operator and on noise, each
+      # slot with the QSO context the app gives (crates/rr73-decode/src/ap.rs), rendered in
+      # memory; thresholds in bench/gate-ap.toml.
+      - name: Run subtract-3-osd2 on the ap-sweep set
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- run --preset subtract-3-osd2 --synth ap-sweep --per-step 10 --noise-count 300 --out results/ci-ap.json
+      - name: Gate a priori decoding against bench/subtract-3-osd2-ap.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-ap.json --baseline bench/subtract-3-osd2-ap.json --thresholds bench/gate-ap.toml
       # WSPR: the wspr preset on wspr-smoke and 50 wspr-noise slots, rendered in memory so no
       # 2.9 MB WAV file per 120 s slot is written. Gated against bench/wspr.json with
       # bench/gate-wspr.toml.

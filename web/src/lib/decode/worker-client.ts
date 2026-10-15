@@ -54,14 +54,16 @@ export const PRESET = 'subtract-3-osd2';
  * first on a grid of 4 frames per symbol and 4 bins per tone spacing, the second on 8 frames
  * per symbol with 400 candidates from a 2 dB sync threshold and OSD over all 91 information
  * bits. Both leave frames that overlap digital silence out of the sync score and accept OSD
- * decodes from -23 dB, 1 dB above the preset, as they try more candidates. CI gates them
+ * decodes from -23 dB, 1 dB above the preset, as they try more candidates. Their a priori
+ * decoding stays near the QSO partner's frequency, which keeps its cost to 4%
+ * (crates/rr73-decode/src/ap.rs). CI gates them
  * against bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has the
  * measurements and the budget.
  */
 export const DEEP: DeepStages = {
   plan: [
-    'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23',
-    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2',
+    'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ap.my_anywhere=false',
+    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false',
   ].join('; '),
   budgetMs: 2000,
 };
@@ -139,7 +141,7 @@ export class WorkerDecoder implements DecoderClient {
     const id = this.nextId++;
     const deep = more && slot.mode === 'FT8' && this.deep ? this.deep : undefined;
     const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject, more: deep && more }));
-    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}) }, [slot.samples.buffer]);
+    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}), ...(slot.qso ? { qso: slot.qso } : {}) }, [slot.samples.buffer]);
     return done;
   }
 

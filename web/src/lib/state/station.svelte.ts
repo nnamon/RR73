@@ -18,7 +18,7 @@ import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from 
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
 import { SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
-import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
+import type { Decode, DecoderClient, DecoderStatus, QsoContext } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
 import type { WsprDecode } from '../wspr/spots';
 import { operatingDialHz } from '../radio/hound-dial';
@@ -286,13 +286,21 @@ function onSlot(slot: AssembledSlot) {
     return;
   }
   const t0 = performance.now();
-  // The decoder gets a copy: the recorder keeps the slot for Save slot.
-  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice() }, (more) => addDecodes(slot.startUtcMs, more)).then(
+  // The decoder gets a copy: the recorder keeps the slot for Save slot. The QSO under way
+  // lets it try weak messages with what it expects.
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice(), qso: qsoContext() ?? undefined }, (more) => addDecodes(slot.startUtcMs, more)).then(
     (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0 }),
     (e: unknown) => {
       if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode, decodes: [], ms: 0, skipped: true });
     },
   );
+}
+
+let qsoContext: () => QsoContext | null = () => null;
+
+/** Gives the decoder the QSO under way at each slot, for a priori decoding: the sequencer's (qso.svelte.ts). */
+export function provideQsoContext(fn: () => QsoContext | null) {
+  qsoContext = fn;
 }
 
 /** Decodes a WSPR slot in the worker; its spots go to the WSPR listeners. */

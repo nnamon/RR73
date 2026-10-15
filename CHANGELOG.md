@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT8 and FT4 decode weaker messages in a QSO: the decoder tries what it expects from the station you work, and calls to you, before giving up on a signal. On the bench, the replies in a QSO decode 2.7 dB lower.
+
 ## 0.20.1 · 2026-10-15
 
 - The station detail, from touch and hold on a decode, ends with the station's SNR over its last 8 slots, gaps marked.

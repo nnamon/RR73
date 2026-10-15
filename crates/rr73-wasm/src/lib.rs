@@ -43,6 +43,10 @@ struct AppDecode<'a> {
     dt_s: f64,
     /// SNR in 2500 Hz, in dB, to 0.1 dB.
     snr_db: f64,
+    /// For a priori decodes, the knowledge that found it (`my`, `my_dx`, `rrr`, `rr73`,
+    /// `seventy_three`).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    ap: Option<rr73_decode::ApKind>,
 }
 
 /// Rounds to `digits` decimal places; dividing by a power of ten keeps the JSON short.
@@ -67,8 +71,23 @@ impl<'a> AppDecode<'a> {
             freq_hz: round(d.freq_hz, 1),
             dt_s: round(d.dt_s, 2),
             snr_db: round(d.snr_db, 1),
+            ap: d.ap,
         }
     }
+}
+
+/// Sets the QSO under way for a priori decoding of the slots decoded after it: the operator's
+/// callsign, and the other station's callsign and audio frequency (tone 0, Hz) during a QSO.
+/// An empty `my_call` turns a priori decoding off; an empty `dx_call` or a `dx_hz` that is not
+/// a positive number leaves those out.
+#[wasm_bindgen]
+pub fn set_qso_context(my_call: &str, dx_call: &str, dx_hz: f32) {
+    let ap = (!my_call.trim().is_empty()).then(|| rr73_decode::ApContext {
+        my_call: my_call.trim().to_string(),
+        dx_call: (!dx_call.trim().is_empty()).then(|| dx_call.trim().to_string()),
+        dx_hz: (dx_hz.is_finite() && dx_hz > 0.0).then_some(dx_hz),
+    });
+    CONTEXT.with(|c| c.borrow_mut().ap = ap);
 }
 
 fn decodes_json(decodes: &[Decode]) -> Result<String, String> {

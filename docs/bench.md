@@ -42,6 +42,7 @@ The decode lists record neither the WSJT-X version nor the decode depth. Some en
 | `wspr-snr-sweep` | `wspr-snr-sweep/awgn`, `wspr-snr-sweep/fading` | 15 x `--per-step` each, default 40 | One type 1 WSPR signal per slot at -34 to -20 dB in 1 dB steps; `fading` adds Watterson fading at 0.1 Hz spread and 1 ms delay. |
 | `wspr-band` | `wspr-band` | `--crowded-count`, default 20 | 20 WSPR signals per slot, SNR uniform in -28 to -10 dB, centres at least 8 Hz apart, drift uniform in ±0.01 Hz/s. |
 | `late-start` | `late-start/<mode>-<how>-<late s>`, such as `late-start/ft8-cut-3.000` | 8 x `--per-step` each, default 40 | One steady signal per slot started late: FT8 0 to 6 s at -22 to -8 dB, FT4 0 to 2.5 s at -20 to -6 dB, in 2 dB steps, DT 0 before the delay. `shift` sends the whole message late, cut at the end of the slot; `cut` keeps it on time and leaves out its first part; `replace` and `splice` are `shift` and `cut` after a CQ at the same frequency for the first part, as when a reply replaces our CQ on air. 4 x 12 subsets for FT8 and 4 x 11 for FT4: 18400 slots and about 4.8 GB at `--per-step 25`. |
+| `ap-sweep` | `ap-sweep/qso`, `ap-sweep/callers`, `ap-sweep/noise` | 13 x `--per-step` each, default 40; `--noise-count` noise slots | Messages to 9V1NE at -30 to -18 dB in AWGN: from K1ABC ending in a report, an R-report, RRR, RR73 and 73 (`qso`), and from other stations with a grid (`callers`); noise slots. Each slot's source carries the QSO context (`ap`: 9V1NE, K1ABC, K1ABC's frequency in `qso`, none for `callers`, one drawn from the seed for `noise`), which `run` gives the decoder; `--ap-my`, `--ap-dx` and `--ap-dx-hz` give one context to every slot instead. Decision 0009. |
 
 Signals are random standard QSO messages (CQ with a grid, call pairs with a grid, report, R-report, RRR, RR73, 73) at a base tone uniform in 300 to 2700 Hz and DT uniform in -0.5 to 0.5 s. WSPR signals are random type 1 messages (standard callsign, 4-character locator, one of the 19 power levels) with the centre uniform in 1405 to 1595 Hz and DT uniform in -1 to 2 s; their truth gives the centre frequency and DT from 1 s into the slot. SNR is the WSJT-X convention: signal power over the noise power in 2500 Hz. Noise is white Gaussian with 0.02 RMS per sample; a slot whose peak would pass 0.98 is scaled down as a whole. Fading SNR is the average over the fading process.
 
@@ -173,7 +174,15 @@ The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesi
 | `subtract-3-osd2` | `bench/subtract-3-osd2.json` | The preset the app ships from 0.4.0. Its numbers are what operators get from the first decodes of a slot. |
 | `subtract-3-osd2` with two `--then` stages | `bench/subtract-3-osd2-deep.json` | The later FT8 stages the app runs after the preset (`DEEP` in `web/src/lib/decode/worker-client.ts`, decision 0007). The gate requires the same stages; a Vitest test holds `DEEP` to the recorded file. |
 
-A third gate covers WSPR: the `wspr` preset on `wspr-smoke` (25 slots, 51 signals) and 50 `wspr-noise` slots, rendered in memory with `--synth`, against `bench/wspr.json` with the thresholds in `bench/gate-wspr.toml`. To record it again:
+A priori decoding (decision 0009) has a gate of its own: `subtract-3-osd2` on `ap-sweep` with `--per-step 10 --noise-count 300`, rendered in memory, against `bench/subtract-3-osd2-ap.json` with the thresholds in `bench/gate-ap.toml`. To record it again:
+
+```sh
+docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+  --preset subtract-3-osd2 --synth ap-sweep --per-step 10 --noise-count 300 --out results/ci-ap.json
+docker compose run --rm rust rr73-bench slim results/ci-ap.json --out bench/subtract-3-osd2-ap.json
+```
+
+A further gate covers WSPR: the `wspr` preset on `wspr-smoke` (25 slots, 51 signals) and 50 `wspr-noise` slots, rendered in memory with `--synth`, against `bench/wspr.json` with the thresholds in `bench/gate-wspr.toml`. To record it again:
 
 ```sh
 docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \

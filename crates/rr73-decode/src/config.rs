@@ -51,6 +51,56 @@ pub struct DecoderConfig {
     pub subtract: SubtractParams,
     /// Decoding passes. Each pass after the first runs on the audio left by the subtractor.
     pub passes: u32,
+    /// A priori decoding with the QSO context the caller gives (`crate::ap`). Absent from
+    /// results written before it existed.
+    #[serde(default)]
+    pub ap: ApParams,
+}
+
+/// A priori decoding: when it applies and what it accepts (`crate::ap`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ApParams {
+    /// Try the hypotheses on candidates that fail to decode, when the context names the
+    /// operator's callsign.
+    pub enabled: bool,
+    /// The QSO hypotheses apply within this distance of the other station's frequency, in Hz.
+    pub width_hz: f32,
+    /// `my` (the operator's callsign first) applies to candidates anywhere in the band; else
+    /// only within `width_hz` of the other station's frequency.
+    pub my_anywhere: bool,
+    /// `my` away from the other station's frequency uses belief propagation only, without
+    /// ordered-statistics decoding, which costs most of its time.
+    pub my_anywhere_bp_only: bool,
+    /// Most code bits where the channel's hard decision may differ from the codeword of a
+    /// `my` decode. It is tried on every candidate, so it takes the tightest limit.
+    pub my_max_hard_errors: u32,
+    /// Most code bits where the channel's hard decision may differ from the codeword of a
+    /// `my_dx` decode.
+    pub my_dx_max_hard_errors: u32,
+    /// Most code bits where the channel's hard decision may differ from a whole message
+    /// (`rrr`, `rr73`, `73`).
+    pub whole_max_hard_errors: u32,
+    /// Magnitude given to the log-likelihood ratios of known bits.
+    pub strength: f32,
+    /// Lowest SNR an AP decode may report, in dB.
+    pub min_snr_db: f32,
+}
+
+impl Default for ApParams {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            width_hz: 50.0,
+            my_anywhere: true,
+            my_anywhere_bp_only: true,
+            my_max_hard_errors: 36,
+            my_dx_max_hard_errors: 45,
+            whole_max_hard_errors: 50,
+            strength: 30.0,
+            min_snr_db: -30.0,
+        }
+    }
 }
 
 /// Spectrogram layout, in multiples of the mode's symbol length and tone spacing.
@@ -297,6 +347,7 @@ impl DecoderConfig {
                 refine: false,
             },
             passes: 1,
+            ap: ApParams::default(),
         }
     }
 
@@ -396,6 +447,16 @@ impl DecoderConfig {
         }
         if !(1..=8).contains(&self.passes) {
             return bad("passes must be 1 to 8");
+        }
+        let a = &self.ap;
+        if !(a.width_hz >= 0.0 && a.strength > 0.0 && a.strength.is_finite() && a.min_snr_db.is_finite())
+            || a.my_max_hard_errors > 174
+            || a.my_dx_max_hard_errors > 174
+            || a.whole_max_hard_errors > 174
+        {
+            return bad(
+                "ap.width_hz must be at least 0, ap.strength positive and the hard-error limits at most 174",
+            );
         }
         Ok(())
     }
