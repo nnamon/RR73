@@ -122,3 +122,16 @@ test('Band activity keeps the hour: the list draws 8 slots, and 8 more as it scr
   await page.getByRole('radiogroup', { name: 'Show decodes' }).getByRole('radio', { name: /^To me/ }).click();
   await expect(list.locator('button.dr')).toHaveCount(0);
 });
+
+test('the station detail ends with the station’s signal over its last 8 slots, gaps marked', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.getByRole('link', { name: 'Operate' }).click();
+  // VK3QRP calls CQ in the odd slots from 15 slots back; two of those slots hold only JA1KXM.
+  const now = Date.now() - (Date.now() % 15_000);
+  for (let i = 16; i >= 1; i--) await decoded(page, now - i * 15_000, [i % 2 === 1 && i !== 7 && i !== 11 ? 'CQ VK3QRP QF22' : 'CQ JA1KXM PM95']);
+  await page.getByTestId('decode-list').locator('button.dr', { hasText: 'CQ VK3QRP QF22' }).first().click({ button: 'right' });
+  await expect(page.getByTestId('signal-chart')).toHaveAttribute('aria-label', /^SNR over the last 8 slots, oldest first: (−8 dB, ){2}no decode, −8 dB, no decode, (−8 dB, ){2}−8 dB$/);
+});

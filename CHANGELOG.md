@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The station detail, from touch and hold on a decode, ends with the station's SNR over its last 8 slots, gaps marked.
+
 ## 0.20.0 · 2026-10-15
 
 - Settings › Logging backs up the log to one file, with every QSO, activation and what Wavelog holds, through the share sheet.

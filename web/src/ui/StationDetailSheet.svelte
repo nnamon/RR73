@@ -1,5 +1,5 @@
 <script lang="ts">
-  /** Station detail, from touch and hold: Call first, then the facts. */
+  /** Station detail, from touch and hold: Call first, then the facts, then the signal over its last slots. */
   import Sheet from './Sheet.svelte';
   import { dt, signed, utcHm, utcTime } from '../lib/clock/format';
   import { bare, parseExchange } from '../lib/qso/messages';
@@ -9,6 +9,10 @@
   import { callStart, callStation, qso, type Selected } from '../lib/state/qso.svelte';
   import { log } from '../lib/log/log.svelte';
   import { displayMode } from '../lib/log/qso';
+  import { signalHistory } from '../lib/decode/signal';
+  import { band } from '../lib/state/station.svelte';
+  import { isFt } from '../lib/clock/slots';
+  import SignalChart from './SignalChart.svelte';
 
   let { open = $bindable(false), item }: { open: boolean; item: Selected | null } = $props();
 
@@ -28,6 +32,8 @@
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
   const ord = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
+  // The station's last slots of its parity, from the hour Band activity keeps.
+  const signal = $derived(call && isFt(settings.mode) ? signalHistory(band.slots, bare(call), settings.mode) : []);
 
   function doCall() {
     if (!item) return;
@@ -58,6 +64,7 @@
         </span>
       </li>
     </ul>
+    {#if signal.length}<SignalChart points={signal} />{/if}
   {/if}
 </Sheet>
 
