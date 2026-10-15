@@ -8,10 +8,12 @@
  * anything else happens, so the transmit code can turn Tx off at once.
  *
  * Chromium on Windows asserts DTR and RTS while it opens a port with no flow control, before
- * open() resolves. With the IC-705's USB SEND set to a line of the port, that keys the radio. So a
- * link lowers both lines first thing after open() resolves, before any write, and closes the port
- * if it cannot (docs/design/cat.md, Port settings). Web Serial cannot close the few milliseconds
- * between the two.
+ * open() resolves. With the IC-705's USB SEND set to a line of the port, that keys the radio. A
+ * Digirig grounds its PTT line while RTS is asserted, and its KX cable takes that line to the KX2's
+ * MIC jack, which MIC BTN reads as PTT by default: that keys the KX2. So a link lowers both lines
+ * first thing after open() resolves, before any write, and closes the port if it cannot
+ * (docs/design/cat.md, Port settings). Web Serial cannot close the few milliseconds between the
+ * two.
  *
  * TypeScript's DOM types have no Web Serial, so the parts used are declared here.
  */
@@ -72,6 +74,21 @@ export function serialApi(nav: unknown = globalThis.navigator): SerialApiLike | 
  */
 export const CIV_PORT: Readonly<SerialOptionsLike> = { baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' };
 
+/** The rates of the KX2's MENU › RS232 (Owner's Manual p. 49; `BR`, Programmer's Reference p. 8). */
+export const KX2_BAUDS = [4800, 9600, 19200, 38400] as const;
+export type Kx2Baud = (typeof KX2_BAUDS)[number];
+/** The KX2's default rate (Owner's Manual p. 49): a radio as delivered needs no menu change. */
+export const KX2_DEFAULT_BAUD: Kx2Baud = 4800;
+
+/**
+ * The KX2's ACC port through a Digirig's serial port. Elecraft's documents give only the rate;
+ * 8 data bits, no parity and 1 stop bit are Web Serial's defaults. Unverified on a device. No
+ * flow control: Digirig's PTT follows RTS (Getting Started with Digirig Mobile).
+ */
+export function kx2Port(baud: Kx2Baud): SerialOptionsLike {
+  return { baudRate: baud, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' };
+}
+
 const errorName = (e: unknown): string => (e && typeof e === 'object' && 'name' in e ? String((e as { name: unknown }).name) : '');
 
 /** The outcome of the browser's port chooser. */
@@ -110,7 +127,7 @@ export type LinkEnd = 'closed' | 'lost';
  */
 export type OpenError = 'busy' | 'signals' | 'failed';
 
-/** DTR and RTS low: no USB SEND setting keys the radio through them. */
+/** DTR and RTS low: no USB SEND setting keys the IC-705 through them, and the Digirig's PTT is off. */
 export const LINES_LOW: Readonly<SerialSignalsLike> = { dataTerminalReady: false, requestToSend: false };
 
 /** A write to a link that is not open. */

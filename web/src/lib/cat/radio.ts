@@ -1,16 +1,21 @@
 /**
- * One IC-705 over one serial link (docs/design/cat.md): the requests in flight and their answers,
- * the dial polling, transceive frames, and PTT. The CI-V frames come from rr73-wasm through a
- * CatCodec; the bytes go through a CatTransport (lib/cat/serial.ts in the app, a fake port in
- * tests).
+ * One radio over one serial link (docs/design/cat.md): the requests in flight and their answers,
+ * the dial polling, transceive frames, and PTT. The IC-705's CI-V frames and the KX2's Elecraft
+ * commands come from rr73-wasm through a CatCodec, and what else differs between the radios from
+ * its RadioTraits (lib/cat/radios.ts); the bytes go through a CatTransport (lib/cat/serial.ts in
+ * the app, a fake port in tests).
  *
- * Requests go out one at a time from a queue, and each waits at most REPLY_MS for its answer.
- * PTT and the read that confirms PTT off jump the queue and go out at once, beside a request in
- * flight. The radio answers frames in the order they arrive, so an answer goes to the oldest
- * request it answers. OK and NG carry no command, so a request that goes unanswered starts a
- * drain of DRAIN_MS: its late answer may come in it. Nothing but PTT off goes out during a drain,
- * and every answer that arrives in it is dropped, so a late OK is never taken for the answer to a
- * later request.
+ * Requests go out one at a time from a queue, and each waits at most REPLY_MS for its answer
+ * (longer for the KX2's frequency set, which may change band). PTT and the read that confirms PTT
+ * off jump the queue and go out at once, beside a request in flight. The radio answers in the order
+ * requests arrive, so an answer goes to the oldest request it answers. OK, NG and the KX2's `?;`
+ * carry no command, so a request that goes unanswered, and a `?;`, start a drain of DRAIN_MS: a
+ * late answer may come in it. Nothing but PTT off goes out during a drain, and every answer that
+ * arrives in it is dropped, so a late answer is never taken for the answer to a later request.
+ *
+ * The KX2 answers no set: each set carries the read that checks it, and the read-back decides
+ * (lib/cat/protocol.ts). PTT on is TX followed by TQ, and a TQ that says receive is read again,
+ * PTT_READ_MS apart, until PTT_TIMEOUT_MS.
  *
  * PTT off goes out up to UNKEY_TRIES times, UNKEY_ACK_MS apart, until the radio answers OK, and
  * is then confirmed by reading transmit or receive (`1C 00`). Until a read says receive, the radio
@@ -31,7 +36,8 @@
  */
 
 import type { LinkEnd } from './serial';
-import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, MenuItemId } from './protocol';
+import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, DataSub, SettingId } from './protocol';
+import { IC705, type RadioTraits, type SettingRead } from './radios';
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
 
 /** The serial link as the radio uses it. */
@@ -67,11 +73,10 @@ export const MODE_EVERY = 5;
 export const UNKEY_TRIES = 4;
 /** How long each PTT off waits for its OK before the next, ms. */
 export const UNKEY_ACK_MS = 100;
-/** After a request goes unanswered, answers arriving this long are dropped as late, ms. */
+/** After a request goes unanswered, or the KX2 answers `?;`, answers arriving this long are dropped as late, ms. */
 export const DRAIN_MS = 250;
-
-/** The menu settings read on connecting (docs/design/cat.md, Radio settings). */
-export const CONNECT_SETTINGS: readonly MenuItemId[] = ['usb_send', 'data_mod', 'time_out_timer'];
+/** A KX2 that says receive after TX is read again this often until PTT_TIMEOUT_MS, ms. Unverified on a device. */
+export const PTT_READ_MS = 50;
 
 export type RadioStatus = 'starting' | 'connected' | 'silent' | 'closed' | 'lost';
 
@@ -91,12 +96,14 @@ export interface RadioState {
   hz: number | null;
   mode: CatMode | null;
   filter: CatFilter | null;
-  /** Data mode on (USB-D), once read. */
+  /** Data mode on (USB-D), once read. The IC-705's. */
   data: boolean | null;
+  /** The data sub-mode, once read: valid only while `mode` is DATA or DATA-REV. The KX2's. */
+  sub: DataSub | null;
   /** When the frequency was last read or reported, CatTimers.now() ms. */
   heardAtMs: number | null;
-  /** The menu settings read, by item, as the codes the CI-V guide lists. */
-  settings: Partial<Record<MenuItemId, number>>;
+  /** The settings read, by item: the codes the CI-V guide lists, and for the KX2 its product number, MIC BTN as MP gives it and VOX (1 on). */
+  settings: Partial<Record<SettingId, number>>;
   /** Bytes arrived, but never a frame from the radio: another port, such as USB (B). */
   noiseOnly: boolean;
   /** RR73 holds PTT on: sent and not released. */
@@ -107,8 +114,11 @@ export interface RadioState {
   unkeyFailed: boolean;
 }
 
-/** `busy`: a dial or mode set refused while the radio transmits or may still transmit. */
-export type CatResult = { ok: true; event: CatEvent } | { ok: false; why: 'ng' | 'timeout' | 'closed' | 'invalid' | 'busy' };
+/**
+ * `busy`: a dial or mode set refused while the radio transmits or may still transmit. `ng` carries
+ * the answer that refused: NG, `?;`, or the KX2's read-back of something else.
+ */
+export type CatResult = { ok: true; event: CatEvent } | { ok: false; why: 'ng' | 'timeout' | 'closed' | 'invalid' | 'busy'; event?: CatEvent };
 
 interface InFlight {
   req: CatRequest;
@@ -124,11 +134,10 @@ interface Waiting {
   resolve: (r: CatResult) => void;
 }
 
-const isSet = (r: CatRequest) => r.type.startsWith('set_');
 /** Sets that change the dial or mode, which never go out while the radio transmits. */
-const TUNING = new Set<CatRequest['type']>(['set_frequency', 'set_mode', 'set_data_mode']);
+const TUNING = new Set<CatRequest['type']>(['set_frequency', 'set_mode', 'set_data_mode', 'set_data_sub_mode']);
 
-/** True for an event that may answer a request; transceive frames answer none. */
+/** True for an event that may answer a request; transceive frames and the KX2's `IF` answer none. */
 function isAnswer(e: CatEvent): boolean {
   switch (e.type) {
     case 'frequency':
@@ -137,6 +146,7 @@ function isAnswer(e: CatEvent): boolean {
     case 'noise':
     case 'echo':
     case 'other_address':
+    case 'info':
       return false;
     default:
       return true;
@@ -145,6 +155,7 @@ function isAnswer(e: CatEvent): boolean {
 
 export class CatRadio implements Keyer {
   private readonly codec: CatCodec;
+  private readonly traits: RadioTraits;
   private readonly transport: CatTransport;
   private readonly timers: CatTimers;
   private readonly waiting: Waiting[] = [];
@@ -159,6 +170,7 @@ export class CatRadio implements Keyer {
     mode: null,
     filter: null,
     data: null,
+    sub: null,
     heardAtMs: null,
     settings: {},
     noiseOnly: false,
@@ -188,8 +200,10 @@ export class CatRadio implements Keyer {
   private tailTimer: unknown = null;
   /** Waiting for PTT off to be confirmed (true) or reported unconfirmed (false). */
   private unkeyWaiters: ((confirmed: boolean) => void)[] = [];
-  /** Menu settings the radio answered NG: not read again. */
-  private readonly menuRefused = new Set<MenuItemId>();
+  /** Settings the radio refused (NG or `?;`): not read again. */
+  private readonly menuRefused = new Set<SettingId>();
+  /** Settings being read now. */
+  private readonly menuAsked = new Set<SettingId>();
   /** The radio is, or may be, on a Tx dial: set for a shifted keying and not yet set back. */
   private shift: DialShift | null = null;
   /** A shift's dial set in flight, Tx dial or receive dial; the next one waits for it. */
@@ -199,8 +213,9 @@ export class CatRadio implements Keyer {
   private restoreWaiters: ((restored: boolean) => void)[] = [];
   private readonly restoreListeners = new Set<(restored: boolean) => void>();
 
-  constructor(opts: { codec: CatCodec; transport: CatTransport; timers?: CatTimers }) {
+  constructor(opts: { codec: CatCodec; transport: CatTransport; timers?: CatTimers; traits?: RadioTraits }) {
     this.codec = opts.codec;
+    this.traits = opts.traits ?? IC705;
     this.transport = opts.transport;
     this.timers = opts.timers ?? realTimers;
     this.codec.reset();
@@ -288,14 +303,45 @@ export class CatRadio implements Keyer {
     this.schedulePoll();
   }
 
-  /** Reads the menu settings not read yet, except those the radio refused. */
-  private readSettings() {
-    for (const item of CONNECT_SETTINGS) {
-      if (item in this.stateValue.settings || this.menuRefused.has(item)) continue;
-      void this.request({ type: 'read_setting', item }).then((r) => {
-        if (!r.ok && r.why === 'ng') this.menuRefused.add(item);
+  /**
+   * Reads the settings not read yet, except those the radio refused and those whose condition does
+   * not hold yet. With `waiting`, only the settings that wait for another.
+   */
+  private readSettings(waiting = false) {
+    for (const s of this.traits.settings) {
+      const id = s.id;
+      if (waiting && !s.when) continue;
+      if (id in this.stateValue.settings || this.menuRefused.has(id) || this.menuAsked.has(id)) continue;
+      if (s.when && !s.when(this.stateValue)) continue;
+      this.menuAsked.add(id);
+      const guard = s.guard;
+      if (!guard) {
+        void this.readSetting(s);
+        continue;
+      }
+      void this.request(guard.request).then((g) => {
+        if (g.ok && guard.ok(g.event)) void this.readSetting(s);
+        else this.menuAsked.delete(id);
       });
     }
+  }
+
+  private async readSetting(s: SettingRead) {
+    const r = await this.request(s.request);
+    this.menuAsked.delete(s.id);
+    if (!r.ok) {
+      if (r.why === 'ng') this.menuRefused.add(s.id);
+      return;
+    }
+    const v = s.value(r.event);
+    if (v === null) return;
+    this.setSetting(s.id, v);
+    // A setting another one waited for: the KX2's MIC BTN waits for its product number.
+    this.readSettings(true);
+  }
+
+  private setSetting(id: SettingId, v: number) {
+    if (this.stateValue.settings[id] !== v) this.patch({ settings: { ...this.stateValue.settings, [id]: v } });
   }
 
   /**
@@ -331,28 +377,25 @@ export class CatRadio implements Keyer {
     return this.holder !== null || this.mayBeKeyed || this.shift !== null;
   }
 
-  /** Reads the frequency, and the mode and data mode with `all`. */
+  /** Reads the frequency, and with `all` the mode reads of the radio's traits: the mode and data mode, and the KX2's VOX. */
   readDial(all = false): Promise<CatResult[]> {
     const reads: Promise<CatResult>[] = [this.request({ type: 'read_frequency' })];
-    if (all) reads.push(this.request({ type: 'read_mode' }), this.request({ type: 'read_data_mode' }));
+    if (all) for (const r of this.traits.modeReads) reads.push(this.request(r));
     return Promise.all(reads);
   }
 
   /**
-   * Sets the dial to `hz` and the mode to USB-D, FIL1 (docs/design/cat.md, USB-D), then reads them
-   * back. Refused with `busy` while RR73 holds PTT or the radio reports transmitting (by VOX or its
-   * own PTT). Resolves with the first refusal or loss, or ok.
+   * Sets the dial to `hz` and the data mode, USB-D, FIL1 on the IC-705 and DATA A on the KX2
+   * (docs/design/cat.md), then reads them back. Refused with `busy` while RR73 holds PTT or the
+   * radio reports transmitting (by VOX or its own PTT). Resolves with the first refusal or loss, or
+   * ok.
    */
   async tune(hz: number): Promise<CatResult> {
     if (this.tuningBlocked()) return { ok: false, why: 'busy' };
     const now = await this.request({ type: 'read_transmit' });
     if (!now.ok) return now;
     if (now.event.type === 'transmit' && now.event.on) return { ok: false, why: 'busy' };
-    const steps: CatRequest[] = [
-      { type: 'set_frequency', hz },
-      { type: 'set_mode', mode: 'usb', filter: 1 },
-      { type: 'set_data_mode', on: true, filter: 1 },
-    ];
+    const steps: CatRequest[] = [{ type: 'set_frequency', hz }, ...this.traits.dataMode];
     let result: CatResult = { ok: false, why: 'closed' };
     for (const s of steps) {
       result = await this.request(s);
@@ -363,7 +406,7 @@ export class CatRadio implements Keyer {
   }
 
   /** Queues a request; resolves with its answer, or why there was none. A dial or mode set while keyed is refused with `busy`. */
-  request(req: CatRequest, timeoutMs = REPLY_MS): Promise<CatResult> {
+  request(req: CatRequest, timeoutMs = this.traits.slow[req.type] ?? REPLY_MS): Promise<CatResult> {
     if (this.over) return Promise.resolve({ ok: false, why: 'closed' });
     if (TUNING.has(req.type) && this.tuningBlocked()) return Promise.resolve({ ok: false, why: 'busy' });
     return new Promise((resolve) => {
@@ -418,7 +461,9 @@ export class CatRadio implements Keyer {
       this.pttGen++;
       this.mayBeKeyed = true;
       this.patch({ keyed: true });
-      return this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS).then((r) => {
+      const until = this.timers.now() + PTT_TIMEOUT_MS;
+      const on = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS);
+      return (this.traits.readsPtt ? on.then((r) => this.readUntilKeyed(r, until, held)) : on).then((r) => {
         const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
         if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
         if (answer !== 'ok') release();
@@ -442,6 +487,22 @@ export class CatRadio implements Keyer {
         return held();
       },
     };
+  }
+
+  /**
+   * The KX2 answered PTT on with a read that says receive: it may still be switching over. Reads
+   * again, PTT_READ_MS apart, until it says transmit or `until` passes. `?;` and no answer end it.
+   */
+  private async readUntilKeyed(first: CatResult, until: number, held: () => boolean): Promise<CatResult> {
+    let r = first;
+    while (!r.ok && r.why === 'ng' && r.event?.type === 'transmit' && held()) {
+      if (until - this.timers.now() <= PTT_READ_MS) break;
+      await new Promise<void>((resolve) => this.timers.set(resolve, PTT_READ_MS));
+      if (!held()) break;
+      const q = await this.sendNow({ type: 'read_transmit' }, Math.max(1, until - this.timers.now()));
+      r = q.ok && q.event.type === 'transmit' && !q.event.on ? { ok: false, why: 'ng', event: q.event } : q;
+    }
+    return r;
   }
 
   /**
@@ -559,12 +620,22 @@ export class CatRadio implements Keyer {
     void this.confirmOff(gen);
   }
 
-  /** PTT off until the radio answers OK, then a read that must say receive. */
+  /**
+   * PTT off until the radio accepts it (OK, or the KX2's TQ0), UNKEY_ACK_MS apart, then a read that
+   * must say receive. An early refusal, such as a KX2 still reading transmit, waits out the rest of
+   * the UNKEY_ACK_MS before the next try.
+   */
   private async confirmOff(gen: number) {
     for (let n = 0; n < UNKEY_TRIES; n++) {
+      const sent = this.timers.now();
       const r = await this.sendNow({ type: 'set_transmit', on: false }, UNKEY_ACK_MS);
       if (this.over || gen !== this.pttGen) return;
       if (r.ok) break;
+      const rest = sent + UNKEY_ACK_MS - this.timers.now();
+      if (rest > 0 && n < UNKEY_TRIES - 1) {
+        await new Promise<void>((resolve) => this.timers.set(resolve, rest));
+        if (this.over || gen !== this.pttGen) return;
+      }
     }
     const read = await this.sendNow({ type: 'read_transmit' }, REPLY_MS);
     if (this.over || gen !== this.pttGen) return;
@@ -687,14 +758,17 @@ export class CatRadio implements Keyer {
     if (isAnswer(e) && this.draining()) return;
     this.note(e);
     const i = this.inFlight.findIndex((f) => this.codec.answers(f.req, e));
-    if (i < 0) return;
-    const [f] = this.inFlight.splice(i, 1);
-    this.timers.clear(f.timer);
-    this.lostInRow = 0;
-    const answered: Partial<RadioState> = { noiseOnly: false };
-    if (this.stateValue.status === 'starting' || this.stateValue.status === 'silent') answered.status = 'connected';
-    this.patch(answered);
-    f.resolve(e.type === 'ng' || e.type === 'malformed' || (isSet(f.req) && e.type !== 'ok') ? { ok: false, why: 'ng' } : { ok: true, event: e });
+    if (i >= 0) {
+      const [f] = this.inFlight.splice(i, 1);
+      this.timers.clear(f.timer);
+      this.lostInRow = 0;
+      const answered: Partial<RadioState> = { noiseOnly: false };
+      if (this.stateValue.status === 'starting' || this.stateValue.status === 'silent') answered.status = 'connected';
+      this.patch(answered);
+      f.resolve(this.codec.accepts(f.req, e) ? { ok: true, event: e } : { ok: false, why: 'ng', event: e });
+    }
+    // The KX2's `?;` may answer the set of a set and its read: the read's answer may follow.
+    if (this.codec.drains(e)) this.drain();
   }
 
   /** Takes what a frame says about the radio into the state. */
@@ -706,7 +780,19 @@ export class CatRadio implements Keyer {
         this.patch({ hz: e.hz, heardAtMs: this.timers.now() });
         break;
       case 'mode':
-        this.patch({ mode: e.mode, ...(e.filter !== null ? { filter: e.filter } : {}) });
+        this.patch({ mode: e.mode, ...(typeof e.filter === 'number' ? { filter: e.filter } : {}) });
+        break;
+      case 'data_sub_mode':
+        this.patch({ sub: e.sub });
+        break;
+      case 'info':
+        // The KX2's auto-info: VFO A and the mode. Its transmit flag is never taken as a
+        // confirmation: only TQ confirms PTT off.
+        if (!this.shift) this.patch({ hz: e.hz, heardAtMs: this.timers.now() });
+        if (e.mode !== null) this.patch({ mode: e.mode });
+        break;
+      case 'vox':
+        this.setSetting('vox', e.on ? 1 : 0);
         break;
       case 'data_mode':
         this.patch({ data: e.on, ...(e.filter !== null ? { filter: e.filter } : {}) });
@@ -717,7 +803,7 @@ export class CatRadio implements Keyer {
         if (!e.on && !this.holder && this.mayBeKeyed) this.confirmed();
         break;
       case 'setting':
-        this.patch({ settings: { ...this.stateValue.settings, [e.item]: e.value } });
+        this.setSetting(e.item, e.value);
         break;
       default:
         break;

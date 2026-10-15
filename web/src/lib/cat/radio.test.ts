@@ -539,7 +539,7 @@ describe('CatRadio', () => {
     // 300 MHz is outside the receiver's coverage (Basic Manual p. 11-1): the simulator refuses it.
     const done = radio.tune(300_000_000);
     await timers.advance(300);
-    expect(await done).toEqual({ ok: false, why: 'ng' });
+    expect(await done).toMatchObject({ ok: false, why: 'ng' });
     expect(port.sent('06')).toEqual([]);
   });
 

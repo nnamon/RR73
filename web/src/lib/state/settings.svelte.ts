@@ -15,6 +15,8 @@ import { SPOT_SORTS, type SpotSort } from '../wspr/spots';
 import { RTTY_DEFAULTS, validateRtty, type RttySettings } from '../rtty/settings';
 import { keyboardDefaults, validateKeyboard, type KeyboardSettings } from '../keyboard/settings';
 import { fixShippedReport, normaliseMacros } from '../keyboard/macros';
+import type { CatRadioId } from '../cat/radios';
+import { KX2_BAUDS, KX2_DEFAULT_BAUD, type Kx2Baud } from '../cat/serial';
 
 /** Sun: light with the most contrast, for direct sunlight (tokens.css). */
 export type Theme = 'system' | 'light' | 'dark' | 'sun';
@@ -61,8 +63,7 @@ export interface WsprSettings {
 
 export const WSPR_DEFAULTS: Readonly<WsprSettings> = { txPct: DEFAULT_TX_PCT, powerDbm: DEFAULT_POWER_DBM, txHz: 1500, stopAfterMin: DEFAULT_STOP_AFTER_MIN, sort: 'distance' };
 
-/** The radios rig control knows. */
-export type CatRadioId = 'ic705';
+export type { CatRadioId };
 
 /** Rig control (Settings › Rig control, docs/design/cat.md). Desktop Chromium only. */
 export interface CatSettings {
@@ -80,9 +81,11 @@ export interface CatSettings {
   /** USB IDs of the port chosen, to find it among the ports the browser allows; null when the browser gave none. */
   usbVendorId: number | null;
   usbProductId: number | null;
+  /** The KX2's serial rate: its MENU › RS232 must match (Owner's Manual p. 49). */
+  kx2Baud: Kx2Baud;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -299,6 +302,8 @@ function validateCat(raw: unknown): CatSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const c = { ...CAT_DEFAULTS };
   for (const k of ['keyPtt', 'shiftDial', 'connect'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  if (r.radio === 'ic705' || r.radio === 'kx2') c.radio = r.radio;
+  if (KX2_BAUDS.includes(r.kx2Baud as Kx2Baud)) c.kx2Baud = r.kx2Baud as Kx2Baud;
   for (const k of ['usbVendorId', 'usbProductId'] as const) {
     const v = r[k];
     if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffff) c[k] = v;
