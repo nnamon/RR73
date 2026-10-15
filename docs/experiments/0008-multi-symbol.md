@@ -1,6 +1,6 @@
 # Experiment 0008: soft bits from multi-symbol block detection
 
-Status: measured 2026-10-16 on the tree of commit 7fc6e33 (0.21.8 with the block demodulator); hypothesis recorded 2026-10-15, before implementation. The preset change in the Decision section is a proposal.
+Status: measured 2026-10-16 with the block demodulator on 0.21.8 (commit 945b59d after rebasing onto 0.22.1, whose changes leave the decoder as it was); hypothesis recorded 2026-10-15, before implementation. Accepted 2026-10-16: `subtract-3-osd2` ships with block soft bits from the next release after 0.22.1, and the later stages take them through the preset.
 
 ## Question
 
@@ -192,7 +192,7 @@ The plan expected a block stage after decision 0007's stages to add 0.3 to 0.6 d
 
 ## Decision
 
-Proposed, in a separate commit: `subtract-3-osd2` takes its soft bits from blocks of 1 and 3 FT8 symbols or 1 and 4 FT4 symbols, with the sync gate at 5 of 21 and 7 of 16. The app's later stages are written as overrides of the preset, so they take block soft bits as well. The plan strings, CI's stage strings and the gate files keep their names, and every CI gate passes against the recorded baselines (recall up, no false decode, SNR50 down); the recorded numbers then describe the old decoder and want recording again with the merge.
+Accepted 2026-10-16: `subtract-3-osd2` takes its soft bits from blocks of 1 and 3 FT8 symbols or 1 and 4 FT4 symbols, with the sync gate at 5 of 21 and 7 of 16. The app's later stages are written as overrides of the preset, so they take block soft bits as well. The plan strings, CI's stage strings and the gate files keep their names, and the gate files were recorded again with the change.
 
 - Why the preset: the early pass and the slots RR73 transmitted in decode with the preset alone (decision 0007), and stage 1's decodes reach the sequencer first. The preset with blocks alone beats the three stages it replaces in recall and SNR50 on every set.
 - Cost: 1.6 times the preset's time natively on the FT8 recordings; in WebKit on a loaded host stage 1 ends at p50 72 ms (60 ms now) and p95 256 ms (179 ms). Half the added time decodes the added signals. The three stages together take p50 561 ms (497 ms now) and p95 1416 ms (1090 ms) in WebKit; 3 of 410 slots reached the 2 s budget, which ends stage 3 early as designed. A phone is slower than the M4: more slots will reach the budget there. Not tested on a device.
