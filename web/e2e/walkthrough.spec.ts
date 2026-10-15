@@ -17,11 +17,14 @@ test.beforeEach(async () => {
 /**
  * The station set up as after first use: callsign, grid, and a Tx frequency already picked on the
  * waterfall, so its first-use hint is gone. Then the practice band on, and Operate receiving.
+ * The iPad and desktop screenshots show the callsigns on the waterfall; the iPhone ones keep the
+ * default, off, so the phone's smaller waterfall stays clear.
  */
 async function practiceOn(page: Page, theme: 'light' | 'dark') {
   await useTheme(page, theme);
   await page.goto('./');
-  await seed(page, { ...emptySeed(), kv: [{ key: 'settings', value: { callsign: '9V1NE', grid: 'OJ11', freqPicked: true } }] });
+  const waterfallCalls = test.info().project.name !== 'walkthrough';
+  await seed(page, { ...emptySeed(), kv: [{ key: 'settings', value: { callsign: '9V1NE', grid: 'OJ11', freqPicked: true, waterfallCalls } }] });
   await page.goto('./#/settings/practice');
   await page.getByRole('switch', { name: /^Practice band/ }).check();
   await page.getByRole('link', { name: 'Settings' }).click();

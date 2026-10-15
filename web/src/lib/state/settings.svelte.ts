@@ -114,7 +114,7 @@ export interface Settings {
   highlights: HighlightEntry[];
   /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
   waterfallContrast: Contrast;
-  /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall. */
+  /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall; off by default. */
   waterfallCalls: boolean;
   /** Minutes without a touch before Operate turns to the night display; 0 never. */
   nightAfterMin: NightAfter;
@@ -159,7 +159,7 @@ export const DEFAULTS: Settings = {
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
-  waterfallCalls: true,
+  waterfallCalls: false,
   nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',

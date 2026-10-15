@@ -94,15 +94,22 @@ test('practice on shows the tag and decodes the band without a microphone', asyn
   await expect(row(page, /^CQ /).first()).toBeVisible();
   expect(media).toEqual([]);
 
-  // The waterfall writes each sender over its signal; Radio and audio turns that off.
+  // Radio and audio turns on the sender written over each signal on the waterfall; off by default.
+  const labels = async (on: boolean) => {
+    await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+    await page.getByRole('link', { name: /^Radio and audio/ }).click();
+    const sw = page.getByRole('switch', { name: /^Callsigns on the waterfall/ });
+    await expect(sw).toBeChecked({ checked: !on });
+    await sw.setChecked(on);
+    await page.getByRole('link', { name: 'Settings', exact: true }).click();
+    await page.getByRole('link', { name: 'Operate' }).click();
+  };
+  await expect(page.getByTestId('wf-call')).toHaveCount(0);
+  await labels(true);
   const label = page.getByTestId('wf-call').first();
   await expect(label).toBeVisible({ timeout: 20_000 });
   await expect(page.getByTestId('decode-list').locator('.c-msg', { hasText: (await label.textContent())! }).first()).toBeVisible();
-  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
-  await page.getByRole('link', { name: /^Radio and audio/ }).click();
-  await page.getByRole('switch', { name: /^Callsigns on the waterfall/ }).uncheck();
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await page.getByRole('link', { name: 'Operate' }).click();
+  await labels(false);
   await expect(page.getByTestId('wf-call')).toHaveCount(0);
 });
 

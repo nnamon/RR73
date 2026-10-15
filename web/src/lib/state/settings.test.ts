@@ -23,6 +23,9 @@ describe('settings', () => {
     expect(DEFAULTS.mode).toBe('FT8');
     expect(DEFAULTS.features).toEqual({ activations: false, potaSpots: false, clusterSpots: false });
     expect(DEFAULTS.theme).toBe('light');
+    // Callsigns on the waterfall, and the night display, are the operator's to turn on.
+    expect(DEFAULTS.waterfallCalls).toBe(false);
+    expect(DEFAULTS.nightAfterMin).toBe(0);
   });
 
   it('normalises callsigns', () => {
