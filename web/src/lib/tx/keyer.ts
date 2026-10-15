@@ -20,6 +20,11 @@ export const PTT_SETTLE_MS = 100;
  * within the timeout. It is the transmit scheduler's pre-roll (lib/tx/scheduler.ts).
  */
 export const PTT_LEAD_MS = 500;
+/**
+ * How long the Tx dial set before PTT on waits for the radio's OK, ms, when the dial shifts for a
+ * transmission (lib/cat/passband.ts). Unverified on a device.
+ */
+export const DIAL_TIMEOUT_MS = 300;
 /** PTT goes off this long after the audio ends, ms, on top of the output's latency. */
 export const PTT_TAIL_MS = 100;
 
@@ -38,8 +43,11 @@ export function tailMs(ctx: LatencySource | null | undefined): number {
   return PTT_TAIL_MS + Math.round(Math.max(0, Math.min(latencyS, 1)) * 1000);
 }
 
-/** The radio's answer to PTT on: OK, NG, no answer in time, or no link. */
-export type KeyResult = 'ok' | 'ng' | 'timeout' | 'closed';
+/**
+ * The radio's answer to PTT on: OK, NG, no answer in time, or no link; `dial` when the Tx dial set
+ * before it was refused or unanswered, and PTT on never went out.
+ */
+export type KeyResult = 'ok' | 'ng' | 'timeout' | 'closed' | 'dial';
 
 /** One transmission's hold on PTT. */
 export interface Keying {
@@ -58,13 +66,17 @@ export interface Keying {
 }
 
 export interface Keyer {
-  /** PTT on. PTT goes off `maxMs` later whatever else happens. */
-  key(maxMs: number): Keying;
+  /**
+   * PTT on. PTT goes off `maxMs` later whatever else happens. With `shiftHz` the radio's dial
+   * moves that far first, and PTT on goes out after the radio's OK to it; the receive dial is set
+   * back once PTT off is confirmed (docs/design/cat.md, Passband shift).
+   */
+  key(maxMs: number, shiftHz?: number): Keying;
 }
 
 /** The status line when a transmission cannot key the radio. */
 export function keyFailedText(r: Exclude<KeyResult, 'ok'>): string {
-  return r === 'ng' ? STATUS.pttRefused : r === 'timeout' ? STATUS.pttNoReply : STATUS.radioDown;
+  return r === 'ng' ? STATUS.pttRefused : r === 'timeout' ? STATUS.pttNoReply : r === 'dial' ? STATUS.txDialFailed : STATUS.radioDown;
 }
 
 /** Waits `ms`; resolves at once for 0. */

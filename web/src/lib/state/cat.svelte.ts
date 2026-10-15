@@ -14,10 +14,11 @@
  * Safety: Halt (and with it the page hiding or closing, audio stopping and the output changing,
  * lib/state/station.svelte.ts) sends PTT off while Key the radio with CAT is on or RR73 holds PTT.
  * A lost port, and a radio that stops answering or says receive while keyed, turn Tx off as when
- * audio stops.
+ * audio stops. A shifted transmission's receive dial goes back after PTT off, and on the next
+ * connection when the port went first; a radio that does not take it back turns Tx off.
  */
 
-import { CatRadio, type CatTimers, type RadioState } from '../cat/radio';
+import { CatRadio, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
 import { SerialLink, choosePort, grantedPorts, serialApi, type SerialApiLike, type SerialPortLike } from '../cat/serial';
 import { loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
 import { utcTime } from '../clock/format';
@@ -53,6 +54,8 @@ let deps: Deps = { api: () => serialApi(), wasm: loadCatWasm };
 let current: Link | null = null;
 /** This page lost the port while RR73 may have held PTT on. */
 let recover = false;
+/** This page lost the port while a shifted transmission had the radio on its Tx dial. */
+let recoverShift: DialShift | null = null;
 let testGen = 0;
 /** The RR73 band of the last dial read on this link; undefined before the first. */
 let lastBand: BandId | null | undefined;
@@ -90,6 +93,7 @@ function mirror(s: RadioState) {
   if (s.status === 'connected') {
     rig.error = null;
     recover = false;
+    recoverShift = null;
   } else if (s.status === 'silent') rig.error = 'no-reply';
   rig.noiseOnly = s.noiseOnly;
   rig.hz = s.hz;
@@ -157,14 +161,20 @@ async function open(port: SerialPortLike): Promise<boolean> {
     radioNotice(f === 'silent' ? STATUS.radioSilent : STATUS.radioReceive, true);
     halt();
   });
+  // The receive dial did not go back after a shifted transmission: RR73 now shows the dial the radio
+  // reads, and Tx goes off so nothing goes out on an RF the operator did not choose.
+  radio.onRestore((restored) => {
+    if (current === me && !restored) radioNotice(STATUS.rxDialFailed, true, true);
+  });
   provideKeyer(radio);
-  radio.start({ recover });
+  radio.start({ recover, shifted: recoverShift });
   return true;
 }
 
 /** The port went away: Tx goes off as when audio stops, and the status line says so. */
 function lost(me: Link) {
   recover = me.radio.endedKeyed;
+  recoverShift = me.radio.endedShift;
   current = null;
   provideKeyer(null);
   rig.status = 'lost';
@@ -181,7 +191,8 @@ function lost(me: Link) {
 /**
  * Closes the link without forgetting the port. When RR73 may hold PTT, Halt goes first (the
  * transmission stops, Tx goes off and PTT off goes out), and the port closes once a read confirms
- * receive or the confirmation fails. Resolves false when PTT off went unconfirmed.
+ * receive or the confirmation fails, and after a shifted transmission once the receive dial is
+ * back or setting it failed. Resolves false when PTT off went unconfirmed.
  */
 async function closeCurrent(): Promise<boolean> {
   const c = current;
@@ -194,6 +205,10 @@ async function closeCurrent(): Promise<boolean> {
     halt();
     c.radio.unkeyAll();
     confirmed = await c.radio.unkeyed();
+  }
+  if (c.radio.shifted) {
+    halt();
+    await c.radio.dialRestored();
   }
   c.radio.close();
   await c.link.close();
@@ -291,7 +306,13 @@ export function tuneRadioToBand(): Promise<void> {
   return setRadioDial(plannedDialHz(settings.band, settings.mode));
 }
 
-const testFailed = { ng: 'The IC-705 refused PTT. PTT off was sent and confirmed.', timeout: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.', closed: 'The port closed during the test.' } as const;
+const testFailed = {
+  ng: 'The IC-705 refused PTT. PTT off was sent and confirmed.',
+  timeout: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.',
+  closed: 'The port closed during the test.',
+  // The radio was still on a shifted transmission's Tx dial, and setting the receive dial back failed.
+  dial: 'Not tested: the IC-705 did not set the receive dial back. Check its dial.',
+} as const;
 /** The radio answered OK to PTT on and then said receive. PTT Lock "inhibits all transmissions" (Basic Manual p. 8-4). */
 const PTT_LOCK = 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.';
 /** PTT off went unconfirmed: the operator has to check the radio. Rig control shows it under Connection. */
@@ -388,6 +409,7 @@ export function resetCat() {
   current?.radio.close();
   current = null;
   recover = false;
+  recoverShift = null;
   testGen++;
   lastBand = undefined;
   started = false;

@@ -22,11 +22,17 @@
  *
  * The menu settings are read on connecting, and those still unread every 5 s after, until the
  * radio answers or refuses each.
+ *
+ * A keying with a dial shift (lib/cat/passband.ts) sets the Tx dial first and sends PTT on only
+ * after the radio's OK; the receive dial goes back once PTT off is confirmed. While the radio is on
+ * a Tx dial the state keeps the receive dial, frequency reports leave it alone, the dial is not
+ * polled, and the band sheet's dial and mode sets wait. No dial or mode set ever goes out while
+ * the radio may be keyed by RR73.
  */
 
 import type { LinkEnd } from './serial';
 import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, MenuItemId } from './protocol';
-import { PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
+import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
 
 /** The serial link as the radio uses it. */
 export interface CatTransport {
@@ -71,6 +77,12 @@ export type RadioStatus = 'starting' | 'connected' | 'silent' | 'closed' | 'lost
 
 /** What went wrong while RR73 held PTT on: the radio said receive, or stopped answering. */
 export type TxFault = 'receive' | 'silent';
+
+/** A transmission's dial shift: the receive dial to set back, and the Tx dial set for it, Hz. */
+export interface DialShift {
+  rxHz: number;
+  txHz: number;
+}
 
 export interface RadioState {
   /** `starting` until the radio first answers; `silent` after LOST_LIMIT requests in a row went unanswered. */
@@ -178,6 +190,14 @@ export class CatRadio implements Keyer {
   private unkeyWaiters: ((confirmed: boolean) => void)[] = [];
   /** Menu settings the radio answered NG: not read again. */
   private readonly menuRefused = new Set<MenuItemId>();
+  /** The radio is, or may be, on a Tx dial: set for a shifted keying and not yet set back. */
+  private shift: DialShift | null = null;
+  /** A shift's dial set in flight, Tx dial or receive dial; the next one waits for it. */
+  private dialOp: Promise<void> | null = null;
+  private endedShiftValue: DialShift | null = null;
+  /** Waiting for the receive dial to be set back (true) or for that to fail (false). */
+  private restoreWaiters: ((restored: boolean) => void)[] = [];
+  private readonly restoreListeners = new Set<(restored: boolean) => void>();
 
   constructor(opts: { codec: CatCodec; transport: CatTransport; timers?: CatTimers }) {
     this.codec = opts.codec;
@@ -202,6 +222,16 @@ export class CatRadio implements Keyer {
     return this.endedKeyedValue;
   }
 
+  /** The shift the radio may still be on when the link ended: the next connection sets the receive dial back if the radio is still on the Tx dial. */
+  get endedShift(): DialShift | null {
+    return this.endedShiftValue;
+  }
+
+  /** True while the radio is, or may be, on a Tx dial for a shifted transmission. */
+  get shifted(): boolean {
+    return this.shift !== null;
+  }
+
   /** Listens to every change of the state. */
   onChange(fn: (s: RadioState) => void): () => void {
     this.listeners.add(fn);
@@ -220,6 +250,12 @@ export class CatRadio implements Keyer {
     return () => this.faultListeners.delete(fn);
   }
 
+  /** Listens for the receive dial set back after a shifted transmission: false when the radio refused it or did not answer. */
+  onRestore(fn: (restored: boolean) => void): () => void {
+    this.restoreListeners.add(fn);
+    return () => this.restoreListeners.delete(fn);
+  }
+
   private fault(f: TxFault) {
     if (!this.holder) return;
     this.unkeyAll();
@@ -229,15 +265,24 @@ export class CatRadio implements Keyer {
   /**
    * Reads what RR73 shows and checks (transmit or receive, the dial, the mode, the menu settings)
    * and starts polling. Sends no PTT, except PTT off when `recover` is set and the radio reports
-   * transmitting: RR73 lost the port while it held PTT on.
+   * transmitting: RR73 lost the port while it held PTT on. With `shifted`, RR73 lost the port while
+   * the radio was on a Tx dial: the receive dial is set back when the radio still reads the Tx dial.
    */
-  start(opts: { recover?: boolean } = {}) {
+  start(opts: { recover?: boolean; shifted?: DialShift | null } = {}) {
     void this.request({ type: 'read_transmit' }).then((r) => {
       if (opts.recover && r.ok && r.event.type === 'transmit' && r.event.on) {
         this.mayBeKeyed = true;
         this.unkeyAll();
       }
     });
+    const shifted = opts.shifted;
+    if (shifted) {
+      void this.request({ type: 'read_frequency' }).then((r) => {
+        if (!r.ok || r.event.type !== 'frequency' || r.event.hz !== shifted.txHz || this.shift) return;
+        this.shift = { ...shifted };
+        this.restoreDial();
+      });
+    }
     void this.readDial(true);
     this.readSettings();
     this.schedulePoll();
@@ -267,6 +312,25 @@ export class CatRadio implements Keyer {
     for (const w of this.unkeyWaiters.splice(0)) w(confirmed);
   }
 
+  /**
+   * Resolves true once the radio is back on the receive dial after a shifted transmission (at once
+   * with none), or false when setting it back failed or the link ends first.
+   */
+  dialRestored(): Promise<boolean> {
+    if (!this.shift) return Promise.resolve(true);
+    if (this.over) return Promise.resolve(false);
+    return new Promise((resolve) => this.restoreWaiters.push(resolve));
+  }
+
+  private settleRestore(restored: boolean) {
+    for (const w of this.restoreWaiters.splice(0)) w(restored);
+  }
+
+  /** Dial and mode sets wait while RR73 holds or may hold PTT, and while a shift holds the radio on a Tx dial. */
+  private tuningBlocked(): boolean {
+    return this.holder !== null || this.mayBeKeyed || this.shift !== null;
+  }
+
   /** Reads the frequency, and the mode and data mode with `all`. */
   readDial(all = false): Promise<CatResult[]> {
     const reads: Promise<CatResult>[] = [this.request({ type: 'read_frequency' })];
@@ -280,7 +344,7 @@ export class CatRadio implements Keyer {
    * own PTT). Resolves with the first refusal or loss, or ok.
    */
   async tune(hz: number): Promise<CatResult> {
-    if (this.holder || this.mayBeKeyed) return { ok: false, why: 'busy' };
+    if (this.tuningBlocked()) return { ok: false, why: 'busy' };
     const now = await this.request({ type: 'read_transmit' });
     if (!now.ok) return now;
     if (now.event.type === 'transmit' && now.event.on) return { ok: false, why: 'busy' };
@@ -301,7 +365,7 @@ export class CatRadio implements Keyer {
   /** Queues a request; resolves with its answer, or why there was none. A dial or mode set while keyed is refused with `busy`. */
   request(req: CatRequest, timeoutMs = REPLY_MS): Promise<CatResult> {
     if (this.over) return Promise.resolve({ ok: false, why: 'closed' });
-    if (TUNING.has(req.type) && (this.holder || this.mayBeKeyed)) return Promise.resolve({ ok: false, why: 'busy' });
+    if (TUNING.has(req.type) && this.tuningBlocked()) return Promise.resolve({ ok: false, why: 'busy' });
     return new Promise((resolve) => {
       this.waiting.push({ req, timeoutMs, resolve });
       this.pump();
@@ -312,24 +376,35 @@ export class CatRadio implements Keyer {
    * PTT on (`1C 00 01`), at once. The keying's result resolves when the radio answers OK, or says
    * why not within PTT_TIMEOUT_MS; without an OK, PTT off follows at once. Releasing sends PTT off
    * unless a later keying holds PTT; `maxMs` after keying, PTT goes off whatever else happens.
+   *
+   * With `shiftHz`, or with the radio still on an earlier transmission's Tx dial, the dial goes
+   * first: `05` to the receive dial plus `shiftHz`, after any earlier PTT off is confirmed, and PTT
+   * on only after the radio's OK to it within DIAL_TIMEOUT_MS. Without that OK the result is
+   * `dial` and PTT on never goes out; released before PTT on, it is `closed`. Either way the
+   * receive dial is set back once PTT off is confirmed.
    */
-  key(maxMs: number): Keying {
+  key(maxMs: number, shiftHz = 0): Keying {
     const token = {};
+    const dialFirst = shiftHz !== 0 || this.shift !== null;
     this.holder = token;
     this.okAt = null;
     this.clearTail();
-    this.pttGen++;
-    this.mayBeKeyed = true;
-    this.patch({ keyed: true });
     // setTimeout runs at once for more than 2^31 - 1 ms.
     const watchdog = this.timers.set(() => release(0), Math.min(maxMs, 0x7fffffff));
     let released = false;
+    let pttSent = false;
     const release = (tailMs = 0) => {
       if (released) return;
       released = true;
       this.timers.clear(watchdog);
       if (this.holder !== token) return;
       this.holder = null;
+      // Released before its PTT on went out (the dial went first): no PTT off is due, as any
+      // earlier one is being confirmed. The receive dial goes back.
+      if (!pttSent) {
+        this.restoreDial();
+        return;
+      }
       if (tailMs > 0) {
         this.tailTimer = this.timers.set(() => {
           this.tailTimer = null;
@@ -337,13 +412,29 @@ export class CatRadio implements Keyer {
         }, tailMs);
       } else this.unkeyNow();
     };
-    const result: Promise<KeyResult> = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS).then((r) => {
-      const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
-      if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
-      if (answer !== 'ok') release();
-      return answer;
-    });
     const held = () => !released && this.holder === token && !this.over;
+    const pttOn = (): Promise<KeyResult> => {
+      pttSent = true;
+      this.pttGen++;
+      this.mayBeKeyed = true;
+      this.patch({ keyed: true });
+      return this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS).then((r) => {
+        const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
+        if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
+        if (answer !== 'ok') release();
+        return answer;
+      });
+    };
+    // The dial never moves while the radio may transmit: PTT held by an earlier keying, or its tail,
+    // goes off first, and the dial waits for its confirmation.
+    if (dialFirst && this.mayBeKeyed) this.unkeyNow();
+    const result: Promise<KeyResult> = !dialFirst
+      ? pttOn()
+      : this.txDial(shiftHz, held).then((d) => {
+          if (d === 'ok' && held()) return pttOn();
+          release();
+          return d === 'ok' ? 'closed' : d;
+        });
     return {
       result,
       release,
@@ -351,6 +442,67 @@ export class CatRadio implements Keyer {
         return held();
       },
     };
+  }
+
+  /**
+   * Before PTT on: sets the dial `shiftHz` from the receive dial and waits for the radio's OK. With
+   * `shiftHz` 0 it sets the receive dial back, as an earlier transmission left the radio on its Tx
+   * dial. The dial never changes while the radio may be keyed: an earlier PTT off must be confirmed
+   * first, and a restore in flight ends first.
+   */
+  private async txDial(shiftHz: number, held: () => boolean): Promise<'ok' | 'dial' | 'closed'> {
+    for (;;) {
+      if (!held()) return 'closed';
+      if (this.dialOp) await this.dialOp;
+      else if (!this.mayBeKeyed) break;
+      else if (!(await this.unkeyed())) return held() ? 'dial' : 'closed';
+    }
+    const rxHz = this.shift?.rxHz ?? this.stateValue.hz;
+    if (rxHz === null) return 'dial';
+    const shift = { rxHz, txHz: rxHz + shiftHz };
+    this.shift = shift;
+    // With no shift, the radio is back on the receive dial once it answers OK.
+    const r = await this.dialSet(shift.txHz, DIAL_TIMEOUT_MS, (answer) => {
+      if (answer.ok && shiftHz === 0 && this.shift === shift) {
+        this.shift = null;
+        this.settleRestore(true);
+      }
+    });
+    // Released while the set was in flight: the receive dial goes back now.
+    if (!held()) this.restoreDial();
+    return r.ok ? 'ok' : r.why === 'closed' ? 'closed' : 'dial';
+  }
+
+  /**
+   * One of a shift's dial sets, jumping the queue; the next waits for it. `then` runs with the
+   * answer before any waiting set goes out.
+   */
+  private dialSet(hz: number, timeoutMs: number, then: (r: CatResult) => void): Promise<CatResult> {
+    let done = () => {};
+    this.dialOp = new Promise<void>((resolve) => (done = resolve));
+    return this.sendNow({ type: 'set_frequency', hz }, timeoutMs).then((r) => {
+      this.dialOp = null;
+      then(r);
+      done();
+      return r;
+    });
+  }
+
+  /**
+   * Sets the receive dial back after a shifted transmission, once no keying holds PTT and a read
+   * has confirmed receive. Then reads the dial: after a refusal or no answer, RR73 shows and uses
+   * the dial the radio reports, and says so.
+   */
+  private restoreDial() {
+    const s = this.shift;
+    if (!s || this.over || this.holder || this.mayBeKeyed || this.dialOp) return;
+    void this.dialSet(s.rxHz, REPLY_MS, (r) => {
+      if (this.over || this.shift !== s) return;
+      this.shift = null;
+      void this.readDial();
+      this.settleRestore(r.ok);
+      for (const l of this.restoreListeners) l(r.ok);
+    });
   }
 
   /** PTT off at once, whoever keyed: Halt, the page going, an error. Sends it even when RR73 holds no PTT. */
@@ -383,11 +535,15 @@ export class CatRadio implements Keyer {
     for (const u of this.unsubscribe.splice(0)) u();
     this.patch({ status, keyed: false });
     this.settleUnkey(!this.mayBeKeyed);
+    this.settleRestore(this.shift === null);
   }
 
   private ended(end: LinkEnd) {
     const wasOver = this.over;
-    if (!wasOver) this.endedKeyedValue = this.mayBeKeyed;
+    if (!wasOver) {
+      this.endedKeyedValue = this.mayBeKeyed;
+      this.endedShiftValue = this.shift;
+    }
     this.finish(end === 'lost' ? 'lost' : 'closed');
     if (!wasOver) for (const l of this.endListeners) l(end);
   }
@@ -419,11 +575,12 @@ export class CatRadio implements Keyer {
     }
   }
 
-  /** A read said receive with RR73 holding no PTT. */
+  /** A read said receive with RR73 holding no PTT: a shifted transmission's receive dial goes back. */
   private confirmed() {
     this.mayBeKeyed = false;
     if (this.stateValue.unkeyFailed) this.patch({ unkeyFailed: false });
     this.settleUnkey(true);
+    this.restoreDial();
   }
 
   /**
@@ -458,7 +615,7 @@ export class CatRadio implements Keyer {
     const next = this.waiting.shift();
     if (!next) return;
     // Refused when it reaches the head of the queue too: PTT may have gone on since it was queued.
-    if (TUNING.has(next.req.type) && (this.holder || this.mayBeKeyed)) {
+    if (TUNING.has(next.req.type) && this.tuningBlocked()) {
       next.resolve({ ok: false, why: 'busy' });
       this.pump();
       return;
@@ -467,6 +624,12 @@ export class CatRadio implements Keyer {
   }
 
   private send(req: CatRequest, timeoutMs: number, resolve: (r: CatResult) => void, now: boolean) {
+    // The last check before the wire: no dial or mode set while the radio may be keyed by RR73.
+    if (TUNING.has(req.type) && this.mayBeKeyed) {
+      resolve({ ok: false, why: 'busy' });
+      this.pump();
+      return;
+    }
     let bytes: Uint8Array;
     try {
       bytes = this.codec.encode(req);
@@ -538,6 +701,8 @@ export class CatRadio implements Keyer {
   private note(e: CatEvent) {
     switch (e.type) {
       case 'frequency':
+        // On a Tx dial the state keeps the receive dial: what the app shows, decodes and logs.
+        if (this.shift) break;
         this.patch({ hz: e.hz, heardAtMs: this.timers.now() });
         break;
       case 'mode':
@@ -590,6 +755,11 @@ export class CatRadio implements Keyer {
       return;
     }
     if (this.stateValue.keyed) return;
+    // On a Tx dial: no dial reads until the receive dial is back; try setting it back.
+    if (this.shift) {
+      this.restoreDial();
+      return;
+    }
     this.polls++;
     const all = this.polls % MODE_EVERY === 0;
     void this.readDial(all);

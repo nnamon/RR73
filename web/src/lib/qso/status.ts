@@ -67,6 +67,10 @@ export const STATUS = {
   pttUnconfirmed: 'PTT off not confirmed · unkey radio',
   /** PTT was taken back (Halt, a fault) before a transmission's audio started. */
   pttTaken: 'PTT released · Tx stopped',
+  /** The radio refused or did not answer the Tx dial set before PTT on (the passband shift): nothing transmits. */
+  txDialFailed: 'Radio did not set Tx dial',
+  /** The radio did not take the receive dial back after a shifted transmission: RR73 shows the dial it reads. */
+  rxDialFailed: 'Rx dial not restored · Tx off',
   /** The radio's dial is on another band than RR73's: "Radio on 40m". */
   radioBand: (band: string) => `Radio on ${band}`,
   radioOutside: 'Radio outside the bands',
