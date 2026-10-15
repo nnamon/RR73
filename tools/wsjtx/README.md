@@ -36,14 +36,16 @@ docker compose run --rm wsjtx reference.py --print --mode FT8 corpus/public/ft8_
 ## Decode lists for the bench
 
 ```sh
-docker compose run --rm wsjtx python3 tools/wsjtx/decode_list.py --out results/jt9-ft4.txt \
-  --times results/jt9-ft4.times corpus/synthetic/ft4-sweep
+docker compose run --rm wsjtx python3 tools/wsjtx/decode_list.py --fresh \
+  --my-call K1ABC --his-call W9XYZ --qso-progress 1 \
+  --out results/jt9-ft4.txt --times results/jt9-ft4.times corpus/synthetic/ft4-sweep
 docker compose run --rm rust rr73-bench import --decodes results/jt9-ft4.txt --label jt9-ft4-d3 \
   --out results/jt9-ft4.json corpus/synthetic/ft4-sweep
 ```
 
-- `decode_list.py` decodes every slot below the paths with `jt9 -d 3`, in the mode its sidecar names, and writes the decode list `rr73-bench import` reads (`docs/bench.md`): a line `== <path below corpus/ without extension>` per slot, in path order, followed by `jt9`'s decode lines unchanged, `?` and `aN` marks included. Sidecars are never changed, so synthetic slots work too.
-- Each worker thread keeps one `jt9` working directory for its slots, so `jt9` reuses its FFTW wisdom between slots as WSJT-X does. `--fresh` gives every slot a new directory; on the 3540 `ft4-sweep` slots both give the same decodes.
+- `decode_list.py` decodes every slot below the paths with `jt9 -d 3`, one `jt9` process per slot, in the mode its sidecar names, and writes the decode list `rr73-bench import` reads (`docs/bench.md`): a line `== <path below corpus/ without extension>` per slot, in path order, followed by `jt9`'s decode lines unchanged, `?` and `aN` marks included. Sidecars are never changed, so synthetic slots work too.
+- `--my-call`, `--his-call` and `--qso-progress` pass `-c`, `-x` and `-Q` to `jt9`. With no options `jt9` tries CQ hypotheses and marks what they decode `a1`; `rr73-bench import` scores such lines like any other decode. With callsigns that occur in no slot, as above, `jt9` printed no `aN` decode on `ft4-sweep` and `snr-sweep` (experiment 0007). `--times` records the options in its tool string.
+- Each worker thread keeps one `jt9` working directory for its slots, so `jt9` reuses its FFTW wisdom between slots as WSJT-X does. `--fresh` gives every slot a new directory; on the 3540 `ft4-sweep` and 1680 `snr-sweep` slots both give the same decodes.
 - `--times` writes one JSON line per slot: the tool, the decode count, the wall time and CPU time of the `jt9` process, and `jt9_s`, the total of the `jt9` row in its `timer.out`, in seconds.
 
 ## Output parsing

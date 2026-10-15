@@ -91,3 +91,21 @@ def test_slot_without_a_sidecar_stops_before_decoding(tmp_path: Path) -> None:
     jt9 = fake_jt9(tmp_path, "jt9-ft8-no-decodes.txt")
     assert decode_list.main(["--jt9", str(jt9), "--out", str(tmp_path / "list.txt"), str(wav)]) == 2
     assert not (tmp_path / "args.txt").exists()
+
+
+def test_qso_context_reaches_jt9_and_the_tool_string(tmp_path: Path) -> None:
+    make_slot(tmp_path / "corpus", "260101_000000_s0000", "FT8")
+    jt9 = fake_jt9(tmp_path, "jt9-ft8-no-decodes.txt")
+    out, times = tmp_path / "list.txt", tmp_path / "times.jsonl"
+    context = ["--my-call", "K1ABC", "--his-call", "W9XYZ", "--qso-progress", "2"]
+    argv = ["--jt9", str(jt9), "--fresh", *context, "--out", str(out), "--times", str(times), str(tmp_path / "corpus")]
+    assert decode_list.main(argv) == 0
+    [args] = (tmp_path / "args.txt").read_text().splitlines()
+    assert args.split()[:9] == ["-8", "-d", "3", "-c", "K1ABC", "-x", "W9XYZ", "-Q", "2"]
+    [record] = [json.loads(line) for line in times.read_text().splitlines()]
+    assert record["tool"] == "jt9 9.9.9 -8 -d 3 -c K1ABC -x W9XYZ -Q 2"
+
+
+def test_qso_progress_outside_0_to_5_is_refused(tmp_path: Path) -> None:
+    with pytest.raises(SystemExit):
+        decode_list.main(["--qso-progress", "6", "--out", str(tmp_path / "list.txt"), str(tmp_path)])
