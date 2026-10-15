@@ -21,7 +21,7 @@
   import { layout } from '../../lib/app/layout.svelte';
   import { setListKeys, stepSelection } from '../../lib/app/shortcuts';
   import type { ListItem } from '../../lib/decode/list';
-  import { SLOT_MS, isFt } from '../../lib/clock/slots';
+  import { EARLY_S, SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
   import { RX_PANE_HZ, buildList, filterCounts, rowFacts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
   import { waterfallCalls } from '../../lib/waterfall/calls';
@@ -72,6 +72,8 @@
 
   const live = $derived(audio.status === 'running');
   const slotSeconds = $derived(SLOT_MS[ftMode] / 1000);
+  // The early pass lists a slot this far in (EARLY_S).
+  const earlySeconds = $derived(EARLY_S[ftMode] ?? slotSeconds);
 
   async function findClear() {
     const hz = (await waterfall?.quietest()) ?? null;
@@ -344,13 +346,13 @@
         <div class="empty">
           {#if band.decoder.state === 'loading'}
             <h2>Loading the decoder</h2>
-            <p>Decodes appear here after each {slotSeconds} s slot ends.</p>
+            <p>Decodes appear here {earlySeconds} s into each {slotSeconds} s slot.</p>
           {:else if live}
             <h2>No decodes yet</h2>
-            <p>Decodes appear here after each {slotSeconds} s slot ends. {callWord} one to call the station.</p>
+            <p>Decodes appear here {earlySeconds} s into each {slotSeconds} s slot. {callWord} one to call the station.</p>
           {:else}
             <h2>No decodes yet</h2>
-            <p>Decodes appear here after each {slotSeconds} s slot ends, while audio runs.</p>
+            <p>Decodes appear here {earlySeconds} s into each {slotSeconds} s slot, while audio runs.</p>
           {/if}
         </div>
       {/if}
@@ -422,14 +424,21 @@
     box-shadow: inset 0 calc(-1 * var(--rr-hairline)) 0 var(--rr-sep);
   }
 
-  /* The chips scroll sideways when they outgrow the row, as the macro row does. */
+  /*
+   * The chips scroll sideways when they outgrow the row, as the macro row does, and only
+   * sideways: the row is as tall as the 44 pt targets and reaches over the edges of the 36 pt
+   * bar, so nothing overflows it up or down.
+   */
   .chip-row {
     display: flex;
     flex: 1;
     min-width: 0;
     align-items: center;
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+    height: var(--rr-tap);
+    margin: calc((var(--rr-filters) - var(--rr-tap)) / 2) 0;
+    overflow: auto hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-x;
     scrollbar-width: none;
   }
 
@@ -447,14 +456,13 @@
     gap: var(--rr-space-1);
   }
 
-  /* 28 pt chips inside 44 pt targets that reach over the edges of the 36 pt row. */
+  /* 28 pt chips inside 44 pt targets, the height of the chip row. */
   .chip {
     display: flex;
     flex: none;
     align-items: center;
     min-width: var(--rr-tap);
     height: var(--rr-tap);
-    margin: calc((var(--rr-filters) - var(--rr-tap)) / 2) 0;
     padding: 0 var(--rr-space-half);
   }
 

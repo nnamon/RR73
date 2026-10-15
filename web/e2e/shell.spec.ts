@@ -37,6 +37,7 @@ test('Operate shows the band, the frequency and the empty decode list', async ({
   await expect(band).toContainText('14.074');
   await expect(band).toHaveAccessibleName('Change band. Now 20m FT8, 14.074 MHz USB.');
   await expect(page.getByText('No decodes yet')).toBeVisible();
+  await expect(page.getByText('Decodes appear here 13.5 s into each 15 s slot, while audio runs.')).toBeVisible();
 });
 
 test('a tap on a band applies it at once', async ({ page }) => {

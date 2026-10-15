@@ -42,6 +42,30 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).toMatch(new RegExp(`^${hhmmss(newer)} UTC`));
 });
 
+test('the filter chips scroll sideways only, with 44 px targets', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.getByRole('link', { name: 'Operate' }).click();
+  const row = page.locator('.chip-row');
+  await expect(row).toBeVisible();
+  // Nothing overflows the row up or down, so a vertical drag or wheel has nothing to move.
+  const size = await row.evaluate((el) => ({ scroll: el.scrollHeight, client: el.clientHeight, touch: getComputedStyle(el).touchAction }));
+  expect(size.scroll).toBeLessThanOrEqual(size.client);
+  expect(size.touch).toBe('pan-x');
+  const box = (await row.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.wheel(0, 120);
+  await page.waitForTimeout(200);
+  expect(await row.evaluate((el) => el.scrollTop)).toBe(0);
+  for (const chip of await row.locator('button.chip').all()) {
+    const b = (await chip.boundingBox())!;
+    expect(b.height).toBeGreaterThanOrEqual(44);
+    expect(b.width).toBeGreaterThanOrEqual(44);
+  }
+});
+
 test('the early pass lists a slot before it ends; the full slot keeps those rows and adds its own after them', async ({ page }) => {
   await page.goto('./#/settings');
   const field = page.getByRole('textbox', { name: 'Callsign' });

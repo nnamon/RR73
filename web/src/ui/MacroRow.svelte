@@ -19,6 +19,7 @@
 </div>
 
 <style>
+  /* Scrolls sideways only, as the filter chips do. */
   .mr {
     display: flex;
     flex: none;
@@ -26,8 +27,9 @@
     align-items: center;
     height: 52px;
     padding: 0 calc(var(--rr-space-3) + var(--rr-safe-right)) 0 calc(var(--rr-space-3) + var(--rr-safe-left));
-    overflow-x: auto;
-    overscroll-behavior-x: contain;
+    overflow: auto hidden;
+    overscroll-behavior: contain;
+    touch-action: pan-x;
     scrollbar-width: none;
   }
 

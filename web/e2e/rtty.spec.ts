@@ -256,6 +256,8 @@ for (const theme of ['light', 'dark'] as const) {
     await menu.getByRole('menuitem', { name: 'Number received 127' }).click();
     await expect(page.getByTestId('strip-rcvd')).toHaveValue('599 127');
     await expect(page.getByRole('toolbar', { name: 'Macros' }).getByRole('button')).toHaveText(['CQ', 'Exch', 'TU', 'My call', 'S&P exch', 'Again', 'Nr?', 'Call?']);
+    // The macro row scrolls sideways only, as the filter chips do.
+    expect(await page.getByRole('toolbar', { name: 'Macros' }).evaluate((el) => [el.scrollHeight <= el.clientHeight, getComputedStyle(el).touchAction])).toEqual([true, 'pan-x']);
 
     // Weak copy: uncertain characters in grey, the squelch at −16 and the speed menu open.
     await bar(page).getByRole('button', { name: 'More' }).click();
@@ -287,6 +289,16 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(dial).toHaveValue('14.0830');
     await expect(band.getByRole('radio', { name: '60m', exact: true })).toBeDisabled();
     await expect(band.getByRole('radio', { name: '2m', exact: true })).toBeDisabled();
+    const reset = band.getByRole('button', { name: /^Reset to/ });
+    await expect(reset).toHaveCount(0);
+    await dial.fill('14085');
+    await dial.press('Enter');
+    await expect(dial).toHaveValue('14.0850');
+    // Reset goes back to the band's usual dial.
+    await expect(reset).toHaveAccessibleName('Reset to 14.0830 MHz');
+    await reset.click();
+    await expect(dial).toHaveValue('14.0830');
+    await expect(reset).toHaveCount(0);
     await dial.fill('14085');
     await dial.press('Enter');
     await expect(dial).toHaveValue('14.0850');
