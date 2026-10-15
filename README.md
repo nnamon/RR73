@@ -106,7 +106,7 @@ Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A 
 - A cable between the phone's headset audio and the radio's audio in and out, through the headset jack or a USB-C or Lightning headset adapter.
 - The radio in USB, keyed by VOX.
 
-There is no CAT control. Set the band on the radio and in the band sheet. Rig control over Web Serial in desktop Chrome and Edge is planned.
+On the iPhone there is no CAT control: set the band on the radio and in the band sheet. In Chrome and Edge on a computer, Settings › Rig control reads and sets an Icom IC-705 over its USB cable or an Elecraft KX2 through a Digirig, and keys it once Key the radio with CAT is on (`docs/design/cat.md`).
 
 ## Getting started
 
