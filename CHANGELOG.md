@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.0 · 2026-10-15
 
 - Night display: the UTC clock, the next transmission and the stations heard in dim red on black, from ••• or by itself after an idle time set in Settings › Appearance. A tap wakes Operate, and Halt stays while Tx is on.
 
