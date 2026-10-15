@@ -155,6 +155,11 @@ pub struct SearchParams {
     /// (`crate::silence`).
     #[serde(default)]
     pub skip_silent_frames: bool,
+    /// Lowest score of a candidate whose sync symbols do not all lie inside the slot (a
+    /// transmission that starts before the slot or runs past its end), in dB. `None` uses
+    /// `min_score_db`.
+    #[serde(default)]
+    pub partial_min_score_db: Option<f32>,
 }
 
 /// Refinement implementations.
@@ -402,6 +407,7 @@ impl DecoderConfig {
                 ft4_dt_min_s: -1.0,
                 ft4_dt_max_s: 1.0,
                 skip_silent_frames: false,
+                partial_min_score_db: None,
             },
             refine: RefineParams {
                 kind: RefineKind::None,
@@ -532,6 +538,9 @@ impl DecoderConfig {
         }
         if !s.min_score_db.is_finite() || s.max_candidates > 100_000 {
             return bad("min_score_db must be finite and max_candidates at most 100000");
+        }
+        if s.partial_min_score_db.is_some_and(|v| !v.is_finite()) {
+            return bad("partial_min_score_db must be finite");
         }
         if !(self.demod.llr_variance > 0.0 && self.demod.llr_variance.is_finite()) {
             return bad("llr_variance must be positive");

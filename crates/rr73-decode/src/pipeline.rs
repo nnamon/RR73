@@ -13,7 +13,7 @@ use crate::ldpc::{LdpcDecoder, LdpcScratch, MinSum, ParityGraph, SumProduct};
 use crate::osd::{BpOsd, OsdParams};
 use crate::refine::{BasebandRefine, RefineScratch};
 use crate::report::DecodeReport;
-use crate::search::{CandidateSearch, CostasSearch};
+use crate::search::{CandidateSearch, CostasPartialSearch, CostasSearch};
 use crate::session::{DecodeSession, Stage};
 use crate::snr::SnrScale;
 use crate::stages::{NoRefine, NoSubtract, Subtractor, SyncRefine};
@@ -179,10 +179,17 @@ impl Pipeline {
     /// Builds the stages a configuration names.
     pub fn from_config(config: &DecoderConfig) -> Self {
         let search: Box<dyn CandidateSearch> = match config.search.kind {
-            SearchKind::Costas => Box::new(CostasSearch {
-                max_candidates: config.search.max_candidates,
-                min_score_db: config.search.min_score_db,
-            }),
+            SearchKind::Costas => match config.search.partial_min_score_db {
+                None => Box::new(CostasSearch {
+                    max_candidates: config.search.max_candidates,
+                    min_score_db: config.search.min_score_db,
+                }),
+                Some(partial) => Box::new(CostasPartialSearch {
+                    max_candidates: config.search.max_candidates,
+                    min_score_db: config.search.min_score_db,
+                    partial_min_score_db: partial,
+                }),
+            },
         };
         let refine: Box<dyn SyncRefine> = match config.refine.kind {
             RefineKind::None => Box::new(NoRefine),
