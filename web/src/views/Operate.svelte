@@ -13,6 +13,7 @@
   import AudioBanner from '../ui/AudioBanner.svelte';
   import StationBar from '../ui/StationBar.svelte';
   import Waterfall from '../ui/Waterfall.svelte';
+  import NightDisplay from '../ui/NightDisplay.svelte';
   import { PANES, familyOf } from './operate/panes';
   import { logNow, qso, setFrequencies } from '../lib/state/qso.svelte';
   import { loggable } from '../lib/qso/sequencer';
@@ -109,6 +110,7 @@
   {/if}
 
   <Pane {active} waterfall={wf} />
+  {#if !isKeyboard}<NightDisplay />{/if}
 </section>
 
 <style>

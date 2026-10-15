@@ -30,6 +30,7 @@ Settings › Practice band plays a band of simulated stations in the app, with n
 - Chips filter the list to CQs, new stations, messages to you or the Rx frequency. Hide worked leaves out stations already in the log on the band and mode.
 - A double-tap on a decode calls the station. The six messages go in turn, each in its slot, and the QSO is logged at RR73 or 73. CQ calls CQ; Repeat CQ answers the next caller after each QSO; Hunt answers CQs one after another.
 - Halt stops the transmission at once.
+- Night display, in ••• or after an idle time, shows the clock, the next transmission and the stations heard in dim red on black. A tap wakes Operate.
 
 ### Hound, WSPR and RTTY
 

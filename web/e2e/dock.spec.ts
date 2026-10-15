@@ -143,7 +143,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st (Even)', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Night display', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st (Even)', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();
@@ -219,4 +219,41 @@ test('Tune in the ••• menu starts at once, shows in the bar, and Halt stop
   await bar.getByRole('button', { name: 'Halt' }).click();
   await expect(bar.getByRole('status')).toHaveText('');
   await expect(bar.getByRole('button', { name: 'Tx off' })).toBeVisible();
+});
+
+test('Night display: from •••, the clock and the stations heard, a tap or a key wakes, and it comes by itself after the idle time', async ({ page }) => {
+  await page.clock.install({ time: Date.UTC(2026, 9, 15, 21, 4, 31) });
+  await setUp(page);
+  const slot = Date.UTC(2026, 9, 15, 21, 4, 15);
+  await page.evaluate(
+    (s) => window.__rr73!.decoded(s, [
+      { text: 'CQ JA1KXM PM95', freq_hz: 900, dt_s: 0.1, snr_db: -12 },
+      { text: 'CQ VK2LAW QF56', freq_hz: 1500, dt_s: 0.1, snr_db: -3 },
+    ]),
+    slot,
+  );
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await bar.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menuitem', { name: 'Night display' }).click();
+  const night = page.getByRole('dialog', { name: 'Night display' });
+  await expect(night).toBeVisible();
+  await expect(night).toContainText(/21:04:3\d\s*UTC/);
+  await expect(night).toContainText('Heard at 21:04:15');
+  await expect(night.locator('.heard')).toHaveText(['VK2LAW −03', 'JA1KXM −12']);
+  // Nothing can play: no Halt. A tap wakes Operate.
+  await expect(night.getByRole('button', { name: 'Halt' })).toHaveCount(0);
+  await night.getByRole('button', { name: 'Wake the display' }).click();
+  await expect(night).toBeHidden();
+
+  // After 2 min without a touch, by itself.
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('radiogroup', { name: 'Night display' }).getByText('2 min').click();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await page.clock.fastForward('01:30');
+  await expect(night).toBeHidden();
+  await page.clock.fastForward('00:40');
+  await expect(night).toBeVisible();
+  // A key wakes it too.
+  await page.keyboard.press('Shift');
+  await expect(night).toBeHidden();
 });

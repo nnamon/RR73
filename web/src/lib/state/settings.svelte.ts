@@ -116,6 +116,8 @@ export interface Settings {
   waterfallContrast: Contrast;
   /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall. */
   waterfallCalls: boolean;
+  /** Minutes without a touch before Operate turns to the night display; 0 never. */
+  nightAfterMin: NightAfter;
   wspr: WsprSettings;
   /** The operator's name and QTH, for {MYNAME} and {MYQTH} in keyboard macros. */
   myName: string;
@@ -158,6 +160,7 @@ export const DEFAULTS: Settings = {
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
   waterfallCalls: true,
+  nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',
   myQth: '',
@@ -166,6 +169,10 @@ export const DEFAULTS: Settings = {
 };
 
 const KEY = 'settings';
+
+/** The night display's idle times, min; 0 is never. */
+export const NIGHT_AFTER = [0, 2, 5, 10] as const;
+export type NightAfter = (typeof NIGHT_AFTER)[number];
 
 /**
  * The stored record's format, kept in it as `schema`:
@@ -311,6 +318,7 @@ export function validate(raw: unknown): Settings {
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
   if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
+  if (NIGHT_AFTER.includes(r.nightAfterMin as NightAfter)) s.nightAfterMin = r.nightAfterMin as NightAfter;
   s.wspr = validateWspr(r.wspr);
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);
   s.rtty = validateRtty(r.rtty);

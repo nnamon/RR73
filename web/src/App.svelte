@@ -36,6 +36,7 @@
   import { settings, settingsStatus } from './lib/state/settings.svelte';
   import { busy, halt } from './lib/state/station.svelte';
   import { callCq, qso, setHunt, setTxEnabled, startQso } from './lib/state/qso.svelte';
+  import { startNightTimer } from './lib/state/night.svelte';
   import { setBeacon, startWspr, wspr } from './lib/state/wspr.svelte';
 
   const tab = $derived(tabOf(route.path));
@@ -102,6 +103,7 @@
     startClock();
     startQso();
     startWspr();
+    return startNightTimer();
   });
 
   /**

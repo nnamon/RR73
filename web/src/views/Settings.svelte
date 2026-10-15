@@ -5,7 +5,7 @@
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
   import { split } from '../lib/app/layout.svelte';
-  import { normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { NIGHT_AFTER, normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
   import { busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
@@ -315,6 +315,19 @@
         </label>
       {/each}
     </div>
+    <div class="group night">
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="night-after">Night display</span><span class="row-sub">After Operate sits untouched</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="night-after">
+          {#each NIGHT_AFTER as m (m)}
+            <label class="seg-i" class:on={settings.nightAfterMin === m}>
+              <input class="visually-hidden" type="radio" name="night-after" value={m} checked={settings.nightAfterMin === m} onchange={() => void updateSettings({ nightAfterMin: m })} />
+              {m === 0 ? 'Off' : `${m} min`}
+            </label>
+          {/each}
+        </span>
+      </div>
+    </div>
     {#if !one}<div class="group colours">
       <a class="row link" href={href('settings', 'colours')}>
         <span class="row-main"><span class="row-title">Decode colours</span></span>
@@ -389,8 +402,16 @@
     color: var(--rr-tx-text);
   }
 
-  .colours {
+  .colours,
+  .night {
     margin-top: var(--rr-space-4);
+  }
+
+  /* The title, then the segments across the row. */
+  .stack {
+    flex-direction: column;
+    gap: var(--rr-space-2);
+    align-items: stretch;
   }
 
   .reload {

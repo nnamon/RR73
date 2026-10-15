@@ -25,6 +25,7 @@
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
+  import { showNight } from '../lib/state/night.svelte';
   import { beaconTexts, clearSpots, nextText, setBeacon, setPowerDbm, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
 
   let { onsave, variant = 'phone' }: { onsave: () => void; variant?: 'phone' | 'panel' | 'bottom' | 'side' } = $props();
@@ -87,6 +88,7 @@
   const moreItems: BarMenuItem[] = $derived([
     { id: 'once', label: 'Transmit next slot', onclick: () => transmitNextSlot() },
     { id: 'tune', label: 'Tune for 10 s', onclick: () => startTune(w.txHz) },
+    { id: 'night', label: 'Night display', onclick: () => showNight() },
     { id: 'save', label: 'Save slot', onclick: onsave },
     { id: 'clear', label: 'Clear spots', gap: true, onclick: () => clearSpots() },
     { id: 'power', label: 'Power', value: `${w.powerDbm} dBm`, onclick: () => (open = 'power') },

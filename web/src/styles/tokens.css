@@ -272,6 +272,14 @@
   --rr-shadow-thumb: light-dark(rgb(0 0 0 / 16%), rgb(0 0 0 / 35%));
 
   /*
+   * Colour: the night display, the same in both themes. Red on black keeps dark-adapted
+   * eyes; the text reaches 4.5:1 on black, the least the style guide allows.
+   */
+  --rr-night-bg: #000000;
+  --rr-night-text: #D9362B;
+  --rr-night-line: rgb(217 54 43 / 45%);
+
+  /*
    * Colour: waterfall. The same in both themes. The colormap stops are read by
    * lib/waterfall/colormap.ts and handed to the waterfall worker, so they stay plain hex.
    */

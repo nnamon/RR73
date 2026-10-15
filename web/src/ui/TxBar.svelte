@@ -34,6 +34,7 @@
   import { practice } from '../lib/state/practice.svelte';
   import { chooseScenario } from '../lib/practice/runtime.svelte';
   import { SCENARIOS } from '../lib/practice/scenarios';
+  import { showNight } from '../lib/state/night.svelte';
 
   type Variant = 'phone' | 'panel' | 'bottom' | 'side';
   let {
@@ -227,6 +228,7 @@
       {#if !listed}<button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>{/if}
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
       <button class="mi" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
+      <button class="mi" role="menuitem" onclick={act(showNight)}>Night display</button>
       <button class="mi gap" role="menuitem" onclick={act(onclear)}>Clear decodes</button>
       <button class="mi" role="menuitemcheckbox" aria-checked={settings.run} onclick={() => setRun(!settings.run)}>
         Repeat CQ <span class="v">{settings.run ? 'On' : 'Off'}</span>

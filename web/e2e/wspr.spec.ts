@@ -154,7 +154,7 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(page.getByTestId('selected-marker')).toBeVisible();
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
-    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Save slot', 'Clear spots', /Power\s*37 dBm/, /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
+    await expect(menu.getByRole('menuitem')).toHaveText(['Transmit next slot', 'Tune for 10 s', 'Night display', 'Save slot', 'Clear spots', /Power\s*37 dBm/, /Sort by\s*Distance/, /Stop beacon after\s*1 h/]);
     await shot(page, info, SHOTS, `${theme}-menu`, 300);
     await menu.getByRole('menuitem', { name: /Sort by/ }).click();
     await expect(menu.getByRole('menuitem', { name: /Sort by/ })).toHaveText(/SNR/);
@@ -174,6 +174,16 @@ for (const theme of ['light', 'dark'] as const) {
     await bar.getByRole('button', { name: 'More' }).click();
     await expect(menu.getByRole('menuitem', { name: /^Power/ })).toHaveText(/27 dBm/);
     await page.keyboard.press('Escape');
+
+    // Night display from •••: the newest spots, strongest first; a tap wakes Operate.
+    await bar.getByRole('button', { name: 'More' }).click();
+    await menu.getByRole('menuitem', { name: 'Night display' }).click();
+    const night = page.getByRole('dialog', { name: 'Night display' });
+    await expect(night).toContainText('Heard at 14:08:00');
+    await expect(night.locator('.heard').first()).toHaveText(/^DU1IVT /);
+    await shot(page, info, SHOTS, `${theme}-night`);
+    await night.getByRole('button', { name: 'Wake the display' }).click();
+    await expect(night).toBeHidden();
 
     // Touch and hold: the spot's details.
     const row = list(page).locator('button.sr', { hasText: 'G4ZFQ' }).first();

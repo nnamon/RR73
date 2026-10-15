@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Night display: the UTC clock, the next transmission and the stations heard in dim red on black, from ••• or by itself after an idle time set in Settings › Appearance. A tap wakes Operate, and Halt stays while Tx is on.
+
 ## 0.20.2 · 2026-10-15
 
 - FT8 and FT4 decode weaker messages in a QSO: the decoder tries what it expects from the station you work, and calls to you, before giving up on a signal. On the bench, the replies in a QSO decode 2.7 dB lower.
