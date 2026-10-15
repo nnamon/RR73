@@ -182,6 +182,8 @@
     const on = rigBand();
     const m = modeText(rig.mode, rig.data);
     if (on !== settings.band) return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}, outside ${settings.band}. Choose a band to set it.`, bad: true };
+    // Connecting changes nothing on the radio, so it may still be in another mode than USB-D.
+    if (rig.mode !== null && rig.data !== null && (rig.mode !== 'usb' || !rig.data)) return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}. Choose the band to set USB-D.`, bad: false };
     return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}.`, bad: false };
   });
 

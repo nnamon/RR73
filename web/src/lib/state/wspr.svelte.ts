@@ -384,11 +384,11 @@ export function startWspr() {
   onWsprDecoded(addSlot);
   onHalt(stopAll);
   // The radio's port lost turns the beacon off, as audio stopping does; Tune refused says why.
-  onRadioNotice((text, txOff) => {
+  onRadioNotice((text, txOff, always) => {
     if (settings.mode !== 'WSPR') return;
     const on = wspr.beacon.on || wspr.next !== null || wspr.onAir !== null;
     if (txOff) stopAll();
-    if (on || !txOff) notice(text);
+    if (on || !txOff || always) notice(text);
   });
   onAudioStatus((s) => {
     if ((s === 'stopped' || s === 'failed') && (wspr.beacon.on || wspr.next)) {

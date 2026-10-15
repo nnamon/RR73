@@ -7,10 +7,6 @@ import { installFakeIc705, rigFrames, type RigFrame } from './fake-ic705';
 import { prepare, waitForTransmissions } from './txhelp';
 import { SLOT_MS } from './tap';
 
-// The transmissions wait for slots and time PTT against the audio clock, as the transmit projects'
-// tests do, so they get the same 2 retries on a loaded machine.
-test.describe.configure({ retries: 2 });
-
 // A microphone for Start audio: the chromium project runs without one.
 test.use({
   permissions: ['microphone'],
@@ -63,7 +59,8 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   const band = page.getByRole('button', { name: /^Change band/ });
   await expect(band).toContainText('14.076');
   await band.click();
-  await expect(page.getByTestId('radio-line')).toHaveText('The IC-705 is on 14.076 MHz USB.');
+  // Connecting changed nothing on the radio: it is still in USB.
+  await expect(page.getByTestId('radio-line')).toHaveText('The IC-705 is on 14.076 MHz USB. Choose the band to set USB-D.');
   const sheet = page.getByRole('dialog', { name: 'Change band' });
   await expect(sheet.getByText('The dial comes from the IC-705. Saved slots and QSOs record it.')).toBeVisible();
   const before = (await rigLog(page)).length;
@@ -73,6 +70,10 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   expect(set).toEqual(['05 00 40 07 07 00', '06 01 01', '1A 06 01 01']);
   await expect(band).toContainText('40m');
   await expect(band).toContainText('7.074');
+  await band.click();
+  await expect(page.getByTestId('radio-line')).toHaveText('The IC-705 is on 7.074 MHz USB-D.');
+  await page.keyboard.press('Escape');
+  await expect(sheet).toBeHidden();
 
   // The operator turns the radio's dial into 15m: RR73 follows within about 1 s.
   await page.evaluate(() => window.__rig.turnDial(21_076_000));
@@ -92,11 +93,31 @@ test('Test keying keys the radio for 1 s and releases it, with Key the radio wit
   await connect(page);
   await expect(page.getByRole('switch', { name: /Key the radio with CAT/ })).not.toBeChecked();
   await page.getByRole('button', { name: 'Test keying' }).click();
-  await expect(page.getByTestId('rig-test')).toHaveText(/^Keyed for 1 s and released at \d\d:\d\d:\d\d UTC\.$/, { timeout: 5000 });
+  await expect(page.getByTestId('rig-test')).toHaveText(/^Keyed and released at \d\d:\d\d:\d\d UTC\.$/, { timeout: 5000 });
   const p = await ptt(page);
   expect(p.map((f) => f.body)).toEqual(['1C 00 01', '1C 00 00']);
   expect(p[1].at - p[0].at).toBeGreaterThanOrEqual(950);
   expect(p[1].at - p[0].at).toBeLessThan(1500);
+  expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
+});
+
+test('a radio that keeps transmitting after PTT off: Test keying says to unkey it, and Rig control and Settings show it', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./');
+  await connect(page);
+  await page.evaluate(() => (window.__rig.ignorePttOff = true));
+  await page.getByRole('button', { name: 'Test keying' }).click();
+  await expect(page.getByTestId('rig-test')).toHaveText('Keyed. PTT off was not confirmed.', { timeout: 5000 });
+  await expect(page.getByTestId('rig-status')).toHaveText('PTT off not confirmed');
+  await expect(page.getByTestId('rig-help')).toHaveText('The IC-705 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.');
+  // PTT off: once, then 3 more 100 ms apart, then read every second while the radio transmits.
+  const offs = (await ptt(page)).filter((f) => f.body === '1C 00 00');
+  expect(offs.length).toBeGreaterThanOrEqual(4);
+  await page.evaluate(() => (location.hash = '#/settings'));
+  await expect(page.getByRole('link', { name: /Rig control/ })).toContainText('PTT off not confirmed');
+  // The radio takes PTT off again: the next read clears the error.
+  await page.evaluate(() => (window.__rig.ignorePttOff = false));
+  await expect(page.getByRole('link', { name: /Rig control/ })).toContainText('Connected', { timeout: 3000 });
   expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
 });
 
@@ -185,7 +206,7 @@ test('a lost port during a transmission stops the audio and turns Tx off', async
   await expect(page.getByTestId('rig-help')).toContainText('Tx went off');
 });
 
-test('Tune keys the radio before the tone and releases it when the tone ends, and Halt releases it at once', async ({ page }) => {
+test('Tune keys no PTT with Key the radio with CAT off; on, it keys the radio before the tone and releases it when the tone ends, and Halt releases it at once', async ({ page }) => {
   test.setTimeout(90_000);
   await installFakeIc705(page);
   // The page's own time of the tap on Halt.
@@ -196,10 +217,19 @@ test('Tune keys the radio before the tone and releases it when the tone ends, an
   });
   await page.goto('./');
   await connect(page);
-  await setKeying(page, true);
+  // Off: the tone plays and no PTT goes to the radio.
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
   const sheet = page.getByRole('dialog', { name: 'Tuning' });
+  await expect(sheet).toBeVisible();
+  await page.waitForTimeout(1000);
+  await sheet.getByRole('button', { name: 'Halt' }).click();
+  await expect(sheet).toBeHidden();
+  await page.waitForTimeout(300);
+  expect(await ptt(page)).toEqual([]);
+  await setKeying(page, true);
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
   await expect(sheet).toBeVisible();
   await expect.poll(async () => (await ptt(page)).map((f) => f.body)).toEqual(['1C 00 01']);
   // The tone ends after 10 s: PTT off follows.

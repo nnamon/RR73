@@ -9,7 +9,7 @@
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { mhz } from '../lib/clock/format';
-  import { connectRadio, disconnectRadio, testKeying } from '../lib/state/cat.svelte';
+  import { UNKEY_FAILED, connectRadio, disconnectRadio, testKeying } from '../lib/state/cat.svelte';
   import { modeText, rig, rigConnected, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
 
@@ -41,7 +41,7 @@
 
   /** What is wrong with the connection and what to do, or how to start. */
   const connectionText = $derived.by((): { text: string; bad: boolean } | null => {
-    if (rig.unkeyFailed) return { text: 'The IC-705 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.', bad: true };
+    if (rig.unkeyFailed) return { text: UNKEY_FAILED, bad: true };
     switch (rig.status) {
       case 'off':
         return { text: `Plug in the IC-705 by USB, tap Connect radio, then choose ${PORT_A}.`, bad: false };

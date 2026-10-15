@@ -101,6 +101,9 @@ function mirror(s: RadioState) {
     rig.menu = { ...s.settings };
   }
   rig.keyed = s.keyed;
+  // PTT off unconfirmed: every mode's status line says so and Tx goes off, as the operator has to
+  // unkey the radio; Rig control gives the detail.
+  if (s.unkeyFailed && !rig.unkeyFailed) radioNotice(STATUS.pttUnconfirmed, true, true);
   rig.unkeyFailed = s.unkeyFailed;
   follow(s.hz);
 }
@@ -147,6 +150,10 @@ async function open(port: SerialPortLike): Promise<boolean> {
   // A CAT error while keyed: PTT off has gone; the transmission stops and Tx goes off.
   radio.onFault((f) => {
     if (current !== me) return;
+    if (rig.test?.state === 'running') {
+      testGen++;
+      rig.test = { state: 'done', ok: false, text: f === 'silent' ? 'No reply from the IC-705 during the test. PTT off was sent.' : PTT_LOCK, atMs: Date.now() };
+    }
     radioNotice(f === 'silent' ? STATUS.radioSilent : STATUS.radioReceive, true);
     halt();
   });
@@ -171,16 +178,26 @@ function lost(me: Link) {
   halt();
 }
 
-/** Closes the link without forgetting the port. PTT off goes first if RR73 may hold PTT. */
-async function closeCurrent() {
+/**
+ * Closes the link without forgetting the port. When RR73 may hold PTT, Halt goes first (the
+ * transmission stops, Tx goes off and PTT off goes out), and the port closes once a read confirms
+ * receive or the confirmation fails. Resolves false when PTT off went unconfirmed.
+ */
+async function closeCurrent(): Promise<boolean> {
   const c = current;
   current = null;
   provideKeyer(null);
-  if (!c) return;
-  if (c.radio.holdsPtt) c.radio.unkeyAll();
+  if (!c) return true;
+  let confirmed = true;
+  if (c.radio.holdsPtt) {
+    // Halt's own PTT off finds no link now: this one is sent and confirmed here.
+    halt();
+    c.radio.unkeyAll();
+    confirmed = await c.radio.unkeyed();
+  }
   c.radio.close();
-  // Closing the link sends what was written first, PTT off included.
   await c.link.close();
+  return confirmed;
 }
 
 /**
@@ -232,14 +249,17 @@ export async function disconnectRadio(): Promise<void> {
   testGen++;
   const port = current?.port ?? null;
   void updateSettings({ cat: { ...settings.cat, connect: false } });
-  await closeCurrent();
+  const confirmed = await closeCurrent();
   try {
     await port?.forget?.();
   } catch {
     // The browser keeps the permission; Connect radio still asks again.
   }
-  recover = false;
   resetRig();
+  // The radio may still transmit: Rig control keeps saying so, and the next connection reads it and
+  // sends PTT off if it does.
+  recover = !confirmed;
+  if (!confirmed) rig.unkeyFailed = true;
 }
 
 /**
@@ -271,18 +291,30 @@ export function tuneRadioToBand(): Promise<void> {
   return setRadioDial(plannedDialHz(settings.band, settings.mode));
 }
 
-const testFailed = { ng: 'The IC-705 refused PTT. PTT off was sent.', timeout: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent.', closed: 'The port closed during the test.' } as const;
+const testFailed = { ng: 'The IC-705 refused PTT. PTT off was sent and confirmed.', timeout: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.', closed: 'The port closed during the test.' } as const;
+/** The radio answered OK to PTT on and then said receive. PTT Lock "inhibits all transmissions" (Basic Manual p. 8-4). */
+const PTT_LOCK = 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.';
+/** PTT off went unconfirmed: the operator has to check the radio. Rig control shows it under Connection. */
+export const UNKEY_FAILED = 'The IC-705 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.';
+/** Test keying's result then; the instruction is UNKEY_FAILED's, shown with it. */
+const UNKEY_TEST = 'Keyed. PTT off was not confirmed.';
 
 /**
- * Test keying: stops any transmission, keys the radio for 1 s with no audio, releases it, and says
- * what happened. It reads transmit or receive while keyed and after. Halt, a lost port and the page
- * going stop it with PTT off. Works with Key the radio with CAT on or off.
+ * Test keying: stops any transmission, keys the radio for TEST_KEY_MS with no audio, sends PTT off,
+ * and says what happened once a read confirms receive, or that it did not. It reads transmit or
+ * receive while keyed. Halt, a lost port, a fault and the page going stop it with PTT off. Works
+ * with Key the radio with CAT on or off; refused while USB SEND keys on a line or an earlier PTT off
+ * is unconfirmed.
  */
 export async function testKeying(): Promise<void> {
   const c = current;
   if (!c || !rigConnected() || rig.test?.state === 'running') return;
   if (usbSendOn()) {
     rig.test = { state: 'done', ok: false, text: 'Not tested: USB SEND keys the radio on a line of the port. Set it to OFF first.', atMs: Date.now() };
+    return;
+  }
+  if (rig.unkeyFailed) {
+    rig.test = { state: 'done', ok: false, text: 'Not tested: the last PTT off is not confirmed. Check that the IC-705 receives.', atMs: Date.now() };
     return;
   }
   halt();
@@ -298,25 +330,28 @@ export async function testKeying(): Promise<void> {
     return;
   }
   if (answer !== 'ok') {
+    // PTT off went out with the failure; the result waits for its confirmation.
     k.release();
-    done(false, testFailed[answer]);
+    const confirmed = await c.radio.unkeyed();
+    if (gen !== testGen) return;
+    done(false, confirmed ? testFailed[answer] : answer === 'timeout' ? 'No reply from the IC-705 to PTT on or off.' : UNKEY_TEST);
     return;
   }
+  const keyedAt = Date.now();
   await pause(TEST_KEY_MS / 2);
   if (gen !== testGen) return;
   const during = await c.radio.request({ type: 'read_transmit' });
-  await pause(TEST_KEY_MS / 2);
+  if (gen !== testGen) return;
+  await pause(Math.max(0, keyedAt + TEST_KEY_MS - Date.now()));
   if (gen !== testGen) return;
   k.release();
-  const after = await c.radio.request({ type: 'read_transmit' });
+  // PTT off, retried until the radio answers OK, and a read that must say receive.
+  const confirmed = await c.radio.unkeyed();
   if (gen !== testGen) return;
   const keyed = during.ok && during.event.type === 'transmit' ? during.event.on : null;
-  const receiving = after.ok && after.event.type === 'transmit' ? !after.event.on : null;
-  if (receiving === false) {
-    c.radio.unkeyAll();
-    done(false, 'The IC-705 still reported transmit after PTT off. PTT off was sent again. If it still transmits, turn it off.');
-  } else if (keyed === false) done(false, 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.');
-  else done(true, `Keyed for 1 s and released at ${utcTime(Date.now())} UTC.`);
+  if (!confirmed) done(false, UNKEY_TEST);
+  else if (keyed === false) done(false, PTT_LOCK);
+  else done(true, `Keyed and released at ${utcTime(Date.now())} UTC.`);
 }
 
 /**

@@ -317,3 +317,12 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
     await shot(page, info, SHOTS, `${theme}-menu`, 200);
   });
 }
+
+// Safari has no Web Serial, so rig control never shows on the iPhone (docs/design/cat.md).
+test('Settings shows no Rig control where the browser has no Web Serial', ci('light', 375), async ({ page }) => {
+  await open(page, '#/settings', 'light');
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeAttached();
+  expect(await page.evaluate(() => 'serial' in navigator)).toBe(false);
+  await expect(page.getByRole('link', { name: /^Radio and audio/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Rig control/ })).toHaveCount(0);
+});

@@ -113,6 +113,11 @@ export const session = new KeyboardSession({
         return keyFailedText(answer);
       }
       await pause(PTT_SETTLE_MS);
+      // Halt, or a fault, took PTT back during the wait: the stream never starts.
+      if (!keying.held) {
+        keying.release();
+        return STATUS.pttTaken;
+      }
     }
     try {
       const stream = await client.startTx(
@@ -319,11 +324,11 @@ export function startKeyboard() {
   });
   onHalt(() => session.halt());
   // The radio's port lost ends a transmission, as audio stopping does; Tune refused says why.
-  onRadioNotice((text, txOff) => {
+  onRadioNotice((text, txOff, always) => {
     if (!isKeyboard(settings.mode)) return;
     const on = session.tx !== 'off';
     if (txOff && on) session.halt();
-    if (on || !txOff) session.notice = { text, atMs: Date.now() };
+    if (on || !txOff || always) session.notice = { text, atMs: Date.now() };
   });
   onAudioStatus((s) => {
     if ((s === 'stopped' || s === 'failed') && session.tx !== 'off') {

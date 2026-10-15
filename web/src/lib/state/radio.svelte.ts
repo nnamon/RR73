@@ -50,7 +50,7 @@ export const rig = $state({
   menu: {} as Partial<Record<MenuItemId, number>>,
   /** RR73 holds PTT on. */
   keyed: false,
-  /** PTT off went unanswered 3 times. */
+  /** PTT off went out and no read confirmed receive after it: the radio may still transmit. */
   unkeyFailed: false,
   tuning: null as RigTuning | null,
   test: null as RigTest | null,
@@ -64,6 +64,7 @@ export function modeText(mode: CatMode | null, data: boolean | null): string {
 
 /** The Rig control row's value in Settings: "Connected", "No reply", or Off with no radio chosen. */
 export function rigSummary(): string {
+  if (rig.unkeyFailed) return 'PTT off not confirmed';
   switch (rig.status) {
     case 'connected':
       return 'Connected';
@@ -158,20 +159,23 @@ export function tuneGate(): string | null {
   return usbSendOn() ? STATUS.usbSend : null;
 }
 
-const noticeListeners = new Set<(text: string, txOff: boolean) => void>();
+type NoticeListener = (text: string, txOff: boolean, always: boolean) => void;
+
+const noticeListeners = new Set<NoticeListener>();
 
 /**
- * Listens for what the radio does to transmissions: the port lost (`txOff`: Tx goes off, as when
- * audio stops), or Tune refused. Each runtime shows it in its own status line.
+ * Listens for what the radio does to transmissions: the port lost or a fault (`txOff`: Tx goes
+ * off, as when audio stops), PTT off unconfirmed, or Tune refused. Each runtime shows it in its own
+ * status line: a `txOff` notice only while Tx was on, unless `always`.
  */
-export function onRadioNotice(fn: (text: string, txOff: boolean) => void): () => void {
+export function onRadioNotice(fn: NoticeListener): () => void {
   noticeListeners.add(fn);
   return () => noticeListeners.delete(fn);
 }
 
-/** Tells the runtimes; rig control calls it with `txOff` when the port goes. */
-export function radioNotice(text: string, txOff = false) {
-  for (const l of noticeListeners) l(text, txOff);
+/** Tells the runtimes; rig control calls it with `txOff` when the port goes or the radio faults. */
+export function radioNotice(text: string, txOff = false, always = false) {
+  for (const l of noticeListeners) l(text, txOff, always);
 }
 
 /** Forgets the radio's state, as after Disconnect radio; tests use it to start again. */

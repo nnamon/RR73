@@ -8,7 +8,8 @@ import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
-import { onRadioNotice, rig, rigGate, txKeyer } from './radio.svelte';
+import { dialNow, onRadioNotice, rig, rigGate, txKeyer } from './radio.svelte';
+import { configNow } from './qso.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
 
@@ -41,6 +42,12 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
   log: string[] = [];
   forgotten = false;
   silent = false;
+  /** The radio's answer to the next PTT on goes missing; it still keys. */
+  dropPttOn = false;
+  /** PTT off goes unanswered and the radio keeps transmitting. */
+  ignorePttOff = false;
+  /** PTT on is answered OK, and the radio stays in receive (PTT Lock). */
+  lockPtt = false;
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   private readableValue: ReadableStream<Uint8Array> | null = null;
   private writableValue: WritableStream<Uint8Array> | null = null;
@@ -60,9 +67,19 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
     this.readableValue = new ReadableStream<Uint8Array>({ start: (c) => void (this.controller = c) });
     this.writableValue = new WritableStream<Uint8Array>({
       write: (chunk) => {
-        this.log.push(hex(chunk));
+        const frame = hex(chunk);
+        this.log.push(frame);
         if (this.silent) return;
+        if (frame === 'FE FE A4 E0 1C 00 00 FD' && this.ignorePttOff) return;
+        if (frame === 'FE FE A4 E0 1C 00 01 FD' && this.lockPtt) {
+          setTimeout(() => this.send(Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0xfb, 0xfd])), 10);
+          return;
+        }
         const reply = this.sim.receive(chunk);
+        if (frame === 'FE FE A4 E0 1C 00 01 FD' && this.dropPttOn) {
+          this.dropPttOn = false;
+          return;
+        }
         setTimeout(() => this.send(reply), 10);
       },
     });
@@ -244,6 +261,26 @@ describe('the dial', () => {
     expect(rigGate()).toBeNull();
   });
 
+  it('follows a dial turned on the radio within 1 s by polling, with no transceive frame', async () => {
+    await connect();
+    // The radio's dial moves; its transceive frame never arrives (CI-V Transceive off).
+    chosen.sim.turn_dial(7_074_000);
+    await run(1000 + 50);
+    expect(rig.hz).toBe(7_074_000);
+    expect(settings.band).toBe('40m');
+  });
+
+  it('is the dial QSOs log while the radio is on RR73’s band, and the band’s dial without a radio', async () => {
+    chosen.sim.receive(wasm.cat_encode('{"type":"set_frequency","hz":14076000}', 0xa4));
+    expect(configNow().dialHz).toBe(14_074_000);
+    await connect();
+    expect(rig.hz).toBe(14_076_000);
+    expect(configNow().dialHz).toBe(14_076_000);
+    expect(dialNow(14_074_000)).toBe(14_076_000);
+    await disconnectRadio();
+    expect(configNow().dialHz).toBe(14_074_000);
+  });
+
   it('sets the dial and USB-D, and waits while the radio transmits', async () => {
     void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
     await connect();
@@ -287,13 +324,14 @@ describe('keying', () => {
     return { audio, played };
   }
 
-  /** A transmission scheduled 2.5 s from now, `lengthMs` long. */
-  async function transmit(lengthMs = 2000) {
+  /** A transmission whose slot starts 2 s from now, `lengthMs` long: FT8 at slot + 0.5 s, WSPR at slot + 1 s. */
+  async function transmit(lengthMs = 2000, mode: 'FT8' | 'WSPR' = 'FT8') {
     const base = Date.now();
     const { audio, played } = fakeAudio(base, lengthMs);
     const reports: TxReport[] = [];
     const sched = new TxScheduler({ audio: () => audio, encoder: { synthesize: async () => new Float32Array(24000) }, gate: () => rigGate(), report: (r) => reports.push(r), keyer: txKeyer });
-    const done = sched.schedule({ text: 'CQ 9V1NE OJ11', mode: 'FT8', slotStartMs: base + 2000, startOffsetS: 0.5, f0Hz: 1500, level: 0.5 });
+    const text = mode === 'WSPR' ? '9V1NE OJ11 37' : 'CQ 9V1NE OJ11';
+    const done = sched.schedule({ text, mode, slotStartMs: base + 2000, startOffsetS: mode === 'WSPR' ? 1 : 0.5, f0Hz: 1500, level: 0.5 });
     return { done, reports, played, sched };
   }
 
@@ -321,6 +359,74 @@ describe('keying', () => {
     expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
     expect(chosen.ptt).toEqual(['01', '00']);
     expect(chosen.sim.transmit).toBe(false);
+  });
+
+  it('keys a WSPR transmission with the switch on, and sends no PTT with it off', async () => {
+    await connect();
+    const off = await transmit(2000, 'WSPR');
+    await run(6000);
+    await off.done;
+    expect(off.played).toHaveLength(1);
+    expect(chosen.ptt).toEqual([]);
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    const on = await transmit(2000, 'WSPR');
+    // PTT on 0.5 s before the audio at slot + 1 s.
+    await run(2400);
+    expect(chosen.ptt).toEqual([]);
+    await run(200);
+    await on.done;
+    expect(chosen.ptt).toEqual(['01']);
+    expect(on.played).toHaveLength(1);
+    await run(4000);
+    expect(on.reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    expect(chosen.ptt).toEqual(['01', '00']);
+    expect(chosen.sim.transmit).toBe(false);
+  });
+
+  it('PTT off unconfirmed after a transmission: Tx goes off, the status line says to unkey the radio, and Tx is refused', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const notices: [string, boolean, boolean][] = [];
+    const off = onRadioNotice((t, txOff, always) => notices.push([t, txOff, always]));
+    const { done } = await transmit();
+    await run(2200);
+    await done;
+    chosen.ignorePttOff = true;
+    // The audio ends 4.5 s in; PTT off from 4.6 s, 4 times, the drain, and the read.
+    await run(3500);
+    expect(chosen.sim.transmit).toBe(true);
+    expect(rig.unkeyFailed).toBe(true);
+    expect(notices).toEqual([['PTT off not confirmed · unkey radio', true, true]]);
+    expect(rigGate()).toBe('PTT off not confirmed · unkey radio');
+    const next = await transmit();
+    await run(3000);
+    await next.done;
+    expect(next.played).toEqual([]);
+    expect(next.reports).toMatchObject([{ type: 'refused', reason: 'PTT off not confirmed · unkey radio' }]);
+    off();
+  });
+
+  it('Disconnect radio during a transmission stops it, and confirms PTT off before the port closes', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const halts: number[] = [];
+    const offHalt = onHalt(() => halts.push(1));
+    const { done, played, sched } = await transmit(10_000);
+    const offSched = onHalt(() => sched.halt());
+    await run(2200);
+    await done;
+    expect(chosen.sim.transmit).toBe(true);
+    const closing = disconnectRadio();
+    await run(200);
+    await closing;
+    expect(halts.length).toBeGreaterThan(0);
+    expect(played[0].stopped).toBe(true);
+    expect(chosen.sim.transmit).toBe(false);
+    const tail = chosen.log.slice(chosen.log.lastIndexOf('FE FE A4 E0 1C 00 00 FD'));
+    expect(tail).toEqual(['FE FE A4 E0 1C 00 00 FD', 'FE FE A4 E0 1C 00 FD', 'close']);
+    expect(rig.unkeyFailed).toBe(false);
+    offHalt();
+    offSched();
   });
 
   it('Halt sends PTT off at once while keying by CAT is on, and not while it is off', async () => {
@@ -381,7 +487,10 @@ describe('keying', () => {
     expect(chosen.ptt).toEqual(['01', '00']);
     expect(chosen.sim.transmit).toBe(false);
     expect(rig.test).toMatchObject({ state: 'done', ok: true });
-    expect(rig.test?.state === 'done' && rig.test.text).toMatch(/^Keyed for 1 s and released at \d\d:\d\d:\d\d UTC\.$/);
+    expect(rig.test?.state === 'done' && rig.test.text).toMatch(/^Keyed and released at \d\d:\d\d:\d\d UTC\.$/);
+    // PTT off, then the read that confirmed receive, before the result.
+    const off = chosen.log.lastIndexOf('FE FE A4 E0 1C 00 00 FD');
+    expect(chosen.log.slice(off + 1)).toContain('FE FE A4 E0 1C 00 FD');
   });
 
   it('Halt stops Test keying with PTT off at once', async () => {
@@ -421,17 +530,70 @@ describe('keying', () => {
     await t;
   });
 
-  it('Test keying says when the radio does not answer PTT, and sends PTT off', async () => {
+  it('Test keying says when the radio does not answer PTT on or off, and sends PTT off', async () => {
     await connect();
     chosen.silent = true;
     const t = testKeying();
     await run(2000);
     await t;
-    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent.' });
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'No reply from the IC-705 to PTT on or off.' });
     expect(chosen.ptt[0]).toBe('01');
     expect(chosen.ptt.slice(1).every((p) => p === '00')).toBe(true);
     expect(chosen.ptt.length).toBeGreaterThan(1);
+    expect(rig.unkeyFailed).toBe(true);
   });
+
+  it('Test keying with PTT on unanswered sends PTT off at once, confirms it, and plays nothing', async () => {
+    await connect();
+    chosen.dropPttOn = true;
+    const t = testKeying();
+    await run(2000);
+    await t;
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.' });
+    expect(chosen.ptt[0]).toBe('01');
+    expect(chosen.ptt.slice(1).every((p) => p === '00')).toBe(true);
+    // The read after PTT off said receive.
+    expect(chosen.sim.transmit).toBe(false);
+    expect(rig.unkeyFailed).toBe(false);
+  });
+
+  it('Test keying reports a radio that keeps transmitting after PTT off, and the status line says to unkey it', async () => {
+    await connect();
+    const notices: [string, boolean][] = [];
+    const off = onRadioNotice((t, txOff, always) => always && notices.push([t, txOff]));
+    chosen.ignorePttOff = true;
+    const t = testKeying();
+    await run(TEST_KEY_MS + 1500);
+    await t;
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Keyed. PTT off was not confirmed.' });
+    // Sent 4 times, 100 ms apart, then read: still transmitting. The 1 s poll sends it again.
+    expect(chosen.ptt.slice(0, 5)).toEqual(['01', '00', '00', '00', '00']);
+    expect(chosen.ptt.slice(1).every((p) => p === '00')).toBe(true);
+    expect(rig.unkeyFailed).toBe(true);
+    expect(notices).toEqual([['PTT off not confirmed · unkey radio', true]]);
+    expect(rigGate()).toBe('PTT off not confirmed · unkey radio');
+    await testKeying();
+    expect(rig.test).toMatchObject({ ok: false, text: 'Not tested: the last PTT off is not confirmed. Check that the IC-705 receives.' });
+    // Each second RR73 reads the radio and sends PTT off again while it transmits; once it takes
+    // it, the error clears.
+    chosen.ignorePttOff = false;
+    await run(1500);
+    expect(chosen.sim.transmit).toBe(false);
+    expect(rig.unkeyFailed).toBe(false);
+    expect(rigGate()).toBeNull();
+    off();
+  });
+
+  it('Test keying says to check PTT Lock when the radio answers OK and stays in receive', async () => {
+    await connect();
+    chosen.lockPtt = true;
+    const t = testKeying();
+    await run(TEST_KEY_MS + 1000);
+    await t;
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.' });
+    expect(chosen.ptt).toContain('00');
+  });
+
 
   it('page hide and the page going away send PTT off during a transmission', async () => {
     void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
@@ -468,7 +630,11 @@ describe('keying', () => {
     expect(played).toHaveLength(1);
     chosen.silent = true;
     await run(3 * 1500 + 500);
-    expect(notices).toEqual([['No reply from radio · Tx off', true]]);
+    // The radio answers nothing, PTT off included: the status line says to unkey it.
+    expect(notices).toEqual([
+      ['No reply from radio · Tx off', true],
+      ['PTT off not confirmed · unkey radio', true],
+    ]);
     expect(played[0].stopped).toBe(true);
     expect(chosen.ptt.slice(0, 2)).toEqual(['01', '00']);
     off();

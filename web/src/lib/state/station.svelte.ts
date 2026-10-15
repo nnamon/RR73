@@ -35,6 +35,7 @@ import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
 import { dialNow, radioNotice, rig, tuneGate, txKeyer } from './radio.svelte';
 import { PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
+import { STATUS } from '../qso/status';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -765,6 +766,13 @@ export function startTune(hz: number = settings.txHz) {
     await pause(PTT_SETTLE_MS);
     if (gen !== tuneGen) return k.release();
     tuneKeying = null;
+    // PTT taken back during the wait (a fault, the link gone): no tone without it.
+    if (!k.held) {
+      k.release();
+      tx.tuning = false;
+      refuseTune(STATUS.pttTaken);
+      return;
+    }
     playTune(ctx, hz, k);
   });
 }

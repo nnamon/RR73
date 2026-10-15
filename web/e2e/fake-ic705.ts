@@ -26,6 +26,8 @@ export interface FakeRig {
   forgotten: boolean;
   granted: boolean;
   menu: Record<string, number>;
+  /** The radio ignores PTT off: no answer, and it keeps transmitting. */
+  ignorePttOff: boolean;
   /** The operator turns the dial: a transceive frame to address 00. */
   turnDial(hz: number): void;
   /** The cable comes out. */
@@ -68,6 +70,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         granted: granted || sessionStorage.getItem('rr73-test-rig-granted') === '1',
         // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
         menu: { '0125': 0, '0119': 1, '0043': 2 },
+        ignorePttOff: false,
         turnDial(f) {
           rig.hz = f;
           send([0xfe, 0xfe, 0x00, 0xa4, 0x00, ...freqBytes(f), 0xfd]);
@@ -111,6 +114,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         }
         if (cmd === 0x1c && d[0] === 0x00 && d.length === 1) return reply([0x1c, 0x00, rig.transmit ? 1 : 0]);
         if (cmd === 0x1c && d[0] === 0x00 && d.length === 2) {
+          if (d[1] === 0 && rig.ignorePttOff) return;
           rig.transmit = d[1] === 1;
           return ok();
         }

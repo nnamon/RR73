@@ -63,8 +63,10 @@ export const STATUS = {
   /** While keyed: the radio stopped answering, or said receive (its own Time-Out Timer, its PTT). */
   radioSilent: 'No reply from radio · Tx off',
   radioReceive: 'Radio stopped transmitting · Tx off',
-  /** PTT off went unanswered: the radio may still transmit. */
-  pttUnconfirmed: 'PTT off not confirmed',
+  /** PTT off went unanswered: the radio may still transmit, and the operator has to unkey it. */
+  pttUnconfirmed: 'PTT off not confirmed · unkey radio',
+  /** PTT was taken back (Halt, a fault) before a transmission's audio started. */
+  pttTaken: 'PTT released · Tx stopped',
   /** The radio's dial is on another band than RR73's: "Radio on 40m". */
   radioBand: (band: string) => `Radio on ${band}`,
   radioOutside: 'Radio outside the bands',

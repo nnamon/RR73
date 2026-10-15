@@ -433,15 +433,16 @@ export function startQso() {
     scheduler.halt();
     dispatch({ type: 'halt', nowMs: Date.now() });
   });
-  // The radio's port lost turns Tx off, as audio stopping does; Tune refused says why.
-  onRadioNotice((text, txOff) => {
+  // The radio's port lost, a fault and PTT off unconfirmed turn Tx off, as audio stopping does;
+  // Tune refused says why.
+  onRadioNotice((text, txOff, always) => {
     if (!isFt(settings.mode)) return;
     const on = qso.st.txEnabled || qso.st.hunt || qso.onAir !== null;
     if (txOff) {
       scheduler.halt();
       dispatch({ type: 'halt', nowMs: Date.now() });
     }
-    if (on || !txOff) qso.notice = { kind: 'refused', text, atMs: Date.now() };
+    if (on || !txOff || always) qso.notice = { kind: 'refused', text, atMs: Date.now() };
   });
   setInterval(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
   let lastTouch = 0;
