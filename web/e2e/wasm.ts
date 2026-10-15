@@ -16,6 +16,11 @@ export interface Wasm {
   cat_encode(requestJson: string, radio: number): Uint8Array;
   cat_answers(requestJson: string, eventJson: string): boolean;
   CatParser: new (radio: number) => { push(bytes: Uint8Array): string; reset(): void; readonly radio_address: number; free(): void };
+  /** Rig control for the KX2 (crates/rr73-wasm/src/cat_kx2.rs): Elecraft's text commands. */
+  cat_kx2_encode(requestJson: string): Uint8Array;
+  cat_kx2_answers(requestJson: string, eventJson: string): boolean;
+  cat_kx2_accepts(requestJson: string, eventJson: string): boolean;
+  CatKx2Parser: new () => { push(bytes: Uint8Array): string; reset(): void; free(): void };
 }
 
 let cached: Promise<Wasm | null> | null = null;

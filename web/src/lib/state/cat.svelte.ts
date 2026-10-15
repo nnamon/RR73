@@ -1,8 +1,9 @@
 /**
- * Rig control in the app (docs/design/cat.md): one IC-705 over one serial port in desktop
- * Chromium. Connect radio opens the browser's port chooser from a tap; a port the operator allowed
- * opens again by itself when the app opens, and Disconnect radio forgets it. The radio's state goes
- * to lib/state/radio.svelte.ts for the rest of the app.
+ * Rig control in the app (docs/design/cat.md): one radio over one serial port in desktop Chromium,
+ * the IC-705 over its USB cable or the KX2 through a Digirig, as chosen in Settings › Rig control.
+ * Connect radio opens the browser's port chooser from a tap; a port the operator allowed opens
+ * again by itself when the app opens, and Disconnect radio forgets it. The radio's state goes to
+ * lib/state/radio.svelte.ts for the rest of the app.
  *
  * Connecting lowers the port's DTR and RTS lines (lib/cat/serial.ts), waits OPEN_SETTLE_MS and
  * drops what arrived meanwhile, then reads the radio. It sends no PTT and changes no setting. The
@@ -19,8 +20,9 @@
  */
 
 import { CatRadio, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
-import { SerialLink, choosePort, grantedPorts, serialApi, type SerialApiLike, type SerialPortLike } from '../cat/serial';
-import { loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
+import { CIV_PORT, SerialLink, choosePort, grantedPorts, kx2Port, serialApi, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
+import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
+import { RADIOS, type CatRadioId } from '../cat/radios';
 import { utcTime } from '../clock/format';
 import type { Mode } from '../clock/slots';
 import { bandOfHz } from '../log/bandplan';
@@ -29,7 +31,7 @@ import { dialHz, isBand, type BandId } from '../radio/bands';
 import { PTT_TIMEOUT_MS, pause } from '../tx/keyer';
 import { settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
-import { plannedDialHz, provideKeyer, radioNotice, resetRig, rig, rigConnected, usbSendOn } from './radio.svelte';
+import { plannedDialHz, provideKeyer, radioName, radioNotice, resetRig, rig, rigConnected, usbSendOn } from './radio.svelte';
 
 /** Test keying holds PTT on this long, ms. */
 export const TEST_KEY_MS = 1000;
@@ -100,6 +102,7 @@ function mirror(s: RadioState) {
   rig.mode = s.mode;
   rig.filter = s.filter;
   rig.data = s.data;
+  rig.sub = s.sub;
   if (menuSeen !== s.settings) {
     menuSeen = s.settings;
     rig.menu = { ...s.settings };
@@ -126,7 +129,8 @@ async function open(port: SerialPortLike): Promise<boolean> {
     fail('no-wasm');
     return false;
   }
-  const link = new SerialLink(port);
+  const kx2 = settings.cat.radio === 'kx2';
+  const link = new SerialLink(port, kx2 ? kx2Port(settings.cat.kx2Baud) : CIV_PORT);
   const err = await link.open();
   if (err) {
     fail(err);
@@ -140,7 +144,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
     rig.error = 'lost';
     return false;
   }
-  const radio = new CatRadio({ codec: wasmCodec(wasm), transport: link, timers: deps.timers });
+  const radio = new CatRadio({ codec: kx2 ? kx2Codec(wasm) : wasmCodec(wasm), traits: RADIOS[settings.cat.radio], transport: link, timers: deps.timers });
   const me: Link = { port, link, radio };
   current = me;
   lastBand = undefined;
@@ -156,7 +160,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
     if (current !== me) return;
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: f === 'silent' ? 'No reply from the IC-705 during the test. PTT off was sent.' : PTT_LOCK, atMs: Date.now() };
+      rig.test = { state: 'done', ok: false, text: f === 'silent' ? `No reply from the ${radioName()} during the test. PTT off was sent.` : stayedInReceive(), atMs: Date.now() };
     }
     radioNotice(f === 'silent' ? STATUS.radioSilent : STATUS.radioReceive, true);
     halt();
@@ -306,18 +310,42 @@ export function tuneRadioToBand(): Promise<void> {
   return setRadioDial(plannedDialHz(settings.band, settings.mode));
 }
 
-const testFailed = {
-  ng: 'The IC-705 refused PTT. PTT off was sent and confirmed.',
-  timeout: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.',
-  closed: 'The port closed during the test.',
-  // The radio was still on a shifted transmission's Tx dial, and setting the receive dial back failed.
-  dial: 'Not tested: the IC-705 did not set the receive dial back. Check its dial.',
-} as const;
-/** The radio answered OK to PTT on and then said receive. PTT Lock "inhibits all transmissions" (Basic Manual p. 8-4). */
-const PTT_LOCK = 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.';
+/** Test keying's answer when PTT on failed and PTT off was confirmed. */
+function testFailed(why: 'ng' | 'timeout' | 'closed' | 'dial'): string {
+  const name = radioName();
+  switch (why) {
+    case 'ng':
+      // The KX2's TX has no answer: TQ stayed at receive, or the radio answered ?;. TX does nothing
+      // in FSK D and PSK D (Programmer's Reference p. 28).
+      return settings.cat.radio === 'kx2'
+        ? 'The KX2 did not key on TX. PTT off was sent and confirmed. It ignores TX in FSK D and PSK D: choose a band to set DATA A.'
+        : `The ${name} refused PTT. PTT off was sent and confirmed.`;
+    case 'timeout':
+      return `No reply to PTT from the ${name} within 0.3 s. PTT off was sent and confirmed.`;
+    case 'closed':
+      return 'The port closed during the test.';
+    case 'dial':
+      // The radio was still on a shifted transmission's Tx dial, and setting the receive dial back failed.
+      return `Not tested: the ${name} did not set the receive dial back. Check its dial.`;
+  }
+}
+
+/**
+ * The radio keyed and then read receive. On the IC-705, PTT Lock "inhibits all transmissions"
+ * (Basic Manual p. 8-4). The KX2 drops out of transmit on its own at a high temperature or a load
+ * it cannot drive (Owner's Manual p. 56).
+ */
+function stayedInReceive(): string {
+  return settings.cat.radio === 'kx2'
+    ? 'The KX2 keyed, then returned to receive. Check its screen for a warning, such as high SWR or temperature.'
+    : 'The IC-705 answered OK but stayed in receive. Check that SET › Function › PTT Lock is off.';
+}
+
 /** PTT off went unconfirmed: the operator has to check the radio. Rig control shows it under Connection. */
-export const UNKEY_FAILED = 'The IC-705 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.';
-/** Test keying's result then; the instruction is UNKEY_FAILED's, shown with it. */
+export function unkeyFailedText(): string {
+  return `The ${radioName()} did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.`;
+}
+/** Test keying's result then; the instruction is unkeyFailedText's, shown with it. */
 const UNKEY_TEST = 'Keyed. PTT off was not confirmed.';
 
 /**
@@ -335,7 +363,7 @@ export async function testKeying(): Promise<void> {
     return;
   }
   if (rig.unkeyFailed) {
-    rig.test = { state: 'done', ok: false, text: 'Not tested: the last PTT off is not confirmed. Check that the IC-705 receives.', atMs: Date.now() };
+    rig.test = { state: 'done', ok: false, text: `Not tested: the last PTT off is not confirmed. Check that the ${radioName()} receives.`, atMs: Date.now() };
     return;
   }
   halt();
@@ -355,7 +383,7 @@ export async function testKeying(): Promise<void> {
     k.release();
     const confirmed = await c.radio.unkeyed();
     if (gen !== testGen) return;
-    done(false, confirmed ? testFailed[answer] : answer === 'timeout' ? 'No reply from the IC-705 to PTT on or off.' : UNKEY_TEST);
+    done(false, confirmed ? testFailed(answer) : answer === 'timeout' ? `No reply from the ${radioName()} to PTT on or off.` : UNKEY_TEST);
     return;
   }
   const keyedAt = Date.now();
@@ -371,8 +399,31 @@ export async function testKeying(): Promise<void> {
   if (gen !== testGen) return;
   const keyed = during.ok && during.event.type === 'transmit' ? during.event.on : null;
   if (!confirmed) done(false, UNKEY_TEST);
-  else if (keyed === false) done(false, PTT_LOCK);
+  else if (keyed === false) done(false, stayedInReceive());
   else done(true, `Keyed and released at ${utcTime(Date.now())} UTC.`);
+}
+
+/**
+ * Settings › Rig control › Radio. Choosing another radio disconnects the one connected and forgets
+ * its port first: the port of one radio never opens with the other's protocol.
+ */
+export async function chooseRadio(id: CatRadioId): Promise<void> {
+  if (settings.cat.radio === id) return;
+  if (current || settings.cat.connect || rig.status !== 'off') await disconnectRadio();
+  void updateSettings({ cat: { ...settings.cat, radio: id } });
+}
+
+/**
+ * The KX2's baud rate. With the KX2 connected, its port closes (PTT off confirmed first, as for
+ * Disconnect radio) and opens again at the new rate, its lines lowered at once as on every open.
+ */
+export async function setKx2Baud(baud: Kx2Baud): Promise<void> {
+  if (settings.cat.kx2Baud === baud) return;
+  void updateSettings({ cat: { ...settings.cat, kx2Baud: baud } });
+  const c = current;
+  if (!c || settings.cat.radio !== 'kx2') return;
+  recover = !(await closeCurrent());
+  await open(c.port);
 }
 
 /**

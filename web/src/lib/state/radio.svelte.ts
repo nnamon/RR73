@@ -5,7 +5,8 @@
  * the log read it, so none of them imports the link.
  */
 
-import type { CatFilter, CatMode, MenuItemId } from '../cat/protocol';
+import type { CatFilter, CatMode, DataSub, SettingId } from '../cat/protocol';
+import { RADIOS, type RadioTraits } from '../cat/radios';
 import { bandOfHz } from '../log/bandplan';
 import { STATUS } from '../qso/status';
 import { dialHz, isBand, type BandId } from '../radio/bands';
@@ -45,10 +46,12 @@ export const rig = $state({
   hz: null as number | null,
   mode: null as CatMode | null,
   filter: null as CatFilter | null,
-  /** Data mode (USB-D) on, once read. */
+  /** Data mode (USB-D) on, once read. The IC-705's. */
   data: null as boolean | null,
-  /** The menu settings read on connecting, as the CI-V guide's codes. */
-  menu: {} as Partial<Record<MenuItemId, number>>,
+  /** The data sub-mode, once read; valid only in DATA and DATA-REV. The KX2's. */
+  sub: null as DataSub | null,
+  /** The settings read on connecting: the IC-705's menu codes; the KX2's product number, MIC BTN and VOX. */
+  menu: {} as Partial<Record<SettingId, number>>,
   /** RR73 holds PTT on. */
   keyed: false,
   /** PTT off went out and no read confirmed receive after it: the radio may still transmit. */
@@ -57,10 +60,44 @@ export const rig = $state({
   test: null as RigTest | null,
 });
 
-/** The radio's mode as its screen shows it: "USB-D", "LSB", "CW-R"; empty before the first read. */
-export function modeText(mode: CatMode | null, data: boolean | null): string {
+/** The radio chosen in Settings › Rig control. */
+export function radioTraits(): RadioTraits {
+  return RADIOS[settings.cat.radio] ?? RADIOS.ic705;
+}
+
+/** The chosen radio's name on screen: "IC-705", "KX2". */
+export function radioName(): string {
+  return radioTraits().name;
+}
+
+const SUB_TEXT: Record<DataSub, string> = { data_a: 'DATA A', afsk_a: 'AFSK A', fsk_d: 'FSK D', psk_d: 'PSK D' };
+
+/**
+ * The radio's mode as its screen shows it: "USB-D", "LSB", "CW-R" on the IC-705; "DATA A",
+ * "AFSK A REV", "USB" on the KX2. Empty before the first read.
+ */
+export function modeText(mode: CatMode | null, data: boolean | null, sub: DataSub | null = null): string {
   if (mode === null) return '';
-  return mode.toUpperCase() + (data ? '-D' : '');
+  if (mode === 'data' || mode === 'data-rev') return (sub ? SUB_TEXT[sub] : 'DATA') + (mode === 'data-rev' ? ' REV' : '');
+  return mode.toUpperCase().replace('-REV', ' REV') + (data ? '-D' : '');
+}
+
+/** The connected radio's mode, as modeText gives it. */
+export function rigModeText(): string {
+  return modeText(rig.mode, rig.data, rig.sub);
+}
+
+/**
+ * True when the radio reads the data mode RR73 sets (USB-D on the IC-705, DATA A on the KX2),
+ * false when it reads another mode, null before it has read enough to say.
+ */
+export function rigInDataMode(): boolean | null {
+  if (rig.mode === null) return null;
+  if (settings.cat.radio === 'kx2') {
+    if (rig.mode !== 'data') return false;
+    return rig.sub === null ? null : rig.sub === 'data_a';
+  }
+  return rig.data === null ? null : rig.mode === 'usb' && rig.data;
 }
 
 /** The Rig control row's value in Settings: "Connected", "No reply", or Off with no radio chosen. */
@@ -137,12 +174,14 @@ export function txKeyer(): Keyer | null {
 
 /**
  * The radio's dial shift for a transmission at audio `hz` in `mode`, Hz (lib/cat/passband.ts): with
- * Keep Tx audio centred on, the radio keyed by CAT and in USB, for FT8 and FT4; 0 otherwise. The
+ * Keep Tx audio centred on, the IC-705 keyed by CAT and in USB, for FT8 and FT4; 0 otherwise. The
  * dial moves up by it and the audio down, so the RF frequency stays the receive dial plus `hz`. In
  * another mode than USB the dial and the audio would not add up to the same RF. WSPR (1410 to
  * 1590 Hz) and RTTY are left out (docs/design/cat.md, Passband shift).
  */
 export function txShiftHz(mode: Mode, hz: number): number {
+  // Elecraft's documents give no transmit passband for the KX2's DATA A to centre the audio in.
+  if (settings.cat.radio !== 'ic705') return 0;
   if (!settings.cat.shiftDial || (mode !== 'FT8' && mode !== 'FT4') || !txKeyer() || rig.mode !== 'usb' || rig.hz === null) return 0;
   return txDialShiftHz(hz);
 }
@@ -193,6 +232,6 @@ export function radioNotice(text: string, txOff = false, always = false) {
 
 /** Forgets the radio's state, as after Disconnect radio; tests use it to start again. */
 export function resetRig() {
-  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, menu: {}, keyed: false, unkeyFailed: false, tuning: null, test: null });
+  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, sub: null, menu: {}, keyed: false, unkeyFailed: false, tuning: null, test: null });
   keyer = null;
 }

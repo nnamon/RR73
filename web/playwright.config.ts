@@ -89,7 +89,7 @@ const quietProjects = [
   // The decode test passes whatever the offset between the loop and the UTC slots. It skips,
   // locally, when the host starves the fake microphone; e2e/decode.spec.ts and docs/testing.md.
   { name: 'decode', testMatch: /decode\.spec/, use: { ...desktop, ...ft8Mic } },
-  { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list|country|spots|pskreporter|heard-you|wsprnet|upload-defaults|output|rig)\.spec/, use: desktop },
+  { name: 'chromium', testMatch: /(a11y|shell|tune|log|freq|dock|features|upgrade|service-worker|colours|list|country|spots|pskreporter|heard-you|wsprnet|upload-defaults|output|rig|rig-kx2)\.spec/, use: desktop },
   // Updating beside an older copy also runs in WebKit, the engine on the iPhone.
   { name: 'webkit', testMatch: /upgrade\.spec/, use: iphone(393, 852, 3) },
   // Layout in the light theme: geometry is the same in dark, where only colours change
@@ -119,10 +119,10 @@ const transmitProjects = [
   // (load average 14 to 20 seen) the fake audio device lags and decodes come late. They run
   // after the other projects, so the rest of the suite does not load the machine meanwhile, with
   // 2 retries. The QSO comes first: it is the longest of the three. Rig control's transmissions
-  // (rig-tx.spec) time PTT against the audio and run in tx-cq with no retries: they measure the
-  // audio clock and skip on a starved host.
+  // (rig-tx.spec, rig-kx2-tx.spec) time PTT against the audio and run in tx-cq with no retries:
+  // they measure the audio clock and skip on a starved host.
   { name: 'transmit', testMatch: /transmit\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...qsoMic } },
-  { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx|rig-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
+  { name: 'tx-cq', testMatch: /(tx-cq|rtty-tx|rig-tx|rig-kx2-tx)\.spec/, retries: 2, dependencies: QUIET, use: { ...desktop, ...fakeMic } },
   // WebKit's mock microphone runs the audio. Playwright's WebKit reports wrong output timestamps.
   { name: 'webkit-tx', testMatch: /tx-again\.spec/, retries: 2, dependencies: QUIET, use: iphone(393, 852, 3) },
   // The practice band and the web SDR: audio made or streamed in the page, decoded in real time,

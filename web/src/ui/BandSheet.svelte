@@ -24,7 +24,7 @@
   import { dial4, parseRttyDial, rttyDialHz } from '../lib/rtty/dial';
   import { setRtty } from '../lib/state/keyboard.svelte';
   import { setRadioDial } from '../lib/state/cat.svelte';
-  import { modeText, plannedDialHz, rig, rigBand, rigConnected } from '../lib/state/radio.svelte';
+  import { plannedDialHz, radioName, radioTraits, rig, rigBand, rigConnected, rigInDataMode, rigModeText } from '../lib/state/radio.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -173,18 +173,19 @@
   const radioLine = $derived.by((): { text: string; bad: boolean } | null => {
     if (!radio) return null;
     const t = rig.tuning;
-    if (t?.state === 'setting') return { text: `Setting the IC-705 to ${mhz(t.hz)}`, bad: false };
-    if (t?.state === 'waiting') return { text: `The IC-705 is transmitting. Its dial goes to ${mhz(t.hz)} when Tx ends.`, bad: false };
-    if (t?.state === 'refused') return { text: `The IC-705 refused ${mhz(t.hz)}.`, bad: true };
-    if (t?.state === 'no-reply') return { text: `No reply from the IC-705 while setting ${mhz(t.hz)}.`, bad: true };
-    if (t?.state === 'busy') return { text: `The IC-705 kept transmitting, so its dial did not change to ${mhz(t.hz)}.`, bad: true };
-    if (rig.hz === null) return { text: 'Reading the IC-705', bad: false };
+    const name = radioName();
+    if (t?.state === 'setting') return { text: `Setting the ${name} to ${mhz(t.hz)}`, bad: false };
+    if (t?.state === 'waiting') return { text: `The ${name} is transmitting. Its dial goes to ${mhz(t.hz)} when Tx ends.`, bad: false };
+    if (t?.state === 'refused') return { text: `The ${name} refused ${mhz(t.hz)}.`, bad: true };
+    if (t?.state === 'no-reply') return { text: `No reply from the ${name} while setting ${mhz(t.hz)}.`, bad: true };
+    if (t?.state === 'busy') return { text: `The ${name} kept transmitting, so its dial did not change to ${mhz(t.hz)}.`, bad: true };
+    if (rig.hz === null) return { text: `Reading the ${name}`, bad: false };
     const on = rigBand();
-    const m = modeText(rig.mode, rig.data);
-    if (on !== settings.band) return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}, outside ${settings.band}. Choose a band to set it.`, bad: true };
-    // Connecting changes nothing on the radio, so it may still be in another mode than USB-D.
-    if (rig.mode !== null && rig.data !== null && (rig.mode !== 'usb' || !rig.data)) return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}. Choose the band to set USB-D.`, bad: false };
-    return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}.`, bad: false };
+    const m = rigModeText();
+    if (on !== settings.band) return { text: `The ${name} is on ${mhz(rig.hz)} ${m}, outside ${settings.band}. Choose a band to set it.`, bad: true };
+    // Connecting changes nothing on the radio, so it may still be in another mode than USB-D or DATA A.
+    if (rigInDataMode() === false) return { text: `The ${name} is on ${mhz(rig.hz)} ${m}. Choose the band to set ${radioTraits().dataModeName}.`, bad: false };
+    return { text: `The ${name} is on ${mhz(rig.hz)} ${m}.`, bad: false };
   });
 
   /** The mode after choosing band `b`: the same, or FT8 where FT4 has no usual frequency (160m, 60m); null where the mode has none. */
@@ -266,7 +267,7 @@
   {/if}
   {#if mode === 'RTTY'}
     <div class="setblock">
-      <label class="k" for="rtty-dial">{radio ? 'Set the IC-705 to' : 'Set the radio to'}</label>
+      <label class="k" for="rtty-dial">{radio ? `Set the ${radioName()} to` : 'Set the radio to'}</label>
       <div class="dialrow">
         <input
           id="rtty-dial"
@@ -286,14 +287,14 @@
           <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
-      <p class="m">{radio ? 'USB-D' : 'USB'}</p>
+      <p class="m">{radio ? radioTraits().dataModeName : 'USB'}</p>
     </div>
     {#if rttyError}<p class="err" role="alert">{rttyError}</p>{/if}
     {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
-    <p class="note">{radio ? 'The dial comes from the IC-705. QSOs log it as their frequency.' : 'Update this after each retune: QSOs log it as their frequency.'}</p>
+    <p class="note">{radio ? `The dial comes from the ${radioName()}. QSOs log it as their frequency.` : 'Update this after each retune: QSOs log it as their frequency.'}</p>
   {:else if ownDial}
     <div class="setblock">
-      <label class="k" for="ft-dial">{radio ? 'Set the IC-705 to' : 'Set the radio to'}</label>
+      <label class="k" for="ft-dial">{radio ? `Set the ${radioName()} to` : 'Set the radio to'}</label>
       <div class="dialrow">
         <input
           id="ft-dial"
@@ -313,19 +314,19 @@
           <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
-      <p class="m">{radio ? 'USB-D' : 'USB'}</p>
+      <p class="m">{radio ? radioTraits().dataModeName : 'USB'}</p>
     </div>
     {#if ftError}<p class="err" role="alert">{ftError}</p>{/if}
     {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
-    <p class="note">{radio ? 'The dial comes from the IC-705. Saved slots and QSOs record it.' : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.'}</p>
+    <p class="note">{radio ? `The dial comes from the ${radioName()}. Saved slots and QSOs record it.` : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.'}</p>
   {:else}
     <div class="setblock">
-      <p class="k">{radio ? 'IC-705 dial' : 'Set the radio to'}</p>
+      <p class="k">{radio ? `${radioName()} dial` : 'Set the radio to'}</p>
       <p class="f mono">{radio && rig.hz !== null && rigBand() === band ? mhz(rig.hz) : dial === null ? '' : mhz(dial)}</p>
-      <p class="m">{radio && rig.hz !== null && rigBand() === band ? modeText(rig.mode, rig.data) : 'USB'}</p>
+      <p class="m">{radio && rig.hz !== null && rigBand() === band ? rigModeText() : 'USB'}</p>
     </div>
     {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
-    <p class="note">{radio ? 'The dial comes from the IC-705. Saved slots and QSOs record it.' : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.'}</p>
+    <p class="note">{radio ? `The dial comes from the ${radioName()}. Saved slots and QSOs record it.` : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.'}</p>
   {/if}
 </Sheet>
 
