@@ -632,7 +632,7 @@ impl DecodeSession {
             let snr_db = g.snr.estimate(&view, &cand, &tones, &ws.live, &mut ws.noise);
             // An OSD codeword claiming an SNR below what decoding reaches is noise; an AP decode
             // has its own floor.
-            if (found_by.is_none() && outcome.osd && snr_db < config.validate.osd_min_snr_db)
+            if (found_by.is_none() && outcome.osd && snr_db < config.validate.osd_floor_db(self.layout.mode))
                 || (found_by.is_some() && snr_db < config.ap.min_snr_db)
             {
                 stats.implausible += 1;

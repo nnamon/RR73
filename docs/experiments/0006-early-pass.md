@@ -63,5 +63,5 @@ In Chromium every slot appeared in the list 13.53 to 13.58 s after it started, 5
 ## Open risks
 
 - Not tested on a device: the early pass's time on an iPhone. 0003 estimated 145 to 290 ms for the slowest slot.
-- FT4 accepts OSD codewords at -22 and -20 dB on noise (2 in 10000 slots, whole and early alike), where real FT4 decodes do not reach. An SNR floor for FT4 OSD is the next decoder change.
+- FT4 accepted OSD codewords at -22 and -20 dB on noise (2 in 10000 slots, whole and early alike), where real FT4 decodes do not reach. The OSD presets now hold FT4 OSD decodes to -19 dB (experiment 0002, FT4 floor).
 - No FT4 recordings in the corpus: the FT4 cut rests on synthetic signals with DT within ±0.5 s and the `late-start` set.

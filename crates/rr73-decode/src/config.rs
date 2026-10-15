@@ -5,6 +5,7 @@
 //! so a bench result records exactly what ran.
 
 use rr73_dsp::WindowKind;
+use rr73_ft8::Mode;
 
 pub use crate::osd::OsdSource;
 use serde::{Deserialize, Serialize};
@@ -252,6 +253,19 @@ pub struct ValidateParams {
     pub osd_messages: OsdMessages,
     /// Lowest SNR an OSD decode may report, in dB; codewords below it are rejected.
     pub osd_min_snr_db: f32,
+    /// The same floor for FT4 slots, in dB, where it differs: FT4 decodes need more SNR than
+    /// FT8. `None` uses `osd_min_snr_db`.
+    pub osd_ft4_min_snr_db: Option<f32>,
+}
+
+impl ValidateParams {
+    /// Lowest SNR an OSD decode may report in `mode`, in dB.
+    pub fn osd_floor_db(&self, mode: Mode) -> f32 {
+        match mode {
+            Mode::Ft4 => self.osd_ft4_min_snr_db.unwrap_or(self.osd_min_snr_db),
+            Mode::Ft8 => self.osd_min_snr_db,
+        }
+    }
 }
 
 /// Messages accepted from OSD codewords. Codewords from belief propagation are not checked.
@@ -340,6 +354,7 @@ impl DecoderConfig {
                 kind: ValidateKind::CrcUnpack,
                 osd_messages: OsdMessages::Standard,
                 osd_min_snr_db: -24.0,
+                osd_ft4_min_snr_db: None,
             },
             subtract: SubtractParams {
                 kind: SubtractKind::None,
@@ -369,8 +384,8 @@ impl DecoderConfig {
     /// propagation: reliabilities from the channel LLRs, flips among the `window` least
     /// reliable information positions, at most 30 hard errors, a weighted distance of at
     /// most 0.07 (erased bits of a partial slot count as hard errors), an SNR of at least
-    /// -24 dB, and OSD messages limited to plausible standard messages. The limits come from
-    /// `docs/experiments/0002-osd.md` and `docs/experiments/0003-anytime.md`.
+    /// -24 dB (-19 dB in FT4), and OSD messages limited to plausible standard messages. The
+    /// limits come from `docs/experiments/0002-osd.md` and `docs/experiments/0003-anytime.md`.
     fn subtract_3_osd(order: u8, window: usize) -> Self {
         let mut c = Self::subtract_3();
         c.ldpc.kind = LdpcKind::BpOsd;
@@ -381,6 +396,7 @@ impl DecoderConfig {
         c.ldpc.osd_max_distance = 0.07;
         c.ldpc.osd_erasures_as_errors = true;
         c.validate.osd_messages = OsdMessages::Standard;
+        c.validate.osd_ft4_min_snr_db = Some(-19.0);
         c
     }
 
@@ -513,6 +529,23 @@ mod tests {
         for name in PRESETS {
             DecoderConfig::preset(name).expect(name);
         }
+    }
+
+    #[test]
+    fn ft4_has_its_own_osd_floor() {
+        let c = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+        assert_eq!(c.validate.osd_floor_db(Mode::Ft8), -24.0);
+        assert_eq!(c.validate.osd_floor_db(Mode::Ft4), -19.0);
+        let base = DecoderConfig::baseline();
+        assert_eq!(
+            base.validate.osd_floor_db(Mode::Ft4),
+            base.validate.osd_min_snr_db
+        );
+        let o = base
+            .with_overrides(&["validate.osd_ft4_min_snr_db=-20"])
+            .expect("override");
+        assert_eq!(o.validate.osd_floor_db(Mode::Ft4), -20.0);
+        assert_eq!(o.validate.osd_floor_db(Mode::Ft8), -24.0);
     }
 
     #[test]
