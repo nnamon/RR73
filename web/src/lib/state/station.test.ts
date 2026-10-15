@@ -24,6 +24,19 @@ describe('later decoder stages', () => {
   });
 });
 
+describe('band activity', () => {
+  it('keeps the slots of the last hour', () => {
+    clearDecodes();
+    const start = Date.UTC(2026, 9, 14, 15, 0, 0);
+    // 250 FT8 slots: 62.5 minutes.
+    for (let i = 0; i < 250; i++) deliverDecodes({ startUtcMs: start + i * 15_000, mode: 'FT8', decodes: [d(`CQ K1AB${i % 10} FN42`)], ms: 80 });
+    expect(band.slots).toHaveLength(240);
+    expect(band.slots[0].startUtcMs).toBe(start + 249 * 15_000);
+    expect(band.slots.at(-1)!.startUtcMs).toBe(start + 10 * 15_000);
+    clearDecodes();
+  });
+});
+
 describe('Clear decodes', () => {
   it('empties the list and keeps saved slots, transmitted slots and Your Tx heard back', () => {
     const start = Date.UTC(2026, 9, 14, 13, 0, 0);

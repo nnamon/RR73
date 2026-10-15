@@ -6,6 +6,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - Operate's New chip lists the decodes your decode colours mark as new: new DXCC entities, grids and calls, as Settings › Decode colours sets them.
 - Hide worked leaves stations already in the log on this band and mode out of the list. Their messages to you stay.
+- Band activity keeps the last hour of slots. Older slots appear as you scroll down, and the chip counts cover the hour.
 
 ## 0.19.10 · 2026-10-15
 

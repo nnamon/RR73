@@ -101,8 +101,8 @@ export interface WsprSlotResult {
   skipped?: boolean;
 }
 
-/** Slots kept in the decode list: 2 minutes of FT8. */
-const KEEP_SLOTS = 8;
+/** Band activity keeps the slots of the last hour, 240 of FT8; Operate draws them as its list scrolls. */
+const KEEP_MS = 3_600_000;
 /** Tune, the keying check, and the slots RR73 transmitted in (UTC ms, oldest first). */
 export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null, slots: [] as number[] });
 const transmitted = new TransmittedSlots();
@@ -376,7 +376,8 @@ export function timingSnapshot(): TimingSnapshot {
 }
 
 function keepSlot(entry: DecodedSlot) {
-  band.slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs).slice(0, KEEP_SLOTS);
+  const slots = [entry, ...band.slots.filter((s) => s.startUtcMs !== entry.startUtcMs)].sort((a, b) => b.startUtcMs - a.startUtcMs);
+  band.slots = slots.filter((s) => s.startUtcMs > slots[0].startUtcMs - KEEP_MS);
 }
 
 /** The newest slot Clear decodes took out of the list, while later decoder stages may still add to it. */

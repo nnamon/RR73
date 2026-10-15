@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildList, filterCounts, outText, quietHeader, slotHeader, type Classify, type ListItem, type RowItem, type SlotDecodes } from './list';
+import { buildList, filterCounts, outText, quietHeader, rowFacts, slotHeader, type Classify, type ListItem, type RowItem, type SlotDecodes } from './list';
 import { defaultHighlights, highlightDecode } from './highlight';
 import { buildLogIndex } from '../log/worked';
 
@@ -149,8 +149,8 @@ describe('the New filter and Hide worked', () => {
     // Worked before off in the colours changes nothing here.
     const noInk: Classify = (dec, sent) => highlightDecode({ text: dec.text, sent }, '9V1NE', index, { band: '20m', mode: 'FT8' }, defaultHighlights().map((e) => ({ ...e, on: e.id !== 'worked' })));
     expect(texts(buildList([NEWER], '9V1NE', 'cq', 1500, [], 'FT8', noInk, {}, { hideWorked: true }))).toEqual([]);
-    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, classify)).toEqual({ all: 6, cq: 2, new: 2, me: 2, rx: 2 });
-    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, classify, true)).toEqual({ all: 4, cq: 1, new: 2, me: 2, rx: 2 });
+    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, { classify })).toEqual({ all: 6, cq: 2, new: 2, me: 2, rx: 2 });
+    expect(filterCounts([OLDER, NEWER, LATEST], '9V1NE', 1500, { classify, hideWorked: true })).toEqual({ all: 4, cq: 1, new: 2, me: 2, rx: 2 });
   });
 
   it('leaves out a slot Hide worked empties', () => {
@@ -304,5 +304,24 @@ describe('buildList for the panes of regular width', () => {
     // A slot with nothing near Rx leaves no bar.
     expect(items.some((i) => i.kind === 'header' && i.id === `h${T - 15000}`)).toBe(false);
     expect(rows(items)[0].out?.stage).toBe('next');
+  });
+});
+
+describe('rowFacts', () => {
+  it('classifies each decode once across rebuilds of the list and the counts', () => {
+    let calls = 0;
+    const classify: Classify = () => {
+      calls++;
+      return { bg: null, ink: null, isNew: false, worked: false };
+    };
+    const facts = rowFacts('9V1NE', classify);
+    for (let i = 0; i < 3; i++) {
+      buildList([OLDER, NEWER], '9V1NE', 'all', 1500, [], 'FT8', classify, {}, { facts });
+      filterCounts([OLDER, NEWER], '9V1NE', 1500 + i, { facts });
+    }
+    expect(calls).toBe(4);
+    // A new slot adds only its own decodes.
+    buildList([OLDER, NEWER, { ...NEWER, startUtcMs: T + 15000, decodes: [d('CQ VK2LAW QF56', 900)] }], '9V1NE', 'all', 1500, [], 'FT8', classify, {}, { facts });
+    expect(calls).toBe(5);
   });
 });

@@ -86,3 +86,39 @@ test('New shows what the decode colours call new, and Hide worked hides stations
   await expect(chips.getByRole('radio', { name: /^All/ })).toBeChecked();
   await expect.poll(texts).toHaveLength(5);
 });
+
+test('Band activity keeps the hour: the list draws 8 slots, and 8 more as it scrolls near its end', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.getByRole('link', { name: 'Operate' }).click();
+
+  // 20 slots of 6 decodes, oldest first.
+  const now = Date.now() - (Date.now() % 15_000);
+  for (let i = 20; i >= 1; i--) await decoded(page, now - i * 15_000, Array.from({ length: 6 }, (_, k) => `CQ JA${k}X${String.fromCharCode(65 + (i % 26))}${String.fromCharCode(65 + k)} PM9${k}`));
+  const list = page.getByTestId('decode-list');
+  const bars = list.locator('li.slot-bar');
+  await expect(bars).toHaveCount(8);
+  await expect(page.getByRole('radiogroup', { name: 'Show decodes' }).getByRole('radio', { name: /^All/ })).toHaveText(/^All 120$/);
+
+  // Near the end, 8 more; then the rest.
+  await list.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expect(bars).toHaveCount(16);
+  await list.evaluate((el) => el.scrollTo({ top: el.scrollHeight }));
+  await expect(bars).toHaveCount(20);
+  await expect(bars.last().locator('.visually-hidden')).toHaveText(new RegExp(`^${hhmmss(now - 20 * 15_000)} UTC`));
+
+  // Back at the top, the next slot takes the list back to 8.
+  await list.evaluate((el) => el.scrollTo({ top: 0 }));
+  await page.waitForTimeout(700);
+  await decoded(page, now, ['CQ K1ABC FN42']);
+  await expect(bars).toHaveCount(8);
+  await expect(bars.first().locator('.visually-hidden')).toHaveText(new RegExp(`^${hhmmss(now)} UTC`));
+
+  // A filter that matches few rows draws back until the screen fills or the hour runs out.
+  await page.getByRole('radiogroup', { name: 'Show decodes' }).getByRole('radio', { name: /^CQ/ }).click();
+  await expect(bars).toHaveCount(8);
+  await page.getByRole('radiogroup', { name: 'Show decodes' }).getByRole('radio', { name: /^To me/ }).click();
+  await expect(list.locator('button.dr')).toHaveCount(0);
+});

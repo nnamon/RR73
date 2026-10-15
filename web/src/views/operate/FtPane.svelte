@@ -23,7 +23,7 @@
   import type { ListItem } from '../../lib/decode/list';
   import { SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
-  import { RX_PANE_HZ, buildList, filterCounts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
+  import { RX_PANE_HZ, buildList, filterCounts, rowFacts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
   import { queueMarks, type QueueMark } from '../../lib/decode/queue';
   import { CHASE_MS, chaseMark, spots } from '../../lib/state/spots.svelte';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
@@ -87,6 +87,7 @@
     clearDecodeList();
     shown = band.slots;
     unseen = 0;
+    depth = LIST_SLOTS;
   }
 
   // The list never moves under a finger: while touched, and for 0.5 s after the last touch or
@@ -95,6 +96,12 @@
   const freeze = new TouchFreeze();
   let shown = $state<DecodedSlot[]>([]);
   let unseen = $state(0);
+  // Band activity keeps an hour of slots. The list draws the newest LIST_SLOTS, and LIST_SLOTS more
+  // each time it scrolls near its end, so few rows sit in the page; back at the top, a new slot
+  // takes it back to LIST_SLOTS.
+  const LIST_SLOTS = 8;
+  let depth = $state(LIST_SLOTS);
+  const drawn = $derived(shown.slice(0, depth));
   let touching = false;
   let listEl: HTMLDivElement | undefined = $state();
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -114,15 +121,28 @@
     const next = band.slots;
     if (next === shown) return;
     const known = new Set(shown.map((s) => s.startUtcMs));
-    const added = rowsIn(next.filter((s) => !known.has(s.startUtcMs)));
+    const fresh = next.filter((s) => !known.has(s.startUtcMs));
     const el = listEl;
     const top = el?.scrollTop ?? 0;
     const height = el?.scrollHeight ?? 0;
     shown = next;
-    if (!el || top <= 4) return;
+    if (!el || top <= 4) {
+      depth = LIST_SLOTS;
+      return;
+    }
+    // Scrolled down, the slots in view stay drawn below the new ones.
+    depth += fresh.length;
     await tick();
     el.scrollTop = top + (el.scrollHeight - height);
-    unseen += added;
+    unseen += rowsIn(fresh);
+  }
+
+  /** Draws LIST_SLOTS more slots when the list is scrolled within half a screen of its end, or does not fill the screen. */
+  function more() {
+    const el = listEl;
+    // A hidden pane measures 0 and would draw the whole hour.
+    if (!el || !el.clientHeight || depth >= shown.length) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - el.clientHeight / 2) depth += LIST_SLOTS;
   }
 
   $effect(() => {
@@ -169,6 +189,7 @@
   function scrolled() {
     freeze.activity(performance.now());
     if ((listEl?.scrollTop ?? 0) <= 4) unseen = 0;
+    more();
     void sync();
   }
 
@@ -220,11 +241,19 @@
   // on. Regular width: the Rx frequency pane takes the place of the Rx freq filter.
   const anyNew = $derived(settings.highlights.some((e) => e.on && isNewCategory(e.id)));
   const shownFilter = $derived<Filter>((regular && filter === 'rx') || (!anyNew && filter === 'new') ? 'all' : filter);
+  // Each decode's row, colours and filter facts, worked out once while the callsign and the colours stay.
+  const facts = $derived(rowFacts(settings.callsign, classify));
   const items = $derived(
-    applyFocus(buildList(shown, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar', hideWorked } : { hideWorked }), focus),
+    applyFocus(buildList(drawn, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar', hideWorked, facts } : { hideWorked, facts }), focus),
   );
-  const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true }), focus) : []);
-  const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz, classify, hideWorked));
+  // Rx frequency has few rows: it takes the whole hour.
+  const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true, facts }), focus) : []);
+  const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz, { hideWorked, facts }));
+  // A filtered list that leaves the screen part empty draws further back.
+  $effect(() => {
+    void items;
+    void tick().then(more);
+  });
   const chips: { id: Filter; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'cq', label: 'CQ' },
