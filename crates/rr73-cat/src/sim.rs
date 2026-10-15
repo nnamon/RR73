@@ -13,7 +13,10 @@
 //! - Each VFO keeps one filter, shared by the mode and the data mode.
 //! - A mode set without a filter selects FIL1. The guide says the mode's default filter (p. 17).
 //! - It answers a read of the data mode while off with `00 00`.
-//! - Transceive frames go to the controller's address, `E0`.
+//! - Transceive frames go to address `00`, for every controller.
+//! - With USB SEND set to USB (A) DTR or USB (A) RTS, it transmits while that line of port A is
+//!   asserted (Advanced Manual p. 9-2 names the setting; it does not say which line level keys),
+//!   and PTT off (`1C 00 00`) does not end that transmission. Port B's settings key nothing here.
 //! - Echo Back sends back every byte received at once, ahead of the answer.
 //! - It accepts transmit on at any frequency.
 
@@ -23,9 +26,13 @@ use crate::bcd;
 use crate::frame::{Decoded, Frame, FrameDecoder, NG, OK};
 use crate::ic705::{
     CMD_READ_FREQUENCY, CMD_READ_MODE, CMD_SET_FREQUENCY, CMD_SET_MODE, CMD_SETTINGS, CMD_STATUS,
-    CMD_TRANSCEIVE_FREQUENCY, CMD_TRANSCEIVE_MODE, CMD_VFO_FREQUENCY, CMD_VFO_MODE, CONTROLLER_ADDRESS,
-    DEFAULT_RADIO_ADDRESS, Filter, MenuItem, Mode, SUB_DATA_MODE, SUB_MENU, SUB_TRANSMIT, Vfo,
+    CMD_TRANSCEIVE_FREQUENCY, CMD_TRANSCEIVE_MODE, CMD_VFO_FREQUENCY, CMD_VFO_MODE, DEFAULT_RADIO_ADDRESS,
+    Filter, MenuItem, Mode, SUB_DATA_MODE, SUB_MENU, SUB_TRANSMIT, Vfo,
 };
+
+/// The receiving address of the simulator's transceive frames: every controller. The CI-V guide
+/// does not say which address the IC-705 uses for them.
+pub const BROADCAST_ADDRESS: u8 = 0x00;
 
 /// What one VFO holds.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -54,8 +61,13 @@ pub struct SimIc705 {
     pub selected: VfoState,
     /// The other VFO.
     pub unselected: VfoState,
-    /// True while transmitting.
+    /// True while transmitting on PTT over CI-V (`1C 00 01`). [`SimIc705::transmitting`] adds a
+    /// line held by USB SEND.
     pub transmit: bool,
+    /// Port A's DTR line, as the controller set it.
+    pub dtr: bool,
+    /// Port A's RTS line, as the controller set it.
+    pub rts: bool,
     /// Every frame addressed to the radio, oldest first.
     pub received: Vec<Frame>,
     settings: BTreeMap<MenuItem, u16>,
@@ -93,10 +105,32 @@ impl SimIc705 {
             selected: vfo(14_074_000),
             unselected: vfo(7_074_000),
             transmit: false,
+            dtr: false,
+            rts: false,
             received: Vec::new(),
             settings,
             decoder: FrameDecoder::new(),
         }
+    }
+
+    /// The controller sets port A's DTR and RTS lines, as a serial port does when it opens.
+    pub fn set_lines(&mut self, dtr: bool, rts: bool) {
+        self.dtr = dtr;
+        self.rts = rts;
+    }
+
+    /// True while a line of port A keys the radio through USB SEND.
+    pub fn line_keyed(&self) -> bool {
+        match self.setting(MenuItem::UsbSend) {
+            1 => self.dtr,
+            2 => self.rts,
+            _ => false,
+        }
+    }
+
+    /// True while transmitting, by CI-V or by a line.
+    pub fn transmitting(&self) -> bool {
+        self.transmit || self.line_keyed()
     }
 
     /// A menu setting's code.
@@ -168,7 +202,7 @@ impl SimIc705 {
         if self.setting(MenuItem::CivTransceive) != 1 {
             return Vec::new();
         }
-        Frame::new(CONTROLLER_ADDRESS, self.address, command, data)
+        Frame::new(BROADCAST_ADDRESS, self.address, command, data)
             .encode()
             .unwrap_or_default()
     }
@@ -260,7 +294,7 @@ impl SimIc705 {
                     _ => ack(false),
                 }
             }
-            (CMD_STATUS, [SUB_TRANSMIT]) => reply(vec![SUB_TRANSMIT, u8::from(self.transmit)]),
+            (CMD_STATUS, [SUB_TRANSMIT]) => reply(vec![SUB_TRANSMIT, u8::from(self.transmitting())]),
             (CMD_STATUS, [SUB_TRANSMIT, on @ (0x00 | 0x01)]) => {
                 self.transmit = *on == 0x01;
                 ack(true)

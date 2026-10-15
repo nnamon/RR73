@@ -181,6 +181,52 @@ fn transceive_reports_the_front_panel() {
 }
 
 #[test]
+fn transceive_frames_go_to_every_controller_and_parse_at_either_address() {
+    let mut radio = SimIc705::new();
+    let frame = radio.turn_dial(7_074_000);
+    // FE FE 00 A4 00 ...: to address 00.
+    assert_eq!(frame[2..5], [0x00, 0xA4, 0x00]);
+    let mut parser = Parser::new(Addresses::default());
+    let to_e0: Vec<u8> = frame
+        .iter()
+        .enumerate()
+        .map(|(i, &b)| if i == 2 { 0xE0 } else { b })
+        .collect();
+    for bytes in [frame, to_e0] {
+        assert_eq!(
+            parser.push(&bytes),
+            [Event::Frequency {
+                hz: 7_074_000,
+                transceive: true
+            }]
+        );
+    }
+}
+
+#[test]
+fn usb_send_keys_on_a_port_a_line_and_ptt_off_does_not_end_it() {
+    let mut link = Link::new(SimIc705::new());
+    let read = |link: &mut Link| link.ask(Request::ReadTransmit);
+    // USB SEND off, its default: no line keys the radio.
+    link.radio.set_lines(true, true);
+    assert_eq!(read(&mut link), Event::Transmit { on: false });
+    for (send, dtr, rts) in [(1, true, false), (2, false, true)] {
+        link.radio.set_setting(MenuItem::UsbSend, send);
+        link.radio.set_lines(dtr, rts);
+        assert!(link.radio.line_keyed());
+        assert_eq!(read(&mut link), Event::Transmit { on: true });
+        assert_eq!(link.ask(Request::SetTransmit { on: false }), Event::Ok);
+        assert_eq!(read(&mut link), Event::Transmit { on: true });
+        link.radio.set_lines(false, false);
+        assert_eq!(read(&mut link), Event::Transmit { on: false });
+    }
+    // Port B's lines are not modelled: USB (B) DTR keys nothing here.
+    link.radio.set_setting(MenuItem::UsbSend, 3);
+    link.radio.set_lines(true, true);
+    assert_eq!(read(&mut link), Event::Transmit { on: false });
+}
+
+#[test]
 fn reads_the_menu_defaults() {
     let mut link = Link::new(SimIc705::new());
     let read = |link: &mut Link, item| match link.ask(Request::ReadSetting { item }) {
