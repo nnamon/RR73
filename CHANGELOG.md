@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.20.1 · 2026-10-15
 
 - The station detail, from touch and hold on a decode, ends with the station's SNR over its last 8 slots, gaps marked.
 - When the audio stops in a QSO whose reports have gone both ways, its banner offers Log QSO beside Resume audio.
