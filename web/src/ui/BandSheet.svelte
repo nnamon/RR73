@@ -224,7 +224,7 @@
         />
         <span class="mhz">MHz</span>
         {#if rttyOwn && rttyUsualHz !== null}
-          <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><span class="face"><Icon name="reset" size={22} /></span></button>
+          <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
       <p class="m">USB</p>
@@ -249,7 +249,7 @@
         />
         <span class="mhz">MHz</span>
         {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
-          <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><span class="face"><Icon name="reset" size={22} /></span></button>
+          <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
       <p class="m">USB</p>
@@ -425,7 +425,12 @@
     line-height: var(--rr-leading-dial);
   }
 
-  /* Back to the usual dial: a round face after the unit, centred on the field, in a 44 pt target that reaches into the gap and the card's padding. */
+  /*
+   * Back to the usual dial: the glyph alone in the accent colour, as iOS shows a toolbar glyph, a
+   * little under the height of the unit's capitals. Its 44 pt target reaches into the gap and the
+   * card's padding. It sits 2 pt below the field's middle, on the middle of the capitals, which
+   * SF Pro's line box sets 1 to 2 pt low.
+   */
   .reset {
     display: flex;
     flex: none;
@@ -434,24 +439,22 @@
     width: var(--rr-tap);
     height: var(--rr-tap);
     margin: 0 calc((var(--rr-dial-reset) - var(--rr-tap)) / 2);
+    color: var(--rr-accent);
+    translate: 0 var(--rr-space-half);
   }
 
-  .reset .face {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+  .reset :global(.reset-i) {
     width: var(--rr-dial-reset);
     height: var(--rr-dial-reset);
     border-radius: var(--rr-radius-pill);
-    background: var(--rr-fill-bg);
-    color: var(--rr-accent);
   }
 
+  /* The ring goes round the glyph: round the 44 pt target it would touch the unit. */
   .reset:focus-visible {
     outline: none;
   }
 
-  .reset:focus-visible .face {
+  .reset:focus-visible :global(.reset-i) {
     outline: 2px solid var(--rr-accent);
     outline-offset: 2px;
   }

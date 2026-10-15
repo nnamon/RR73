@@ -58,8 +58,10 @@ export const ICONS = {
   // Reorder handle: three lines, as in iOS table views.
   grip: { stroke: ['M4.5 8H19.5M4.5 12H19.5M4.5 16H19.5'], width: 1.8 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
-  // Back to the default value: an arrow going round anticlockwise, its open head at 12 o'clock.
-  reset: { stroke: ['M6.02 8.81A7.3 7.3 0 1 0 12 5.7', 'M15.54 2.16L12 5.7L15.54 9.24'], width: 2.5 },
+  // Back to the default value: rotate-ccw from Lucide (lucide-static 1.57.0), ISC licence, in
+  // THIRD_PARTY_NOTICES.md. The paths are Lucide's. Lucide draws them at stroke 2; 2.5 suits the
+  // bold 40 pt dial beside the glyph.
+  reset: { stroke: ['M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8', 'M3 3v5h5'], width: 2.5 },
   // Bar glyphs share one stroke weight and an 18-unit-wide ink box centred on 12, as SF Symbols do.
   share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
   // Log, activations and destinations.

@@ -149,3 +149,5 @@ docker compose run --rm --service-ports node npm --prefix web run dev
 Dual licensed under the MIT licence or the Apache License 2.0, at your option. See `LICENSE-MIT` and `LICENSE-APACHE`.
 
 Portions of `rr73-ft8` are ported from [ft8_lib](https://github.com/kgoba/ft8_lib) by Kārlis Goba (MIT). The FT8 and FT4 protocols are described in Franke, Somerville and Taylor, "The FT4 and FT8 Communication Protocols", QEX, July/August 2020.
+
+The reset glyph in the band sheet is the `rotate-ccw` icon from [Lucide](https://lucide.dev) (ISC), with its licence in `THIRD_PARTY_NOTICES.md`.

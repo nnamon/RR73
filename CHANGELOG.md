@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The dial reset button in the band sheet is a plain anticlockwise arrow in the accent colour, centred on the dial's digits.
+
 ## 0.21.7 · 2026-10-15
 
 - Settings › Radio and audio › Output sends transmit audio, Tune and the start chime to a chosen device, such as a radio's USB audio. It shows in browsers that can choose an output, such as Chrome and Edge.
