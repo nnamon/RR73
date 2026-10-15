@@ -8,6 +8,12 @@ import { CIV_PORT, LinkClosedError, SerialLink, choosePort, grantedPorts, serial
 
 class FakePort extends EventTarget implements SerialPortLike {
   opened: SerialOptionsLike | null = null;
+  /** What happened to the port, in order: open, the lines set, writes, close. */
+  events: string[] = [];
+  /** DTR and RTS as Chromium on Windows leaves them after open(): asserted. */
+  dtr = false;
+  rts = false;
+  signalsError: DOMException | null = null;
   closes = 0;
   written: number[] = [];
   openError: DOMException | null = null;
@@ -29,9 +35,13 @@ class FakePort extends EventTarget implements SerialPortLike {
     if (this.openError) throw this.openError;
     if (this.opened) throw new DOMException('The port is already open.', 'InvalidStateError');
     this.opened = o;
+    this.dtr = true;
+    this.rts = true;
+    this.events.push('open');
     this.newReadable();
     this.writableValue = new WritableStream<Uint8Array>({
       write: async (chunk) => {
+        this.events.push(`write with DTR ${this.dtr ? 'high' : 'low'}, RTS ${this.rts ? 'high' : 'low'}`);
         await this.writeGate;
         this.written.push(...chunk);
       },
@@ -48,6 +58,13 @@ class FakePort extends EventTarget implements SerialPortLike {
 
   getInfo() {
     return { usbVendorId: 0x1234, usbProductId: 0x5678 };
+  }
+
+  async setSignals(s: { dataTerminalReady?: boolean; requestToSend?: boolean }) {
+    if (this.signalsError) throw this.signalsError;
+    if (s.dataTerminalReady !== undefined) this.dtr = s.dataTerminalReady;
+    if (s.requestToSend !== undefined) this.rts = s.requestToSend;
+    this.events.push(`signals DTR ${this.dtr ? 'high' : 'low'}, RTS ${this.rts ? 'high' : 'low'}`);
   }
 
   /** The radio sends bytes. */
@@ -179,6 +196,22 @@ describe('SerialLink', () => {
     port.unplug(false);
     await vi.waitFor(() => expect(ends).toEqual(['lost']));
     await vi.waitFor(() => expect(link.state).toBe('closed'));
+  });
+
+  it('lowers DTR and RTS as soon as the port opens, before any write', async () => {
+    const { port, link } = await openLink();
+    await link.write(Uint8Array.from([1]));
+    expect(port.events).toEqual(['open', 'signals DTR low, RTS low', 'write with DTR low, RTS low']);
+  });
+
+  it('closes the port again when the lines cannot be lowered', async () => {
+    const port = new FakePort();
+    port.signalsError = new DOMException('Failed to set control signals.', 'NetworkError');
+    const link = new SerialLink(port);
+    expect(await link.open()).toBe('signals');
+    expect(link.state).toBe('closed');
+    expect(port.closes).toBe(1);
+    await expect(link.write(Uint8Array.from([1]))).rejects.toBeInstanceOf(LinkClosedError);
   });
 
   it('says why a port did not open', async () => {

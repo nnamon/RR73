@@ -7,6 +7,12 @@
  * switched off, the driver gone) ends the link with `lost`, and the listeners hear it before
  * anything else happens, so the transmit code can turn Tx off at once.
  *
+ * Chromium on Windows asserts DTR and RTS while it opens a port with no flow control, before
+ * open() resolves. With the IC-705's USB SEND set to a line of the port, that keys the radio. So a
+ * link lowers both lines first thing after open() resolves, before any write, and closes the port
+ * if it cannot (docs/design/cat.md, Port settings). Web Serial cannot close the few milliseconds
+ * between the two.
+ *
  * TypeScript's DOM types have no Web Serial, so the parts used are declared here.
  */
 
@@ -18,6 +24,13 @@ export interface SerialOptionsLike {
   parity?: 'none' | 'even' | 'odd';
   flowControl?: 'none' | 'hardware';
   bufferSize?: number;
+}
+
+/** Output lines of a port, as SerialPort.setSignals takes them. */
+export interface SerialSignalsLike {
+  dataTerminalReady?: boolean;
+  requestToSend?: boolean;
+  break?: boolean;
 }
 
 /** USB IDs of a port, where the browser knows them. */
@@ -33,12 +46,17 @@ export interface SerialPortLike extends EventTarget {
   open(options: SerialOptionsLike): Promise<void>;
   close(): Promise<void>;
   getInfo(): SerialPortInfoLike;
+  setSignals(signals: SerialSignalsLike): Promise<void>;
+  /** Takes back the permission to open the port (Chromium 103 and later). */
+  forget?(): Promise<void>;
 }
 
 /** The parts of navigator.serial RR73 uses. */
 export interface SerialApiLike {
   requestPort(options?: { filters?: SerialPortInfoLike[] }): Promise<SerialPortLike>;
   getPorts(): Promise<SerialPortLike[]>;
+  /** `connect` fires when a port the operator allowed is plugged in again. */
+  addEventListener?(type: 'connect', listener: () => void): void;
 }
 
 /** The browser's Web Serial, or null where it has none (Safari, iOS). */
@@ -87,9 +105,13 @@ export type LinkEnd = 'closed' | 'lost';
 
 /**
  * Why a port did not open: `busy` when the system refused it (Windows does when another program
- * has the port open), `failed` otherwise.
+ * has the port open), `signals` when DTR and RTS could not be lowered (the port is closed again),
+ * `failed` otherwise.
  */
-export type OpenError = 'busy' | 'failed';
+export type OpenError = 'busy' | 'signals' | 'failed';
+
+/** DTR and RTS low: no USB SEND setting keys the radio through them. */
+export const LINES_LOW: Readonly<SerialSignalsLike> = { dataTerminalReady: false, requestToSend: false };
 
 /** A write to a link that is not open. */
 export class LinkClosedError extends Error {
@@ -146,6 +168,18 @@ export class SerialLink {
     } catch (e) {
       this.stateValue = 'closed';
       return errorName(e) === 'NetworkError' ? 'busy' : 'failed';
+    }
+    // Before anything else: Chromium raised DTR and RTS while opening.
+    try {
+      await this.port.setSignals(LINES_LOW);
+    } catch {
+      try {
+        await this.port.close();
+      } catch {
+        // Closing a port that failed may fail too; the link stays closed.
+      }
+      this.stateValue = 'closed';
+      return 'signals';
     }
     this.port.addEventListener('disconnect', this.onDisconnect);
     this.writer = this.port.writable?.getWriter() ?? null;
