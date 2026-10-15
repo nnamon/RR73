@@ -6,6 +6,7 @@ import { inBand, type FtDials, type HoundDials } from '../radio/hound-dial';
 import type { Mode } from '../clock/slots';
 import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
 import type { Contrast } from '../waterfall/levels';
+import { isPaletteId, type PaletteId } from '../waterfall/colormap';
 import { clampHz } from '../waterfall/pick';
 import { HUNT_ORDERS, QUEUE_ORDERS, type HuntOrder, type QueueOrder } from '../qso/sequencer';
 import { DEFAULT_POWER_DBM, isPowerDbm } from '../wspr/power';
@@ -118,6 +119,8 @@ export interface Settings {
   highlights: HighlightEntry[];
   /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
   waterfallContrast: Contrast;
+  /** The waterfall's colormap (waterfall/colormap.ts). */
+  waterfallPalette: PaletteId;
   /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall; off by default. */
   waterfallCalls: boolean;
   /** Minutes without a touch before Operate turns to the night display; 0 never. */
@@ -165,6 +168,7 @@ export const DEFAULTS: Settings = {
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
+  waterfallPalette: 'rr73',
   waterfallCalls: false,
   nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
@@ -325,6 +329,7 @@ export function validate(raw: unknown): Settings {
   if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
   if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
+  if (isPaletteId(r.waterfallPalette)) s.waterfallPalette = r.waterfallPalette;
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
   if (NIGHT_AFTER.includes(r.nightAfterMin as NightAfter)) s.nightAfterMin = r.nightAfterMin as NightAfter;
   s.wspr = validateWspr(r.wspr);

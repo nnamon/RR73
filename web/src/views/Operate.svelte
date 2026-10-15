@@ -73,6 +73,7 @@
       markHz={selectedHz}
       txSlots={tx.slots}
       contrast={settings.waterfallContrast}
+      palette={settings.waterfallPalette}
       stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
       hint={!settings.freqPicked}
       onset={(f) => f.txHz !== undefined && setWsprTxHz(f.txHz)}
@@ -84,6 +85,7 @@
       rxHz={null}
       txHz={0}
       contrast={settings.waterfallContrast}
+      palette={settings.waterfallPalette}
       stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
       hint={!live}
       onset={() => undefined}
@@ -103,6 +105,7 @@
       txHz={markedTxHz(qso.st, settings.txHz)}
       txSlots={tx.slots}
       contrast={settings.waterfallContrast}
+      palette={settings.waterfallPalette}
       stoppedAtUtcMs={audio.status === 'stopped' ? audio.stoppedAtUtcMs : null}
       hint={!settings.freqPicked}
       onset={setFrequencies}

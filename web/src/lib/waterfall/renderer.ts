@@ -109,7 +109,7 @@ export class WaterfallRenderer {
   private height = 0;
   private mode: Mode;
   private lut: Uint8ClampedArray;
-  private readonly palette: WaterfallPalette;
+  private palette: WaterfallPalette;
   private cols: Column[] = [];
   private hop = 1000;
   private view: View;
@@ -145,7 +145,7 @@ export class WaterfallRenderer {
     this.palette = palette;
     this.mode = mode;
     this.quiet = new QuietTracker(isFt(mode) ? mode : 'FT8');
-    this.lut = buildLut(palette.stops);
+    this.lut = buildLut(palette.stops, palette.positions);
     this.view = viewOf(mode);
     this.spectrum = new DisplaySpectrum(this.view);
     this.mapper = new LevelMapper(12, bandFor(this.view));
@@ -215,6 +215,13 @@ export class WaterfallRenderer {
     this.hop = Math.max(64, Math.round(((this.spanS ?? this.view.visibleS) * DISPLAY_RATE) / this.height));
     this.mapper.setRate(1000 / this.rowMs);
     this.history = this.history.slice(-this.height);
+    this.redraw();
+  }
+
+  /** Sets the colormap and redraws the picture in it, rows drawn before included. */
+  setPalette(palette: WaterfallPalette) {
+    this.palette = palette;
+    this.lut = buildLut(palette.stops, palette.positions);
     this.redraw();
   }
 

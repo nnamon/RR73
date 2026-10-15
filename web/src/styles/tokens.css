@@ -282,8 +282,9 @@
   --rr-night-line: rgb(217 54 43 / 45%);
 
   /*
-   * Colour: waterfall. The same in both themes. The colormap stops are read by
-   * lib/waterfall/colormap.ts and handed to the waterfall worker, so they stay plain hex.
+   * Colour: waterfall. The same in both themes. The colormap stops of each palette (Settings ›
+   * Radio and audio › Waterfall colours) are read by lib/waterfall/colormap.ts and handed to the
+   * waterfall worker, so they stay plain hex.
    */
   --rr-wf-bg: #04060A;
   --rr-wf-line: rgb(255 255 255 / 18%);
@@ -299,13 +300,34 @@
   --rr-wf-ruler-text: rgb(255 255 255 / 90%);
   --rr-wf-tick: rgb(255 255 255 / 55%);
   --rr-wf-tick-major: rgb(255 255 255 / 90%);
-  --rr-wf-c0: #04060A;
-  --rr-wf-c1: #0B1D45;
-  --rr-wf-c2: #1898D8;
-  --rr-wf-c3: #4FD2FF;
-  --rr-wf-c4: #8AF0C8;
-  --rr-wf-c5: #FFF060;
-  --rr-wf-c6: #FFF8E6;
+  /* RR73, the default: navy noise, cyan from 3 dB over it, mint, yellow, warm white. */
+  --rr-wf-rr73-c0: #04060A;
+  --rr-wf-rr73-c1: #0B1D45;
+  --rr-wf-rr73-c2: #1898D8;
+  --rr-wf-rr73-c3: #4FD2FF;
+  --rr-wf-rr73-c4: #8AF0C8;
+  --rr-wf-rr73-c5: #FFF060;
+  --rr-wf-rr73-c6: #FFF8E6;
+  /* Fire: even steps of lightness from indigo through purple, crimson and orange to pale yellow. */
+  --rr-wf-fire-c0: #050713;
+  --rr-wf-fire-c1: #241D48;
+  --rr-wf-fire-c2: #5F226E;
+  --rr-wf-fire-c3: #A71075;
+  --rr-wf-fire-c4: #E2205E;
+  --rr-wf-fire-c5: #FF5E40;
+  --rr-wf-fire-c6: #FF9C4A;
+  --rr-wf-fire-c7: #FFCE68;
+  --rr-wf-fire-c8: #FFF7D1;
+  /* Grey: even steps of lightness from black to white. */
+  --rr-wf-grey-c0: #040404;
+  --rr-wf-grey-c1: #222222;
+  --rr-wf-grey-c2: #3D3D3D;
+  --rr-wf-grey-c3: #5A5A5A;
+  --rr-wf-grey-c4: #787878;
+  --rr-wf-grey-c5: #989898;
+  --rr-wf-grey-c6: #B9B9B9;
+  --rr-wf-grey-c7: #DCDCDC;
+  --rr-wf-grey-c8: #FFFFFF;
 
   /*
    * Decode list: messages to you, the focus during a QSO and runs of empty slots. A message to

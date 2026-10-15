@@ -193,6 +193,20 @@ describe('the sequencer settings migration', () => {
     for (const bad of [0, 100, 2.5, -1, Number.NaN, '3']) expect(validate({ huntCalls: bad }).huntCalls).toBe(4);
   });
 
+  it('starts the waterfall in RR73’s colours, keeps a stored palette and drops an unknown one', async () => {
+    expect(DEFAULTS.waterfallPalette).toBe('rr73');
+    expect(validate({}).waterfallPalette).toBe('rr73');
+    for (const p of ['rr73', 'fire', 'grey'] as const) expect(validate({ waterfallPalette: p }).waterfallPalette).toBe(p);
+    for (const p of ['viridis', 'Fire', '', 2, null]) expect(validate({ waterfallPalette: p }).waterfallPalette).toBe('rr73');
+    // No migration: a record without the field reads as RR73 and stores nothing for it.
+    expect(migration({ schema: SETTINGS_SCHEMA })).toEqual({});
+    await setKv('settings', { waterfallPalette: 'grey', schema: SETTINGS_SCHEMA });
+    await loadSettings();
+    expect(settings.waterfallPalette).toBe('grey');
+    await updateSettings({ waterfallPalette: 'fire' });
+    expect(await getKv('settings')).toMatchObject({ waterfallPalette: 'fire' });
+  });
+
   it('starts with Responses refresh watchdog off and keeps what the operator sets', () => {
     expect(validate({}).watchdogRefresh).toBe(false);
     expect(validate({ watchdogRefresh: true }).watchdogRefresh).toBe(true);

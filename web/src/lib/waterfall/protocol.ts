@@ -10,6 +10,7 @@ export type ToWaterfall =
   | { type: 'mode'; mode: Mode }
   | { type: 'span'; seconds: number | null }
   | { type: 'contrast'; contrast: Contrast }
+  | { type: 'palette'; palette: WaterfallPalette }
   | { type: 'txSlots'; starts: number[] }
   | { type: 'txWave'; wave: TxWave }
   | { type: 'clear' }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HALF_WINDOW, LevelMapper, NOISE_POSITION, SPAN_DB, baseline, scalePosition, type Contrast } from './levels';
-import { STOP_POSITIONS } from './colormap';
+import { RR73_POSITIONS } from './colormap';
 import { BIN_HZ, DISPLAY_BINS } from './spectrum';
 import { prng } from '../testing/signal';
 
@@ -27,9 +27,9 @@ const bin = (hz: number) => Math.round(hz / BIN_HZ);
 describe('scalePosition', () => {
   it('puts average noise on the second stop and 3 dB over it on the cyan stop', () => {
     expect(scalePosition(0)).toBe(NOISE_POSITION);
-    expect(NOISE_POSITION).toBe(STOP_POSITIONS[1]);
-    expect(scalePosition(3)).toBeCloseTo(STOP_POSITIONS[2], 6);
-    expect(scalePosition(6)).toBeCloseTo(STOP_POSITIONS[3], 6);
+    expect(NOISE_POSITION).toBe(RR73_POSITIONS[1]);
+    expect(scalePosition(3)).toBeCloseTo(RR73_POSITIONS[2], 6);
+    expect(scalePosition(6)).toBeCloseTo(RR73_POSITIONS[3], 6);
     expect(scalePosition(20)).toBeCloseTo(1, 6);
   });
 
@@ -113,7 +113,7 @@ describe('LevelMapper', () => {
     row[bin(1000)] = -60 + 3;
     row[bin(2000)] = -60 + 20.5;
     const levels = m.map(row);
-    expect(Math.abs(levels[bin(1000)] / 255 - STOP_POSITIONS[2])).toBeLessThan(0.03);
+    expect(Math.abs(levels[bin(1000)] / 255 - RR73_POSITIONS[2])).toBeLessThan(0.03);
     expect(levels[bin(2000)]).toBe(255);
   });
 

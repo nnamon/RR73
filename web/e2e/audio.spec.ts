@@ -1,6 +1,8 @@
-// Audio from a tap to a saved slot, with Chromium's fake microphone playing e2e/.fixtures/tones.wav.
+// Audio from a tap to a saved slot, with Chromium's fake microphone playing e2e/.fixtures/tones.wav,
+// and the waterfall's colours: the palette chosen in Settings › Radio and audio redraws the
+// waterfall at once, rows drawn before included, and stays chosen after a reload.
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { decodeWav16 } from '../src/lib/slots/wav';
@@ -197,4 +199,70 @@ test('a decoder gone from the server says a new version is ready, waits for audi
   await expect(notice).toHaveText(/^A new version of RR73 is ready\.\s*Reload$/);
   await Promise.all([page.waitForEvent('load'), page.getByRole('link', { name: 'Operate' }).click()]);
   expect(await page.evaluate(() => (window as unknown as { marker?: boolean }).marker ?? false)).toBe(false);
+});
+
+/**
+ * Mean red, green and blue over the top 40 % of the picture from 2100 to 2450 Hz, clear of the
+ * test tones, the Tx and Rx markers and the labels; the largest difference between two channels of
+ * one pixel there; and the share of pixels drawn from audio.
+ */
+async function picture(page: Page) {
+  const px = await elementPixels(page, page.getByTestId('waterfall'));
+  const [x0, x1] = [2100, 2450].map((hz) => Math.round((hz / 3000) * px.width));
+  const rows = Math.round(px.height * 0.4);
+  const sum = [0, 0, 0];
+  let spread = 0;
+  let n = 0;
+  for (let y = 2; y < rows; y++)
+    for (let x = x0; x <= x1; x++) {
+      const o = (y * px.width + x) * 4;
+      const c = [px.data[o], px.data[o + 1], px.data[o + 2]];
+      // Rows from before audio started are blank, in the background colour of every palette.
+      if (c[0] === 4 && c[1] === 6 && c[2] === 10) continue;
+      c.forEach((v, k) => (sum[k] += v));
+      spread = Math.max(spread, Math.max(...c) - Math.min(...c));
+      n++;
+    }
+  const [r, g, b] = sum.map((v) => v / n);
+  return { r, g, b, spread, drawn: n / ((rows - 2) * (x1 - x0 + 1)) };
+}
+
+async function choose(page: Page, label: string) {
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  const group = page.getByRole('radiogroup', { name: 'Waterfall colours' });
+  await group.getByText(label, { exact: true }).click();
+  await expect(group.getByRole('radio', { name: label })).toBeChecked();
+  await page.evaluate(() => (location.hash = '#/operate'));
+  await expect(page.getByTestId('waterfall')).toBeVisible();
+}
+
+test('the waterfall takes the colours chosen in Settings at once, rows drawn before included', async ({ page }) => {
+  test.setTimeout(90_000);
+  await page.goto('./');
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 15_000 });
+  await page.waitForTimeout(6000);
+
+  // RR73: navy noise with cyan peaks, more green than red.
+  const rr73 = await picture(page);
+  expect(rr73.drawn).toBeGreaterThan(0.1);
+  expect(rr73.g).toBeGreaterThan(rr73.r + 8);
+  expect(rr73.b).toBeGreaterThan(rr73.r + 20);
+
+  // Grey: every pixel neutral, rows from before the change included.
+  await choose(page, 'Grey');
+  const grey = await picture(page);
+  expect(grey.spread).toBeLessThanOrEqual(3);
+  expect(grey.r).toBeGreaterThan(10);
+
+  // Fire: violet noise, more red than green.
+  await choose(page, 'Fire');
+  const fire = await picture(page);
+  expect(fire.r).toBeGreaterThan(fire.g + 15);
+  expect(fire.r).toBeGreaterThan(rr73.r + 15);
+
+  // The choice is stored.
+  await page.reload();
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await expect(page.getByRole('radiogroup', { name: 'Waterfall colours' }).getByRole('radio', { name: 'Fire' })).toBeChecked();
 });

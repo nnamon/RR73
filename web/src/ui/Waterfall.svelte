@@ -30,7 +30,7 @@
    */
   import { onMount } from 'svelte';
   import { WaterfallClient } from '../lib/waterfall/client';
-  import { paletteFrom } from '../lib/waterfall/colormap';
+  import { paletteFrom, type PaletteId } from '../lib/waterfall/colormap';
   import type { FrameInfo } from '../lib/waterfall/renderer';
   import { placeCalls, type WaterfallCall } from '../lib/waterfall/calls';
   import { FREQ_LIMITS, hzAtX, xOfHz } from '../lib/waterfall/pick';
@@ -50,6 +50,7 @@
     markHz = null,
     txSlots = [],
     contrast = 'normal',
+    palette = 'rr73',
     stoppedAtUtcMs = null,
     hint = false,
     onset,
@@ -67,6 +68,8 @@
     /** Starts of the slots RR73 transmitted in, UTC ms: drawn from the transmitted audio. */
     txSlots?: number[];
     contrast?: Contrast;
+    /** The colormap (Settings › Radio and audio › Waterfall colours). */
+    palette?: PaletteId;
     stoppedAtUtcMs?: number | null;
     /** Shows the pill that says how to move Tx and Rx: until the first drag or tap. */
     hint?: boolean;
@@ -167,6 +170,11 @@
   });
 
   $effect(() => {
+    const p = palette;
+    client?.setPalette(colours(p));
+  });
+
+  $effect(() => {
     const s = spanS;
     client?.setSpan(s);
   });
@@ -241,9 +249,13 @@
     return client ? client.quietest(Date.now(), txHz) : Promise.resolve(null);
   }
 
-  onMount(() => {
+  /** A palette's colours, from the tokens. */
+  function colours(id: PaletteId) {
     const style = getComputedStyle(document.documentElement);
-    const palette = paletteFrom((t) => style.getPropertyValue(t));
+    return paletteFrom((t) => style.getPropertyValue(t), id);
+  }
+
+  onMount(() => {
     let size = { w: 0, h: 0 };
     const measure = () => {
       dpr = Math.min(3, window.devicePixelRatio || 1);
@@ -255,7 +267,7 @@
       if (!w || !h || (w === size.w && h === size.h)) return;
       size = { w, h };
       if (!client) {
-        client = new WaterfallClient(canvas, palette, mode, w, h, (info) => (frame = info));
+        client = new WaterfallClient(canvas, colours(palette), mode, w, h, (info) => (frame = info));
         client.setContrast(contrast);
         client.setSpan(spanS);
         client.setTxSlots(txSlots);

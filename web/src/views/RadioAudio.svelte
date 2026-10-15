@@ -11,6 +11,7 @@
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
+  import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
@@ -82,6 +83,14 @@
     { id: 'normal', label: 'Normal' },
     { id: 'high', label: 'High' },
   ];
+
+  /** A palette's colours left to right, from its tokens, for the strip under its name. */
+  const ramp = (id: PaletteId) => {
+    const at = paletteSpec(id).positions;
+    return `linear-gradient(to right, ${stopTokens(id)
+      .map((t, i) => `var(${t}) ${at[i] * 100}%`)
+      .join(', ')})`;
+  };
 
   const checks: { key: keyof Checklist; title: string; sub?: string }[] = [
     { key: 'focus', title: 'Focus mode on', sub: 'Stops iOS sounds keying the radio' },
@@ -227,6 +236,18 @@
             <label class="seg-i" class:on={settings.waterfallContrast === c.id}>
               <input class="visually-hidden" type="radio" name="contrast" value={c.id} checked={settings.waterfallContrast === c.id} onchange={() => void updateSettings({ waterfallContrast: c.id })} />
               {c.label}
+            </label>
+          {/each}
+        </span>
+      </div>
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="wf-colours">Waterfall colours</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="wf-colours">
+          {#each PALETTES as p (p.id)}
+            <label class="seg-i ramped" class:on={settings.waterfallPalette === p.id}>
+              <input class="visually-hidden" type="radio" name="wf-colours" value={p.id} checked={settings.waterfallPalette === p.id} onchange={() => void updateSettings({ waterfallPalette: p.id })} />
+              {p.label}
+              <i class="ramp" style:background={ramp(p.id)} aria-hidden="true"></i>
             </label>
           {/each}
         </span>
@@ -459,6 +480,18 @@
     flex-direction: column;
     gap: var(--rr-space-2);
     align-items: stretch;
+  }
+
+  /* Waterfall colours: each name over a strip of its colours. */
+  .ramped {
+    flex-direction: column;
+    gap: var(--rr-space-1);
+  }
+
+  .ramp {
+    width: 60%;
+    height: var(--rr-space-1-5);
+    border-radius: var(--rr-radius-pill);
   }
 
   .tune {

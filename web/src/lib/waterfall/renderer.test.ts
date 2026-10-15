@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { WaterfallRenderer, columns, VISIBLE_S, type Context2D } from './renderer';
-import type { WaterfallPalette } from './colormap';
+import { RR73_POSITIONS, type WaterfallPalette } from './colormap';
 import { DISPLAY_BINS } from './spectrum';
 import { prng } from '../testing/signal';
 
@@ -13,7 +13,7 @@ const MOCKUP_STOPS: WaterfallPalette['stops'] = [
   [240, 210, 90],
   [255, 248, 230],
 ];
-const PALETTE: WaterfallPalette = { stops: MOCKUP_STOPS, background: [4, 6, 10], line: [255, 255, 255, 0.18] };
+const PALETTE: WaterfallPalette = { stops: MOCKUP_STOPS, positions: [...RR73_POSITIONS], background: [4, 6, 10], line: [255, 255, 255, 0.18] };
 
 /** A 2D context over a plain RGBA buffer, enough for the renderer. */
 class FakeContext {
@@ -220,6 +220,29 @@ describe('WaterfallRenderer', () => {
     expect(ctx.canvas).toEqual({ width: 600, height: 300 });
     expect(bright(ctx.pixel(300, 20))).toBeGreaterThan(bright(ctx.pixel(450, 20)) * 2);
     expect(r.info().boundaries.map((b) => b.utcMs)).toEqual([Date.UTC(2026, 9, 13, 13, 15, 0)]);
+  });
+
+  it('redraws the rows it has in another palette, and draws new rows in it', () => {
+    const ctx = new FakeContext();
+    const r = new WaterfallRenderer(ctx as unknown as Context2D, PALETTE, 'FT8', 300, 400);
+    feed(r, signal(20, [1500]), T0);
+    const before = ctx.pixel(150, 20);
+    const boundaries = r.info().boundaries;
+    // Grey: equal channels, from black to white.
+    const grey: WaterfallPalette = { ...PALETTE, stops: [[0, 0, 0], [255, 255, 255]], positions: [0, 1] };
+    r.setPalette(grey);
+    const tone = ctx.pixel(150, 20);
+    expect(tone).not.toEqual(before);
+    expect([tone[1], tone[2]]).toEqual([tone[0], tone[0]]);
+    expect(bright(tone)).toBeGreaterThan(bright(ctx.pixel(250, 20)) * 2);
+    for (const x of [10, 100, 200, 290]) {
+      const p = ctx.pixel(x, 100);
+      expect([p[1], p[2]], `x ${x}`).toEqual([p[0], p[0]]);
+    }
+    expect(r.info().boundaries).toEqual(boundaries);
+    feed(r, signal(2, [1500], 2), T0 + 20_000, 20 * 12000);
+    const fresh = ctx.pixel(150, 2);
+    expect([fresh[1], fresh[2]]).toEqual([fresh[0], fresh[0]]);
   });
 
   it('clears the picture', () => {

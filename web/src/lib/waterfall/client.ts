@@ -84,6 +84,15 @@ export class WaterfallClient {
     else this.local?.setContrast(contrast);
   }
 
+  /** Redraws the picture in another colormap. */
+  setPalette(palette: WaterfallPalette) {
+    if (this.worker) this.send({ type: 'palette', palette });
+    else if (this.local) {
+      this.local.setPalette(palette);
+      this.onFrame(this.local.info());
+    }
+  }
+
   /** Slots RR73 transmitted in, UTC ms: drawn from their transmitted audio, or blank. */
   setTxSlots(starts: readonly number[]) {
     if (this.worker) this.send({ type: 'txSlots', starts: [...starts] });
