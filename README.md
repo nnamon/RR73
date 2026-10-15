@@ -1,8 +1,8 @@
 # RR73
 
-RR73 turns an iPhone into a full FT8, FT4, WSPR and RTTY station. Wire the phone to your radio's audio and operate from a park or a summit without a laptop.
+RR73 is an FT8, FT4, WSPR and RTTY app for amateur radio operators, made for the iPhone. It runs in Safari and connects to the radio through an audio cable, keying the transmitter by VOX.
 
-It installs from Safari at https://nnamon.github.io/RR73/ and also runs on the iPad and in desktop browsers. It is free and open source, and once installed it opens and decodes without a connection.
+The app is at https://nnamon.github.io/RR73/. Once added to the home screen it opens and decodes without a network connection.
 
 <table>
 <tr>
@@ -12,37 +12,39 @@ It installs from Safari at https://nnamon.github.io/RR73/ and also runs on the i
 </tr>
 </table>
 
-## Decoders built for weak signals
+## Features
 
-RR73 decodes FT8 and FT4 with its own decoders, written in Rust and compiled to WebAssembly so they run on the phone itself. Each slot gets up to three passes that subtract every decoded signal before the next, ordered-statistics decoding for the signals belief propagation gives up on, and then up to 2 s of finer searching. On the bench's white-noise sweep, half of all FT8 messages decode at −19.9 dB.
+Every upload and optional feature is off until turned on in Settings.
 
-During a QSO the decoder knows what the other station is likely to send next, its callsigns, a report, RRR, RR73 or 73, and tests the weak signals near its frequency against those messages. That recovers replies about 2.7 dB weaker than a decode from scratch.
+### Operating
 
-The first decodes of a slot appear 13.5 s into the 15 s FT8 slot (6 s into the 7.5 s FT4 slot), so there is time to pick a station and answer in the next slot. Every change to the decoders is measured on thousands of recorded and simulated slots, and CI refuses one that loses decodes or adds false ones.
+- Double-tap a decode to work the station. Each message goes out in its slot with the report filled in, and the QSO is logged when it completes.
+- Repeat CQ keeps calling CQ after each QSO and answers callers from a queue, in the order chosen.
+- Hunt answers CQs one after another until stopped, unworked stations first.
+- Hound mode works FT8 DXpeditions running Fox and Hound, reading the report out of the Fox's multi-call messages.
+- Halt is always on screen. The watchdog stops Tx after 6 min without a touch, adjustable in Settings.
+- Decode colours mark messages to your call, CQs, new DXCC entities, continents, zones, grids and calls, and stations already worked. One colour scheme stays distinguishable with colour blindness.
+- Chips filter the list to CQ, New, To me or Rx freq. Hide worked drops stations already logged on the band and mode.
+- A Clock badge shows when the phone's clock is 1 s or more off.
 
-## The QSO runs itself
+### Decoding
 
-Double-tap a decode and RR73 works the station: each message goes out in its slot with the report filled in, and the QSO is logged when it completes. CQ calls CQ, and Repeat CQ keeps going after each QSO, answering callers from a queue in the order you pick. Hunt answers CQs one after another, the stations you have not worked first. Halt stops the transmission at once, and the watchdog stops a QSO nobody answers.
+- The FT8, FT4, WSPR and RTTY decoders are RR73's own, written in Rust and compiled to WebAssembly. They run on the phone.
+- Up to 3 passes per FT8 or FT4 slot, each decoded signal subtracted before the next. Ordered-statistics decoding (OSD) takes the candidates belief propagation fails on.
+- After the slot, 2 later stages search finer time and frequency grids for up to 2 s.
+- First decodes appear 13.5 s into an FT8 slot (6 s into FT4).
+- During a QSO, a priori decoding tests weak signals near the other station against the messages expected next.
 
-Decodes are coloured by what they mean to you: messages to you, new DXCC entities, continents, zones, grids and calls, CQs and stations already worked. One colour scheme is chosen to stay distinct with colour blindness. Chips filter the list to CQs, new stations, messages to you or the Rx frequency, and Hide worked drops stations already in the log.
+### Logging and activations
 
-## DXpeditions, WSPR and RTTY
-
-<table>
-<tr>
-<td><img src="docs/screenshots/hound.png" width="260" alt="FT8 Hound: the Fox's multi-call message with the report to 9V1NE, and the R-report on air"></td>
-<td><img src="docs/screenshots/wspr.png" width="260" alt="WSPR on 20m: spots of two slots, farthest first, and the beacon"></td>
-<td><img src="docs/screenshots/rtty.png" width="260" alt="RTTY: received text with callsigns marked, the QSO strip with name and QTH, and the macros"></td>
-</tr>
-</table>
-
-Hound mode works a DXpedition running FT8 in Fox and Hound mode. It calls above 1000 Hz, reads your report out of the Fox's multi-call messages and moves to the Fox's frequency for the R-report.
-
-WSPR decodes every two-minute slot, beacons in the share of slots you set, and uploads the spots to WSPRnet when you turn that on.
-
-RTTY runs at 45.45 baud and 170 Hz shift. Tap a callsign in the received text and RR73 fills in the QSO from what that station sent. Macros send the exchanges, with a contest set that numbers each QSO.
-
-## Activations and the log
+- The log is stored on the phone and works offline.
+- QSOs go to Wavelog on request or automatically. A refused QSO shows the reason and a Fix button.
+- ADIF export and import, and a backup of the whole log to one file.
+- POTA, SOTA, WWFF and IOTA activations, with progress toward each programme's goal and the time left in the UTC day.
+- Park and summit suggestions by name, or from the phone's GPS position.
+- POTA, SOTA and WWFF upload files for each activation.
+- Spots lists POTA activators and DX cluster spots.
+- Decodes can be reported to PSK Reporter through a relay. Heard you lists the stations that heard your signal in the last 30 min.
 
 <table>
 <tr>
@@ -52,34 +54,75 @@ RTTY runs at 45.45 baud and 170 Hz shift. Tap a callsign in the received text an
 </tr>
 </table>
 
-Start a POTA, SOTA, WWFF or IOTA activation and RR73 counts every QSO toward each programme's goal, shows the time left in the UTC day, and writes the POTA, SOTA and WWFF log files. It suggests parks and summits near your GPS position as you type a reference.
+### WSPR and RTTY
 
-The log lives on the phone and works with no signal at all. QSOs go to Wavelog when you send them, or automatically. Export ADIF, back the whole log up to one file, or import ADIF from another logger.
+- WSPR decodes each 2-minute slot and lists the spots farthest first.
+- The WSPR beacon transmits in a set share of slots, 20% by default.
+- WSPR spots can be uploaded to WSPRnet.
+- RTTY runs at 45.45 baud and 170 Hz shift by default, with other speeds and shifts as presets.
+- Tap a callsign in the RTTY text to start a QSO. Name, QTH and report fill in from what that station sent.
+- RTTY macros, including a contest set that numbers each QSO.
 
-Spots shows POTA activators and DX cluster spots on your bands. Heard you lists the stations that PSK Reporter says heard your signal.
+<table>
+<tr>
+<td><img src="docs/screenshots/hound.png" width="260" alt="FT8 Hound: the Fox's multi-call message with the report to 9V1NE, and the R-report on air"></td>
+<td><img src="docs/screenshots/wspr.png" width="260" alt="WSPR on 20m: spots of two slots, farthest first, and the beacon"></td>
+<td><img src="docs/screenshots/rtty.png" width="260" alt="RTTY: received text with callsigns marked, the QSO strip with name and QTH, and the macros"></td>
+</tr>
+</table>
 
-## Listen without a radio
+### Receiving without a radio
 
-Through a relay you add, RR73 receives from a KiwiSDR web SDR in place of your radio and reports your decodes to PSK Reporter. The relay, QSP, is part of this repository and anyone can run one (`crates/rr73-qsp/README.md`).
+- A KiwiSDR web SDR can stand in for the radio's receive audio through a QSP relay. Tx still goes to the radio.
+- The practice band simulates a busy band with CQs, callers, RTTY stations and a DXpedition. Its QSOs go to a separate log.
+- Tx audio still plays in practice and can key a connected radio. Play Tx audio in Settings › Practice band turns it off.
 
-The practice band simulates a busy band inside the app: stations calling CQ, callers answering yours, an RTTY station and a DXpedition to chase. Nothing is transmitted while it is on, and its QSOs go to a separate practice log. The screenshots here were taken on it.
+### Display
 
-## On the phone and beyond
-
-Rows are sized for a thumb and the decode colours hold up in sunlight. Every upload and optional feature starts switched off. The night display turns the screen black with the clock, the next transmission and the stations heard in dim red, for long sessions after dark. RR73 also warns when the phone's clock is a second or more off, enough to put your transmissions out of step with the band.
-
-On an iPad or a desktop, band activity, the Rx frequency and the transmit panel sit side by side, and the keyboard drives it: Esc halts, Return calls the selected station, and ? lists the rest.
+- Light and dark themes, and a night display in dim red on black.
+- On an iPad or a desktop, Band activity, Rx frequency and the transmit panel sit side by side.
+- On a keyboard, Esc halts and ? lists the other shortcuts.
 
 <img src="docs/screenshots/ipad.png" width="800" alt="Operate on an iPad: band activity, the Rx frequency list and the transmit panel beside the waterfall">
 
 <img src="docs/screenshots/desktop.png" width="800" alt="Operate in a desktop browser in the dark theme">
 
+## Decoder measurements
+
+Figures from `rr73-bench`. SNR is in a 2500 Hz bandwidth, and SNR50 is the SNR at which half the messages decode.
+
+| | First stage | With the later stages |
+| --- | --- | --- |
+| FT8 SNR50, white noise | −19.0 dB | −19.9 dB |
+| FT8 SNR50, Watterson fading | −15.7 dB | −17.3 dB |
+| FT4 SNR50, white noise | −14.2 dB | −15.4 dB |
+| FT8, reference decodes found in 350 slots recorded on 40m | 74% | 84% |
+
+Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −19.0 to −21.7 dB, with none in 10000 noise-only slots. Method and data sets: `docs/bench.md` and decision records 0007 and 0009.
+
+## Requirements
+
+- An iPhone with iOS 26 and Safari. An iPad or a desktop browser also works.
+- A cable between the phone's headset audio and the radio's audio in and out, through the headset jack or a USB-C or Lightning headset adapter.
+- The radio in USB, keyed by VOX.
+
+There is no CAT control. Set the band on the radio and in the band sheet. Rig control over Web Serial in desktop Chrome and Edge is planned.
+
 ## Getting started
 
 1. Open https://nnamon.github.io/RR73/ in Safari and choose Share › Add to Home Screen.
-2. Connect the radio's audio output to the phone's microphone input and the phone's headphone output to the radio's audio input, through the headset jack or a USB-C or Lightning headset adapter. Set the radio to USB and key it with VOX. RR73 has no CAT control: set the band on the radio and in RR73's band sheet.
-3. In Settings, enter your callsign and grid (Use GPS fills the grid), then set the input and output levels in Settings › Radio and audio.
-4. In Operate, tap Start audio.
+2. Connect the cable. Set the radio to USB with VOX on.
+3. In Settings, enter the callsign and grid. Use GPS fills in the grid.
+4. Set the input and output levels in Settings › Radio and audio.
+5. In Operate, choose the band and tap Start audio. A short chime keys the radio through VOX.
+
+Settings › Practice band runs a simulated band for trying RR73 without a radio.
+
+## Relay
+
+QSP, in `crates/rr73-qsp`, is an optional relay server. It carries KiwiSDR audio, which a page in Safari cannot open over plain `ws://`, and PSK Reporter reports, which travel over UDP. The app ships with no relay set up. Relays are added in Settings › Relay.
+
+Anyone can run a relay. Each release includes QSP binaries for x86-64 and ARM64 Linux and the image `ghcr.io/nnamon/rr73-qsp`. Setup is in `crates/rr73-qsp/README.md`.
 
 ## Repository
 
@@ -87,12 +130,12 @@ On an iPad or a desktop, band activity, the Rx frequency and the transmit panel 
 | --- | --- |
 | `crates/` | Rust: FT8, FT4, WSPR and RTTY codecs, DSP, decoders, channel simulator, corpus format, bench, WebAssembly bindings, and QSP. |
 | `web/` | The app: Svelte 5, TypeScript, Vite. |
-| `tools/` | ft8_lib oracle, reference decoder tools, KiwiSDR corpus recorder, reference data build, copy lint, release scripts. |
+| `tools/` | FT8 codec test oracle, reference decoder tools, KiwiSDR corpus recorder, reference data build, copy lint, release scripts. |
 | `docs/` | Architecture, design documents, decision records, experiments, testing. |
 
 ## Development
 
-Everything runs in Docker. `AGENTS.md` has the commands and the rules for changes.
+Everything runs in Docker. `AGENTS.md` lists the commands and the rules for changes.
 
 ```sh
 docker compose build

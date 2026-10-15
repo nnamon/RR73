@@ -109,7 +109,7 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 
 ### Documentation, commits and comments
 
-- The README opens with one sentence on what RR73 does and for whom, then setup.
+- The README opens with one sentence on what RR73 does and for whom, then its features, the decoder measurements, the requirements and setup.
 - Design docs and decision records give the decision, the reason, the alternatives rejected and the open risks. Unknowns are labelled "Unverified" or "Not tested on a device".
 - Commit subjects are imperative and under 72 characters: "Add OSD pass to FT8 decoder". The body says what changed and why.
 - The changelog lists user-visible changes, one line each.
