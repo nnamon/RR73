@@ -15,6 +15,7 @@
   import { dial4 } from '../lib/rtty/dial';
   import { currentDialHz, session } from '../lib/state/keyboard.svelte';
   import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { dialNow } from '../lib/state/radio.svelte';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { practice } from '../lib/state/practice.svelte';
@@ -62,7 +63,7 @@
 <TopBar
   band={settings.band}
   mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
-  dialHz={isWspr ? dialHz(settings.band, 'WSPR') : isKeyboard ? currentDialHz() : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz, settings.ftDialHz)}
+  dialHz={isWspr ? dialNow(dialHz(settings.band, 'WSPR')) : isKeyboard ? currentDialHz() : dialNow(operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz, settings.ftDialHz))}
   dialText={isKeyboard ? dial4(currentDialHz()) : undefined}
   utc={utcTime(clock.ms)}
   progress={hasSlots(settings.mode) ? slotProgress(clock.ms, settings.mode) : null}

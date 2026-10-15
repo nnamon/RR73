@@ -22,6 +22,7 @@ import { log } from '../log/log.svelte';
 import { features } from './features.svelte';
 import { txLevel } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
+import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onWsprDecoded, showTx, type WsprSlotResult } from './station.svelte';
 
 /** One slot's spots, newest slot first in the list. */
@@ -109,8 +110,9 @@ const scheduler = new TxScheduler({
     return out ? webAudioOut(out.ctx, out.mapper) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
-  gate: () => (audio.status !== 'running' ? STATUS.audioOff : null),
+  gate: () => (audio.status !== 'running' ? STATUS.audioOff : rigGate()),
   report: onReport,
+  keyer: txKeyer,
 });
 
 function notice(text: string, nowMs = Date.now()) {
@@ -146,6 +148,11 @@ function ready(nowMs: number): boolean {
   }
   if (!beaconTexts().ok) {
     notice(STATUS.setUp, nowMs);
+    return false;
+  }
+  const rigWhy = rigGate();
+  if (rigWhy) {
+    notice(rigWhy, nowMs);
     return false;
   }
   return true;
@@ -330,7 +337,7 @@ function onReport(r: TxReport) {
 /** A slot's decodes as spots, into the list. Exported for the review build's injected spots. */
 export function addSlot(r: WsprSlotResult) {
   const s = station();
-  const dial = dialHz(settings.band, 'WSPR') ?? 0;
+  const dial = dialNow(dialHz(settings.band, 'WSPR')) ?? 0;
   const spots = toSpots(r.decodes, r.startUtcMs, { myGrid: s.grid, myCall: s.call, dialHz: dial, grids });
   learnGrids(spots, grids);
   const entry: WsprSlot = { startUtcMs: r.startUtcMs, band: settings.band, dialHz: dial, spots, ms: r.ms, skipped: !!r.skipped };
@@ -376,6 +383,13 @@ export function startWspr() {
   started = true;
   onWsprDecoded(addSlot);
   onHalt(stopAll);
+  // The radio's port lost turns the beacon off, as audio stopping does; Tune refused says why.
+  onRadioNotice((text, txOff) => {
+    if (settings.mode !== 'WSPR') return;
+    const on = wspr.beacon.on || wspr.next !== null || wspr.onAir !== null;
+    if (txOff) stopAll();
+    if (on || !txOff) notice(text);
+  });
   onAudioStatus((s) => {
     if ((s === 'stopped' || s === 'failed') && (wspr.beacon.on || wspr.next)) {
       stopAll();

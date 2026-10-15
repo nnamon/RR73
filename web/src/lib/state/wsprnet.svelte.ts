@@ -9,6 +9,7 @@ import { practice } from './practice.svelte';
 import { settings } from './settings.svelte';
 import { onWsprDecoded } from './station.svelte';
 import { webSdrInput } from './relay.svelte';
+import { dialNow } from './radio.svelte';
 import { wspr, wsprStation } from './wspr.svelte';
 import { dialHz } from '../radio/bands';
 import { isGrid } from '../qso/messages';
@@ -97,7 +98,7 @@ export function initWsprnet() {
   onWsprDecoded((r) => {
     if (wsprnetHold() !== null || r.skipped) return;
     const s = wsprStation();
-    const dial = dialHz(settings.band, 'WSPR');
+    const dial = dialNow(dialHz(settings.band, 'WSPR'));
     if (dial === null) return;
     const tx = { pct: wspr.beacon.on ? settings.wspr.txPct : 0, frequencyHz: dial + settings.wspr.txHz, dbm: settings.wspr.powerDbm };
     queue.addSlot(records({ callsign: s.call, grid: s.grid, version: `RR73 ${__APP_VERSION__}` }, r.startUtcMs, dial, r.decodes, tx));

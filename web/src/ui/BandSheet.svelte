@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
-   * Change band. RR73 cannot read the radio's dial, so the operator chooses the band here and
-   * sets the radio to the frequency shown. A tap on a band applies it and closes the sheet; a tap
+   * Change band. Without rig control RR73 cannot read the radio's dial, so the operator chooses the
+   * band here and sets the radio to the frequency shown. With a radio connected (Settings › Rig
+   * control), choosing a band or a mode, or entering a dial, sets the radio's dial and USB-D, and
+   * the sheet shows what the radio reports. A tap on a band applies it and closes the sheet; a tap
    * on a mode applies it and keeps the sheet open. Tx keeps its state across a band change.
    * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
    * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
@@ -10,7 +12,7 @@
    * operator's own per band and mode in the same field, such as a 60m channel; an empty field, or
    * the usual dial, goes back to the usual one.
    */
-  import { tick } from 'svelte';
+  import { tick, untrack } from 'svelte';
   import Sheet from './Sheet.svelte';
   import Icon from './Icon.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
@@ -21,6 +23,8 @@
   import { dialText as ftDialText, operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
   import { dial4, parseRttyDial, rttyDialHz } from '../lib/rtty/dial';
   import { setRtty } from '../lib/state/keyboard.svelte';
+  import { setRadioDial } from '../lib/state/cat.svelte';
+  import { modeText, plannedDialHz, rig, rigBand, rigConnected } from '../lib/state/radio.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
@@ -46,13 +50,19 @@
     dialError = null;
   });
 
-  // RTTY's dial, as typed; it follows the band chosen.
+  /** The radio's dial while one is connected and on the band shown: the dial fields start from it. */
+  const radioHz = $derived(rigConnected() && rig.hz !== null && rigBand() === band ? rig.hz : null);
+  /** True while the operator edits `field`: the radio's dial does not overwrite what they type. */
+  const editing = (field: HTMLInputElement | undefined) => !!field && document.activeElement === field;
+
+  // RTTY's dial, as typed; it follows the band chosen, or the radio.
   let rttyText = $state('');
   let rttyError = $state<string | null>(null);
   let rttyField: HTMLInputElement | undefined = $state();
   $effect(() => {
     if (mode !== 'RTTY') return;
-    const hz = rttyDialHz(band, settings.rtty.dialHz);
+    const hz = radioHz ?? rttyDialHz(band, settings.rtty.dialHz);
+    if (untrack(() => editing(rttyField))) return;
     rttyText = hz === null ? '' : dial4(hz);
     rttyError = null;
   });
@@ -69,9 +79,11 @@
   const usualHz = $derived(dialHz(band, mode));
   let ftText = $state('');
   let ftError = $state<string | null>(null);
+  let ftField: HTMLInputElement | undefined = $state();
   $effect(() => {
     if (!ownDial) return;
-    const hz = operatingDialHz(band, mode, false, {}, settings.ftDialHz);
+    const hz = radioHz ?? operatingDialHz(band, mode, false, {}, settings.ftDialHz);
+    if (untrack(() => editing(ftField))) return;
     ftText = hz === null ? '' : ftDialText(hz);
     ftError = null;
   });
@@ -93,6 +105,7 @@
     ftError = null;
     ftText = ftDialText(next[band] ?? usualHz ?? 0);
     if (next[band] !== settings.ftDialHz[m][band]) void updateSettings({ ftDialHz: { ...settings.ftDialHz, [m]: next } });
+    tuneRadio(next[band] ?? usualHz);
   }
 
   /** Back to the band's usual FT8 or FT4 dial. */
@@ -103,6 +116,7 @@
     ftError = null;
     ftText = usualHz === null ? '' : ftDialText(usualHz);
     void updateSettings({ ftDialHz: { ...settings.ftDialHz, [mode]: next } });
+    tuneRadio(usualHz);
   }
 
   // RTTY's usual dial on the band, and whether the operator's differs from it.
@@ -116,6 +130,7 @@
     rttyError = null;
     rttyText = rttyUsualHz === null ? '' : dial4(rttyUsualHz);
     setRtty({ dialHz: next });
+    tuneRadio(rttyUsualHz);
   }
 
   function saveRttyDial() {
@@ -127,6 +142,7 @@
     rttyError = null;
     rttyText = dial4(r.hz);
     if (r.hz !== rttyDialHz(band, settings.rtty.dialHz)) setRtty({ dialHz: { ...settings.rtty.dialHz, [band]: r.hz } });
+    tuneRadio(r.hz);
   }
 
   function saveDial() {
@@ -137,7 +153,37 @@
     }
     dialError = null;
     setHoundDial(band, r.hz);
+    tuneRadio(r.hz);
   }
+
+  // ---- With a radio connected: the sheet sets its dial and shows what it reports ----
+
+  const radio = $derived(rigConnected());
+
+  /** Sets the radio to `hz` when one is connected and the dial is for the band in use. */
+  function tuneRadio(hz: number | null) {
+    if (!radio || band !== settings.band || mode !== settings.mode) return;
+    // The same dial again, as when a field loses focus unchanged: already set or being set.
+    const t = rig.tuning;
+    if (t && t.hz === hz && (t.state === 'setting' || t.state === 'waiting' || (t.state === 'set' && rig.hz === hz))) return;
+    void setRadioDial(hz);
+  }
+
+  /** What the radio says now, and whether it needs the operator: a refusal, another band. */
+  const radioLine = $derived.by((): { text: string; bad: boolean } | null => {
+    if (!radio) return null;
+    const t = rig.tuning;
+    if (t?.state === 'setting') return { text: `Setting the IC-705 to ${mhz(t.hz)}`, bad: false };
+    if (t?.state === 'waiting') return { text: `The IC-705 is transmitting. Its dial goes to ${mhz(t.hz)} when Tx ends.`, bad: false };
+    if (t?.state === 'refused') return { text: `The IC-705 refused ${mhz(t.hz)}.`, bad: true };
+    if (t?.state === 'no-reply') return { text: `No reply from the IC-705 while setting ${mhz(t.hz)}.`, bad: true };
+    if (t?.state === 'busy') return { text: `The IC-705 kept transmitting, so its dial did not change to ${mhz(t.hz)}.`, bad: true };
+    if (rig.hz === null) return { text: 'Reading the IC-705', bad: false };
+    const on = rigBand();
+    const m = modeText(rig.mode, rig.data);
+    if (on !== settings.band) return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}, outside ${settings.band}. Choose a band to set it.`, bad: true };
+    return { text: `The IC-705 is on ${mhz(rig.hz)} ${m}.`, bad: false };
+  });
 
   /** The mode after choosing band `b`: the same, or FT8 where FT4 has no usual frequency (160m, 60m); null where the mode has none. */
   function modeOn(b: BandId, m: Mode): Mode | null {
@@ -151,12 +197,14 @@
     band = b;
     mode = m;
     void updateSettings({ band, mode });
+    if (radio) void setRadioDial(plannedDialHz(b, m));
     open = false;
   }
 
   function chooseMode(m: Mode) {
     mode = m;
     void updateSettings({ band, mode });
+    if (radio) void setRadioDial(plannedDialHz(band, m));
   }
 </script>
 
@@ -183,7 +231,16 @@
     <div class="group hound">
       <label class="row">
         <span class="row-main"><span class="row-title">Hound</span></span>
-        <input type="checkbox" role="switch" class="switch" checked={hound} onchange={(e) => setHound(e.currentTarget.checked)} />
+        <input
+          type="checkbox"
+          role="switch"
+          class="switch"
+          checked={hound}
+          onchange={(e) => {
+            setHound(e.currentTarget.checked);
+            tuneRadio(plannedDialHz(band, mode));
+          }}
+        />
       </label>
       {#if hound}
         <label class="row">
@@ -207,7 +264,7 @@
   {/if}
   {#if mode === 'RTTY'}
     <div class="setblock">
-      <label class="k" for="rtty-dial">Set the radio to</label>
+      <label class="k" for="rtty-dial">{radio ? 'Set the IC-705 to' : 'Set the radio to'}</label>
       <div class="dialrow">
         <input
           id="rtty-dial"
@@ -227,16 +284,18 @@
           <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
-      <p class="m">USB</p>
+      <p class="m">{radio ? 'USB-D' : 'USB'}</p>
     </div>
     {#if rttyError}<p class="err" role="alert">{rttyError}</p>{/if}
-    <p class="note">Update this after each retune: QSOs log it as their frequency.</p>
+    {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
+    <p class="note">{radio ? 'The dial comes from the IC-705. QSOs log it as their frequency.' : 'Update this after each retune: QSOs log it as their frequency.'}</p>
   {:else if ownDial}
     <div class="setblock">
-      <label class="k" for="ft-dial">Set the radio to</label>
+      <label class="k" for="ft-dial">{radio ? 'Set the IC-705 to' : 'Set the radio to'}</label>
       <div class="dialrow">
         <input
           id="ft-dial"
+          bind:this={ftField}
           class="dialf mono"
           type="text"
           inputmode="decimal"
@@ -252,17 +311,19 @@
           <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>
-      <p class="m">USB</p>
+      <p class="m">{radio ? 'USB-D' : 'USB'}</p>
     </div>
     {#if ftError}<p class="err" role="alert">{ftError}</p>{/if}
-    <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.</p>
+    {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
+    <p class="note">{radio ? 'The dial comes from the IC-705. Saved slots and QSOs record it.' : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.'}</p>
   {:else}
     <div class="setblock">
-      <p class="k">Set the radio to</p>
-      <p class="f mono">{dial === null ? '' : mhz(dial)}</p>
-      <p class="m">USB</p>
+      <p class="k">{radio ? 'IC-705 dial' : 'Set the radio to'}</p>
+      <p class="f mono">{radio && rig.hz !== null && rigBand() === band ? mhz(rig.hz) : dial === null ? '' : mhz(dial)}</p>
+      <p class="m">{radio && rig.hz !== null && rigBand() === band ? modeText(rig.mode, rig.data) : 'USB'}</p>
     </div>
-    <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.</p>
+    {#if radioLine}<p class="note" class:bad={radioLine.bad} role="status" data-testid="radio-line">{radioLine.text}</p>{/if}
+    <p class="note">{radio ? 'The dial comes from the IC-705. Saved slots and QSOs record it.' : 'RR73 can’t read the radio’s dial. Saved slots and QSOs record the band chosen here.'}</p>
   {/if}
 </Sheet>
 
@@ -469,6 +530,10 @@
     font-size: var(--rr-text-foot);
     line-height: var(--rr-leading-row);
     color: var(--rr-label2);
+  }
+
+  .note.bad {
+    color: var(--rr-tx-text);
   }
 
   /* A phone on its side: six bands to a row and the dial on one line, so the sheet fits its height. */

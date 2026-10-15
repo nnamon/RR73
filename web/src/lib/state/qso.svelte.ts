@@ -29,6 +29,7 @@ import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
+import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
 import type { QsoContext } from '../decode/types';
 
@@ -85,7 +86,8 @@ export function configNow() {
     activationId: a?.id ?? null,
     mode: ftMode(),
     band: settings.band,
-    dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz, settings.ftDialHz) ?? 0,
+    // The radio's dial while rig control reads it: QSOs log it.
+    dialHz: dialNow(operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz, settings.ftDialHz)) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,
@@ -129,8 +131,9 @@ const scheduler = new TxScheduler({
     return out ? webAudioOut(out.ctx, out.mapper) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
-  gate: () => (audio.status !== 'running' ? STATUS.audioOff : notReady(qso.st)),
+  gate: () => (audio.status !== 'running' ? STATUS.audioOff : (rigGate() ?? notReady(qso.st))),
   report: onTxReport,
+  keyer: txKeyer,
 });
 
 /** Applies one event to the sequencer and carries out its effects. */
@@ -429,6 +432,16 @@ export function startQso() {
   onHalt(() => {
     scheduler.halt();
     dispatch({ type: 'halt', nowMs: Date.now() });
+  });
+  // The radio's port lost turns Tx off, as audio stopping does; Tune refused says why.
+  onRadioNotice((text, txOff) => {
+    if (!isFt(settings.mode)) return;
+    const on = qso.st.txEnabled || qso.st.hunt || qso.onAir !== null;
+    if (txOff) {
+      scheduler.halt();
+      dispatch({ type: 'halt', nowMs: Date.now() });
+    }
+    if (on || !txOff) qso.notice = { kind: 'refused', text, atMs: Date.now() };
   });
   setInterval(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
   let lastTouch = 0;

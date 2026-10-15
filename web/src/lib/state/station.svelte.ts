@@ -4,7 +4,8 @@
  * whoever listens for the waterfall.
  *
  * Transmit safety: only Tune plays, and output halts when audio stops, when the page is hidden
- * or closed, and on Halt.
+ * or closed, and on Halt. With rig control keying the radio (lib/state/radio.svelte.ts), Tune keys
+ * it by PTT first, and Halt's hooks send PTT off (lib/state/cat.svelte.ts).
  */
 
 import { CaptureEngine, type Chunk, type InputSource, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
@@ -32,6 +33,8 @@ import { DISPLAY_RATE } from '../waterfall/spectrum';
 import { settings, updateSettings } from './settings.svelte';
 import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
+import { dialNow, radioNotice, rig, tuneGate, txKeyer } from './radio.svelte';
+import { PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -108,8 +111,11 @@ export interface WsprSlotResult {
 
 /** Band activity keeps the slots of the last hour, 240 of FT8; Operate draws them as its list scrolls. */
 const KEEP_MS = 3_600_000;
-/** Tune, the keying check, and the slots RR73 transmitted in (UTC ms, oldest first). */
-export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null, slots: [] as number[] });
+/**
+ * Tune, the keying check, and the slots RR73 transmitted in (UTC ms, oldest first). `tuneRefused`
+ * says why the last Tune could not key the radio.
+ */
+export const tx = $state({ tuning: false, endsAtMs: 0, keying: null as KeyingResult | null, slots: [] as number[], tuneRefused: null as string | null });
 const transmitted = new TransmittedSlots();
 /** What RR73 sent in its recent slots, by slot start (UTC ms). */
 const sentTx = new Map<number, SentTx>();
@@ -568,7 +574,9 @@ let startToneUri: { level: number; uri: string } | null = null;
  * Returns when the tone starts, as performance.now() ms, or null when no tone plays.
  */
 function playStartClip(): number | null {
-  if (!settings.startTone || txLevel(1) === 0) {
+  // With rig control keying the radio, the chime has nothing to key: RR73 keys by PTT, and the
+  // radio's OK replaces the keying check. It plays silence for iOS's sake.
+  if (!settings.startTone || txLevel(1) === 0 || txKeyer() !== null) {
     playClip(silentClipUri(), document, undefined, chosenOutput());
     return null;
   }
@@ -669,7 +677,7 @@ export function saveRecentSlot(startUtcMs: number): Promise<SaveResult> | null {
   const slot = recorder.get(startUtcMs);
   if (!slot) return null;
   const files = slotFiles(slot, {
-    dialHz: operatingDialHz(settings.band, slot.mode, settings.houndBands.includes(settings.band), settings.houndDialHz, settings.ftDialHz) ?? 0,
+    dialHz: dialNow(operatingDialHz(settings.band, slot.mode, settings.houndBands.includes(settings.band), settings.houndDialHz, settings.ftDialHz)) ?? 0,
     input: audio.report?.inputLabel ?? 'Microphone',
     captureRateHz: audio.report?.contextRate ?? 0,
     appVersion: `${__APP_VERSION__} (${__APP_BUILD__})`,
@@ -684,14 +692,66 @@ function median(xs: number[]): number | null {
   return s[s.length >> 1];
 }
 
-/** Plays the Tune tone at the Tx frequency (`hz`; FT8 and FT4's by default) for 10 s. Call from the tap. */
+/** Bumped by every Tune and Halt, so a Tune still waiting for the radio's OK gives way. */
+let tuneGen = 0;
+/** PTT held for a Tune still waiting for the radio's OK. */
+let tuneKeying: Keying | null = null;
+
+/**
+ * Plays the Tune tone at the Tx frequency (`hz`; FT8 and FT4's by default) for 10 s. Call from the
+ * tap. With rig control keying the radio: PTT on, the radio's OK, and the tone 0.1 s later; without
+ * an OK no tone plays and the status line says why.
+ */
 export function startTune(hz: number = settings.txHz) {
   playClip(silentClipUri(), document, undefined, chosenOutput());
+  const e = getEngine();
+  const ctx = e.ensureContext();
+  const gen = ++tuneGen;
+  tuneKeying?.release();
+  tuneKeying = null;
+  tx.tuneRefused = null;
+  const why = tuneGate();
+  if (why) {
+    refuseTune(why);
+    return;
+  }
+  const keyer = txKeyer();
+  if (!keyer) {
+    playTune(ctx, hz, null);
+    return;
+  }
+  output.halt();
+  tx.tuning = true;
+  tx.endsAtMs = performance.now() + PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000;
+  wake?.set(true);
+  const k = keyer.key(PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000 + tailMs(ctx) + 1000);
+  tuneKeying = k;
+  void k.result.then(async (answer) => {
+    if (gen !== tuneGen) return k.release();
+    if (answer !== 'ok') {
+      tuneKeying = null;
+      k.release();
+      tx.tuning = false;
+      refuseTune(keyFailedText(answer));
+      return;
+    }
+    await pause(PTT_SETTLE_MS);
+    if (gen !== tuneGen) return k.release();
+    tuneKeying = null;
+    playTune(ctx, hz, k);
+  });
+}
+
+function refuseTune(text: string) {
+  tx.tuneRefused = text;
+  radioNotice(text);
+}
+
+/** The Tune tone itself, with PTT released when it ends. */
+function playTune(ctx: AudioContext, hz: number, keying: Keying | null) {
   const now = Date.now();
   markTransmitted(now, now + TUNE.seconds * 1000);
   emitTxWave(toneWave(now, hz, TUNE.seconds));
-  const e = getEngine();
-  const ctx = e.ensureContext();
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
   const handle = output.tune(ctx, { ...TUNE, hz, level: txLevel(settings.outputLevel) });
@@ -699,6 +759,7 @@ export function startTune(hz: number = settings.txHz) {
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);
   void handle.done.then((end: TuneEnd) => {
+    keying?.release(end === 'finished' ? tailMs(ctx) : 0);
     tx.tuning = false;
     cutTx(Date.now());
     wake?.set(audio.status === 'running');
@@ -709,15 +770,21 @@ export function startTune(hz: number = settings.txHz) {
   });
 }
 
-/** Stops all output at once: Tune and any transmission. */
+/** Stops all output at once: Tune and any transmission, and with them PTT (the hooks). */
 export function halt() {
+  tuneGen++;
+  if (tuneKeying) {
+    tuneKeying.release();
+    tuneKeying = null;
+    tx.tuning = false;
+  }
   output.halt();
   for (const h of haltHooks) h();
 }
 
-/** True while audio runs or Tune plays: a reload would interrupt the operator. */
+/** True while audio runs, Tune plays or RR73 holds PTT: a reload would interrupt the operator. */
 export function busy(): boolean {
-  return audio.status === 'running' || audio.status === 'starting' || tx.tuning;
+  return audio.status === 'running' || audio.status === 'starting' || tx.tuning || rig.keyed;
 }
 
 if (typeof document !== 'undefined') {

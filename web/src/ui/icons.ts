@@ -94,6 +94,8 @@ export const ICONS = {
   info: { stroke: ['M12 11v5.5M12 7.8v.01'], rings: [[12, 12, 8.5, 8.5]], width: 2.2 },
   antenna: { stroke: ['M8.2 8.2a5.4 5.4 0 0 0 0 7.6M15.8 8.2a5.4 5.4 0 0 1 0 7.6M5.4 5.4a9.3 9.3 0 0 0 0 13.2M18.6 5.4a9.3 9.3 0 0 1 0 13.2'], dots: [[12, 12, 1.8]], width: 2.2 },
   headphones: { stroke: ['M4 15v-3a8 8 0 0 1 16 0v3', 'M4 15a2 2 0 0 1 2-2h1.5v7H6a2 2 0 0 1-2-2z', 'M20 15a2 2 0 0 0-2-2h-1.5v7H18a2 2 0 0 0 2-2z'], width: 2.2 },
+  /** Rig control: a plug on its cable. */
+  plug: { stroke: ['M9 3v4M15 3v4', 'M6.5 7h11v4a5.5 5.5 0 0 1-11 0z', 'M12 16.5V21'], width: 2.2 },
 } satisfies Record<string, IconShape>;
 
 export type IconName = keyof typeof ICONS;

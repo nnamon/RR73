@@ -17,6 +17,12 @@ export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper): TxAudi
     get currentTime() {
       return ctx.currentTime;
     },
+    get outputLatency() {
+      return (ctx as { outputLatency?: number }).outputLatency;
+    },
+    get baseLatency() {
+      return ctx.baseLatency;
+    },
     toContextTime(utcMs) {
       const base = mapper.baseMs;
       return base === null ? null : (utcMs - base) / 1000;

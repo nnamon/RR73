@@ -12,6 +12,7 @@ import { initRelay, loadRelay } from './lib/state/relay.svelte';
 import { initPskReporter, loadPskReporter } from './lib/state/pskreporter.svelte';
 import { initHeardYou, loadHeardYou } from './lib/state/heard.svelte';
 import { initWsprnet, loadWsprnet } from './lib/state/wsprnet.svelte';
+import { initCat } from './lib/state/cat.svelte';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
@@ -48,8 +49,11 @@ const relayLoaded = loadRelay();
 const pskLoaded = loadPskReporter();
 const heardLoaded = loadHeardYou();
 const wsprnetLoaded = loadWsprnet();
-void Promise.race([Promise.all([loadSettings(), practiceLoaded, relayLoaded, pskLoaded, heardLoaded, wsprnetLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
+const settingsLoaded = loadSettings();
+void Promise.race([Promise.all([settingsLoaded, practiceLoaded, relayLoaded, pskLoaded, heardLoaded, wsprnetLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
   mount(App, { target: document.getElementById('app')! });
+  // Rig control, in desktop Chromium: opens the radio's port again once the settings say to.
+  void settingsLoaded.then(() => initCat());
   void Promise.all([practiceLoaded, relayLoaded])
     .then(() => initPractice())
     .then(() => initRelay())

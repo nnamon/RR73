@@ -61,6 +61,23 @@ export interface WsprSettings {
 
 export const WSPR_DEFAULTS: Readonly<WsprSettings> = { txPct: DEFAULT_TX_PCT, powerDbm: DEFAULT_POWER_DBM, txHz: 1500, stopAfterMin: DEFAULT_STOP_AFTER_MIN, sort: 'distance' };
 
+/** The radios rig control knows. */
+export type CatRadioId = 'ic705';
+
+/** Rig control (Settings › Rig control, docs/design/cat.md). Desktop Chromium only. */
+export interface CatSettings {
+  radio: CatRadioId;
+  /** Transmissions key the radio by PTT over CI-V. Off: the radio keys by VOX, and RR73 only reads and sets its dial and mode. */
+  keyPtt: boolean;
+  /** The operator connected a radio and has not disconnected it: RR73 opens its port again when the app opens. */
+  connect: boolean;
+  /** USB IDs of the port chosen, to find it among the ports the browser allows; null when the browser gave none. */
+  usbVendorId: number | null;
+  usbProductId: number | null;
+}
+
+export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, connect: false, usbVendorId: null, usbProductId: null };
+
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
   callsign: string;
@@ -134,6 +151,7 @@ export interface Settings {
   rtty: RttySettings;
   /** Macros, contest and serial numbers, shared by every keyboard mode. */
   keyboard: KeyboardSettings;
+  cat: CatSettings;
 }
 
 export const DEFAULTS: Settings = {
@@ -177,6 +195,7 @@ export const DEFAULTS: Settings = {
   myQth: '',
   rtty: { ...RTTY_DEFAULTS, dialHz: {} },
   keyboard: keyboardDefaults(),
+  cat: { ...CAT_DEFAULTS },
 };
 
 const KEY = 'settings';
@@ -267,6 +286,17 @@ export function normaliseMinutes(v: number): number | null {
   return m > 0 && m <= 9999 ? m : null;
 }
 
+function validateCat(raw: unknown): CatSettings {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const c = { ...CAT_DEFAULTS };
+  for (const k of ['keyPtt', 'connect'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  for (const k of ['usbVendorId', 'usbProductId'] as const) {
+    const v = r[k];
+    if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffff) c[k] = v;
+  }
+  return c;
+}
+
 function validateWspr(raw: unknown): WsprSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const w = { ...WSPR_DEFAULTS };
@@ -337,6 +367,7 @@ export function validate(raw: unknown): Settings {
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);
   s.rtty = validateRtty(r.rtty);
   s.keyboard = validateKeyboard(r.keyboard);
+  s.cat = validateCat(r.cat);
   return s;
 }
 

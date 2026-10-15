@@ -61,6 +61,8 @@ export interface E2eHooks {
   rttyState(): { tx: string; field: string; call: string; fields: Record<string, string>; lastTx: { underrunFrames: number; playedFrames: number } | null; notice: string | null };
   /** Sets Settings › Theme as the operator would. */
   theme(theme: Theme): Promise<void>;
+  /** Suspends the running AudioContext, as the system does when it takes the audio away. */
+  suspendAudio(): Promise<void>;
 }
 
 declare global {
@@ -127,6 +129,9 @@ export function installE2eHooks() {
       notice: session.notice?.text ?? null,
     }),
     theme: (theme) => updateSettings({ theme }),
+    suspendAudio: async () => {
+      await audioOut()?.ctx.suspend();
+    },
     wsprState: () => ({
       onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
       next: wspr.next?.slotStartMs ?? null,

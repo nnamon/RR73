@@ -15,6 +15,11 @@
   import { pskReporter } from '../lib/state/pskreporter.svelte';
   import { presetLabel, presetOf } from '../lib/decode/highlight';
   import { loggingSummary as logging, radioSummary as radio } from '../lib/state/summaries';
+  import { catSupported } from '../lib/state/cat.svelte';
+  import { rigSummary } from '../lib/state/radio.svelte';
+
+  // Rig control needs Web Serial: desktop Chrome and Edge. Safari has none, so the row never shows there.
+  const rigShown = catSupported();
 
   /**
    * "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings.
@@ -243,6 +248,13 @@
         <span class="row-value">{radioSummary}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
+      {#if rigShown}
+        <a class="row link" href={href('settings', 'rig')}>
+          <span class="row-main"><span class="row-title">Rig control</span></span>
+          <span class="row-value">{rigSummary()}</span>
+          <Icon name="chevright" size={13} class="row-chevron" />
+        </a>
+      {/if}
       <a class="row link" href={href('settings', 'sdr')}>
         <span class="row-main"><span class="row-title">Web SDR</span></span>
         <span class="row-value">{relay.sdrOn ? relay.receiverName || 'On' : 'Off'}</span>

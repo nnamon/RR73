@@ -404,6 +404,16 @@ describe('TxScheduler keying the radio', () => {
     expect(keyer.log).toEqual([`on@${15000}`, `off@${15000 + 500 + 12_640}+${PTT_TAIL_MS}`]);
   });
 
+  it('releases PTT after the output latency and the tail', async () => {
+    const { clock, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    (clock as unknown as { outputLatency: number }).outputLatency = 0.06;
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15000 + 13200);
+    await done;
+    expect(keyer.log.at(-1)).toBe(`off@${15000 + 500 + 12_640}+${60 + PTT_TAIL_MS}`);
+  });
+
   it('still starts on time when the OK takes the whole timeout', async () => {
     const { clock, sched, keyer } = setup(() => null, 0, { delayMs: PTT_TIMEOUT_MS - 10 });
     clock.advanceTo(T0 + 3000);

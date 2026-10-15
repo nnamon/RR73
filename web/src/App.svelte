@@ -20,6 +20,8 @@
   import RttySettings from './views/RttySettings.svelte';
   import MacroSettings from './views/MacroSettings.svelte';
   import RadioAudio from './views/RadioAudio.svelte';
+  import RigControl from './views/RigControl.svelte';
+  import { catSupported } from './lib/state/cat.svelte';
   import Settings from './views/Settings.svelte';
   import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
@@ -182,6 +184,8 @@
 {#snippet settingsScreen()}
   {#if sub === 'radio'}
     <RadioAudio />
+  {:else if sub === 'rig' && catSupported()}
+    <RigControl />
   {:else if sub === 'logging' && route.path[2] === 'wavelog'}
     <WavelogSettings />
   {:else if sub === 'logging'}

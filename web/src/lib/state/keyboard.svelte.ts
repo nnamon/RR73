@@ -22,7 +22,9 @@ import { features } from './features.svelte';
 import { log } from '../log/log.svelte';
 import { txLevel } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
+import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { onAudioChunk, onAudioStatus, onHalt, outputContext } from './station.svelte';
+import { PTT_SETTLE_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 
 /** Audio kept for Save 2 min of audio, s at 12 kHz. */
 const KEEP_S = 120;
@@ -57,9 +59,9 @@ function station(): { call: string; grid: string } {
   return { call: a?.callsign || settings.callsign, grid: a?.grid || settings.grid };
 }
 
-/** The dial in RTTY on the current band, Hz. */
+/** The dial in RTTY on the current band, Hz: the radio's while rig control reads it. */
 export function currentDialHz(): number {
-  return rttyDialHz(settings.band, settings.rtty.dialHz) ?? 0;
+  return dialNow(rttyDialHz(settings.band, settings.rtty.dialHz)) ?? 0;
 }
 
 function config(): SessionConfig {
@@ -96,6 +98,22 @@ export const session = new KeyboardSession({
   async startTx(cb) {
     const ctx = outputContext();
     if (!ctx) return STATUS.audioOff;
+    const why = rigGate();
+    if (why) return why;
+    // With rig control keying the radio: PTT on, the radio's OK, then the stream 0.1 s later. A
+    // stream has no set length, so PTT is held until it drains, and the output's latency and 0.1 s
+    // after, or until it stops (docs/design/cat.md).
+    const keyer = txKeyer();
+    let keying: Keying | null = null;
+    if (keyer) {
+      keying = keyer.key(Infinity);
+      const answer = await keying.result;
+      if (answer !== 'ok') {
+        keying.release();
+        return keyFailedText(answer);
+      }
+      await pause(PTT_SETTLE_MS);
+    }
     try {
       const stream = await client.startTx(
         ctx,
@@ -105,6 +123,7 @@ export const session = new KeyboardSession({
           drained: (underrunFrames, playedFrames) => {
             keyboard.lastTx = { underrunFrames, playedFrames };
             client.reset();
+            keying?.release(tailMs(ctx));
             cb.drained();
           },
           recording: (samples) => {
@@ -114,8 +133,17 @@ export const session = new KeyboardSession({
         },
         keyboard.record,
       );
-      return stream;
+      if (!keying) return stream;
+      const k = keying;
+      return {
+        ...stream,
+        stop: () => {
+          stream.stop();
+          k.release();
+        },
+      };
     } catch {
+      keying?.release();
       return STATUS.encode;
     }
   },
@@ -290,6 +318,13 @@ export function startKeyboard() {
     if (session.tx === 'off' && keyboard.listening) client.push(c.samples);
   });
   onHalt(() => session.halt());
+  // The radio's port lost ends a transmission, as audio stopping does; Tune refused says why.
+  onRadioNotice((text, txOff) => {
+    if (!isKeyboard(settings.mode)) return;
+    const on = session.tx !== 'off';
+    if (txOff && on) session.halt();
+    if (on || !txOff) session.notice = { text, atMs: Date.now() };
+  });
   onAudioStatus((s) => {
     if ((s === 'stopped' || s === 'failed') && session.tx !== 'off') {
       session.halt();

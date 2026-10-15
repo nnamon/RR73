@@ -1,0 +1,185 @@
+// A fake IC-705 behind navigator.serial, installed in the page by an init script, for the rig
+// control tests (rig.spec.ts). It answers the CI-V frames RR73 sends in the formats of Icom's
+// IC-705 CI-V Reference Guide, A7560-8EX-6 (p. 2 layout and OK/NG, p. 14 transmit, p. 17
+// frequency and mode, p. 22 data mode, pp. 6 and 8 menu settings), 5 ms after each frame, and logs
+// every frame with the UTC time it was written. Like Chromium on Windows, opening the port raises
+// DTR and RTS; setSignals sets them.
+import type { Page } from '@playwright/test';
+
+export interface RigFrame {
+  /** Date.now() when written. */
+  at: number;
+  /** "FE FE A4 E0 1C 00 01 FD". */
+  hex: string;
+}
+
+export interface FakeRig {
+  log: RigFrame[];
+  hz: number;
+  mode: number;
+  filter: number;
+  data: number;
+  transmit: boolean;
+  dtr: boolean;
+  rts: boolean;
+  opened: boolean;
+  forgotten: boolean;
+  granted: boolean;
+  menu: Record<string, number>;
+  /** The operator turns the dial: a transceive frame to address 00. */
+  turnDial(hz: number): void;
+  /** The cable comes out. */
+  unplug(): void;
+}
+
+declare global {
+  interface Window {
+    __rig: FakeRig;
+  }
+}
+
+/**
+ * Installs the fake radio before the app loads. `granted`: the port was allowed before, so getPorts
+ * lists it. A port allowed with requestPort stays allowed across reloads of the page.
+ */
+export async function installFakeIc705(page: Page, opts: { hz?: number; granted?: boolean } = {}) {
+  await page.addInitScript(
+    ({ hz, granted }) => {
+      const bcd = (n: number) => ((Math.floor(n / 10) % 10) << 4) | n % 10;
+      const freqBytes = (f: number) => [0, 1, 2, 3, 4].map((i) => bcd(Math.floor(f / 10 ** (2 * i)) % 100));
+      const fromBytes = (b: number[]) => b.reduce((sum, x, i) => sum + ((x >> 4) * 10 + (x & 15)) * 10 ** (2 * i), 0);
+      const hex = (b: ArrayLike<number>) => Array.from(b, (x) => x.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+      let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
+      let buffer: number[] = [];
+      const port = new EventTarget() as EventTarget & Record<string, unknown>;
+      const rig: FakeRig = {
+        log: [],
+        hz,
+        mode: 0x01,
+        filter: 1,
+        data: 0,
+        transmit: false,
+        dtr: false,
+        rts: false,
+        opened: false,
+        forgotten: false,
+        // The browser remembers an allowed port across reloads.
+        granted: granted || sessionStorage.getItem('rr73-test-rig-granted') === '1',
+        // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
+        menu: { '0125': 0, '0119': 1, '0043': 2 },
+        turnDial(f) {
+          rig.hz = f;
+          send([0xfe, 0xfe, 0x00, 0xa4, 0x00, ...freqBytes(f), 0xfd]);
+        },
+        unplug() {
+          rig.opened = false;
+          const c = controller;
+          controller = null;
+          readable = null;
+          c?.error(new DOMException('The device has been lost.', 'NetworkError'));
+          port.dispatchEvent(new Event('disconnect'));
+        },
+      };
+      window.__rig = rig;
+      const send = (bytes: number[]) => setTimeout(() => controller?.enqueue(Uint8Array.from(bytes)), 5);
+      const reply = (data: number[]) => send([0xfe, 0xfe, 0xe0, 0xa4, ...data, 0xfd]);
+      const ok = (yes = true) => reply([yes ? 0xfb : 0xfa]);
+
+      function answer(f: number[]) {
+        const [cmd, ...d] = f;
+        if (cmd === 0x03 && !d.length) return reply([0x03, ...freqBytes(rig.hz)]);
+        if (cmd === 0x04 && !d.length) return reply([0x04, rig.mode, rig.filter]);
+        if (cmd === 0x05 && d.length === 5) {
+          rig.hz = fromBytes(d);
+          return ok();
+        }
+        if (cmd === 0x06 && d.length >= 1) {
+          rig.mode = d[0];
+          rig.filter = d[1] ?? 1;
+          return ok();
+        }
+        if (cmd === 0x1a && d[0] === 0x06 && d.length === 1) return reply([0x1a, 0x06, rig.data, rig.data ? rig.filter : 0]);
+        if (cmd === 0x1a && d[0] === 0x06 && d.length === 3) {
+          rig.data = d[1];
+          if (d[1]) rig.filter = d[2];
+          return ok();
+        }
+        if (cmd === 0x1a && d[0] === 0x05 && d.length === 3) {
+          const item = hex([d[1], d[2]]).replace(' ', '');
+          return item in rig.menu ? reply([0x1a, 0x05, d[1], d[2], bcd(rig.menu[item])]) : ok(false);
+        }
+        if (cmd === 0x1c && d[0] === 0x00 && d.length === 1) return reply([0x1c, 0x00, rig.transmit ? 1 : 0]);
+        if (cmd === 0x1c && d[0] === 0x00 && d.length === 2) {
+          rig.transmit = d[1] === 1;
+          return ok();
+        }
+        return ok(false);
+      }
+
+      function receive(chunk: Uint8Array) {
+        buffer.push(...chunk);
+        for (;;) {
+          const start = buffer.indexOf(0xfe);
+          const end = buffer.indexOf(0xfd, start);
+          if (start < 0 || end < 0) return;
+          const frame = buffer.slice(start, end + 1);
+          buffer = buffer.slice(end + 1);
+          rig.log.push({ at: Date.now(), hex: hex(frame) });
+          if (frame[1] === 0xfe && frame[2] === 0xa4 && frame[3] === 0xe0) answer(frame.slice(4, -1));
+        }
+      }
+
+      let readable: ReadableStream<Uint8Array> | null = null;
+      let writable: WritableStream<Uint8Array> | null = null;
+      Object.defineProperties(port, {
+        readable: { get: () => readable },
+        writable: { get: () => writable },
+      });
+      Object.assign(port, {
+        async open() {
+          rig.opened = true;
+          rig.dtr = true;
+          rig.rts = true;
+          buffer = [];
+          readable = new ReadableStream<Uint8Array>({ start: (c) => void (controller = c) });
+          writable = new WritableStream<Uint8Array>({ write: (chunk) => receive(chunk) });
+        },
+        async setSignals(s: { dataTerminalReady?: boolean; requestToSend?: boolean }) {
+          if (s.dataTerminalReady !== undefined) rig.dtr = s.dataTerminalReady;
+          if (s.requestToSend !== undefined) rig.rts = s.requestToSend;
+        },
+        async close() {
+          rig.opened = false;
+          readable = null;
+          writable = null;
+          controller = null;
+        },
+        async forget() {
+          rig.forgotten = true;
+          rig.granted = false;
+          sessionStorage.removeItem('rr73-test-rig-granted');
+        },
+        getInfo: () => ({ usbVendorId: 0x0c26, usbProductId: 0x0036 }),
+      });
+      const serial = {
+        async requestPort() {
+          rig.granted = true;
+          sessionStorage.setItem('rr73-test-rig-granted', '1');
+          return port;
+        },
+        async getPorts() {
+          return rig.granted ? [port] : [];
+        },
+        addEventListener() {},
+      };
+      Object.defineProperty(navigator, 'serial', { value: serial, configurable: true });
+    },
+    { hz: opts.hz ?? 14_074_000, granted: opts.granted ?? false },
+  );
+}
+
+/** Frames written since index `from`, by their bytes after the addresses: "1C 00 01". */
+export function rigFrames(log: RigFrame[], from = 0): { at: number; body: string }[] {
+  return log.slice(from).map((f) => ({ at: f.at, body: f.hex.slice(12, -3) }));
+}

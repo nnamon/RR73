@@ -15,6 +15,7 @@
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
+  import { txKeyer } from '../lib/state/radio.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let outputs = $state<MediaDeviceInfo[]>([]);
@@ -200,6 +201,9 @@
     void useInput(id);
   }
 
+  // With rig control keying the radio, the chime keys nothing: the radio's OK to PTT replaces the keying check.
+  const catKeys = $derived(txKeyer() !== null);
+
   function pickOutput(e: Event) {
     const id = (e.currentTarget as HTMLSelectElement).value || null;
     const label = outputs.find((d) => d.deviceId === id)?.label ?? '';
@@ -314,7 +318,7 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">Keys the radio when audio starts</span>
+            <span class="row-sub">{catKeys ? 'Off while CAT keys the radio' : 'Keys the radio when audio starts'}</span>
           </span>
         </label>
       </div>
@@ -322,7 +326,8 @@
         class="row tune"
         onclick={() => {
           startTune();
-          tuneOpen = true;
+          // Not opened when the radio refused: the line below the group says why.
+          tuneOpen = tx.tuning;
         }}
       >
         <span class="row-main">
@@ -331,6 +336,7 @@
       </button>
     </div>
     {#if outputFoot}<p class="section-foot" data-testid="output-foot">{outputFoot}</p>{/if}
+    {#if tx.tuneRefused}<p class="section-foot err" role="alert" data-testid="tune-refused">Tune did not start: {tx.tuneRefused}.</p>{/if}
     <p class="section-foot">Set the level for 4 to 5 ALC bars during Tune, no more.</p>
   </div>
 
@@ -551,5 +557,9 @@
 
   .row-sub.off {
     color: var(--rr-warn);
+  }
+
+  .err {
+    color: var(--rr-tx-text);
   }
 </style>

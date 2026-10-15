@@ -18,6 +18,11 @@
   import { settings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
   import { loggingSummary } from '../lib/state/summaries';
+  import { catSupported } from '../lib/state/cat.svelte';
+  import { rigSummary } from '../lib/state/radio.svelte';
+
+  /** Rig control needs Web Serial: desktop Chrome and Edge. */
+  const rigShown = catSupported();
 
   let { children }: { children: Snippet } = $props();
 
@@ -41,6 +46,7 @@
     ],
     [
       { id: 'radio', title: 'Radio and audio', icon: 'mic', tile: 'orange', value: audio.status === 'running' ? 'Audio on' : 'Audio off' },
+      ...(rigShown ? [{ id: 'rig', title: 'Rig control', icon: 'plug' as const, tile: 'orange' as const, value: rigSummary() }] : []),
       { id: 'sdr', title: 'Web SDR', icon: 'headphones', tile: 'teal', value: relay.sdrOn ? relay.receiverName || 'On' : 'Off' },
       { id: 'pskreporter', title: 'PSK Reporter', icon: 'share', tile: 'blue', value: pskReporter.on ? 'On' : 'Off' },
       { id: 'relay', title: 'Relay', icon: 'globe', tile: 'grey', value: relayName(relay.base) },

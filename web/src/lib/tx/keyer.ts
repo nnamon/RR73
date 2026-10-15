@@ -4,7 +4,8 @@
  *
  * Every transmission keys, waits for the radio's OK, and starts its audio PTT_SETTLE_MS or more
  * after it. Without an OK within PTT_TIMEOUT_MS no audio plays. The end of the audio releases
- * PTT after PTT_TAIL_MS, so the output's buffer has played out; Halt releases it at once.
+ * PTT after the output's latency and PTT_TAIL_MS (tailMs), so the last sample has left the output;
+ * Halt releases it at once.
  */
 
 import { STATUS } from '../qso/status';
@@ -19,8 +20,23 @@ export const PTT_SETTLE_MS = 100;
  * within the timeout. It is the transmit scheduler's pre-roll (lib/tx/scheduler.ts).
  */
 export const PTT_LEAD_MS = 500;
-/** PTT goes off this long after the audio ends, ms, so the output buffer has played out. */
+/** PTT goes off this long after the audio ends, ms, on top of the output's latency. */
 export const PTT_TAIL_MS = 100;
+
+/** The parts of an AudioContext that give its output latency; Chromium has outputLatency, Safari baseLatency. */
+export interface LatencySource {
+  readonly outputLatency?: number;
+  readonly baseLatency?: number;
+}
+
+/**
+ * How long after the audio ends PTT goes off, ms: the output's latency, so the last sample has
+ * been heard, and PTT_TAIL_MS.
+ */
+export function tailMs(ctx: LatencySource | null | undefined): number {
+  const latencyS = ctx?.outputLatency || ctx?.baseLatency || 0;
+  return PTT_TAIL_MS + Math.round(Math.max(0, Math.min(latencyS, 1)) * 1000);
+}
 
 /** The radio's answer to PTT on: OK, NG, no answer in time, or no link. */
 export type KeyResult = 'ok' | 'ng' | 'timeout' | 'closed';

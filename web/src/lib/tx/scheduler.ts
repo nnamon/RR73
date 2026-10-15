@@ -15,13 +15,14 @@
  * With a keyer (rig control keying the radio, lib/tx/keyer.ts), the radio is keyed at the
  * pre-roll, 0.5 s before the audio. The audio is handed to the graph only after the radio's OK,
  * to start PTT_SETTLE_MS or more after it; without an OK the transmission is refused. The end of
- * the audio releases PTT after PTT_TAIL_MS; Halt, cancel and anything that drops a transmission
- * before it plays release it at once.
+ * the audio releases PTT after the output's latency and PTT_TAIL_MS (tailMs in lib/tx/keyer.ts),
+ * as the audio thread ends a sound before its last sample is heard. Halt, cancel and anything that
+ * drops a transmission before it plays release it at once.
  */
 
 import type { SlotMode as Mode } from '../clock/slots';
 import { LATE_S, SHIFT_LIMIT_S } from '../qso/sequencer';
-import { PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TAIL_MS, PTT_TIMEOUT_MS, keyFailedText, type Keyer, type Keying } from './keyer';
+import { PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, tailMs, type Keyer, type Keying } from './keyer';
 
 /** Where a transmission starts in its slot, s. */
 export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
@@ -53,6 +54,9 @@ export interface TxAudio {
   toContextTime(utcMs: number): number | null;
   /** UTC ms at which audio-clock time `t` is heard. */
   toUtcMs(t: number): number | null;
+  /** Time from the audio thread to the output, s, where the browser reports it. */
+  readonly outputLatency?: number;
+  readonly baseLatency?: number;
   /** Plays `samples` at audio-clock time `when` with gain `level`. */
   play(samples: Float32Array, when: number, level: number): Playing;
 }
@@ -179,7 +183,7 @@ export class TxScheduler {
     let keying: Keying | null = null;
     if (keyer) {
       // PTT goes off by itself once the transmission should long be over.
-      const maxMs = Math.max(0, (target - now.currentTime) * 1000) + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + PTT_TAIL_MS + 1000;
+      const maxMs = Math.max(0, (target - now.currentTime) * 1000) + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + tailMs(now) + 1000;
       keying = keyer.key(maxMs);
       this.keying = keying;
       const answer = await keying.result;
@@ -225,7 +229,7 @@ export class TxScheduler {
       if (this.playing !== entry) return;
       this.playing = null;
       this.clear(entry.startTimer);
-      entry.keying?.release(PTT_TAIL_MS);
+      entry.keying?.release(tailMs(this.audio()));
       if (!entry.started) this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS), skippedS });
       this.report({ type: 'ended', slotStartMs: req.slotStartMs, text: req.text, complete: true });
     };

@@ -3,7 +3,8 @@
  * practice band pauses them; the feed polls only while Spots is shown (lib/spots/feed.svelte.ts).
  *
  * Go on a spot chases its station. It sets the spot's band and mode and opens Operate with the
- * band sheet, where the operator reads the frequency to set the radio to. The station's rows in
+ * band sheet, where the operator reads the frequency to set the radio to; with a radio connected
+ * (lib/state/cat.svelte.ts), RR73 sets it. The station's rows in
  * the decode list show its reference. A QSO the sequencer logs with the station on that band
  * takes the spot's references, for park to park and summit to summit, and ends the chase.
  * Another Go replaces the chase, and it lapses 60 min after Go.
@@ -21,6 +22,7 @@ import type { Spot } from '../spots/types';
 import { features } from './features.svelte';
 import { practice } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
+import { tuneRadioToBand } from './cat.svelte';
 
 /** The station Go chases. */
 export interface Chase {
@@ -66,6 +68,8 @@ export function goToSpot(s: Spot, nowMs = Date.now()): boolean {
   if (!t) return false;
   spots.chase = { call: s.activator, band: t.band, refs: s.refs.map(({ programme, ref }) => ({ programme, ref })), atMs: nowMs };
   if (settings.band !== t.band || settings.mode !== t.mode) void updateSettings({ band: t.band, mode: t.mode });
+  // With a radio connected, it goes to the spot's band too.
+  void tuneRadioToBand();
   go('operate');
   sheets.band = true;
   return true;

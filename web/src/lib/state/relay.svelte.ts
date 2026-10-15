@@ -11,6 +11,7 @@ import { getKv, mergeKv, peekKv } from './db';
 import { practice } from './practice.svelte';
 import { settings } from './settings.svelte';
 import { setInputSource, startAudio } from './station.svelte';
+import { dialNow } from './radio.svelte';
 import { showNotice } from './qso.svelte';
 import { STATUS } from '../qso/status';
 import { isKeyboard } from '../clock/slots';
@@ -108,12 +109,12 @@ export async function updateRelay(patch: Partial<RelaySettings>): Promise<void> 
   }
 }
 
-/** The radio's dial for the band and mode now, Hz: the receiver tunes there. */
+/** The radio's dial for the band and mode now, Hz: the receiver tunes there. Rig control's reading when a radio is connected. */
 export function currentDialHz(): number {
   const band = settings.band;
   const mode = settings.mode;
-  if (isKeyboard(mode)) return rttyDialHz(band, settings.rtty.dialHz) ?? 0;
-  return operatingDialHz(band, mode, settings.houndBands.includes(band), settings.houndDialHz, settings.ftDialHz) ?? dialHz(band, mode) ?? 0;
+  if (isKeyboard(mode)) return dialNow(rttyDialHz(band, settings.rtty.dialHz)) ?? 0;
+  return dialNow(operatingDialHz(band, mode, settings.houndBands.includes(band), settings.houndDialHz, settings.ftDialHz) ?? dialHz(band, mode)) ?? 0;
 }
 
 const NOTICES: Record<string, string> = {
