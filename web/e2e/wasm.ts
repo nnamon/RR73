@@ -9,6 +9,10 @@ export interface Wasm {
   /** RTTY's streaming receiver (crates/rr73-wasm/src/rtty.rs), for decoding what the app sent. */
   RttyReceiver: new (json: string) => { push(samples: Float32Array): string; flush(): string; free(): void };
   rtty_encode(text: string, json: string): Float32Array;
+  /** Rig control (crates/rr73-wasm/src/cat.rs): a CI-V request as JSON to the bytes for the radio at `radio`. */
+  cat_encode(requestJson: string, radio: number): Uint8Array;
+  cat_answers(requestJson: string, eventJson: string): boolean;
+  CatParser: new (radio: number) => { push(bytes: Uint8Array): string; reset(): void; readonly radio_address: number; free(): void };
 }
 
 let cached: Promise<Wasm | null> | null = null;

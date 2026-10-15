@@ -858,6 +858,7 @@ dependencies = [
 name = "rr73-wasm"
 version = "0.21.6"
 dependencies = [
+ "rr73-cat",
  "rr73-chansim",
  "rr73-decode",
  "rr73-dsp",

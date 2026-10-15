@@ -16,6 +16,9 @@
 //! type 1 and type 2 messages resolve the hashed callsigns of type 3 messages in later slots.
 //!
 //! RTTY, a continuous mode, has its own streaming exports in [`rtty`].
+//!
+//! Rig control has its own exports in [`cat`]: CI-V requests to bytes, and bytes from the radio
+//! to events.
 
 use std::cell::RefCell;
 
@@ -25,6 +28,7 @@ use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
+pub mod cat;
 pub mod rtty;
 
 thread_local! {
