@@ -2,6 +2,14 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Decode colours add New DXCC entity, New continent, New CQ zone and New ITU zone, each also on this band, placed by the country file. New DXCC is on, in magenta. The others start off.
+<!-- lint-copy: off -->
+- The WSJT-X preset turns the continent, CQ zone and DXCC colours on, as WSJT-X does.
+<!-- lint-copy: on -->
+- Callsigns in RTTY text take the DXCC, continent and zone colours too.
+
 ## 0.19.9 · 2026-10-15
 
 - Hunt calls directed CQs meant for you: CQ POTA and other activities, your continent, CQ DX from another continent, and your country's prefix. It still skips contest CQs.

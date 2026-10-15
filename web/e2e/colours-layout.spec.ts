@@ -3,18 +3,25 @@
 // shows 13 rows at 393 x 852 (10 at 375 x 667), and a colour change moves no row. The review
 // projects save the screens to test-results/screens/colours; CI runs the light theme (ci() in
 // layout-checks.ts). The status bar and home indicator insets are applied, as in states.spec.ts.
-// Decodes, QSOs and the sent row come through the screen-review hooks.
+// Decodes, QSOs and the sent row come through the screen-review hooks. The country file is the
+// one the test helper converts, so New DXCC shows wherever the test runs.
 import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { checkLayout, ci, shot, smallTargets } from './layout-checks';
 import { useTheme } from './theme';
+import { bigCtyFixture } from '../src/lib/reference/testing';
+
+const CTY = JSON.stringify(bigCtyFixture());
+test.beforeEach(async ({ page }) => {
+  await page.route('**/data/cty.json', (route) => route.fulfill({ body: CTY, contentType: 'application/json' }));
+});
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens/colours', import.meta.url));
 const INSETS: Record<number, { top: number; bottom: number }> = { 393: { top: 59, bottom: 34 }, 375: { top: 20, bottom: 0 } };
 const TARGET: Record<number, number> = { 393: 13, 375: 10 };
 
-/** The log: each QSO puts a call or grid on a band, so the decodes below fall in every category. */
+/** The log: each QSO puts a call, grid and DXCC entity on a band, so the decodes below fall in every category RR73's scheme turns on. */
 const LOG: [string, string, string, 'FT8' | 'FT4'][] = [
   ['JA7XVZ', 'QM09', '40m', 'FT8'],
   ['JH1RRT', 'QM09', '20m', 'FT8'],
@@ -27,9 +34,10 @@ const LOG: [string, string, string, 'FT8' | 'FT4'][] = [
 /** Decodes on 20m FT8, the background each takes and whether worked before greys its text. */
 const DECODES: [string, string | null, boolean][] = [
   ['9V1NE JA1KXM PM95', 'myCall', false],
-  ['CQ A41ZZ LL93', 'newGrid', false],
+  ['CQ A41ZZ LL93', 'newDxcc', false],
+  ['CQ JA6BBM PM51', 'newGrid', false],
   ['CQ BH1LKO OM89', 'newGridBand', false],
-  ['CQ VR2XMT OL72', 'newCall', false],
+  ['CQ JA7BEW QM09', 'newCall', false],
   ['CQ JA7XVZ QM09', 'newCallBand', false],
   ['JA8HCE 4I1LCT RR73', 'ending', false],
   ['CQ 4I1LCT PK04', 'cq', false],
@@ -62,11 +70,13 @@ for (const theme of ['light', 'dark'] as const) {
     await useTheme(page, theme);
     await page.goto('./#/settings/colours');
     await expect(page.getByRole('heading', { level: 1, name: 'Decode colours' })).toBeVisible();
+    // The example places its stations once the country file has loaded: A41ZZ is in Oman, an entity the sample log lacks.
+    await expect(page.getByTestId('colours-example').locator('[data-hl="newDxcc"]')).toHaveCount(1);
     await page.waitForTimeout(300);
     await checkLayout(page);
     // Every category row is one switch, one swatch and, in Highlight, one handle, at least 56 pt high.
     const rows = page.locator('.hl-list > li');
-    await expect(page.locator('.hl-list:not(.text-list) > li')).toHaveCount(8);
+    await expect(page.locator('.hl-list:not(.text-list) > li')).toHaveCount(16);
     await expect(page.locator('.text-list > li')).toHaveCount(1);
     await expect(page.locator('.text-list .grip')).toHaveCount(0);
     for (const box of await rows.evaluateAll((els) => els.map((el) => el.getBoundingClientRect().height))) expect(box).toBeGreaterThanOrEqual(55.5);

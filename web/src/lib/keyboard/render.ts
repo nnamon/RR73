@@ -5,7 +5,7 @@
  */
 
 import type { HighlightEntry, HighlightId } from '../decode/highlight';
-import { bandModeKey, callKey, setOf, type LogIndex } from '../log/worked';
+import { bandModeKey, callKey, isNewPlace, setOf, type LogIndex } from '../log/worked';
 import type { CharKind, TextLine } from './transcript';
 import { bare, isCallsign } from './words';
 
@@ -63,15 +63,25 @@ export interface CallColour {
 }
 
 /**
- * The colours of a callsign: My call, New call and New call on this band, in the operator's
- * order, and Worked before as a text layer, as in FT8's list. Other categories need a message.
+ * The colours of a callsign: My call, the DXCC, continent and zone categories, New call and New
+ * call on this band, in the operator's order, and Worked before as a text layer, as in FT8's list.
+ * Other categories need a message.
  */
 export function callColour(call: string, myCall: string, index: LogIndex, band: string, mode: string, entries: readonly HighlightEntry[]): CallColour {
   const key = callKey(call);
   const me = callKey(myCall);
   const b = band.toLowerCase();
+  const place = key !== me ? index.place(call) : null;
   const test: Partial<Record<HighlightId, () => boolean>> = {
     myCall: () => !!me && key === me,
+    newContinent: () => isNewPlace(index, place, 'continent'),
+    newContinentBand: () => isNewPlace(index, place, 'continent', b),
+    newCqZone: () => isNewPlace(index, place, 'cqZone'),
+    newCqZoneBand: () => isNewPlace(index, place, 'cqZone', b),
+    newItuZone: () => isNewPlace(index, place, 'ituZone'),
+    newItuZoneBand: () => isNewPlace(index, place, 'ituZone', b),
+    newDxcc: () => isNewPlace(index, place, 'dxcc'),
+    newDxccBand: () => isNewPlace(index, place, 'dxcc', b),
     newCall: () => key !== me && !index.calls.has(key),
     newCallBand: () => key !== me && !setOf(index.callsByBand, b).has(key),
   };

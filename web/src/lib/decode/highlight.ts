@@ -5,16 +5,35 @@
  * band and mode, whatever its background. Sources for the defaults are in
  * docs/design/decode-colours.md.
  *
- * New call, new grid and ending a QSO look at the station sending a CQ, 73 or RR73, as WSJT-X
- * does. No category looks at the operator's own callsign as a sender. Calls compare by base
- * callsign. Own transmissions match only Sent, and received decodes never match it.
+ * New call, new grid, the DXCC, continent and zone categories and ending a QSO look at the station
+ * sending a CQ, 73 or RR73, as WSJT-X does. No category looks at the operator's own callsign as a
+ * sender. Calls compare by base callsign. Own transmissions match only Sent, and received decodes
+ * never match it. The DXCC, continent and zone categories place the station by the country file;
+ * without it they match nothing.
  */
 
 import { parseExchange } from '../qso/messages';
 import { baseCall, looksLikeCall } from './marking';
-import { bandModeKey, callKey, gridKey, setOf, type LogIndex } from '../log/worked';
+import { bandModeKey, callKey, gridKey, isNewPlace, setOf, type LogIndex } from '../log/worked';
 
-export type HighlightId = 'myCall' | 'sent' | 'newGrid' | 'newGridBand' | 'newCall' | 'newCallBand' | 'ending' | 'cq' | 'worked';
+export type HighlightId =
+  | 'myCall'
+  | 'sent'
+  | 'newContinent'
+  | 'newContinentBand'
+  | 'newCqZone'
+  | 'newCqZoneBand'
+  | 'newItuZone'
+  | 'newItuZoneBand'
+  | 'newDxcc'
+  | 'newDxccBand'
+  | 'newGrid'
+  | 'newGridBand'
+  | 'newCall'
+  | 'newCallBand'
+  | 'ending'
+  | 'cq'
+  | 'worked';
 
 /** How a category shows its colour: a tint behind the row, in priority order, or a text colour layered over it. */
 export type HighlightStyle = 'background' | 'text';
@@ -22,13 +41,13 @@ export type HighlightStyle = 'background' | 'text';
 export interface HighlightCategory {
   id: HighlightId;
   /**
-   * Position in WSJT-X's default order. The gaps are the categories that need reference data:
-   * new continent (2, 3), CQ zone (4, 5), ITU zone (6, 7) and DXCC (8, 9), each overall and on
-   * the band. When they ship, settings insert them by rank. RR73 has no LoTW user category (14).
-   * Ending a QSO (14.5) and worked before are RR73's own; worked before is a text layer outside
-   * the order.
+   * Position in WSJT-X's default order; settings insert a category missing from a stored order by
+   * it. RR73 has no LoTW user category (14). Ending a QSO (14.5) and worked before are RR73's own;
+   * worked before is a text layer outside the order.
    */
   rank: number;
+  /** True for an "on this band" form of the category before it in the order. */
+  onBand?: true;
   label: string;
   sub?: string;
   style: HighlightStyle;
@@ -48,12 +67,28 @@ export function bandColour(colour: string): string {
 }
 
 /**
+ * The DXCC, continent and zone categories' colours in every scheme but WSJT-X's: WSJT-X's own,
+ * with RR73's "on this band" forms. No palette has colours left for them that stay apart.
+ */
+const PLACES = {
+  newContinent: '#FF0063',
+  newContinentBand: bandColour('#FF0063'),
+  newCqZone: '#FFBF00',
+  newCqZoneBand: bandColour('#FFBF00'),
+  newItuZone: '#A6FF00',
+  newItuZoneBand: bandColour('#A6FF00'),
+  newDxcc: '#FF00FF',
+  newDxccBand: bandColour('#FF00FF'),
+} as const;
+
+/**
  * RR73's colours (docs/design/decode-colours.md, RR73's scheme): the Okabe–Ito palette, assigned
  * so the closest pair of row tints, and each tint and a plain row, stay furthest apart for
- * protanopia, deuteranopia and tritanopia, in light and dark.
+ * protanopia, deuteranopia and tritanopia, in light and dark; and New DXCC in WSJT-X's magenta.
  */
 const RR73: Record<HighlightId, string> = {
   myCall: '#D55E00',
+  ...PLACES,
   newGrid: '#E69F00',
   newGridBand: bandColour('#E69F00'),
   newCall: '#0072B2',
@@ -66,10 +101,18 @@ const RR73: Record<HighlightId, string> = {
 
 export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'myCall', rank: 1, label: 'My call in the message', sub: 'Including portable forms', style: 'background', colour: RR73.myCall, spoken: 'my call' },
+  { id: 'newContinent', rank: 2, label: 'New continent', style: 'background', colour: RR73.newContinent, spoken: 'new continent' },
+  { id: 'newContinentBand', rank: 3, onBand: true, label: 'New continent on this band', style: 'background', colour: RR73.newContinentBand, spoken: 'new continent on this band' },
+  { id: 'newCqZone', rank: 4, label: 'New CQ zone', style: 'background', colour: RR73.newCqZone, spoken: 'new CQ zone' },
+  { id: 'newCqZoneBand', rank: 5, onBand: true, label: 'New CQ zone on this band', style: 'background', colour: RR73.newCqZoneBand, spoken: 'new CQ zone on this band' },
+  { id: 'newItuZone', rank: 6, label: 'New ITU zone', style: 'background', colour: RR73.newItuZone, spoken: 'new ITU zone' },
+  { id: 'newItuZoneBand', rank: 7, onBand: true, label: 'New ITU zone on this band', style: 'background', colour: RR73.newItuZoneBand, spoken: 'new ITU zone on this band' },
+  { id: 'newDxcc', rank: 8, label: 'New DXCC entity', style: 'background', colour: RR73.newDxcc, spoken: 'new DXCC entity' },
+  { id: 'newDxccBand', rank: 9, onBand: true, label: 'New DXCC entity on this band', style: 'background', colour: RR73.newDxccBand, spoken: 'new DXCC entity on this band' },
   { id: 'newGrid', rank: 10, label: 'New grid', style: 'background', colour: RR73.newGrid, spoken: 'new grid' },
-  { id: 'newGridBand', rank: 11, label: 'New grid on this band', style: 'background', colour: RR73.newGridBand, spoken: 'new grid on this band' },
+  { id: 'newGridBand', rank: 11, onBand: true, label: 'New grid on this band', style: 'background', colour: RR73.newGridBand, spoken: 'new grid on this band' },
   { id: 'newCall', rank: 12, label: 'New call', style: 'background', colour: RR73.newCall, spoken: 'new call' },
-  { id: 'newCallBand', rank: 13, label: 'New call on this band', style: 'background', colour: RR73.newCallBand, spoken: 'new call on this band' },
+  { id: 'newCallBand', rank: 13, onBand: true, label: 'New call on this band', style: 'background', colour: RR73.newCallBand, spoken: 'new call on this band' },
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: RR73.ending, spoken: 'ending a QSO' },
   { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: RR73.cq, spoken: 'CQ' },
   { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: RR73.sent, spoken: 'sent' },
@@ -105,6 +148,14 @@ export const PALETTE: readonly { name: string; colour: string }[] = [
   { name: 'Blue', colour: '#0072B2' },
   { name: 'Light blue', colour: RR73.newCallBand },
   { name: 'Reddish purple', colour: '#CC79A7' },
+  { name: 'Magenta', colour: PLACES.newDxcc },
+  { name: 'Light magenta', colour: PLACES.newDxccBand },
+  { name: 'Rose', colour: PLACES.newContinent },
+  { name: 'Light rose', colour: PLACES.newContinentBand },
+  { name: 'Amber', colour: PLACES.newCqZone },
+  { name: 'Light amber', colour: PLACES.newCqZoneBand },
+  { name: 'Lime', colour: PLACES.newItuZone },
+  { name: 'Light lime', colour: PLACES.newItuZoneBand },
   { name: 'Black', colour: '#000000' },
   { name: 'Grey', colour: '#8C93A0' },
   { name: 'Red', colour: '#FF6666' },
@@ -117,10 +168,21 @@ export const PALETTE: readonly { name: string; colour: string }[] = [
   { name: 'Light cyan', colour: '#99FFFF' },
 ];
 
-/** RR73's colours, every category on, in WSJT-X's order: background categories by rank, then text layers. */
-export function defaultHighlights(): HighlightEntry[] {
+/**
+ * The categories RR73's scheme leaves off: the DXCC, continent and zone categories but New DXCC.
+ * Their colours fall closer to the others than RR73's scheme allows (decode-colours.md).
+ */
+const RR73_OFF: readonly HighlightId[] = ['newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxccBand'];
+
+/** The categories in WSJT-X's order: background categories by rank, then text layers. */
+function defaultOrder(): HighlightCategory[] {
   const key = (c: HighlightCategory) => (c.style === 'text' ? 1000 : 0) + c.rank;
-  return [...CATEGORIES].sort((a, b) => key(a) - key(b)).map((c) => ({ id: c.id, on: true, colour: c.colour }));
+  return [...CATEGORIES].sort((a, b) => key(a) - key(b));
+}
+
+/** RR73's scheme in WSJT-X's order. */
+export function defaultHighlights(): HighlightEntry[] {
+  return defaultOrder().map((c) => ({ id: c.id, on: !RR73_OFF.includes(c.id), colour: c.colour }));
 }
 
 /** True for categories that tint the row's background, in priority order. */
@@ -141,7 +203,9 @@ export function normaliseColour(v: unknown): string | null {
 /**
  * The stored order with unknown and repeated categories dropped, bad values replaced by the
  * defaults, and each missing category inserted after the last stored one that ranks above it in
- * WSJT-X's order, or first when none does.
+ * WSJT-X's order, or first when none does. A missing category takes its switch and colour from the
+ * preset the stored categories match, so a new category keeps the operator on their preset, and
+ * from RR73's scheme otherwise.
  */
 export function normaliseHighlights(raw: unknown): HighlightEntry[] {
   if (!Array.isArray(raw)) return defaultHighlights();
@@ -152,21 +216,23 @@ export function normaliseHighlights(raw: unknown): HighlightEntry[] {
     const c = category(e.id);
     out.push({ id: c.id, on: typeof e.on === 'boolean' ? e.on : true, colour: normaliseColour(e.colour) ?? c.colour });
   }
+  const same = (a: HighlightEntry, b: HighlightEntry | undefined) => !!b && a.on === b.on && a.colour === b.colour;
+  const like = PRESETS.map((p) => presetHighlights(p.id)).find((d) => out.every((o) => same(o, d.find((e) => e.id === o.id)))) ?? defaultHighlights();
   for (const c of [...CATEGORIES].sort((a, b) => a.rank - b.rank)) {
     if (out.some((o) => o.id === c.id)) continue;
     let above = -1;
     out.forEach((o, i) => {
       if (category(o.id).rank < c.rank) above = i;
     });
-    out.splice(above + 1, 0, { id: c.id, on: true, colour: c.colour });
+    out.splice(above + 1, 0, { ...like.find((e) => e.id === c.id)! });
   }
   return out;
 }
 
-/** True when `entries` hold the default order and colours with every category on. */
+/** True when `entries` hold RR73's scheme: the default order, colours and switches. */
 export function isDefault(entries: readonly HighlightEntry[]): boolean {
   const d = defaultHighlights();
-  return entries.length === d.length && entries.every((e, i) => e.id === d[i].id && e.on && e.colour === d[i].colour);
+  return entries.length === d.length && entries.every((e, i) => e.id === d[i].id && e.on === d[i].on && e.colour === d[i].colour);
 }
 
 /** `entries` with the one at `from` moved to `to`. */
@@ -182,33 +248,58 @@ export interface Preset {
   off: readonly HighlightId[];
 }
 
-/** A scheme from 6 colours: each "on this band" category takes its category's colour mixed with white. */
+/**
+ * A scheme from 7 colours: each "on this band" category takes its category's colour mixed with
+ * white, and the DXCC, continent and zone categories take RR73's.
+ */
 function scheme(c: { myCall: string; newGrid: string; newCall: string; ending: string; cq: string; sent: string; worked: string }): Record<HighlightId, string> {
-  return { ...c, newGridBand: bandColour(c.newGrid), newCallBand: bandColour(c.newCall) };
+  return { ...c, ...PLACES, newGridBand: bandColour(c.newGrid), newCallBand: bandColour(c.newCall) };
 }
+
+/** The DXCC, continent and zone categories. */
+const PLACE_IDS = Object.keys(PLACES) as HighlightId[];
 
 /**
  * The presets. WSJT-X's colours and switches are WSJT-X 2.7.0's defaults, read from its Settings ›
  * Colors tab; it has no Ending a QSO or Worked before, so those start off. The editor schemes take
- * each palette's accents, assigned so the closest pair of row tints stays furthest apart.
+ * each palette's accents, assigned so the closest pair of row tints stays furthest apart, and
+ * switch the categories as RR73's scheme does.
  */
 export const PRESETS: readonly Preset[] = [
-  { id: 'rr73', label: 'RR73', sub: 'Distinct with colour blindness', colours: RR73, off: [] },
+  { id: 'rr73', label: 'RR73', sub: 'Distinct with colour blindness', colours: RR73, off: RR73_OFF },
   // My call, Sent, CQ and Ending a QSO only.
-  { id: 'quiet', label: 'Quiet', colours: RR73, off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
+  { id: 'quiet', label: 'Quiet', colours: RR73, off: [...PLACE_IDS, 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
   {
     id: 'wsjtx',
     // lint-copy: off
     label: 'WSJT-X',
     // lint-copy: on
-    colours: { myCall: '#FF6666', newGrid: '#FF8000', newGridBand: '#FFCC99', newCall: '#00FFFF', newCallBand: '#99FFFF', ending: '#FFE2C8', cq: '#66FF66', sent: '#FFFF00', worked: '#8C93A0' },
-    off: ['newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'worked'],
+    colours: {
+      myCall: '#FF6666',
+      newContinent: '#FF0063',
+      newContinentBand: '#FF99C2',
+      newCqZone: '#FFBF00',
+      newCqZoneBand: '#FFE499',
+      newItuZone: '#A6FF00',
+      newItuZoneBand: '#DDFF99',
+      newDxcc: '#FF00FF',
+      newDxccBand: '#FFAAFF',
+      newGrid: '#FF8000',
+      newGridBand: '#FFCC99',
+      newCall: '#00FFFF',
+      newCallBand: '#99FFFF',
+      ending: '#FFE2C8',
+      cq: '#66FF66',
+      sent: '#FFFF00',
+      worked: '#8C93A0',
+    },
+    off: ['newItuZone', 'newItuZoneBand', 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'worked'],
   },
-  { id: 'monokai', label: 'Monokai', colours: scheme({ myCall: '#F92672', newGrid: '#E6DB74', newCall: '#66D9EF', ending: '#FD971F', cq: '#A6E22E', sent: '#AE81FF', worked: '#75715E' }), off: [] },
-  { id: 'solarized', label: 'Solarized', colours: scheme({ myCall: '#DC322F', newGrid: '#CB4B16', newCall: '#268BD2', ending: '#D33682', cq: '#859900', sent: '#93A1A1', worked: '#586E75' }), off: [] },
-  { id: 'dracula', label: 'Dracula', colours: scheme({ myCall: '#FF5555', newGrid: '#FFB86C', newCall: '#8BE9FD', ending: '#BD93F9', cq: '#50FA7B', sent: '#FF79C6', worked: '#6272A4' }), off: [] },
-  { id: 'nord', label: 'Nord', colours: scheme({ myCall: '#BF616A', newGrid: '#EBCB8B', newCall: '#88C0D0', ending: '#5E81AC', cq: '#A3BE8C', sent: '#4C566A', worked: '#616E88' }), off: [] },
-  { id: 'gruvbox', label: 'Gruvbox', colours: scheme({ myCall: '#FB4934', newGrid: '#FE8019', newCall: '#83A598', ending: '#FABD2F', cq: '#8EC07C', sent: '#928374', worked: '#A89984' }), off: [] },
+  { id: 'monokai', label: 'Monokai', colours: scheme({ myCall: '#F92672', newGrid: '#E6DB74', newCall: '#66D9EF', ending: '#FD971F', cq: '#A6E22E', sent: '#AE81FF', worked: '#75715E' }), off: RR73_OFF },
+  { id: 'solarized', label: 'Solarized', colours: scheme({ myCall: '#DC322F', newGrid: '#CB4B16', newCall: '#268BD2', ending: '#D33682', cq: '#859900', sent: '#93A1A1', worked: '#586E75' }), off: RR73_OFF },
+  { id: 'dracula', label: 'Dracula', colours: scheme({ myCall: '#FF5555', newGrid: '#FFB86C', newCall: '#8BE9FD', ending: '#BD93F9', cq: '#50FA7B', sent: '#FF79C6', worked: '#6272A4' }), off: RR73_OFF },
+  { id: 'nord', label: 'Nord', colours: scheme({ myCall: '#BF616A', newGrid: '#EBCB8B', newCall: '#88C0D0', ending: '#5E81AC', cq: '#A3BE8C', sent: '#4C566A', worked: '#616E88' }), off: RR73_OFF },
+  { id: 'gruvbox', label: 'Gruvbox', colours: scheme({ myCall: '#FB4934', newGrid: '#FE8019', newCall: '#83A598', ending: '#FABD2F', cq: '#8EC07C', sent: '#928374', worked: '#A89984' }), off: RR73_OFF },
 ];
 
 /** The entries a preset sets: the default order, the preset's colours, its categories off. */
@@ -268,12 +359,14 @@ export function highlightDecode(decode: HighlightInput, myCall: string, index: L
   const tokens = decode.text.trim().toUpperCase().split(/\s+/);
   const mine = !sent && !!me && tokens.some((t) => looksLikeCall(t) && baseCall(t) === me);
   const ex = sent ? null : parseExchange(decode.text);
-  // The sender, unless it is the operator or an unresolved hash; for new call, new grid and
-  // ending a QSO, only the sender of a CQ, 73 or RR73.
+  // The sender, unless it is the operator or an unresolved hash; for new call, new grid, the place
+  // categories and ending a QSO, only the sender of a CQ, 73 or RR73.
   const from = ex?.from && ex.from !== '<...>' ? callKey(ex.from) : '';
   const sender = from && from !== me ? from : '';
   const station = sender && (ex?.kind === 'cq' || ex?.kind === '73' || ex?.kind === 'rr73') ? sender : '';
   const grid = station && ex?.grid ? gridKey(ex.grid) : '';
+  // Where the station is, by the whole call: VK3/9V1NE is in Australia.
+  const place = station && ex?.from ? index.place(ex.from) : null;
   // RR73 or 73 from a station to anyone but the operator: that station is about to be free.
   const ending = !!station && (ex?.kind === '73' || ex?.kind === 'rr73') && !!ex.to && callKey(ex.to) !== me;
   const band = where.band.toLowerCase();
@@ -281,6 +374,14 @@ export function highlightDecode(decode: HighlightInput, myCall: string, index: L
   const test: Record<HighlightId, () => boolean> = {
     myCall: () => mine,
     sent: () => sent,
+    newContinent: () => isNewPlace(index, place, 'continent'),
+    newContinentBand: () => isNewPlace(index, place, 'continent', band),
+    newCqZone: () => isNewPlace(index, place, 'cqZone'),
+    newCqZoneBand: () => isNewPlace(index, place, 'cqZone', band),
+    newItuZone: () => isNewPlace(index, place, 'ituZone'),
+    newItuZoneBand: () => isNewPlace(index, place, 'ituZone', band),
+    newDxcc: () => isNewPlace(index, place, 'dxcc'),
+    newDxccBand: () => isNewPlace(index, place, 'dxcc', band),
     cq: () => !sent && tokens[0] === 'CQ',
     ending: () => ending,
     newCall: () => !!station && !index.calls.has(station),

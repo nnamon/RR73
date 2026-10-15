@@ -3,6 +3,8 @@ import { KEEP_LINES, Transcript, type TextLine } from './transcript';
 import { callColour, tokens } from './render';
 import { buildLogIndex } from '../log/worked';
 import { defaultHighlights } from '../decode/highlight';
+import { DxccIndex } from '../reference/dxcc';
+import { bigCtyFixture } from '../reference/testing';
 
 const T = Date.UTC(2026, 9, 14, 14, 4, 0);
 
@@ -87,5 +89,18 @@ describe('words on screen', () => {
     expect(colour('JA1XYZ')).toEqual({ bg: null, worked: true });
     const off = entries.map((e) => ({ ...e, on: false }));
     expect(callColour('OH2BAX', '9V1NE', index, '20m', 'RTTY', off)).toEqual({ bg: null, worked: false });
+  });
+
+  it('gives a callsign the DXCC, continent and zone colours from the country file', () => {
+    const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(bigCtyFixture())));
+    const index = buildLogIndex([{ call: 'JA1XYZ', gridsquare: '', band: '20m', mode: 'RTTY', submode: '' }], cty);
+    const entries = defaultHighlights();
+    const colour = (c: string, band = '20m') => callColour(c, '9V1NE', index, band, 'RTTY', entries).bg;
+    const of = (id: string) => entries.find((e) => e.id === id)!.colour;
+    expect(colour('OH2BAX')).toBe(of('newDxcc'));
+    expect(colour('JA2ABC')).toBe(of('newCall'));
+    expect(colour('JA1XYZ', '40m')).toBe(of('newCallBand'));
+    expect(callColour('JA1XYZ', '9V1NE', index, '40m', 'RTTY', entries.map((e) => ({ ...e, on: e.id === 'newDxccBand' }))).bg).toBe(of('newDxccBand'));
+    expect(colour('9V1NE')).toBe(of('myCall'));
   });
 });

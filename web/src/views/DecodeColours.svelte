@@ -5,8 +5,8 @@
    * and a handle: touch and hold the handle, then drag, as on iOS. Move up and Move down do the
    * same for VoiceOver and keyboards; they show when focused. Every change applies at once.
    * Presets set a colour scheme and which categories are on: RR73's (the default), Quiet, WSJT-X's
-   * own and 5 editor schemes. Each row shows the scheme's background colours, those it turns off
-   * faded. Choosing one offers Undo for 10 s. Custom shows when the colours match no preset, and
+   * own and 5 editor schemes. Each row shows the scheme's background colours, without the "on this
+   * band" forms, those it turns off faded. Choosing one offers Undo for 10 s. Custom shows when the colours match no preset, and
    * cannot be chosen.
    */
   import { tick } from 'svelte';
@@ -20,23 +20,26 @@
   import { toYou } from '../lib/decode/focus';
   import { markDecode } from '../lib/decode/marking';
   import { buildLogIndex } from '../lib/log/worked';
+  import { reference } from '../lib/reference';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
 
   /** Touch and hold before a row lifts, as iOS does, ms. */
   const LONG_PRESS_MS = 350;
   const NOTICE_MS = 10_000;
 
-  // The example: decodes on 20m FT8 against a small log, coloured by the operator's settings.
-  const SAMPLE_LOG = buildLogIndex(
-    [
-      ['JA7XVZ', 'QM09', '40m', 'FT8'],
-      ['JH1RRT', 'QM09', '20m', 'FT8'],
-      ['BH1LKO', 'OM89', '40m', 'FT8'],
-      ['VK2AXN', 'OL72', '20m', 'FT4'],
-      ['9M2TRX', 'OJ02', '20m', 'FT8'],
-      ['4I1LCT', 'PK04', '20m', 'FT8'],
-    ].map(([call, gridsquare, band, mode]) => ({ call, gridsquare, band, mode, submode: '' })),
-  );
+  // The example: decodes on 20m FT8 against a small log, coloured by the operator's settings. The
+  // DXCC, continent and zone categories show once the country file has loaded.
+  const SAMPLE_QSOS = [
+    ['JA7XVZ', 'QM09', '40m', 'FT8'],
+    ['JH1RRT', 'QM09', '20m', 'FT8'],
+    ['BH1LKO', 'OM89', '40m', 'FT8'],
+    ['VK2AXN', 'QF56', '20m', 'FT4'],
+    ['9M2TRX', 'OJ02', '20m', 'FT8'],
+    ['4I1LCT', 'PK04', '20m', 'FT8'],
+  ].map(([call, gridsquare, band, mode]) => ({ call, gridsquare, band, mode, submode: '' }));
+  let countries = $state.raw(reference.loadedCountries());
+  if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
+  const sampleLog = $derived(buildLogIndex(SAMPLE_QSOS, countries));
   const SAMPLE_AT = { band: '20m', mode: 'FT8' };
 
   const me = $derived(settings.callsign || 'K1ABC');
@@ -45,7 +48,7 @@
       [`${me} JA1KXM PM95`, -14, 0.1, 2397, false],
       ['CQ A41ZZ LL93', -4, 0.2, 956, false],
       ['CQ BH1LKO OM89', -7, 0.2, 1959, false],
-      ['CQ VR2XMT OL72', -9, 0.1, 1066, false],
+      ['CQ JA7BEW QM09', -9, 0.1, 1066, false],
       ['CQ JA7XVZ QM09', -13, 0.4, 1803, false],
       ['JA8HCE VK2AXN RR73', -8, 0.1, 1169, false],
       ['CQ 9M2TRX OJ02', -12, 0.3, 1310, false],
@@ -54,14 +57,16 @@
     ];
     return rows.map(([text, snr_db, dt_s, freq_hz, sent], i) => {
       const decode = { text, snr_db, dt_s, freq_hz };
-      const h = highlightDecode({ text, sent }, me, SAMPLE_LOG, SAMPLE_AT, settings.highlights);
+      const h = highlightDecode({ text, sent }, me, sampleLog, SAMPLE_AT, settings.highlights);
       return { kind: 'row' as const, id: `x${i}`, slotStartMs: 0, toYou: !sent && toYou(text, me), row: { decode, ...markDecode(decode, me, sent), hl: h.bg, ink: h.ink, time: sent ? '13:14:30' : undefined } };
     });
   });
 
   const entries = $derived(settings.highlights);
-  /** The background categories in the default order, for each preset's chips. */
-  const CHIPS = defaultHighlights().filter(isBackground).map((e) => e.id);
+  /** The background categories in the default order, without the "on this band" forms, for each preset's chips. */
+  const CHIPS = defaultHighlights()
+    .filter((e) => isBackground(e) && !category(e.id).onBand)
+    .map((e) => e.id);
   const backgrounds = $derived(entries.filter(isBackground));
   const layers = $derived(entries.filter((e) => !isBackground(e)));
 

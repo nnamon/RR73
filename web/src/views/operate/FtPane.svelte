@@ -62,7 +62,8 @@
   }
   let filter = $state<Filter>('all');
 
-  // CQ rows name the caller's country once the country file has loaded, when the page is idle.
+  // CQ rows name the caller's country, and decode colours place stations, once the country file
+  // has loaded, when the page is idle.
   let countries = $state.raw(reference.loadedCountries());
   if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
 
@@ -174,9 +175,9 @@
     listEl?.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
-  // Decode colours: the log's calls and grids are indexed once per change of the log, so each row
-  // looks its station up in O(1).
-  const logIndex = $derived(buildLogIndex(log.live));
+  // Decode colours: the log's calls, grids, entities and zones are indexed once per change of the
+  // log or the country file, so each row looks its station up in O(1).
+  const logIndex = $derived(buildLogIndex(log.live, countries));
   const classify: Classify = $derived.by(() => {
     const index = logIndex;
     const where = { band: settings.band, mode: ftMode };

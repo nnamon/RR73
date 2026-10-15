@@ -1,7 +1,19 @@
 // Settings › Decode colours: a colour change shows in Operate at once, the order decides which
-// colour a decode takes, and a preset (RR73, Quiet, WSJT-X or an editor scheme) acts on the first tap with Undo. Decodes come
-// through the screen-review hooks (src/lib/testing/e2e-hooks.ts).
+// colour a decode takes, and a preset (RR73, Quiet, WSJT-X or an editor scheme) acts on the first
+// tap with Undo. Decodes come through the screen-review hooks (src/lib/testing/e2e-hooks.ts).
+//
+// The DXCC, continent and zone categories need the country file, which CI serves and a local run
+// may not. These tests run without it, but the one for New DXCC, which serves the file converted
+// by the test helper.
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { bigCtyFixture } from '../src/lib/reference/testing';
+
+test.beforeEach(async ({ page }) => {
+  await page.route('**/data/cty.json', (route) => route.fulfill({ status: 404, body: '' }));
+});
+
+/** The DXCC, continent and zone categories, as Settings names them. */
+const PLACES = ['New continent', 'New continent on this band', 'New CQ zone', 'New CQ zone on this band', 'New ITU zone', 'New ITU zone on this band', 'New DXCC entity', 'New DXCC entity on this band'];
 
 async function setUp(page: Page) {
   await page.goto('./#/settings');
@@ -145,8 +157,9 @@ test('the order decides which colour a decode takes', async ({ page }) => {
   await toColours(page);
   expect((await order(page))[0]).toBe('myCall');
   await dragByTouch(page, 'cq', 'myCall');
-  expect(await order(page)).toEqual(['cq', 'myCall', 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'sent']);
-  await expect(page.getByRole('status').filter({ hasText: 'CQ in the message moved to 1 of 8.' })).toBeAttached();
+  const places = ['newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxcc', 'newDxccBand'];
+  expect(await order(page)).toEqual(['cq', 'myCall', ...places, 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'sent']);
+  await expect(page.getByRole('status').filter({ hasText: 'CQ in the message moved to 1 of 16.' })).toBeAttached();
   await toOperate(page);
   await expect(cq).toHaveAttribute('data-hl', 'cq');
 
@@ -238,7 +251,7 @@ test('the Quiet preset keeps CQ coloured and turns the new-station colours off, 
   for (const r of await example.locator('[data-hl="cq"]').all()) expect(await hlOf(r)).toBe('#009E73');
   await expect(example.locator(fresh)).toHaveCount(0);
   await expect(example.locator('[data-ink="worked"]')).toHaveCount(0);
-  for (const name of ['New grid', 'New grid on this band', 'New call', 'New call on this band', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
+  for (const name of [...PLACES, 'New grid', 'New grid on this band', 'New call', 'New call on this band', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
   for (const name of ['My call in the message', 'Ending a QSO', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
 
   const notice = page.getByTestId('colours-notice');
@@ -260,22 +273,42 @@ test('the WSJT-X preset takes WSJT-X’s own colours and switches', async ({ pag
   const example = page.getByTestId('colours-example');
   await choose(page, 'WSJT-X');
   await expect(preset(page, 'WSJT-X')).toBeChecked();
-  // CQ green, Sent yellow, the new-station categories and the 2 RR73-only ones off.
+  // CQ green, Sent yellow, the ITU zone and new-station categories and the 2 RR73-only ones off.
   for (const r of await example.locator('[data-hl="cq"]').all()) expect(await hlOf(r)).toBe('#66FF66');
   expect(await hlOf(example.locator('[data-hl="sent"]'))).toBe('#FFFF00');
   expect(await hlOf(example.locator('[data-hl="myCall"]'))).toBe('#FF6666');
-  for (const name of ['New grid', 'New grid on this band', 'New call', 'New call on this band', 'Ending a QSO', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
-  for (const name of ['My call in the message', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
+  for (const name of ['New ITU zone', 'New ITU zone on this band', 'New grid', 'New grid on this band', 'New call', 'New call on this band', 'Ending a QSO', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
+  for (const name of ['My call in the message', 'New continent', 'New continent on this band', 'New CQ zone', 'New CQ zone on this band', 'New DXCC entity', 'New DXCC entity on this band', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('WSJT-X');
 });
 
-test('each editor scheme applies with every category on', async ({ page }) => {
+test('each editor scheme applies with RR73’s switches: every category on but the place categories other than New DXCC', async ({ page }) => {
   await page.goto('./#/settings/colours');
+  const off = PLACES.filter((name) => name !== 'New DXCC entity');
   for (const name of ['Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']) {
     await choose(page, name);
     await expect(preset(page, name)).toBeChecked();
-    for (const sw of await page.getByRole('switch').all()) await expect(sw).toBeChecked();
+    for (const sw of await page.getByRole('switch').all()) {
+      const label = (await sw.getAttribute('aria-label')) ?? '';
+      if (off.includes(label)) await expect(sw, label).not.toBeChecked();
+      else await expect(sw, label).toBeChecked();
+    }
   }
   expect(await hlOf(page.getByRole('button', { name: 'Change colour: CQ in the message' }))).toBe('#8EC07C');
+});
+
+test('a CQ from a DXCC entity the log lacks takes New DXCC, once the country file has loaded', async ({ page }) => {
+  const cty = JSON.stringify(bigCtyFixture());
+  await page.route('**/data/cty.json', (route) => route.fulfill({ body: cty, contentType: 'application/json' }));
+  await setUp(page);
+  await decoded(page, ['CQ A41ZZ LL93', 'CQ JA1KXM PM95']);
+  const oman = row(page, 'CQ A41ZZ LL93');
+  await expect(oman).toHaveAttribute('data-hl', 'newDxcc');
+  expect(await hlOf(oman)).toBe('#FF00FF');
+
+  // A QSO with Oman, in another grid: the CQ is a new grid now, and Japan stays a new entity.
+  await page.evaluate(() => window.__rr73!.logged({ call: 'A45XR', grid: 'LL72', band: '20m', mode: 'FT8', dialHz: 14_074_000, audioHz: 1500, startUtcMs: Date.now() - 120_000, endUtcMs: Date.now() - 60_000, reportSent: -10, reportRcvd: -12 }));
+  await expect(oman).toHaveAttribute('data-hl', 'newGrid');
+  await expect(row(page, 'CQ JA1KXM PM95')).toHaveAttribute('data-hl', 'newDxcc');
 });

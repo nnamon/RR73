@@ -2,10 +2,10 @@
 // Each colour is tinted as a row shows it (45% colour on white in light, 30% on #0B0D10 in dark,
 // tokens.css), seen through Machado, Oliveira and Fernandes's 2009 simulation at severity 1, and
 // compared in CIELAB (ΔE76), with each other and with a plain row (white in light, black in dark).
-// The "on this band" categories are paler forms of their category and are left out of the pairs
-// with it.
+// Each scheme is measured over the background categories it turns on. The "on this band"
+// categories are paler forms of their category and are left out of the pairs with it.
 import { describe, expect, it } from 'vitest';
-import { PRESETS, type HighlightId } from './highlight';
+import { PRESETS, isBackground, presetHighlights, type HighlightId, type PresetId } from './highlight';
 
 const SIM = {
   protanopia: [[0.152286, 1.052583, -0.204868], [0.114503, 0.786281, 0.099216], [-0.003882, -0.048116, 1.051998]],
@@ -32,36 +32,38 @@ function seen(hex: string, theme: 'light' | 'dark', vision: Vision): number[] {
   if (vision !== 'normal') l = SIM[vision].map((row) => Math.min(1, Math.max(0, row[0] * l[0] + row[1] * l[1] + row[2] * l[2])));
   return lab(l);
 }
-const BACKGROUNDS: HighlightId[] = ['myCall', 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'cq', 'sent'];
-const SIBLINGS = new Set(['newGrid newGridBand', 'newCall newCallBand']);
+const SIBLINGS = new Set(['newGrid newGridBand', 'newCall newCallBand', 'newContinent newContinentBand', 'newCqZone newCqZoneBand', 'newItuZone newItuZoneBand', 'newDxcc newDxccBand']);
 
-/** The closest pair of background categories over both themes and every vision, ΔE. */
-function closest(colours: Record<HighlightId, string>, pair?: [HighlightId, HighlightId]): number {
+/** The background categories a scheme turns on, in the default order. */
+const backgrounds = (id: PresetId): HighlightId[] => presetHighlights(id).filter((e) => e.on && isBackground(e)).map((e) => e.id);
+const colours = (id: PresetId) => PRESETS.find((p) => p.id === id)!.colours;
+
+/** The closest pair of the background categories a scheme turns on, over both themes and every vision, ΔE. */
+function closest(id: PresetId, pair?: [HighlightId, HighlightId]): number {
+  const ids = backgrounds(id);
   let min = Infinity;
   for (const theme of ['light', 'dark'] as const)
     for (const vision of ['normal', 'protanopia', 'deuteranopia', 'tritanopia'] as const)
-      for (let i = 0; i < BACKGROUNDS.length; i++)
-        for (let j = i + 1; j < BACKGROUNDS.length; j++) {
-          const [a, b] = [BACKGROUNDS[i], BACKGROUNDS[j]];
+      for (let i = 0; i < ids.length; i++)
+        for (let j = i + 1; j < ids.length; j++) {
+          const [a, b] = [ids[i], ids[j]];
           if (SIBLINGS.has(`${a} ${b}`) || (pair && !(a === pair[0] && b === pair[1]))) continue;
-          const [p, q] = [seen(colours[a], theme, vision), seen(colours[b], theme, vision)];
+          const [p, q] = [seen(colours(id)[a], theme, vision), seen(colours(id)[b], theme, vision)];
           min = Math.min(min, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
         }
   return min;
 }
 
-const colours = (id: string) => PRESETS.find((p) => p.id === id)!.colours;
-
-/** The background category closest to a plain row, over both themes and every vision, ΔE. */
-function closestToPlain(colours: Record<HighlightId, string>): number {
+/** The background category a scheme turns on closest to a plain row, over both themes and every vision, ΔE. */
+function closestToPlain(id: PresetId): number {
   let min = Infinity;
   for (const theme of ['light', 'dark'] as const)
     for (const vision of ['normal', 'protanopia', 'deuteranopia', 'tritanopia'] as const) {
       let plain = (theme === 'light' ? [255, 255, 255] : [0, 0, 0]).map(linear);
       if (vision !== 'normal') plain = SIM[vision].map((row) => Math.min(1, Math.max(0, row[0] * plain[0] + row[1] * plain[1] + row[2] * plain[2])));
       const p = lab(plain);
-      for (const id of BACKGROUNDS) {
-        const q = seen(colours[id], theme, vision);
+      for (const c of backgrounds(id)) {
+        const q = seen(colours(id)[c], theme, vision);
         min = Math.min(min, Math.hypot(p[0] - q[0], p[1] - q[1], p[2] - q[2]));
       }
     }
@@ -69,18 +71,19 @@ function closestToPlain(colours: Record<HighlightId, string>): number {
 }
 
 describe('RR73’s scheme with colour blindness', () => {
-  it('keeps every pair of categories 5.5 ΔE apart or more, and each 10 ΔE from a plain row, in both themes', () => {
-    expect(closest(colours('rr73'))).toBeGreaterThanOrEqual(5.5);
-    expect(closestToPlain(colours('rr73'))).toBeGreaterThanOrEqual(10);
+  it('keeps every pair of categories it turns on 5.5 ΔE apart or more, and each 10 ΔE from a plain row, in both themes', () => {
+    expect(backgrounds('rr73')).toContain('newDxcc');
+    expect(closest('rr73')).toBeGreaterThanOrEqual(5.5);
+    expect(closestToPlain('rr73')).toBeGreaterThanOrEqual(10);
   });
 
   it('keeps My call and CQ 16 ΔE apart or more, where WSJT-X’s colours fall to 11', () => {
-    expect(closest(colours('rr73'), ['myCall', 'cq'])).toBeGreaterThanOrEqual(16);
-    expect(closest(colours('wsjtx'), ['myCall', 'cq'])).toBeLessThan(12);
+    expect(closest('rr73', ['myCall', 'cq'])).toBeGreaterThanOrEqual(16);
+    expect(closest('wsjtx', ['myCall', 'cq'])).toBeLessThan(12);
   });
 
   it('beats every other scheme on its closest pair', () => {
-    const rr73 = closest(colours('rr73'));
-    for (const p of PRESETS.filter((x) => x.id !== 'rr73' && x.id !== 'quiet')) expect(closest(p.colours), p.id).toBeLessThan(rr73);
+    const rr73 = closest('rr73');
+    for (const p of PRESETS.filter((x) => x.id !== 'rr73' && x.id !== 'quiet')) expect(closest(p.id), p.id).toBeLessThan(rr73);
   });
 });

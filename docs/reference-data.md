@@ -45,6 +45,10 @@ Operate calls `reference.warm()` when it opens. Once the page is idle (after 2 s
 
 The message keeps its whole width. The country takes the space left before the numbers, ends in an ellipsis when short of room and drops out under 36 px (`DecodeList.svelte`).
 
+### Decode colours
+
+The New DXCC entity, continent, CQ zone and ITU zone colours place each CQ, 73 or RR73 sender and each QSO in the log through the same index (`docs/design/decode-colours.md`). The log is indexed again when the country file loads; until then those colours match nothing.
+
 Decision: look up on the main thread, per row as it is drawn. A lookup takes about 1 µs in Node; the index build is the only cost worth measuring (see Open risks). Rejected:
 
 - Lookups in the decoder worker, sent with each decode: a change to the decode protocol and a second copy of the index, for about 50 µs of work per slot.

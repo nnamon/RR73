@@ -59,7 +59,7 @@
   if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
   const resolves = $derived(countries ? (call: string) => countries!.lookup(call).found : null);
 
-  const logIndex = $derived(buildLogIndex(log.live));
+  const logIndex = $derived(buildLogIndex(log.live, countries));
   const colourOf = $derived.by(() => {
     const index = logIndex;
     const me = settings.callsign;
