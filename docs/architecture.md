@@ -110,7 +110,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 
 - `DecoderConfig` names each stage's implementation and parameters. Presets are named (`baseline`, `subtract-3-osd2` and so on), so a bench run is reproducible from its name and overrides.
 - `decode(&SlotAudio, &DecoderConfig, &mut DecodeContext) -> DecodeReport`. `DecodeContext` carries callsign hashes and the QSO under way for a priori decoding (decision 0009).
-- `SlotAudio::partial` marks the start of a slot still being received (early decoding): symbols after the last sample count as erasures.
+- `SlotAudio::partial` marks the start of a slot still being received (early decoding): symbols after the last sample count as erasures. The app's early pass uses it (experiment 0006).
 - `DecodeSession` decodes one slot in stages, each a `DecoderConfig` run on the residual of every earlier decode and returning only new decodes. `step()` does one bounded unit of work (32 spectrogram frames, 8 search frames, 16 candidates or 2 subtractions), `next_stage()` runs a stage to its end. `decode` is a one-stage session.
 - `Decode` carries the message, text, frequency (base tone, Hz), DT (s), SNR (dB, 2500 Hz reference), pass number, LDPC statistics and candidate score.
 - `DecodeReport` carries decodes and per-stage timings.
@@ -163,6 +163,7 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 ## Timing
 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
+- The slot assembler hands the first 13.5 s of each FT8 slot and the first 6 s of each FT4 slot to an early decoding pass while the slot is still being received; the whole slot follows at its end, and its decodes join the early pass's (experiment 0006).
 - The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it. The same median measures the phone's clock: from 1 s off (off again below 0.8 s) a Clock badge in the top bar and a status line notice say so, and Settings › Radio and audio › Timing gives the effect on the air and the fix.
 - Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X.
 - RTTY has no slots: a transmission starts at once and streams. The keyboard worker renders 0.1 s blocks to the stream worklet over a MessageChannel, 0.3 s ahead of the audio thread; the app hands the transmitter at most 0.4 s of text. Capture skips the slot assembler and goes to the keyboard worker, except while on air.

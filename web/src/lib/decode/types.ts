@@ -31,10 +31,12 @@ export interface SlotAudio {
   mode: Mode;
   /** Slot start, UTC ms. */
   startUtcMs: number;
-  /** Exactly one slot at 12000 Hz. */
+  /** Exactly one slot at 12000 Hz, or with `partial` its first seconds. */
   samples: Float32Array;
   /** The QSO under way when the slot ended; a priori decoding is off without it. */
   qso?: QsoContext;
+  /** The slot is still being received: `samples` end where the audio does (the early pass, EARLY_S). */
+  partial?: boolean;
 }
 
 /** Where the decoder stands. */

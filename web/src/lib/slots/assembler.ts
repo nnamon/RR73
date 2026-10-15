@@ -11,6 +11,9 @@
  *   correction), so the shift never lands inside a slot.
  *
  * Positions written twice keep the first write. Slots with no audio at all are not emitted.
+ *
+ * With `earlyS`, `onEarly` also gets a copy of each slot's first `earlyS` seconds as soon as
+ * they are written, for the early decoding pass.
  */
 
 import { SLOT_SAMPLES, SLOT_RATE, type SlotMode as Mode } from '../clock/slots';
@@ -39,6 +42,17 @@ export interface AssembledSlot {
   gap: boolean;
 }
 
+/** The start of a slot still being received. */
+export interface EarlySlot {
+  mode: Mode;
+  /** Slot start, UTC ms. */
+  startUtcMs: number;
+  /** The slot's first `earlyS` seconds at 12000 Hz, a copy; zero where no audio arrived. */
+  samples: Float32Array;
+  /** Samples that carry audio. */
+  filled: number;
+}
+
 const SAMPLES_PER_MS = SLOT_RATE / 1000;
 /** Zero runs up to this length (10 ms) are not flagged: they come from small re-anchors. */
 const TOLERANCE = 120;
@@ -50,6 +64,8 @@ interface OpenSlot {
   filled: number;
   first: number;
   gap: boolean;
+  /** onEarly has had this slot. */
+  early: boolean;
 }
 
 export class SlotAssembler {
@@ -57,6 +73,9 @@ export class SlotAssembler {
   private readonly length: number;
   private readonly hard: number;
   private readonly soft: number;
+  /** Samples into a slot at which onEarly gets it; 0 for none. */
+  private readonly earlyAt: number;
+  private readonly onEarly: ((s: EarlySlot) => void) | null;
   private anchor: { index: number; g: number } | null = null;
   private pending: { index: number; g: number } | null = null;
   private nextIndex = -1;
@@ -65,11 +84,13 @@ export class SlotAssembler {
   /** Samples dropped because their positions were already written. */
   dropped = 0;
 
-  constructor(mode: Mode, opts: { hardMs?: number; softMs?: number } = {}) {
+  constructor(mode: Mode, opts: { hardMs?: number; softMs?: number; earlyS?: number; onEarly?: (s: EarlySlot) => void } = {}) {
     this.mode = mode;
     this.length = SLOT_SAMPLES[mode];
     this.hard = Math.round((opts.hardMs ?? 100) * SAMPLES_PER_MS);
     this.soft = Math.round((opts.softMs ?? 5) * SAMPLES_PER_MS);
+    this.earlyAt = opts.onEarly && opts.earlyS ? Math.min(this.length, Math.round(opts.earlyS * SLOT_RATE)) : 0;
+    this.onEarly = opts.onEarly ?? null;
   }
 
   /** Adds a chunk and returns the slots it completed, oldest first. */
@@ -115,6 +136,15 @@ export class SlotAssembler {
       slot.filled += m;
       this.writeG = pos + m;
       i += m;
+      if (this.earlyAt && !slot.early && this.writeG - slot.start >= this.earlyAt) {
+        slot.early = true;
+        // Audio that began after the early point leaves nothing to hand over. Samples written
+        // past it count only up to it.
+        if (slot.first < this.earlyAt) {
+          const filled = slot.filled - Math.max(0, this.writeG - slot.start - this.earlyAt);
+          this.onEarly?.({ mode: this.mode, startUtcMs: Math.round(slot.start / SAMPLES_PER_MS), samples: slot.buf.slice(0, this.earlyAt), filled });
+        }
+      }
     }
     return out;
   }
@@ -136,7 +166,7 @@ export class SlotAssembler {
   }
 
   private open(start: number): OpenSlot {
-    return { start, end: start + this.length, buf: new Float32Array(this.length), filled: 0, first: 0, gap: false };
+    return { start, end: start + this.length, buf: new Float32Array(this.length), filled: 0, first: 0, gap: false, early: false };
   }
 
   private finish(slot: OpenSlot): AssembledSlot {

@@ -35,7 +35,8 @@ export interface DeepStages {
 
 export type ToDecoder =
   | { type: 'load' }
-  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array; deep?: DeepStages; qso?: QsoContext }
+  /** With `partial`, `samples` hold the start of a slot still being received; no later stages run. */
+  | { type: 'decode'; id: number; mode: Mode; preset: string; samples: Float32Array; deep?: DeepStages; qso?: QsoContext; partial?: boolean }
   | { type: 'decodeWspr'; id: number; preset: string; samples: Float32Array }
   | { type: 'pack'; id: number; text: string; mode: Mode }
   | { type: 'synth'; id: number; text: string; mode: Mode; f0Hz: number; sampleRate: number };

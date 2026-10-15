@@ -17,6 +17,8 @@ export interface WasmModule {
   /** Fetches and instantiates the .wasm file. */
   default: (input?: unknown) => Promise<unknown>;
   decode_slot: (samples: Float32Array, mode: string, preset: string) => string;
+  /** Decodes the start of a slot still being received: symbols after the last sample count as missing. */
+  decode_partial?: (samples: Float32Array, mode: string, preset: string) => string;
   pack_message: (text: string, mode: string) => string;
   synthesize: (text: string, mode: string, f0Hz: number, sampleRate: number) => Float32Array;
   decode_wspr: (samples: Float32Array, preset: string) => string;
@@ -100,7 +102,11 @@ export class DecoderCore {
     try {
       // A slot without a QSO context decodes without a priori knowledge.
       if (m.type === 'decode') mod.set_qso_context?.(m.qso?.myCall ?? '', m.qso?.dxCall ?? '', m.qso?.dxHz ?? 0);
-      if (m.type === 'decode' && m.deep && mod.DecoderSession) {
+      if (m.type === 'decode' && m.partial) {
+        // A module without partial decoding has no early pass: nothing found yet.
+        const json = mod.decode_partial ? mod.decode_partial(m.samples, m.mode, m.preset) : '[]';
+        this.post({ type: 'decoded', id: m.id, decodes: parseDecodes(json), ms: this.now() - t0 });
+      } else if (m.type === 'decode' && m.deep && mod.DecoderSession) {
         this.decodeDeep(mod.DecoderSession, m, m.deep, t0);
       } else if (m.type === 'decode') {
         const json = mod.decode_slot(m.samples, m.mode, m.preset);

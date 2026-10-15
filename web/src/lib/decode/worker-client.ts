@@ -131,7 +131,7 @@ export class WorkerDecoder implements DecoderClient {
   /**
    * Decodes one slot. The samples are transferred to the worker: pass a copy. With `more`, an
    * FT8 slot also runs the later stages, and `more` receives what each finds after the
-   * returned decodes.
+   * returned decodes. A partial slot (the early pass) runs the preset only.
    */
   decodeSlot(slot: SlotAudio, more?: (d: Decode[]) => void): Promise<Decode[]> {
     if (this.statusValue.state === 'failed') return Promise.reject(new DecoderUnavailableError(this.statusValue.detail));
@@ -139,9 +139,9 @@ export class WorkerDecoder implements DecoderClient {
     if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
     if (this.pending.size >= this.maxPending) return Promise.reject(new DecoderBusyError(`${this.pending.size} slots waiting`));
     const id = this.nextId++;
-    const deep = more && slot.mode === 'FT8' && this.deep ? this.deep : undefined;
+    const deep = more && slot.mode === 'FT8' && !slot.partial && this.deep ? this.deep : undefined;
     const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject, more: deep && more }));
-    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}), ...(slot.qso ? { qso: slot.qso } : {}) }, [slot.samples.buffer]);
+    this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}), ...(slot.qso ? { qso: slot.qso } : {}), ...(slot.partial ? { partial: true } : {}) }, [slot.samples.buffer]);
     return done;
   }
 

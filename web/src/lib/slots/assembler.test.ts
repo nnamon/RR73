@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { SlotAssembler, type AssembledSlot, type StreamChunk } from './assembler';
+import { SlotAssembler, type AssembledSlot, type EarlySlot, type StreamChunk } from './assembler';
 import { prng } from '../testing/signal';
 
 const CHUNK = 512;
@@ -36,6 +36,39 @@ function streamIndexAt(sim0: Sim, utcMs: number): number {
 }
 
 describe('SlotAssembler', () => {
+  it('hands over the first 13.5 s of each FT8 slot once, as soon as they are written', () => {
+    const early: { slot: EarlySlot; atIndex: number }[] = [];
+    const sim = { index: 0, utc0: START };
+    const a = new SlotAssembler('FT8', { earlyS: 13.5, onEarly: (slot) => early.push({ slot, atIndex: sim.index }) });
+    const slots = runFor(a, sim, 40); // to 13:15:32.25
+    expect(early.map((e) => e.slot.startUtcMs)).toEqual([Date.UTC(2026, 9, 13, 13, 14, 45), Date.UTC(2026, 9, 13, 13, 15, 0), Date.UTC(2026, 9, 13, 13, 15, 15)]);
+    for (const { slot, atIndex } of early) {
+      expect(slot.samples.length).toBe(162000);
+      const full = slots.find((s) => s.startUtcMs === slot.startUtcMs)!;
+      expect(slot.samples).toEqual(full.samples.subarray(0, 162000));
+      // Handed over with the chunk that reached 13.5 s, before the slot ended.
+      const reached = streamIndexAt({ index: 0, utc0: START }, slot.startUtcMs + 13_500);
+      expect(atIndex - reached).toBeGreaterThanOrEqual(0);
+      expect(atIndex - reached).toBeLessThanOrEqual(CHUNK);
+    }
+    // The first slot's audio began at 52.25 s, 7.25 s in: 6.25 s of it by 13.5 s.
+    expect(early[0].slot.filled).toBe(75000);
+    expect(early[1].slot.filled).toBe(162000);
+    // A copy: later writes leave it alone.
+    expect(early[2].slot.samples.buffer).not.toBe(slots[2].samples.buffer);
+  });
+
+  it('hands over nothing without onEarly, nor a slot whose audio began after the early point; FT4 at 6 s', () => {
+    expect(runFor(new SlotAssembler('FT8', { earlyS: 13.5 }), { index: 0, utc0: START }, 20)).toHaveLength(1);
+    const early: EarlySlot[] = [];
+    runFor(new SlotAssembler('FT4', { earlyS: 6, onEarly: (s) => early.push(s) }), { index: 0, utc0: START }, 20);
+    // Audio from 52.25 s: the FT4 slot from 45 s gets it 7.25 s in, past 6 s, and is left out.
+    expect(early.map((s) => [s.startUtcMs, s.samples.length, s.filled])).toEqual([
+      [Date.UTC(2026, 9, 13, 13, 14, 52, 500), 72000, 72000],
+      [Date.UTC(2026, 9, 13, 13, 15, 0), 72000, 72000],
+    ]);
+  });
+
   it('emits UTC-aligned FT8 slots of exactly 180000 samples', () => {
     const a = new SlotAssembler('FT8');
     const sim = { index: 0, utc0: START };

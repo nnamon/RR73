@@ -26,7 +26,7 @@ Settings › Practice band plays a band of simulated stations in the app, with n
 </table>
 
 - The waterfall shows 0 to 3000 Hz, with each decoded callsign written over its signal. Drag it to set the Tx frequency; the green marker sets Rx.
-- Decodes arrive after each 15 s slot (7.5 s in FT4), newest slot at the top, coloured by category: messages to you, new DXCC entities, grids and calls, CQs, worked before. The colour schemes include one chosen to stay apart with colour blindness. The list keeps the last hour.
+- Decodes arrive 13.5 s into each 15 s slot (6 s into each 7.5 s FT4 slot), the rest when the slot ends, newest slot at the top, coloured by category: messages to you, new DXCC entities, grids and calls, CQs, worked before. The colour schemes include one chosen to stay apart with colour blindness. The list keeps the last hour.
 - Chips filter the list to CQs, new stations, messages to you or the Rx frequency. Hide worked leaves out stations already in the log on the band and mode.
 - A double-tap on a decode calls the station. The six messages go in turn, each in its slot, and the QSO is logged at RR73 or 73. CQ calls CQ; Repeat CQ answers the next caller after each QSO; Hunt answers CQs one after another.
 - Halt stops the transmission at once.

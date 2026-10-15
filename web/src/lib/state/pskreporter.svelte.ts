@@ -117,8 +117,9 @@ let started = false;
 export function initPskReporter() {
   if (started) return;
   started = true;
-  onSlotDecoded((slotStartMs, decodes) => {
-    if (pskHold() !== null || !isFt(settings.mode)) return;
+  // The final pass carries the early pass's decodes again: they are reported once, with it.
+  onSlotDecoded((slotStartMs, decodes, pass) => {
+    if (pass === 'early' || pskHold() !== null || !isFt(settings.mode)) return;
     queue.add(spotsOf(decodes, Date.now(), currentDialHz(), settings.mode), slotStartMs);
     pskStatus.waiting = queue.waiting;
   });

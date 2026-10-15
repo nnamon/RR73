@@ -10,7 +10,7 @@ import type { Decode } from '../decode/types';
 import type { TxNum } from '../qso/messages';
 import { qso } from '../state/qso.svelte';
 import { settings, updateSettings, type Theme } from '../state/settings.svelte';
-import { audioOut, deliverDecodes, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
+import { audioOut, deliverDecodes, deliverEarly, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
 import { isFt } from '../clock/slots';
 import type { WsprDecode } from '../wspr/spots';
 import { TX_SECONDS } from '../wspr/schedule';
@@ -21,6 +21,8 @@ import type { ModemEvent } from '../keyboard/modem';
 export interface E2eHooks {
   /** Decodes for the slot starting at `slotStartMs`, UTC ms. */
   decoded(slotStartMs: number, decodes: Decode[]): void;
+  /** The early pass's decodes for the slot starting at `slotStartMs`, before it ends. */
+  decodedEarly(slotStartMs: number, decodes: Decode[]): void;
   /** Logs a QSO as the sequencer does, with the Logged notice. */
   logged(record: LogQsoRecord): Promise<void>;
   /** Shows `text` as sent in the slot starting at `slotStartMs`, as the scheduler does once it is on air. */
@@ -74,6 +76,7 @@ export function installE2eHooks() {
   });
   window.__rr73 = {
     decoded: (slotStartMs, decodes) => deliverDecodes({ startUtcMs: slotStartMs, mode: isFt(settings.mode) ? settings.mode : 'FT8', decodes, ms: 40 }),
+    decodedEarly: (slotStartMs, decodes) => deliverEarly({ startUtcMs: slotStartMs, mode: isFt(settings.mode) ? settings.mode : 'FT8', decodes, ms: 30, early: true }),
     logged: async (record) => {
       await logQso(record);
     },

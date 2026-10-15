@@ -1,6 +1,6 @@
 # Experiment 0003: anytime decoding
 
-Status: hypothesis recorded 2026-10-13, before implementation. Part 1 measured. Part 2 measured 2026-10-14; the chosen stages ship (decision 0007).
+Status: hypothesis recorded 2026-10-13, before implementation. Part 1 measured; the app runs an early pass at 13.5 s in FT8 and 6 s in FT4 since 2026-10-15 (experiment 0006). Part 2 measured 2026-10-14; the chosen stages ship (decision 0007).
 
 ## Question
 
@@ -19,7 +19,7 @@ The shipped preset spends about 100 ms of a 15 s slot. It stops after 3 passes, 
 
 - Part 1: `rr73-bench run --audio-s 11.8` and `--audio-s 13.5` decode only the first seconds of every slot. Two ways to treat the rest are measured: absent (the spectrogram stops where the audio stops, so cut symbols are erasures) and zero-filled. The early decodes are compared with the full-slot decodes of the same preset: the share of full-slot decodes already found, early decodes that the full slot does not have, false decodes on 5000 noise slots, and time.
 - Part 2: a staged decoder. Stage 1 is the shipped preset at slot end. Each later stage starts from the residual left by all earlier decodes and returns only new decodes. Candidate stages, each measured alone on top of stage 1: more passes; more candidates and a lower sync threshold; a finer search grid (4 frames per symbol, 4 bins per tone spacing); deeper OSD with the same acceptance checks. Stages that add true decodes without false ones are then chained, cheapest first.
-- API: `decode_partial` for part 1, and a `DecodeSession` that runs stage by stage and step by step in bounded work units (a spectrogram and search, a batch of candidates, a batch of subtractions), so a caller can stop between units and a new slot always wins. `rr73-wasm` exposes both. The web app is not changed.
+- API: `decode_partial` for part 1, and a `DecodeSession` that runs stage by stage and step by step in bounded work units (a spectrogram and search, a batch of candidates, a batch of subtractions), so a caller can stop between units and a new slot always wins. `rr73-wasm` exposes both. The web app was not changed in this experiment; experiment 0006 adds the early pass to it.
 
 ## Expected effect
 

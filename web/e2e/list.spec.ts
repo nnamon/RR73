@@ -42,6 +42,29 @@ test('the list stays still under a finger and takes new slots after it lifts', a
   await expect.poll(async () => await heads.first().textContent(), { timeout: 3000 }).toMatch(new RegExp(`^${hhmmss(newer)} UTC`));
 });
 
+test('the early pass lists a slot before it ends; the full slot keeps those rows and adds its own after them', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.getByRole('link', { name: 'Operate' }).click();
+
+  const slot = Date.now() - (Date.now() % 15_000) - 15_000;
+  const list = page.getByTestId('decode-list');
+  const texts = () => list.locator('button.dr .c-msg').allTextContents();
+  await page.evaluate(
+    (s) => window.__rr73!.decodedEarly(s, [{ text: 'CQ JA1KXM PM95', freq_hz: 600, dt_s: 0.1, snr_db: -12 }, { text: 'CQ VK3QRP QF22', freq_hz: 900, dt_s: 0.2, snr_db: -15 }]),
+    slot,
+  );
+  await expect.poll(texts).toEqual(['CQ JA1KXM PM95', 'CQ VK3QRP QF22']);
+  await expect(list.locator('.slot-bar').first()).toContainText('2 decodes');
+  // The full slot finds 9M2TRX first, and VK3QRP again with its own SNR.
+  await decoded(page, slot, ['CQ 9M2TRX OJ02', 'CQ VK3QRP QF22']);
+  await expect.poll(texts).toEqual(['CQ JA1KXM PM95', 'CQ VK3QRP QF22', 'CQ 9M2TRX OJ02']);
+  await expect(list.locator('.slot-bar').first()).toContainText('3 decodes');
+  await expect(list.locator('button.dr', { hasText: 'CQ VK3QRP QF22' })).toContainText('−08');
+});
+
 test('New shows what the decode colours call new, and Hide worked hides stations in the log on this band and mode', async ({ page }) => {
   // Without the country file, new means a new call or grid here.
   await page.route('**/data/cty.json', (route) => route.fulfill({ status: 404, body: '' }));

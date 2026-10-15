@@ -45,6 +45,22 @@ describe('DecoderCore', () => {
     expect(posted[1]).toEqual({ type: 'decoded', id: 7, decodes: [{ text: 'CQ 9M2TRX OJ02', freq_hz: 1022, dt_s: 0.1, snr_db: -10 }], ms: 25 });
   });
 
+  it('decodes a partial slot with decode_partial and runs no later stages on it', async () => {
+    const partial = vi.fn(() => '[{"text":"CQ K1ABC FN42","freq_hz":1000,"dt_s":0.1,"snr_db":-12}]');
+    const Session = vi.fn();
+    const mod = fakeModule({ decode_partial: partial, DecoderSession: Session as unknown as WasmModule['DecoderSession'] });
+    const { core, posted } = setup(async () => mod);
+    await core.handle({ ...slot(4), samples: new Float32Array(162000), partial: true, deep: { plan: 'baseline', budgetMs: 2000 } });
+    expect(partial).toHaveBeenCalledWith(expect.any(Float32Array), 'FT8', 'baseline');
+    expect(mod.decode_slot).not.toHaveBeenCalled();
+    expect(Session).not.toHaveBeenCalled();
+    expect(posted[1]).toEqual({ type: 'decoded', id: 4, decodes: [{ text: 'CQ K1ABC FN42', freq_hz: 1000, dt_s: 0.1, snr_db: -12 }], ms: 25 });
+    // A module without partial decoding finds nothing early.
+    const { core: old, posted: oldPosted } = setup(async () => fakeModule());
+    await old.handle({ ...slot(5), samples: new Float32Array(162000), partial: true });
+    expect(oldPosted[1]).toEqual({ type: 'decoded', id: 5, decodes: [], ms: 25 });
+  });
+
   it('sets the QSO under way before each slot, and clears it for a slot without one', async () => {
     const calls: string[] = [];
     const set = vi.fn((my: string, dx: string, hz: number) => calls.push(`${my}|${dx}|${hz}`));

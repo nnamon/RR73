@@ -192,6 +192,21 @@ jobs:
       - name: Gate a priori decoding against bench/subtract-3-osd2-ap.json
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: cargo run --release -p rr73-bench -- gate results/ci-ap.json --baseline bench/subtract-3-osd2-ap.json --thresholds bench/gate-ap.toml
+      # The early pass (EARLY_S in web/src/lib/clock/slots.ts, experiment 0006): the shipped
+      # preset on the first 13.5 s of each CI slot, and FT4 on the first 6 s of a small
+      # ft4-sweep rendered in memory; thresholds in bench/gate.toml and bench/gate-ft4.toml.
+      - name: Run subtract-3-osd2 on the first 13.5 s of each slot
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- run --preset subtract-3-osd2 --audio-s 13.5 --out results/ci-early.json corpus/public corpus/synthetic
+      - name: Gate the early pass against bench/subtract-3-osd2-early.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-early.json --baseline bench/subtract-3-osd2-early.json
+      - name: Run subtract-3-osd2 on the first 6 s of each ft4-sweep slot
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- run --preset subtract-3-osd2 --audio-s 6 --synth ft4-sweep --per-step 5 --crowded-count 5 --noise-count 300 --out results/ci-ft4-early.json
+      - name: Gate the FT4 early pass against bench/subtract-3-osd2-ft4-early.json
+        if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
+        run: cargo run --release -p rr73-bench -- gate results/ci-ft4-early.json --baseline bench/subtract-3-osd2-ft4-early.json --thresholds bench/gate-ft4.toml
       # WSPR: the wspr preset on wspr-smoke and 50 wspr-noise slots, rendered in memory so no
       # 2.9 MB WAV file per 120 s slot is written. Gated against bench/wspr.json with
       # bench/gate-wspr.toml.
@@ -209,6 +224,8 @@ jobs:
             results/ci.json
             results/ci-subtract-3-osd2.json
             results/ci-subtract-3-osd2-deep.json
+            results/ci-early.json
+            results/ci-ft4-early.json
             results/ci-wspr.json
       - uses: actions/cache/save@v4
         if: steps.ready.outputs.ready == 'true' && github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'

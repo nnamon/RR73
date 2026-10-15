@@ -1,0 +1,18 @@
+# Thresholds for the FT4 early pass gate: subtract-3-osd2 on the first 6 s of each ft4-sweep
+# slot (5 slots per SNR step and channel, 5 crowded slots, 300 noise slots), rendered in
+# memory, against bench/subtract-3-osd2-ft4-early.json. docs/bench.md describes every check.
+#
+# The baseline was recorded on aarch64 and CI runs on x86_64. FFT rounding differs between
+# the two, which can flip a decode at the margin: the single-signal sets allow 2 of their 95
+# messages, the crowded set 2 of its 50. False decodes on noise may not rise at all.
+
+required_sets = ["synthetic/ft4-sweep/awgn", "synthetic/ft4-sweep/fading", "synthetic/ft4-sweep/crowded", "synthetic/ft4-sweep/noise"]
+
+[default]
+max_recall_drop = 0.022
+max_false_increase = 0
+max_snr50_rise_db = 0.5
+max_time_ratio = 0
+
+[sets."synthetic/ft4-sweep/crowded"]
+max_recall_drop = 0.04

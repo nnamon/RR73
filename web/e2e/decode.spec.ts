@@ -242,6 +242,10 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   test.info().annotations.push({ type: 'timing', description: JSON.stringify({ timings, load: loadLog }) });
   expect(timings.length).toBeGreaterThan(0);
   for (const t of timings) expect(t.afterSlotEndS).toBeLessThan(3);
+  // The early pass lists a slot from its first 13.5 s, before it ends.
+  const firstShown = new Map<string, number>();
+  for (const t of timings) firstShown.set(t.slot, Math.min(firstShown.get(t.slot) ?? Infinity, t.afterSlotEndS));
+  expect([...firstShown.values()].some((s) => s < 0), JSON.stringify([...firstShown])).toBe(true);
   expect(loadLog).toHaveLength(1);
 });
 

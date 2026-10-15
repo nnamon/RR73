@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Decodes show about 1.5 s before the slot ends: an early pass decodes the first 13.5 s of each FT8 slot and the first 6 s of each FT4 slot. Its rows stay in place when the whole slot's decodes arrive, and new ones follow them.
+
 ## 0.21.1 · 2026-10-15
 
 - Clock warning: from 1 s off by the decodes, a Clock badge beside the band and a notice say how far the phone's clock is off. The badge opens Radio and audio at Timing, where Phone clock shows the reading and how to set the clock.

@@ -16,13 +16,13 @@ import type { AudioClockMapper } from '../clock/mapping';
 import { RxCalibration, clockWarns } from '../clock/calibration';
 import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
-import { SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
+import { EARLY_S, SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
 import { NullDecoder } from '../decode/null-client';
 import type { Decode, DecoderClient, DecoderStatus, QsoContext } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
 import type { WsprDecode } from '../wspr/spots';
 import { operatingDialHz } from '../radio/hound-dial';
-import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
+import { SlotAssembler, type AssembledSlot, type EarlySlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
 import { TransmittedSlots } from '../slots/transmitted';
@@ -48,6 +48,8 @@ export interface DecodedSlot {
   ms: number;
   /** True when the decoder was still busy with earlier slots and this one was not decoded. */
   skipped?: boolean;
+  /** From the early pass, before the slot ended (EARLY_S); the full slot's decodes join it. */
+  early?: boolean;
 }
 
 export interface KeyingResult {
@@ -212,7 +214,7 @@ decoder.onStatus((st) => {
   }
 });
 const chunkListeners = new Set<(c: Chunk) => void>();
-const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[], pass: 'final' | 'late') => void>();
+const decodeListeners = new Set<(slotStartMs: number, decodes: Decode[], pass: 'early' | 'final' | 'late') => void>();
 const wsprListeners = new Set<(r: WsprSlotResult) => void>();
 /** The WSPR slot being decoded, UTC ms, or null. */
 export const wsprDecoding = $state<{ startUtcMs: number | null }>({ startUtcMs: null });
@@ -277,7 +279,7 @@ function onChunk(c: Chunk) {
     if (!assembler || assembler.mode !== mode) {
       const partial = assembler?.flush();
       if (partial) onSlot(partial);
-      assembler = new SlotAssembler(mode);
+      assembler = new SlotAssembler(mode, { earlyS: EARLY_S[mode], onEarly: onEarlySlot });
     }
     for (const slot of assembler.push(c)) onSlot(slot);
   }
@@ -305,8 +307,27 @@ function onSlot(slot: AssembledSlot) {
   decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice(), qso: qsoContext() ?? undefined }, (more) => addDecodes(slot.startUtcMs, more)).then(
     (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0 }),
     (e: unknown) => {
-      if (e instanceof DecoderBusyError) keepSlot({ startUtcMs: slot.startUtcMs, mode, decodes: [], ms: 0, skipped: true });
+      if (!(e instanceof DecoderBusyError)) return;
+      // The early pass's decodes stand for the slot; without them it was not decoded.
+      const early = band.slots.find((s) => s.startUtcMs === slot.startUtcMs && s.early);
+      if (early) deliverDecodes({ ...early, early: undefined });
+      else keepSlot({ startUtcMs: slot.startUtcMs, mode, decodes: [], ms: 0, skipped: true });
     },
+  );
+}
+
+/**
+ * The early pass: decodes the first EARLY_S seconds of a slot while it is still being received,
+ * so its messages show about 1.5 s sooner. Slots RR73 transmits in, and slots with less than half
+ * that audio, have none. A busy decoder skips it: the full slot follows.
+ */
+function onEarlySlot(slot: EarlySlot) {
+  if (slot.mode === 'WSPR' || slot.filled < slot.samples.length / 2 || !decoder.available || transmitted.has(slot.startUtcMs)) return;
+  const mode = slot.mode;
+  const t0 = performance.now();
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples, qso: qsoContext() ?? undefined, partial: true }).then(
+    (decodes) => deliverEarly({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0, early: true }),
+    () => undefined,
   );
 }
 
@@ -423,13 +444,43 @@ export function clearDecodes() {
 }
 
 /**
- * A slot's decodes: into the decode list, then to the listeners (the sequencer). The decoder's
- * path, and the screen-review build's (lib/testing/e2e-hooks.ts).
+ * The early pass's decodes of a slot still being received: into the decode list, then to the
+ * listeners as the `early` pass. Nothing once the full slot's decodes are in.
+ */
+export function deliverEarly(entry: DecodedSlot) {
+  if (transmitted.has(entry.startUtcMs)) return;
+  const listed = band.slots.find((s) => s.startUtcMs === entry.startUtcMs);
+  if (listed && !listed.early) return;
+  keepSlot({ ...entry, early: true });
+  for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes, 'early');
+}
+
+/**
+ * The full slot's decodes after the early pass's: those rows stay where they are, with the
+ * full slot's SNR, DT and frequency; new messages follow them. A message only the early pass
+ * found stays.
+ */
+export function mergeDecodes(early: readonly Decode[], full: readonly Decode[]): Decode[] {
+  const byText = new Map(full.map((d) => [d.text, d]));
+  const seen = new Set(early.map((d) => d.text));
+  return [...early.map((d) => byText.get(d.text) ?? d), ...full.filter((d) => !seen.has(d.text))];
+}
+
+/**
+ * A slot's decodes: into the decode list, then to the listeners (the sequencer) as the `final`
+ * pass, joined to the early pass's when it ran. The decoder's path, and the screen-review
+ * build's (lib/testing/e2e-hooks.ts).
  */
 export function deliverDecodes(entry: DecodedSlot) {
   if (transmitted.has(entry.startUtcMs)) return;
-  keepSlot(entry);
-  for (const l of decodeListeners) l(entry.startUtcMs, entry.decodes, 'final');
+  const listed = band.slots.find((s) => s.startUtcMs === entry.startUtcMs && s.early);
+  // Cleared after its early pass: the sequencer still gets the slot, the list does not.
+  const cleared = !listed && clearedSlot?.startUtcMs === entry.startUtcMs && clearedSlot.early ? clearedSlot : null;
+  const early = listed ?? cleared;
+  const merged: DecodedSlot = early ? { ...entry, decodes: mergeDecodes(early.decodes, entry.decodes), early: undefined } : entry;
+  if (cleared) clearedSlot = merged;
+  else keepSlot(merged);
+  for (const l of decodeListeners) l(entry.startUtcMs, merged.decodes, 'final');
   calibrate(entry);
 }
 
@@ -451,10 +502,11 @@ export function addDecodes(startUtcMs: number, decodes: Decode[]) {
 }
 
 /**
- * Listens to each slot's decodes as they arrive (the sequencer): the first decodes as the
- * `final` pass, then what later decoder stages add as `late` passes.
+ * Listens to each slot's decodes as they arrive (the sequencer): the early pass's before the
+ * slot ends as `early`, the slot's decodes when it ends as `final` (the early pass's included),
+ * then what later decoder stages add as `late` passes.
  */
-export function onSlotDecoded(fn: (slotStartMs: number, decodes: Decode[], pass: 'final' | 'late') => void): () => void {
+export function onSlotDecoded(fn: (slotStartMs: number, decodes: Decode[], pass: 'early' | 'final' | 'late') => void): () => void {
   decodeListeners.add(fn);
   return () => decodeListeners.delete(fn);
 }

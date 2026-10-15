@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDecodes, band, clearDecodes, deliverDecodes, markTransmitted, noteHeardBack, onSlotDecoded, recent, timingSnapshot, tx } from './station.svelte';
+import { addDecodes, band, clearDecodes, deliverDecodes, deliverEarly, markTransmitted, mergeDecodes, noteHeardBack, onSlotDecoded, recent, timingSnapshot, tx } from './station.svelte';
 
 const d = (text: string, freq_hz = 1000) => ({ text, freq_hz, dt_s: 0.1, snr_db: -12 });
 
@@ -21,6 +21,66 @@ describe('later decoder stages', () => {
       ['final', 'CQ K1ABC FN42'],
       ['late', 'CQ 9V1NE OJ11'],
     ]);
+  });
+});
+
+describe('the early pass', () => {
+  const e = (text: string, freq_hz: number, snr_db: number) => ({ text, freq_hz, dt_s: 0.1, snr_db });
+
+  it('lists a slot before it ends; the full slot keeps those rows in place and adds its own after them', () => {
+    clearDecodes();
+    const heard: string[][] = [];
+    const off = onSlotDecoded((_, decodes, pass) => heard.push([pass, ...decodes.map((x) => x.text)]));
+    const start = Date.UTC(2026, 9, 15, 9, 0, 0);
+    deliverEarly({ startUtcMs: start, mode: 'FT8', decodes: [e('CQ K1ABC FN42', 1000, -12), e('CQ JA1KXM PM95', 1500, -20)], ms: 60, early: true });
+    expect(band.slots[0].decodes.map((x) => x.text)).toEqual(['CQ K1ABC FN42', 'CQ JA1KXM PM95']);
+    expect(band.slots[0].early).toBe(true);
+    // The full slot: a new message first in its order, K1ABC again with a better SNR, JA1KXM missed.
+    deliverDecodes({ startUtcMs: start, mode: 'FT8', decodes: [e('CQ VK2LAW QF56', 800, -3), e('CQ K1ABC FN42', 1001, -11)], ms: 90 });
+    // An early pass that comes after the full slot changes nothing.
+    deliverEarly({ startUtcMs: start, mode: 'FT8', decodes: [e('CQ ZL1TQK RF70', 600, -9)], ms: 60, early: true });
+    off();
+    const slot = band.slots[0];
+    expect(slot.decodes).toEqual([e('CQ K1ABC FN42', 1001, -11), e('CQ JA1KXM PM95', 1500, -20), e('CQ VK2LAW QF56', 800, -3)]);
+    expect(slot.early).toBeUndefined();
+    expect(slot.ms).toBe(90);
+    expect(heard).toEqual([
+      ['early', 'CQ K1ABC FN42', 'CQ JA1KXM PM95'],
+      ['final', 'CQ K1ABC FN42', 'CQ JA1KXM PM95', 'CQ VK2LAW QF56'],
+    ]);
+    clearDecodes();
+  });
+
+  it('cleared after the early pass: the full slot reaches the sequencer and stays out of the list', () => {
+    clearDecodes();
+    const heard: string[][] = [];
+    const off = onSlotDecoded((_, decodes, pass) => heard.push([pass, ...decodes.map((x) => x.text)]));
+    const start = Date.UTC(2026, 9, 15, 9, 0, 30);
+    deliverEarly({ startUtcMs: start, mode: 'FT8', decodes: [e('CQ K1ABC FN42', 1000, -12)], ms: 60, early: true });
+    clearDecodes();
+    deliverDecodes({ startUtcMs: start, mode: 'FT8', decodes: [e('9V1NE VK2LAW -12', 1800, -14)], ms: 90 });
+    addDecodes(start, [e('CQ JA1KXM PM95', 1500, -20)]);
+    off();
+    expect(band.slots).toEqual([]);
+    expect(heard).toEqual([
+      ['early', 'CQ K1ABC FN42'],
+      ['final', 'CQ K1ABC FN42', '9V1NE VK2LAW -12'],
+      ['late', 'CQ JA1KXM PM95'],
+    ]);
+  });
+
+  it('a slot RR73 transmits in has none', () => {
+    clearDecodes();
+    const start = Date.UTC(2026, 9, 15, 9, 1, 0);
+    markTransmitted(start + 500, start + 501, 'FT8');
+    deliverEarly({ startUtcMs: start, mode: 'FT8', decodes: [e('CQ K1ABC FN42', 1000, -12)], ms: 60, early: true });
+    expect(band.slots).toEqual([]);
+  });
+
+  it('merges by message text', () => {
+    expect(mergeDecodes([], [e('A', 1, 1)])).toEqual([e('A', 1, 1)]);
+    expect(mergeDecodes([e('A', 1, 1)], [])).toEqual([e('A', 1, 1)]);
+    expect(mergeDecodes([e('A', 1, 1), e('B', 2, 2)], [e('C', 3, 3), e('B', 4, 4)])).toEqual([e('A', 1, 1), e('B', 4, 4), e('C', 3, 3)]);
   });
 });
 

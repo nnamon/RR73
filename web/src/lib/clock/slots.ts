@@ -39,6 +39,13 @@ export const SLOT_MS: Record<SlotMode, number> = { FT8: 15000, FT4: 7500, WSPR: 
 /** Samples per slot at 12 kHz. */
 export const SLOT_SAMPLES: Record<SlotMode, number> = { FT8: 180000, FT4: 90000, WSPR: 1440000 };
 
+/**
+ * When the early pass decodes a slot still being received, s from the slot start: a message at
+ * DT 0 ends at 13.14 s in FT8 and 5.54 s in FT4. WSPR has none. docs/experiments/0006-early-pass.md
+ * has the measurements.
+ */
+export const EARLY_S: Partial<Record<SlotMode, number>> = { FT8: 13.5, FT4: 6 };
+
 /** Index of the slot containing `utcMs`, counted from the epoch. */
 export function slotIndex(utcMs: number, mode: SlotMode): number {
   return Math.floor(utcMs / SLOT_MS[mode]);
