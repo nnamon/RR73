@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.1 · 2026-10-15
 
 - Clock warning: from 1 s off by the decodes, a Clock badge beside the band and a notice say how far the phone's clock is off. The badge opens Radio and audio at Timing, where Phone clock shows the reading and how to set the clock.
 
