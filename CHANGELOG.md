@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.11 · 2026-10-15
 
 - Operate's New chip lists the decodes your decode colours mark as new: new DXCC entities, grids and calls, as Settings › Decode colours sets them.
 - Hide worked leaves stations already in the log on this band and mode out of the list. Their messages to you stay.
