@@ -6,9 +6,11 @@ import { settings } from '../state/settings.svelte';
 import { UNDO_MS } from './ledger';
 import {
   addQso,
+  backupFile,
   chooseStation,
   dismissNotice,
   endActivation,
+  importLog,
   loadLog,
   log,
   logQso,
@@ -344,5 +346,31 @@ describe('the log store', () => {
     const left = await updateQso(q.id, activationPatch(null));
     expect(left).toMatchObject({ activationId: null, mySig: '', mySigInfo: '', myPotaRef: '' });
     expect(entry(q.id, 'pota-file')?.parts ?? []).toEqual([]);
+  });
+
+  it('imports a log with Undo: a backup of itself adds nothing, ADIF from another logger is not sent to Wavelog', async () => {
+    dismissNotice();
+    const before = log.qsos.length;
+    const own = await importLog(backupFile().text);
+    expect(own).toMatchObject({ ok: true, plan: { kind: 'backup', qsos: [], already: before } });
+    expect(log.notice?.text).toBe(`No QSOs to import. ${before} were in the log already.`);
+    expect(log.notice?.undo).toBeUndefined();
+
+    const adif = '<ADIF_VER:5>3.1.4 <EOH>\n<CALL:5>K1ABC <QSO_DATE:8>20261001 <TIME_ON:4>1200 <BAND:3>40m <MODE:3>FT8 <EOR>\n<CALL:6>DL1ABC <QSO_DATE:8>20261001 <TIME_ON:4>1210 <BAND:3>40m <MODE:3>FT8 <EOR>\n';
+    const r = await importLog(adif);
+    expect(r.ok && r.plan.qsos.length).toBe(2);
+    const ids = r.ok ? r.plan.qsos.map((q) => q.id) : [];
+    expect(log.notice?.text).toBe('Imported 2 QSOs.');
+    expect(log.qsos.filter((q) => ids.includes(q.id)).map((q) => q.source)).toEqual(['import', 'import']);
+    expect(log.ledger.filter((e) => ids.includes(e.qsoId))).toEqual([]);
+    expect(unsentForWavelog().some((e) => ids.includes(e.qsoId))).toBe(false);
+    expect((await loadSnapshot()).qsos.filter((q) => ids.includes(q.id))).toHaveLength(2);
+
+    // Undo takes them out of the log and out of IndexedDB.
+    log.notice!.undo!();
+    await expect.poll(async () => (await loadSnapshot()).qsos.filter((q) => ids.includes(q.id)).length).toBe(0);
+    expect(log.qsos.some((q) => ids.includes(q.id))).toBe(false);
+    expect(log.qsos.length).toBe(before);
+    expect(log.notice?.text).toBe('Removed the 2 imported QSOs');
   });
 });

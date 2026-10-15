@@ -224,7 +224,7 @@ a {
 }
 
 /* A row holding a 44 pt text field or picker is 44 pt, as an iOS form row. */
-.row:has(> input:not([type='checkbox'], [type='radio'], [type='range']), > select) {
+.row:has(> input:not([type='checkbox'], [type='radio'], [type='range'], [type='file']), > select) {
   padding-block: 0;
 }
 

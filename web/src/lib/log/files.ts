@@ -28,7 +28,8 @@ export interface FileOptions {
   now: number;
 }
 
-const safe = (s: string) => s.replace(/\//g, '-').replace(/[\\:*?"<>|]/g, '');
+/** A name a file may carry: a slash becomes a hyphen, and characters file systems refuse go. */
+export const safeName = (s: string) => s.replace(/\//g, '-').replace(/[\\:*?"<>|]/g, '');
 
 /** "13 Oct 2026" for a YYYYMMDD day. */
 export function dayText(day: string): string {
@@ -62,25 +63,25 @@ export function buildPartFile(partKey: string, qsos: readonly Qso[], activation:
   if (!key) return null;
   const list = partQsos(key, qsos, activation);
   if (!list.length) return null;
-  const call = safe(activation.callsign || list[0].stationCallsign);
+  const call = safeName(activation.callsign || list[0].stationCallsign);
   const firstDay = utcDayKey(list[0].start);
   let name: string;
   let reference: Reference | undefined;
   let headerText: string;
   if (key.programme === 'POTA') {
     reference = { programme: 'POTA', ref: key.ref };
-    name = `${call}@${safe(key.ref)}-${key.day}.adi`;
+    name = `${call}@${safeName(key.ref)}-${key.day}.adi`;
     headerText = `POTA log for ${key.ref} on ${dayText(key.day)}, made by RR73 ${opts.programVersion}`;
   } else if (key.programme === 'SOTA') {
     reference = { programme: 'SOTA', ref: key.ref };
-    name = `${call}@${safe(key.ref)}-${key.day}.adi`;
+    name = `${call}@${safeName(key.ref)}-${key.day}.adi`;
     headerText = `SOTA log for ${key.ref} on ${dayText(key.day)}, made by RR73 ${opts.programVersion}`;
   } else if (key.programme === 'WWFF') {
     reference = { programme: 'WWFF', ref: key.ref };
-    name = `${call}@${safe(key.ref)} ${firstDay}.adi`;
+    name = `${call}@${safeName(key.ref)} ${firstDay}.adi`;
     headerText = `WWFF log for ${key.ref} from ${dayText(firstDay)}, made by RR73 ${opts.programVersion}`;
   } else {
-    name = `${call} ${firstDay} ${safe(activation.refs.map((r) => r.ref).join(' '))}.adi`;
+    name = `${call} ${firstDay} ${safeName(activation.refs.map((r) => r.ref).join(' '))}.adi`;
     headerText = `Activation log for ${refsLabel(activation.refs)} from ${dayText(firstDay)}, made by RR73 ${opts.programVersion}`;
   }
   const records = list.map((q) => qsoToRecord(q, { reference, rr73Id: key.programme === 'ADIF' }));
@@ -91,7 +92,7 @@ export function buildPartFile(partKey: string, qsos: readonly Qso[], activation:
 export function buildExport(qsos: readonly Qso[], callsign: string, opts: FileOptions): ExportFile {
   const list = qsos.filter((q) => q.deletedAt === null).sort((a, b) => a.start - b.start);
   const records = list.map((q) => qsoToRecord(q, { rr73Id: true }));
-  const name = `RR73 ${safe(callsign || 'log')} ${utcDayKey(opts.now)}.adi`;
+  const name = `RR73 ${safeName(callsign || 'log')} ${utcDayKey(opts.now)}.adi`;
   const n = list.length;
   return { name, text: writeAdif(records, { programVersion: opts.programVersion, createdAt: opts.now, headerText: `${n} ${n === 1 ? 'QSO' : 'QSOs'} exported by RR73 ${opts.programVersion}` }) };
 }

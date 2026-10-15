@@ -134,7 +134,8 @@ function reconcileDirect({ entry, dest, qso, sendEdits, sendAutomatically: auto,
   // New and restored QSOs wait UNDO_MS before the outbox may send them.
   const hold = Math.max(now, qso.createdAt + UNDO_MS);
   if (!entry) {
-    if (!dest.active || deleted) return null;
+    // Imported QSOs come from another log, which sends its own: they are not sent from here.
+    if (!dest.active || deleted || qso.source === 'import') return null;
     return ready(emptyEntry(qso.id, dest.id), auto, hold);
   }
   const held = entry.deliveredAt !== null;

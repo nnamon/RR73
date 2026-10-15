@@ -83,6 +83,12 @@ describe('a new QSO', () => {
     expect(run(null, del(q, T + 70_000))).toBeNull();
   });
 
+  it('gets no entry when imported from another log, edited or not', () => {
+    const q: Qso = { ...qso('q1'), source: 'import' };
+    expect(run(null, q)).toBeNull();
+    expect(run(null, edit(q, T + 70_000, { comment: 'checked' }))).toBeNull();
+  });
+
   it('is file ready for each park and UTC day of its activation, and not needed elsewhere', () => {
     const q = qso('q1', T, ACT);
     expect(run(null, q, POTA, { activation: ACT })).toMatchObject({

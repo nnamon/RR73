@@ -535,3 +535,62 @@ test('fixes a station location refusal by choosing another station location', as
   await expect(r.getByText('Wavelog: delivered')).toBeAttached();
   expect(mock.requests.filter((x) => x.path === '/api/qso').map((x) => x.body?.station_profile_id)).toEqual(['1', '7']);
 });
+
+test('backs up the log, restores it into an empty log, and imports ADIF from another logger with Undo', async ({ page, browser }) => {
+  await page.addInitScript(() => Object.defineProperty(Navigator.prototype, 'canShare', { value: undefined, configurable: true }));
+  await start(page, '#/settings/logging', activations(mockupLog()));
+  const notice = page.getByTestId('log-notice');
+
+  // Back up the log: one JSON file, with the QSOs, the activation and the ledger, and no Wavelog key.
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('button', { name: /^Back up the log/ }).click()]);
+  expect(download.suggestedFilename()).toMatch(/^RR73 backup 9V1NE \d{8}\.json$/);
+  const text = readFileSync((await download.path())!, 'utf8');
+  const backup = JSON.parse(text) as { format: string; qsos: unknown[]; activations: unknown[]; ledger: unknown[] };
+  expect(backup.format).toBe('rr73-backup');
+  expect(backup.activations).toHaveLength(1);
+  expect(backup.qsos.length).toBeGreaterThan(0);
+  expect(text).not.toContain(API_KEY);
+  await expect(page.getByRole('status').filter({ hasText: 'Downloaded RR73 backup' })).toBeAttached();
+
+  // Imported into the same log, it adds nothing.
+  const file = page.getByTestId('import-file');
+  await file.setInputFiles({ name: download.suggestedFilename(), mimeType: 'application/json', buffer: Buffer.from(text) });
+  await expect(notice).toContainText(`No QSOs to import. ${backup.qsos.length} were in the log already.`);
+
+  // ADIF from another logger: 2 new QSOs, and one the log holds already. Undo takes them out.
+  const adif = [
+    '<ADIF_VER:5>3.1.4 <EOH>',
+    '<CALL:5>K1ABC <QSO_DATE:8>20261001 <TIME_ON:4>1200 <BAND:3>40m <MODE:3>FT8 <EOR>',
+    '<CALL:6>DL1ABC <QSO_DATE:8>20261001 <TIME_ON:4>1210 <BAND:3>40m <MODE:3>FT8 <EOR>',
+    '<CALL:7>BAD CALL <BAND:3>40m <EOR>',
+  ].join('\n');
+  await file.setInputFiles({ name: 'other.adi', mimeType: 'text/plain', buffer: Buffer.from(adif) });
+  await expect(notice).toContainText('Imported 2 QSOs. 1 record could not be read.');
+  await notice.getByRole('button', { name: 'Undo' }).click();
+  await expect(notice).toContainText('Removed the 2 imported QSOs');
+
+  // Not a log at all.
+  await file.setInputFiles({ name: 'notes.txt', mimeType: 'text/plain', buffer: Buffer.from('Hello') });
+  await expect(page.getByRole('status').filter({ hasText: 'The file is neither ADIF nor an RR73 backup.' })).toBeAttached();
+
+  // A new phone: the backup brings the log back whole, delivered QSOs still delivered.
+  const ctx = await browser.newContext({ baseURL: test.info().project.use.baseURL });
+  const fresh = await ctx.newPage();
+  await fresh.goto('./#/settings/logging');
+  await fresh.getByTestId('import-file').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: Buffer.from(text) });
+  await expect(fresh.getByTestId('log-notice')).toContainText(`Imported ${backup.qsos.length} QSOs and 1 activation.`);
+  const stored = await fresh.evaluate(
+    () =>
+      new Promise<{ qsos: number; ledger: number }>((resolve) => {
+        const r = indexedDB.open('rr73');
+        r.onsuccess = () => {
+          const tx = r.result.transaction(['qsos', 'ledger'], 'readonly');
+          const q = tx.objectStore('qsos').count();
+          const l = tx.objectStore('ledger').count();
+          tx.oncomplete = () => resolve({ qsos: q.result, ledger: l.result });
+        };
+      }),
+  );
+  expect(stored).toEqual({ qsos: backup.qsos.length, ledger: backup.ledger.length });
+  await ctx.close();
+});

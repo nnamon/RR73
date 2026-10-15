@@ -1,10 +1,17 @@
 <script lang="ts">
-  /** Settings › Logging: the destinations and how sending runs. */
+  /**
+   * Settings › Logging: the destinations, how sending runs, and the backup. Back up the log
+   * shares one JSON file (lib/log/backup.ts); Import a log takes that file or ADIF from any
+   * logger, and says what came in with Undo. Both act on the log, so they wait while the
+   * practice band is on.
+   */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { utcHm } from '../lib/clock/format';
-  import { log, setFileDestination, setLoggingSettings, wavelogReady } from '../lib/log/log.svelte';
+  import { backupFile, importLog, log, setFileDestination, setLoggingSettings, wavelogReady } from '../lib/log/log.svelte';
+  import { shareFile } from '../lib/log/files';
+  import { practice } from '../lib/state/practice.svelte';
   import type { FileDestinationId } from '../lib/log/types';
   import { hostOf } from '../lib/log/wavelog';
   import { features } from '../lib/state/features.svelte';
@@ -19,13 +26,42 @@
       .sort((a, b) => (b.lastAttemptAt ?? 0) - (a.lastAttemptAt ?? 0))[0] ?? null,
   );
   const refused = $derived(refusal !== null);
-  const state = $derived.by(() => {
+  const wavelogState = $derived.by(() => {
     if (!w.url || !w.apiKey) return { text: 'Not set up', tone: '' };
     if (!w.enabled) return { text: 'Off', tone: '' };
     if ((refused && (!w.lastTest || (refusal?.lastAttemptAt ?? 0) >= w.lastTest.at)) || (w.lastTest && !w.lastTest.ok)) return { text: 'Refused', tone: 'bad' };
     if (w.lastTest?.ok) return { text: 'Connected', tone: 'ok' };
     return { text: 'Not tested', tone: '' };
   });
+
+  // Backup and import.
+  let status = $state('');
+  let failed = $state(false);
+
+  async function backUp() {
+    const file = backupFile();
+    const r = await shareFile(file);
+    failed = false;
+    status = r.kind === 'downloaded' ? `Downloaded ${file.name}` : r.kind === 'shared' ? `Shared ${file.name}` : '';
+  }
+
+  async function pick(e: Event & { currentTarget: HTMLInputElement }) {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = '';
+    if (!file) return;
+    let text: string;
+    try {
+      text = await file.text();
+    } catch {
+      failed = true;
+      status = `${file.name} could not be read.`;
+      return;
+    }
+    const r = await importLog(text);
+    failed = !r.ok;
+    status = r.ok ? '' : r.reason;
+  }
 
   const files: { id: FileDestinationId; title: string; sub: string; icon: 'doc' | 'tree' | 'mountain'; bg: string }[] = [
     { id: 'pota-file', title: 'POTA', sub: 'File to upload at pota.app', icon: 'tree', bg: 'green' },
@@ -54,7 +90,7 @@
             </span>
           {/if}
         </span>
-        <span class="row-value {state.tone}">{state.text}</span>
+        <span class="row-value {wavelogState.tone}">{wavelogState.text}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
       {#if ready}
@@ -101,6 +137,30 @@
     <p class="section-foot">Wavelog takes no edits, so repeat each edit in Wavelog.</p>
   </div>
 
+  <div class="section">
+    <h2 class="section-head">Backup</h2>
+    <div class="group">
+      <button class="row act" disabled={practice.on || !log.qsos.length} onclick={() => void backUp()}>
+        <span class="row-main">
+          <span class="row-title">Back up the log</span>
+          <span class="row-sub">QSOs, activations and what Wavelog holds</span>
+        </span>
+      </button>
+      <label class="row act" class:off={practice.on}>
+        <span class="row-main">
+          <span class="row-title">Import a log</span>
+          <span class="row-sub">A backup or an ADIF file</span>
+        </span>
+        <input class="visually-hidden" type="file" accept=".json,.adi,.adif,application/json,text/plain" disabled={practice.on} onchange={(e) => void pick(e)} data-testid="import-file" />
+      </label>
+    </div>
+    {#if practice.on}
+      <p class="section-foot">Turn off the practice band to back up or import the log.</p>
+    {:else}
+      <p class="section-foot" class:err={failed} role="status">{status || 'Imported QSOs are not sent to Wavelog.'}</p>
+    {/if}
+  </div>
+
 </section>
 
 <style>
@@ -118,6 +178,24 @@
 
   label.row {
     cursor: pointer;
+  }
+
+  .act {
+    width: 100%;
+    text-align: left;
+  }
+
+  .act .row-title {
+    color: var(--rr-accent);
+  }
+
+  .act:disabled .row-title,
+  .act.off .row-title {
+    opacity: 0.4;
+  }
+
+  .err {
+    color: var(--rr-tx-text);
   }
 
   .indent {

@@ -111,7 +111,17 @@ As built:
 
 A full ADIF export and a JSON backup with RR73 fields and the ledger, through the share sheet. Import accepts both.
 
-As built: the ADIF export, with `APP_RR73_ID` on each record so a later import can recognise the QSO. The JSON backup and the import screen are not built; the ADIF reader and the record mapping they need are (`lib/log/adif.ts`, `lib/log/qso-adif.ts`).
+As built (`lib/log/backup.ts`, Settings › Logging › Backup):
+
+- Export ADIF in the Log writes `APP_RR73_ID` on each record, so a later import knows the QSO.
+- Back up the log shares one JSON file, "RR73 backup 9V1NE 20261015.json": every QSO with the tombstones, every activation and the ledger, with the format name, its version and the app's version. Destination settings stay out, so the Wavelog API key never leaves the phone in a file.
+- Import a log takes a backup or ADIF from any logger. From a backup, QSOs and activations the log does not hold come back with their ledger, so QSOs Wavelog holds stay delivered; a QSO whose activation is in neither keeps out of activations. A backup from a newer format version is refused with the version that wrote it.
+- From ADIF, a QSO the log holds already is skipped: the same RR73 id, or the same call (by base callsign), band and mode within 2 minutes, in the log or earlier in the file. The rest come in with source `import`, outside any activation.
+- Imported QSOs get no ledger entries and the ledger gives them none later, edited or not: they come from another log, which sends its own. Send to Wavelog leaves them out.
+- The notice says what came in, what was in the log already and what could not be read, with Undo for 10 s. Undo removes the imported QSOs, their ledger and the activations from IndexedDB in one transaction.
+- Both wait while the practice band is on, since the Log then shows the practice log.
+
+Rejected: sending imported QSOs to Wavelog like new ones. An operator importing an old log from another logger would upload it again; Wavelog takes duplicates as delivered, but a large log takes one request per QSO.
 
 ## Storage
 

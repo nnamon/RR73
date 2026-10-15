@@ -98,6 +98,19 @@ export async function saveChanges(c: Changes): Promise<void> {
   await Promise.all([...puts, tx.done]);
 }
 
+/** Removes QSOs with their ledger entries, and activations, in one transaction: the Undo of an import. */
+export async function removeRecords(r: { qsoIds: readonly string[]; activationIds: readonly string[] }): Promise<void> {
+  const d = await logDb();
+  const tx = d.transaction(['qsos', 'ledger', 'activations'], 'readwrite');
+  const ops: Promise<unknown>[] = [];
+  for (const id of r.qsoIds) {
+    ops.push(tx.objectStore('qsos').delete(id));
+    ops.push(tx.objectStore('ledger').index('qso').getAllKeys(id).then((keys) => Promise.all(keys.map((k) => tx.objectStore('ledger').delete(k)))));
+  }
+  for (const id of r.activationIds) ops.push(tx.objectStore('activations').delete(id));
+  await Promise.all([...ops, tx.done]);
+}
+
 export function saveLoggingSettings(s: LoggingSettings): Promise<void> {
   return kvSet(logDb(), SETTINGS_KEY, s);
 }

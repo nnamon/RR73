@@ -17,7 +17,9 @@ import { fileParts, markHandled, markSubmitted, reconcile, requeue, retry, UNDO_
 import { migrateLogging } from './migrations';
 import { Outbox, systemClock, type DestinationStatus, type SendingDestination } from './outbox';
 import { adifChanged, createQso, displayMode, newId, stampActivation, withAllFields } from './qso';
-import { loadSnapshot, saveChanges, saveLoggingSettings, saveMigrations, setLogStore, type Changes } from './store';
+import { loadSnapshot, removeRecords, saveChanges, saveLoggingSettings, saveMigrations, setLogStore, type Changes } from './store';
+import { buildBackup, importText, planImport, type ImportPlan, type ImportResult } from './backup';
+import type { ExportFile } from './files';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
 import { testConnection, type FetchLike, type TestResult } from './wavelog';
@@ -381,6 +383,47 @@ export async function undoQso(id: string): Promise<void> {
 export async function restoreQso(id: string): Promise<void> {
   const q = await setDeleted(id, false);
   if (q) show({ kind: 'info', qsoId: id, text: `Restored ${q.call}` });
+}
+
+/** The backup file of the log (lib/log/backup.ts), built at once so the share sheet keeps the tap. */
+export function backupFile(): ExportFile {
+  return buildBackup({ qsos: log.qsos, activations: log.activations, ledger: log.ledger }, settings.callsign, { programVersion: __APP_VERSION__, now: now() });
+}
+
+/**
+ * Imports a backup or an ADIF file into the log, and says what came in with Undo. Returns why
+ * the file was refused, or what was imported.
+ */
+export async function importLog(text: string): Promise<ImportResult> {
+  await loadLog();
+  const r = planImport(text, { qsos: log.qsos, activations: log.activations }, { now: now(), newId });
+  if (!r.ok) return r;
+  const p = r.plan;
+  const any = p.qsos.length > 0 || p.activations.length > 0;
+  if (any) {
+    await commit({ qsos: p.qsos, activations: p.activations, ledger: p.ledger });
+    persistStorage();
+    outbox.kick();
+  }
+  show({ kind: 'cleared', qsoId: null, text: importText(p), undo: any ? () => void undoImport(p) : undefined });
+  return r;
+}
+
+/** Takes an import back out of the log: its QSOs, their ledger and its activations. */
+async function undoImport(p: ImportPlan): Promise<void> {
+  const qsoIds = new Set(p.qsos.map((q) => q.id));
+  const activationIds = new Set(p.activations.map((a) => a.id));
+  for (const id of qsoIds) byId.delete(id);
+  log.qsos = sortQsos([...byId.values()]);
+  log.ledger = log.ledger.filter((e) => !qsoIds.has(e.qsoId));
+  log.activations = log.activations.filter((a) => !activationIds.has(a.id));
+  try {
+    await removeRecords({ qsoIds: [...qsoIds], activationIds: [...activationIds] });
+  } catch {
+    log.storageError = STORAGE_FAILED;
+  }
+  const n = p.qsos.length;
+  show({ kind: 'info', qsoId: null, text: `Removed the ${n} imported ${n === 1 ? 'QSO' : 'QSOs'}` });
 }
 
 let seq = 0;

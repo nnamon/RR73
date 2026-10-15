@@ -55,7 +55,7 @@ Settings › Practice band plays a band of simulated stations in the app, with n
 </tr>
 </table>
 
-- The log lives on the phone. QSOs go to Wavelog when you send them, or by themselves with Send automatically on; a refusal says why and how to fix it. The log exports ADIF.
+- The log lives on the phone. QSOs go to Wavelog when you send them, or by themselves with Send automatically on; a refusal says why and how to fix it. The log exports ADIF, and Settings › Logging backs it up to one file and imports a backup or ADIF from any logger.
 - An activation holds POTA, SOTA, WWFF and IOTA references, counts toward each programme's rule, and builds the POTA, SOTA and WWFF files. POTA and SOTA references come with suggestions from the parks and summits lists: as you type, and the ones near the phone from a GPS fix. A logged QSO can join the running activation.
 - Spots lists POTA activators and DX cluster spots, and with Heard you on, the stations PSK Reporter says heard you.
 
