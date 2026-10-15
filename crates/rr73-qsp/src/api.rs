@@ -3,8 +3,9 @@
 
 use crate::config::{Config, ReceiverConfig, ReceiverKind};
 use crate::frame::{self, AdpcmState, Encoding, FrameHead};
-use crate::kiwi::{self, Control, Event, Target};
+use crate::kiwi::{Control, Event, Target};
 use crate::pskreporter::{Reporter, Rules, Spot, Station};
+use crate::upstream::Upstreams;
 use axum::extract::ws::{Message, WebSocket};
 use axum::extract::{Path, Query, Request, State, WebSocketUpgrade};
 use axum::http::{HeaderMap, HeaderValue, Method, StatusCode, header};
@@ -35,6 +36,7 @@ pub struct AppState {
     sessions: Arc<Mutex<HashMap<String, Session>>>,
     limiter: Arc<Mutex<HashMap<String, (u64, u32)>>>,
     reporter: Arc<Mutex<Reporter>>,
+    upstreams: Upstreams,
     started: Instant,
 }
 
@@ -49,6 +51,7 @@ impl AppState {
                 test: config.pskreporter.test,
             }))),
             config: Arc::new(config),
+            upstreams: Upstreams::default(),
             started: Instant::now(),
         }
     }
@@ -344,12 +347,14 @@ async fn create_session(
         latency_s: r.latency_s,
         free_channels: r.free_channels,
     };
+    // Sessions on one receiver and dial share a connection, so the limit counts dials.
     let mut sessions = lock(&s.sessions);
-    let open = sessions
+    let dials: std::collections::HashSet<u64> = sessions
         .values()
         .filter(|v| v.receiver == receiver && !matches!(v.state, SessionState::Ended { .. }))
-        .count();
-    if open >= max as usize {
+        .map(|v| v.target.dial_hz)
+        .collect();
+    if !dials.contains(&req.dial_hz) && dials.len() >= max as usize {
         return Err(ApiError(
             StatusCode::CONFLICT,
             "receiver-busy",
@@ -433,7 +438,7 @@ async fn stream(
     Query(q): Query<Ticket>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
-    let (target, encoding, tx_control, rx_control) = {
+    let (receiver, target, encoding, rx_control) = {
         let mut sessions = lock(&s.sessions);
         let v = sessions.get_mut(&id).ok_or_else(|| not_found(&id))?;
         let ok = matches!(v.state, SessionState::Waiting)
@@ -448,24 +453,24 @@ async fn stream(
         v.ticket = None;
         v.state = SessionState::Streaming;
         let (tx, rx) = mpsc::channel(8);
-        v.control = Some(tx.clone());
-        (v.target.clone(), v.encoding, tx, rx)
+        v.control = Some(tx);
+        (v.receiver.clone(), v.target.clone(), v.encoding, rx)
     };
     let state = s.clone();
-    Ok(ws.on_upgrade(move |socket| pump(socket, state, id, target, encoding, tx_control, rx_control)))
+    Ok(ws.on_upgrade(move |socket| pump(socket, state, id, receiver, target, encoding, rx_control)))
 }
 
+/// Sends one session's stream: joins the connection for its receiver and dial, moves it when the
+/// app retunes, and leaves it when either side stops.
 async fn pump(
     mut socket: WebSocket,
     state: AppState,
     id: String,
-    target: Target,
+    receiver: String,
+    mut target: Target,
     encoding: Encoding,
-    control: mpsc::Sender<Control>,
-    rx_control: mpsc::Receiver<Control>,
+    mut control: mpsc::Receiver<Control>,
 ) {
-    let (tx_events, mut events) = mpsc::channel(64);
-    tokio::spawn(kiwi::run(target, tx_events, rx_control));
     let status = |state: &str| {
         Message::Text(
             serde_json::json!({ "type": "status", "state": state })
@@ -473,41 +478,64 @@ async fn pump(
                 .into(),
         )
     };
+    let mut joined = state.upstreams.join(&receiver, &target);
     let _ = socket.send(status("connecting")).await;
+    if joined.streaming {
+        let _ = socket.send(status("streaming")).await;
+    }
     let mut seq = 0u32;
     let mut adpcm = AdpcmState::default();
+    // Audio is missing before the next frame: after a reconnect, a move or a lag.
+    let mut gap = false;
     let (code, message) = loop {
         tokio::select! {
-            e = events.recv() => match e {
-                Some(Event::Streaming) => { let _ = socket.send(status("streaming")).await; }
-                Some(Event::Audio { utc_us, samples, gap }) => {
-                    let head = FrameHead { seq, utc_us, flags: if gap { frame::FLAG_GAP } else { 0 } };
+            e = joined.events.recv() => match e {
+                Ok(Event::Streaming) => { let _ = socket.send(status("streaming")).await; }
+                Ok(Event::Reconnecting { .. }) => {
+                    gap = true;
+                    let _ = socket.send(status("connecting")).await;
+                }
+                Ok(Event::Audio { utc_us, samples, gap: g }) => {
+                    let lost = std::mem::take(&mut gap);
+                    let flags = if g || lost { frame::FLAG_GAP } else { 0 };
+                    let head = FrameHead { seq, utc_us, flags };
                     seq = seq.wrapping_add(1);
                     if socket.send(Message::Binary(frame::encode(head, encoding, &samples, &mut adpcm).into())).await.is_err() {
-                        let _ = control.send(Control::Stop).await;
                         break ("stopped", "The app closed the stream.".to_string());
                     }
                 }
-                Some(Event::Notice(text)) => {
+                Ok(Event::Notice(text)) => {
                     let _ = socket.send(Message::Text(serde_json::json!({ "type": "notice", "text": text }).to_string().into())).await;
                 }
-                Some(Event::Ended(end)) => {
+                Ok(Event::Ended(end)) => {
                     let m = serde_json::json!({ "type": "status", "state": "ended", "reason": end.code(), "message": end.message() });
                     let _ = socket.send(Message::Text(m.to_string().into())).await;
                     let _ = socket.send(Message::Close(None)).await;
                     break (end.code(), end.message());
                 }
-                None => break ("error", "The connection to the receiver dropped.".to_string()),
+                Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => gap = true,
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break ("error", "The connection to the receiver dropped.".to_string()),
+            },
+            c = control.recv() => match c {
+                Some(Control::Tune(hz)) => {
+                    target.dial_hz = hz;
+                    if state.upstreams.retune(&mut joined, &target) {
+                        gap = true;
+                        let _ = socket.send(status(if joined.streaming { "streaming" } else { "connecting" })).await;
+                    }
+                }
+                Some(Control::Stop) | None => {
+                    let _ = socket.send(Message::Close(None)).await;
+                    break ("stopped", "Stopped.".to_string());
+                }
             },
             m = socket.recv() => match m {
-                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => {
-                    let _ = control.send(Control::Stop).await;
-                    break ("stopped", "The app closed the stream.".to_string());
-                }
+                Some(Ok(Message::Close(_))) | None | Some(Err(_)) => break ("stopped", "The app closed the stream.".to_string()),
                 Some(Ok(_)) => {}
             },
         }
     };
+    state.upstreams.leave(&joined);
     if let Some(v) = lock(&state.sessions).get_mut(&id) {
         v.state = SessionState::Ended {
             code,

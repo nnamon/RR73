@@ -5,10 +5,10 @@ QSP, named after the Q-code for relaying, is a server for the services a web pag
 ## Principles
 
 - No relay is built into the app. Settings › Relay is None by default. The operator adds each relay by its API base, and the list keeps the relays added, each with its own access key, to choose from. Remove relay takes one off, with Undo.
-- QSP carries no credentials for other services. It does only what needs no account. Logbooks are reached from the phone directly (Wavelog, later Cloudlog) or through Wavelog, which uploads to QRZ Logbook, eQSL and Club Log.
+- QSP carries no credentials for other services. It does only what needs no account. Logbooks are reached from the phone directly (Wavelog) or through Wavelog, which uploads to QRZ Logbook, eQSL and Club Log.
 - Nothing goes out one callsign at a time. Every link batches, and each service gets the fewest requests its own published rules allow.
 - No self-spotting.
-- Open source in this repository, under the workspace licence. `docker/qsp.Dockerfile` builds the server image.
+- Open source in this repository, under the workspace licence, and released with the app at its version. Each release carries QSP's binaries for x86-64 and ARM64 Linux and publishes the image `ghcr.io/nnamon/rr73-qsp` (`docker/qsp-release.Dockerfile`); `docker/qsp.Dockerfile` builds the same program from source.
 
 ## What needs it
 
@@ -20,8 +20,7 @@ Checked on 14 and 15 October 2026 by asking each service, from outside a browser
 | PSK Reporter, reports | QSP | IPFIX over UDP to port 4739; a web page cannot send UDP. |
 | PSK Reporter, who heard you | Direct | Its MQTT feed accepts a WebSocket from the RR73 site at `wss://mqtt.pskreporter.info:1886` (checked 15 October). The feed pushes reports to the page. |
 | WSPRnet | Direct | `https://wsprnet.org/post/` takes the form-encoded POST as a simple request; it sends no CORS headers, so its answer cannot be read (checked 15 October). |
-| Wavelog, Cloudlog | Direct | The operator's own server. Cloudlog is not scheduled. |
-| QRZ XML, HamQTH | Direct | Open to browsers. Not scheduled. |
+| Wavelog | Direct | The operator's own server. |
 
 ## Deployment
 
@@ -56,14 +55,14 @@ Binary WebSocket messages, one frame each, big-endian:
 | --- | --- |
 | 1 | Format version, 1 |
 | 1 | Encoding: 0 PCM, 16-bit signed; 1 IMA ADPCM, 4-bit |
-| 2 | Flags: bit 0 set when the time comes from the receiver's GPS |
+| 2 | Flags: bit 0 set when the time comes from the receiver's GPS; bit 1 set when audio is missing before this frame, after a drop, a reconnect or a move to another connection |
 | 4 | Sequence number of the frame |
 | 8 | UTC of the first sample, microseconds since 1970 |
 | 4 | Samples in the frame |
 | 4 | ADPCM only: the predictor (i16) and step index (u8) at the frame's start, and a padding byte |
 | n | Samples at 12 000 per second, mono |
 
-Text messages carry the session's state as JSON: `{"type": "status", "state": "connecting" | "streaming" | "ended", "reason": …}`. ADPCM is the default: about 6 kB/s, some 22 MB an hour. PCM is 24 kB/s. Each ADPCM frame starts from its own predictor and index, so a lost frame costs only itself.
+Text messages carry the session's state as JSON: `{"type": "status", "state": "connecting" | "streaming" | "ended", "reason": …}`, and the receiver's notices as `{"type": "notice", "text": …}`. A stream says connecting again while QSP reconnects to the receiver or moves the session to another connection. ADPCM is the default: about 6 kB/s, some 22 MB an hour. PCM is 24 kB/s. Each ADPCM frame starts from its own predictor and index, so a lost frame costs only itself.
 
 Time comes from QSP's clock, which its host keeps by NTP. A receiver's GPS time is used only where it is usable; the SARTS Web-888's IQ stream carries none (tools/kiwi).
 
@@ -85,7 +84,7 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 - The record format descriptors go in the first 3 datagrams and then once an hour. The receiver information record goes in every datagram.
 - The header's sequence number is the count of reports sent so far. Its observation domain is a random number kept for the session.
 - informationSource is 1, automatically extracted. While developing, the 0x80 test bit is set (`test = true` in the settings).
-- Sender records use the page's fourth descriptor: senderCallsign, frequency, sNR, iMD, mode, informationSource, senderLocator, flowStartSeconds. RR73 has no IMD figure and sends 0; the page offers no descriptor with sNR and without iMD, and asks software that fits none to ask for one. A locator not received is an empty string.
+- Sender records use the page's fourth descriptor: senderCallsign, frequency, sNR, iMD, mode, informationSource, senderLocator, flowStartSeconds. RR73 has no IMD figure and sends 0, since the page offers no descriptor with sNR and without iMD. A locator not received is an empty string.
 - Receiver records: receiverCallsign, receiverLocator, decodingSoftware (`RR73 0.x.y`) and antennaInformation when the operator gives one.
 - Frequency is the RF frequency: dial plus audio, in Hz. Mode is the ADIF mode or submode: FT8, FT4.
 - flowStartSeconds is the time the callsign was recognised: when the decode arrived. PSK Reporter keeps a list of software that sends the start of the transmission instead (https://pskreporter.info/api/characteristics), and reads the time as a decode time for software not on it.
@@ -121,8 +120,9 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 ## Web SDRs
 
 - The settings list the receivers an instance offers: id, kind, name, address, location, grid. QSP connects to those and no others, and the app offers only those.
-- One upstream connection per receiver and dial; two sessions on the same receiver and dial share it. Audio only, no waterfall.
-- Reconnects wait longer each time and stop at the receiver's own time limit. The politeness rules of `tools/kiwi` apply.
+- One connection per receiver and dial (`src/upstream.rs`): sessions on the same receiver and dial share it, and `max_sessions` counts connections. A session that retunes keeps its connection when it listens there alone and no connection is on the new dial; otherwise it moves to the connection there, opening it when needed. The last session to leave a connection closes it. Audio only, no waterfall.
+- A connection that streamed and then dropped is opened again after 2, 4, 8, 16 and 30 s; the count starts over once it streams (`kiwi::run`). The receiver's refusals, a full receiver, and a close after one of its notices, such as its time limit, end the session. The first frame after a reconnect, a move or a lag carries the gap flag. The politeness rules of `tools/kiwi` apply.
+- QSP names itself `RR73-QSP/<version> (+https://github.com/nnamon/RR73)` on the status page and the stream.
 - The KiwiSDR client is written from scratch for QSP. The kiwiclient package the corpus recorder fetches carries no licence for its core files and is not read or copied.
 
 ## Security
@@ -134,7 +134,7 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 ## Testing
 
 - Unit: the KiwiSDR client's handling of the receiver's messages; ADPCM round trip; frame encoding. With PSK Reporter: the IPFIX encoder reproduces the developer page's example datagram byte for byte, and the batching rules.
-- API: every endpoint through the router; the stream over a real WebSocket from a stand-in KiwiSDR.
+- API: every endpoint through the router; the stream over a real WebSocket from a stand-in KiwiSDR, two sessions sharing one connection, a retune that moves a session and one that keeps it, and a reconnect after the stand-in drops the stream.
 - No test reaches a real service.
 
 ## Alternatives rejected
@@ -144,11 +144,11 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 - The NAS at home behind a tunnel: down whenever the house is offline.
 - Who heard you through QSP's polling of PSK Reporter's query API: limited to once per 5 min and unreadable from the page; the MQTT feed pushes to the page directly.
 - QSP passing the KiwiSDR protocol through to the app: every new SDR kind would need an app release.
+- Cloudlog, and callsign lookups through QRZ XML or HamQTH: dropped for now, the owner's call on 15 October 2026.
 - Receivers users add by address, built in 0.19.4 and removed in 0.19.5: the owner's call. A relay reaches only the receivers its operator lists, so it needs no checks on addresses users send.
 
 ## Open risks
 
 - The SARTS receiver's session limits and channels in use by others.
-- PSK Reporter's MQTT feed: its topic names and terms of use, checked before building who heard you.
 - WSPRnet's upload interface is undocumented, and its answers cannot be read from the page: a change on its side would go unnoticed.
 - A server needs looking after: updates, renewals and a check that it is up. A self-hosted instance puts that on its operator.

@@ -31,7 +31,8 @@ interval_s = 300
 # The receivers this instance offers, and the only ones it connects to.
 # kind: kiwisdr (KiwiSDR and Web-888).
 # free_channels: QSP does not connect when fewer channels than this would remain for others.
-# max_sessions: sessions this instance may hold on the receiver at once.
+# max_sessions: connections this instance may hold on the receiver at once; sessions on the same
+# dial share one.
 # latency_s: how late the receiver's audio arrives, s; the app's calibration corrects the rest.
 
 [[sdr.receivers]]

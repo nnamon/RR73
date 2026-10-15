@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- QSP, the relay, comes with each release: binaries for x86-64 and ARM64 Linux, and the image ghcr.io/nnamon/rr73-qsp.
+- QSP connects to a receiver again when it drops, after 2 s and then longer. Settings › Web SDR shows Connecting meanwhile.
+- Phones on the same receiver and band share one of its channels through QSP.
+
 ## 0.19.6 · 2026-10-15
 
 - Light is the default theme. A theme left at System changes to Light once. Light and Dark stay.

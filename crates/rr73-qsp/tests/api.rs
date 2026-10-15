@@ -1,6 +1,6 @@
 //! QSP's API end to end against a stand-in KiwiSDR on the loopback interface: no test reaches a
 //! real receiver.
-#![allow(clippy::unwrap_used, missing_docs)]
+#![allow(clippy::unwrap_used, clippy::result_large_err, missing_docs)]
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
@@ -18,10 +18,23 @@ const KEY: &str = "test-key-0123456789abcdef";
 /// A stand-in KiwiSDR: answers /status, then streams a 1000 Hz tone at 12 kHz in 512-sample
 /// frames every 42 ms, and records the commands it receives.
 async fn stand_in(users: u32) -> (u16, Arc<Mutex<Vec<String>>>) {
+    let (port, heard, _) = stand_in_with(users, None).await;
+    (port, heard)
+}
+
+/// The stand-in, also recording each request's User-Agent; with `drop_after`, its first stream
+/// closes after that many frames, as a receiver that drops a listener.
+async fn stand_in_with(
+    users: u32,
+    drop_after: Option<u32>,
+) -> (u16, Arc<Mutex<Vec<String>>>, Arc<Mutex<Vec<String>>>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let heard = Arc::new(Mutex::new(Vec::new()));
+    let agents = Arc::new(Mutex::new(Vec::new()));
     let log = heard.clone();
+    let seen = agents.clone();
+    let drop_once = Arc::new(std::sync::atomic::AtomicBool::new(drop_after.is_some()));
     tokio::spawn(async move {
         loop {
             let Ok((mut sock, _)) = listener.accept().await else {
@@ -31,7 +44,11 @@ async fn stand_in(users: u32) -> (u16, Arc<Mutex<Vec<String>>>) {
             let n = sock.peek(&mut peek).await.unwrap_or(0);
             if peek[..n].starts_with(b"GET /status") {
                 let mut buf = [0u8; 1024];
-                let _ = sock.read(&mut buf).await;
+                let n = sock.read(&mut buf).await.unwrap_or(0);
+                let req = String::from_utf8_lossy(&buf[..n]).to_string();
+                if let Some(ua) = req.lines().find_map(|l| l.strip_prefix("User-Agent: ")) {
+                    seen.lock().unwrap().push(format!("status {ua}"));
+                }
                 let body = format!("status=active\nusers={users}\nusers_max=4\n");
                 let _ = sock
                     .write_all(format!("HTTP/1.0 200 OK\r\n\r\n{body}").as_bytes())
@@ -39,8 +56,22 @@ async fn stand_in(users: u32) -> (u16, Arc<Mutex<Vec<String>>>) {
                 continue;
             }
             let log = log.clone();
+            let seen = seen.clone();
+            let limit = if drop_once.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                drop_after
+            } else {
+                None
+            };
             tokio::spawn(async move {
-                let Ok(mut ws) = tokio_tungstenite::accept_async(sock).await else {
+                let record =
+                    |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
+                     res: tokio_tungstenite::tungstenite::handshake::server::Response| {
+                        if let Some(ua) = req.headers().get("user-agent").and_then(|v| v.to_str().ok()) {
+                            seen.lock().unwrap().push(format!("stream {ua}"));
+                        }
+                        Ok(res)
+                    };
+                let Ok(mut ws) = tokio_tungstenite::accept_hdr_async(sock, record).await else {
                     return;
                 };
                 let _ = ws
@@ -58,6 +89,11 @@ async fn stand_in(users: u32) -> (u16, Arc<Mutex<Vec<String>>>) {
                             _ => {}
                         },
                         _ = tick.tick() => {
+                            if limit.is_some_and(|l| seq >= l) {
+                                let _ = ws.close(None).await;
+                                log.lock().unwrap().push("dropped".into());
+                                return;
+                            }
                             let mut b = b"SND".to_vec();
                             b.push(0);
                             b.extend_from_slice(&seq.to_le_bytes());
@@ -75,7 +111,7 @@ async fn stand_in(users: u32) -> (u16, Arc<Mutex<Vec<String>>>) {
             });
         }
     });
-    (port, heard)
+    (port, heard, agents)
 }
 
 fn config(port: u16) -> Config {
@@ -230,15 +266,14 @@ async fn sessions_refuse_what_the_instance_does_not_offer() {
     )
     .await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
-    // One session at a time on this receiver.
+    // One connection on this receiver: a session on another dial waits for it.
     let ok = serde_json::json!({"receiver": "stand-in", "dialHz": 14074000});
     assert_eq!(
-        call(&app, "POST", "/v1/sdr/sessions", Some(ok.clone()), true)
-            .await
-            .0,
+        call(&app, "POST", "/v1/sdr/sessions", Some(ok), true).await.0,
         StatusCode::CREATED
     );
-    let (s, e) = call(&app, "POST", "/v1/sdr/sessions", Some(ok), true).await;
+    let other = serde_json::json!({"receiver": "stand-in", "dialHz": 7074000});
+    let (s, e) = call(&app, "POST", "/v1/sdr/sessions", Some(other), true).await;
     assert_eq!(
         (s, e["error"]["code"].as_str()),
         (StatusCode::CONFLICT, Some("receiver-busy"))
@@ -331,6 +366,196 @@ async fn streams_timed_audio_retunes_and_stops() {
     assert!(heard.contains(&"SET mod=usb low_cut=100 high_cut=3000 freq=14074.000".to_string()));
     assert!(heard.contains(&"SET mod=usb low_cut=100 high_cut=3000 freq=7074.000".to_string()));
     assert_eq!(heard.last().map(String::as_str), Some("closed"));
+}
+
+/// A session's stream as the app reads it: status states and frames, in order.
+enum Got {
+    State(String),
+    Frame(frame::Decoded),
+}
+
+type Stream = tokio_tungstenite::WebSocketStream<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
+
+async fn next(ws: &mut Stream) -> Got {
+    loop {
+        match tokio::time::timeout(Duration::from_secs(10), ws.next())
+            .await
+            .unwrap()
+        {
+            Some(Ok(Message::Text(t))) => {
+                let v: serde_json::Value = serde_json::from_str(&t).unwrap();
+                if v["type"] == "status" {
+                    return Got::State(v["state"].as_str().unwrap().to_string());
+                }
+            }
+            Some(Ok(Message::Binary(b))) => return Got::Frame(frame::decode(&b).unwrap()),
+            other => panic!("unexpected {other:?}"),
+        }
+    }
+}
+
+/// Reads until the stream says connecting and then streaming again, as after a move.
+async fn moved(ws: &mut Stream) {
+    let mut connecting = false;
+    loop {
+        if let Got::State(s) = next(ws).await {
+            if s == "connecting" {
+                connecting = true;
+            } else if s == "streaming" && connecting {
+                return;
+            }
+        }
+    }
+}
+
+/// Reads until `frames` audio frames have arrived; returns the states seen on the way.
+async fn frames(ws: &mut Stream, n: usize) -> Vec<String> {
+    let mut states = Vec::new();
+    let mut got = 0;
+    while got < n {
+        match next(ws).await {
+            Got::State(s) => states.push(s),
+            Got::Frame(_) => got += 1,
+        }
+    }
+    states
+}
+
+async fn serve(app: &axum::Router) -> std::net::SocketAddr {
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let qsp = listener.local_addr().unwrap();
+    let served = app.clone();
+    tokio::spawn(async move { axum::serve(listener, served).await.unwrap() });
+    qsp
+}
+
+async fn open(app: &axum::Router, qsp: std::net::SocketAddr, dial_hz: u64) -> (String, Stream) {
+    let body = serde_json::json!({"receiver": "stand-in", "dialHz": dial_hz, "listener": "9V1NE"});
+    let (s, session) = call(app, "POST", "/v1/sdr/sessions", Some(body), true).await;
+    assert_eq!(s, StatusCode::CREATED);
+    let path = session["stream"].as_str().unwrap();
+    let (ws, _) = tokio_tungstenite::connect_async(format!("ws://{qsp}{path}"))
+        .await
+        .unwrap();
+    (session["id"].as_str().unwrap().to_string(), ws)
+}
+
+fn connections(heard: &Arc<Mutex<Vec<String>>>) -> usize {
+    heard
+        .lock()
+        .unwrap()
+        .iter()
+        .filter(|l| *l == "SET auth t=kiwi p=")
+        .count()
+}
+
+#[tokio::test]
+async fn sessions_on_one_dial_share_a_connection_and_a_retune_moves_one() {
+    let (port, heard, _) = stand_in_with(0, None).await;
+    let app = router(AppState::new(config(port)));
+    let qsp = serve(&app).await;
+    // max_sessions 1: one connection, any number of sessions on its dial, none on another.
+    let (a, mut wa) = open(&app, qsp, 14_074_000).await;
+    frames(&mut wa, 5).await;
+    let (b, mut wb) = open(&app, qsp, 14_074_000).await;
+    assert_eq!(frames(&mut wb, 5).await, vec!["connecting", "streaming"]);
+    frames(&mut wa, 5).await;
+    assert_eq!(connections(&heard), 1);
+    let other = serde_json::json!({"receiver": "stand-in", "dialHz": 7_074_000});
+    let (s, e) = call(&app, "POST", "/v1/sdr/sessions", Some(other), true).await;
+    assert_eq!(
+        (s, e["error"]["code"].as_str()),
+        (StatusCode::CONFLICT, Some("receiver-busy"))
+    );
+
+    // A retune while shared moves that session to a connection of its own; the other keeps its.
+    let tune = serde_json::json!({"dialHz": 7_074_000});
+    assert_eq!(
+        call(&app, "PATCH", &format!("/v1/sdr/sessions/{a}"), Some(tune), true)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    moved(&mut wa).await;
+    frames(&mut wa, 5).await;
+    frames(&mut wb, 5).await;
+    assert_eq!(connections(&heard), 2);
+    assert!(
+        heard
+            .lock()
+            .unwrap()
+            .contains(&"SET mod=usb low_cut=100 high_cut=3000 freq=7074.000".to_string())
+    );
+
+    // Alone on its connection, a retune keeps it and only retunes.
+    let back = serde_json::json!({"dialHz": 10_136_000});
+    assert_eq!(
+        call(&app, "PATCH", &format!("/v1/sdr/sessions/{a}"), Some(back), true)
+            .await
+            .0,
+        StatusCode::OK
+    );
+    let tuned = "SET mod=usb low_cut=100 high_cut=3000 freq=10136.000".to_string();
+    for _ in 0..40 {
+        if heard.lock().unwrap().contains(&tuned) {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+    assert!(heard.lock().unwrap().contains(&tuned));
+    frames(&mut wa, 5).await;
+    assert_eq!(connections(&heard), 2);
+
+    for id in [a, b] {
+        assert_eq!(
+            call(&app, "DELETE", &format!("/v1/sdr/sessions/{id}"), None, true)
+                .await
+                .0,
+            StatusCode::NO_CONTENT
+        );
+    }
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!(heard.lock().unwrap().iter().filter(|l| *l == "closed").count(), 2);
+}
+
+#[tokio::test]
+async fn reconnects_after_the_receiver_drops_and_marks_the_gap() {
+    let (port, heard, agents) = stand_in_with(0, Some(10)).await;
+    let app = router(AppState::new(config(port)));
+    let qsp = serve(&app).await;
+    let (id, mut ws) = open(&app, qsp, 14_074_000).await;
+    let mut states = Vec::new();
+    let mut after = Vec::new();
+    while after.len() < 3 {
+        match next(&mut ws).await {
+            Got::State(s) => states.push(s),
+            Got::Frame(f) if states.len() >= 4 => after.push(f),
+            Got::Frame(_) => {}
+        }
+    }
+    // Streaming, dropped, connecting again after 2 s, streaming again.
+    assert_eq!(states, vec!["connecting", "streaming", "connecting", "streaming"]);
+    let flags: Vec<u16> = after.iter().map(|f| f.head.flags).collect();
+    assert_ne!(flags[0] & frame::FLAG_GAP, 0, "{flags:?}");
+    assert_eq!(flags[1] & frame::FLAG_GAP, 0, "{flags:?}");
+    assert_eq!(connections(&heard), 2);
+    assert!(heard.lock().unwrap().contains(&"dropped".to_string()));
+    // QSP names itself, with the repository, on the status page and the stream.
+    let ua = format!(
+        "RR73-QSP/{} (+https://github.com/nnamon/RR73)",
+        env!("CARGO_PKG_VERSION")
+    );
+    let agents = agents.lock().unwrap().clone();
+    assert!(
+        agents.contains(&format!("status {ua}")) && agents.contains(&format!("stream {ua}")),
+        "{agents:?}"
+    );
+    assert_eq!(
+        call(&app, "DELETE", &format!("/v1/sdr/sessions/{id}"), None, true)
+            .await
+            .0,
+        StatusCode::NO_CONTENT
+    );
 }
 
 #[tokio::test]

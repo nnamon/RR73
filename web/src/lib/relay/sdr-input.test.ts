@@ -161,6 +161,18 @@ describe('the web SDR input', () => {
     expect(s.ended()).toBe(1);
   });
 
+  it('says when the relay is connecting to the receiver again, and when audio is back', async () => {
+    const s = setup();
+    await s.input.open(s.ctx, null, s.events);
+    await settle();
+    FakeSocket.last!.send(JSON.stringify({ type: 'status', state: 'streaming' }));
+    FakeSocket.last!.send(JSON.stringify({ type: 'status', state: 'connecting' }));
+    expect(s.statuses.at(-1)).toEqual({ state: 'connecting' });
+    FakeSocket.last!.send(JSON.stringify({ type: 'status', state: 'streaming' }));
+    expect(s.statuses.at(-1)).toEqual({ state: 'streaming' });
+    expect(s.ended()).toBe(0);
+  });
+
   it('says the relay refused a session it will not start, apart from a busy receiver and a gateway failure', async () => {
     const ended = async (status: number, body: unknown) => {
       const s = setup(() => new Response(JSON.stringify(body), { status }));

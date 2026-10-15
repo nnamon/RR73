@@ -122,7 +122,7 @@ pub struct ReceiverConfig {
     /// Channels left free for other listeners: QSP does not connect when fewer would remain.
     #[serde(default = "default_free_channels")]
     pub free_channels: u32,
-    /// Sessions this instance may hold on the receiver at once.
+    /// Connections this instance may hold on the receiver at once; sessions on one dial share one.
     #[serde(default = "default_max_sessions")]
     pub max_sessions: u32,
 }

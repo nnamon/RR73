@@ -359,6 +359,70 @@ jobs:
         if: failure()
         with: { name: 'playwright-report-${{ matrix.part }}', path: web/playwright-report }
 
+  # A release carries QSP, the relay, at the app's version: its binaries for x86-64 and ARM64
+  # Linux on the GitHub release, and the image ghcr.io/<owner>/rr73-qsp:<version> and :latest
+  # (crates/rr73-qsp/README.md). Each architecture builds on a runner of its own.
+  qsp-build:
+    name: QSP for ${{ matrix.arch }}
+    if: startsWith(github.ref, 'refs/tags/v')
+    strategy:
+      matrix:
+        include:
+          - { arch: x86_64, docker: amd64, runner: ubuntu-latest }
+          - { arch: aarch64, docker: arm64, runner: ubuntu-24.04-arm }
+    runs-on: ${{ matrix.runner }}
+    container: rust:1.98.1-slim-bookworm
+    steps:
+      - name: Install build tools
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates make gcc libc6-dev pkg-config
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release --locked -p rr73-qsp
+      - name: Package
+        shell: bash
+        run: |
+          v="${GITHUB_REF_NAME#v}"
+          d="rr73-qsp-$v-linux-${{ matrix.arch }}"
+          mkdir -p "dist/$d"
+          cp target/release/rr73-qsp crates/rr73-qsp/qsp.example.toml crates/rr73-qsp/qsp.service crates/rr73-qsp/README.md LICENSE-MIT LICENSE-APACHE "dist/$d/"
+          tar -C dist -czf "dist/$d.tar.gz" "$d"
+          cp target/release/rr73-qsp "dist/rr73-qsp-${{ matrix.docker }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: qsp-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/rr73-qsp-${{ matrix.docker }}
+
+  qsp-publish:
+    name: Publish QSP
+    if: startsWith(github.ref, 'refs/tags/v') && !cancelled() && !failure()
+    needs: [copy, rust, bench, web, e2e, qsp-build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { pattern: 'qsp-*', path: dist, merge-multiple: true }
+      - name: Attach the binaries to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # tools/release/release.sh publish creates the release just after it pushes the tag.
+          for _ in $(seq 1 30); do gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1 && break; sleep 10; done
+          gh release upload "$GITHUB_REF_NAME" dist/*.tar.gz --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Publish the image
+        run: |
+          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+          image="ghcr.io/${{ github.repository_owner }}/rr73-qsp"
+          docker buildx create --use
+          docker buildx build --platform linux/amd64,linux/arm64 -f docker/qsp-release.Dockerfile \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            --label "org.opencontainers.image.version=${GITHUB_REF_NAME#v}" \
+            -t "$image:${GITHUB_REF_NAME#v}" -t "$image:latest" --push dist
+
   deploy:
     name: Deploy to GitHub Pages
     # Rust, the decoder gate and the end-to-end tests are skipped on a tag whose commit passed.

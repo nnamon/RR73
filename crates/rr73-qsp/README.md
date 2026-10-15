@@ -8,24 +8,25 @@ RR73 works without a relay, and anyone can run one. QSP never receives credentia
 
 QSP serves plain HTTP behind an HTTPS front, such as Caddy, which strips the API base's path. Operators enter the API base in RR73, such as `https://relay.example.org/qsp`.
 
+QSP is released with the app, at the app's version. Each release on GitHub carries `rr73-qsp-<version>-linux-x86_64.tar.gz` and `rr73-qsp-<version>-linux-aarch64.tar.gz`, each holding the binary, `qsp.example.toml`, `qsp.service` and this file, and publishes the image `ghcr.io/nnamon/rr73-qsp:<version>` (also `:latest`) for both architectures.
+
 ```sh
-docker build -f docker/qsp.Dockerfile -t rr73-qsp .
-sudo mkdir -p /etc/qsp && sudo cp crates/rr73-qsp/qsp.example.toml /etc/qsp/qsp.toml   # then edit it
-docker run -d --name qsp --restart unless-stopped -p 127.0.0.1:7373:7373 -v /etc/qsp:/etc/qsp:ro rr73-qsp
+sudo mkdir -p /etc/qsp && sudo cp qsp.example.toml /etc/qsp/qsp.toml   # then edit it
+docker run -d --name qsp --restart unless-stopped -p 127.0.0.1:7373:7373 -v /etc/qsp:/etc/qsp:ro ghcr.io/nnamon/rr73-qsp:latest
 ```
 
-In the container, set `listen = "0.0.0.0:7373"`; the `-p 127.0.0.1:7373:7373` keeps the port off the internet.
+In the container, set `listen = "0.0.0.0:7373"`; the `-p 127.0.0.1:7373:7373` keeps the port off the internet. `docker/qsp.Dockerfile` builds the same image from source: `docker build -f docker/qsp.Dockerfile -t rr73-qsp .` from the repository root.
 
 ### Without Docker
 
-On a small server, run the binary under systemd with `qsp.service` from this directory. Build it for the server's architecture; from an Apple silicon Mac, for an x86-64 server:
+On a small server, run the release's binary under systemd with its `qsp.service`. To build it from source for an x86-64 server on an Apple silicon Mac:
 
 ```sh
 docker build --platform linux/amd64 -f docker/qsp.Dockerfile --target build -t rr73-qsp-build .
 docker cp "$(docker create rr73-qsp-build)":/src/target/release/rr73-qsp .
 ```
 
-On the server, as root:
+On the server, as root, from the unpacked release:
 
 ```sh
 useradd --system --no-create-home --shell /usr/sbin/nologin qsp
@@ -58,11 +59,13 @@ Check it with `curl https://relay.example.org/qsp/about`. The API reference is a
 
 - `access_keys`: keys RR73 sends as `Authorization: Bearer <key>`, at least 16 characters; `openssl rand -hex 24` makes one. Empty: anyone may use the instance, still only for the receivers listed.
 - `allowed_origins`: the sites a browser may call QSP from. RR73's is `https://nnamon.github.io`.
-- `[[sdr.receivers]]`: each receiver offered, with `free_channels` (QSP does not connect when fewer would remain for other listeners) and `max_sessions`. QSP connects to these receivers and no others. Settings files from 0.16.0 to 0.19.4 may hold `user_receivers`; QSP loads them, warns and ignores the line.
+- `[[sdr.receivers]]`: each receiver offered, with `free_channels` (QSP does not connect when fewer would remain for other listeners) and `max_sessions`, the connections QSP may hold on the receiver at once: sessions on the same dial share one. QSP connects to these receivers and no others. Settings files from 0.16.0 to 0.19.4 may hold `user_receivers`; QSP loads them, warns and ignores the line.
 - `[pskreporter]`: `enabled` reports the app's decodes to PSK Reporter over UDP, by its developer page's rules. `test = true` marks every record as a test.
 
 Log detail: `RUST_LOG=debug`. QSP logs no request bodies.
 
 ## Receivers
 
-QSP reads a receiver's `/status` page and connects when the app opens a stream. It disconnects when the app stops. It sends `SET keepalive` every 5 s, takes audio at 12 kHz without the waterfall, and shows the listener as "<callsign> via RR73". Follow each receiver's published rules and its owner's requests.
+QSP reads a receiver's `/status` page and connects when the app opens a stream. Sessions on the same receiver and dial share one connection, and a retune moves a session to the connection for its new dial. QSP disconnects when the last session there stops. It sends `SET keepalive` every 5 s, takes audio at 12 kHz without the waterfall, shows the listener as "<callsign> via RR73", and names itself `RR73-QSP/<version> (+https://github.com/nnamon/RR73)` in its requests.
+
+A connection that streamed and then dropped is opened again after 2, 4, 8, 16 and 30 s; the count starts over once it streams. QSP does not reconnect after the receiver refuses it, reports itself full, or closes it after a notice such as its time limit. Follow each receiver's published rules and its owner's requests.

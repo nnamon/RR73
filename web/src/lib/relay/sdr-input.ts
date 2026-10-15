@@ -134,6 +134,8 @@ export class WebSdrInput implements InputSource {
         }
         if (m.type !== 'status') return;
         if (m.state === 'streaming') this.cfg.status({ state: 'streaming' });
+        // The relay lost the receiver and is connecting again.
+        else if (m.state === 'connecting') this.cfg.status({ state: 'connecting' });
         else if (m.state === 'ended') end(m.reason ?? 'closed', m.message ?? 'The receiver closed the connection.');
         return;
       }

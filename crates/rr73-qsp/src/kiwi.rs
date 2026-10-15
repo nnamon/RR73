@@ -21,6 +21,9 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 use tokio_tungstenite::tungstenite::Message;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::handshake::client::Request;
+use tokio_tungstenite::tungstenite::http::{HeaderValue, header};
 
 /// The only audio rate QSP takes from a receiver, Hz.
 pub const RATE_HZ: u32 = 12_000;
@@ -101,6 +104,23 @@ pub fn parse(bytes: &[u8]) -> Option<Upstream> {
 /// The WebSocket address for one listening session.
 pub fn url(host: &str, port: u16, now_s: u64) -> String {
     format!("ws://{}:{port}/{now_s}/SND", bracketed(host))
+}
+
+/// How QSP names itself to receivers: the program, its version and where it comes from.
+pub const USER_AGENT: &str = concat!(
+    "RR73-QSP/",
+    env!("CARGO_PKG_VERSION"),
+    " (+https://github.com/nnamon/RR73)"
+);
+
+/// The stream's handshake request, with QSP's User-Agent.
+fn request(host: &str, port: u16, now_s: u64) -> Result<Request, String> {
+    let mut r = url(host, port, now_s)
+        .into_client_request()
+        .map_err(|e| e.to_string())?;
+    r.headers_mut()
+        .insert(header::USER_AGENT, HeaderValue::from_static(USER_AGENT));
+    Ok(r)
 }
 
 /// The command that tunes USB to `dial_hz`.
@@ -189,9 +209,8 @@ pub async fn fetch_status(host: &str, port: u16) -> Result<Status, String> {
             .await
             .map_err(|e| e.to_string())?;
         let req = format!(
-            "GET /status HTTP/1.0\r\nHost: {}\r\nUser-Agent: RR73-QSP/{}\r\n\r\n",
+            "GET /status HTTP/1.0\r\nHost: {}\r\nUser-Agent: {USER_AGENT}\r\n\r\n",
             bracketed(host),
-            env!("CARGO_PKG_VERSION")
         );
         s.write_all(req.as_bytes()).await.map_err(|e| e.to_string())?;
         let mut buf = Vec::new();
@@ -230,6 +249,11 @@ pub struct Target {
 pub enum Event {
     /// Tuned and receiving.
     Streaming,
+    /// The connection dropped; QSP connects again after `wait_s`.
+    Reconnecting {
+        /// Seconds until the next attempt.
+        wait_s: u64,
+    },
     /// Audio at 12 kHz from `utc_us` (µs since 1970); `gap` when it does not follow on.
     Audio {
         /// UTC of the first sample, µs since 1970.
@@ -412,13 +436,77 @@ fn is_notice(name: &str, value: Option<&str>) -> bool {
         .any(|w| text.contains(w))
 }
 
-/// Listens until the receiver ends the session, the app stops it or the events go unread.
-pub async fn run(target: Target, events: mpsc::Sender<Event>, mut control: mpsc::Receiver<Control>) {
-    let end = listen(&target, &events, &mut control).await;
-    let _ = events.send(Event::Ended(end)).await;
+/// Waits before each attempt to connect again after a drop, s: longer each time. The count starts
+/// over once a connection streams again.
+const RECONNECT_S: [u64; 5] = [2, 4, 8, 16, 30];
+
+impl End {
+    /// Whether a connection that ended so is worth opening again: one that dropped or failed.
+    /// The receiver's refusals, its own limits (it closes after a notice such as an inactivity
+    /// timeout) and a stop are final.
+    fn reconnects(&self) -> bool {
+        matches!(self, End::Closed(None) | End::Error(_))
+    }
 }
 
-async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mpsc::Receiver<Control>) -> End {
+/// Listens until the receiver ends the session, the app stops it or the events go unread. A
+/// connection that streamed and then dropped is opened again after RECONNECT_S; the first audio
+/// after it is marked as following a gap.
+pub async fn run(mut target: Target, events: mpsc::Sender<Event>, mut control: mpsc::Receiver<Control>) {
+    let mut tries = 0;
+    let mut streamed_ever = false;
+    loop {
+        let (end, streamed) = listen(&mut target, &events, &mut control, streamed_ever).await;
+        streamed_ever |= streamed;
+        if streamed {
+            tries = 0;
+        }
+        if !streamed_ever || !end.reconnects() || tries >= RECONNECT_S.len() {
+            let _ = events.send(Event::Ended(end)).await;
+            return;
+        }
+        let wait_s = RECONNECT_S[tries];
+        tries += 1;
+        if events.send(Event::Reconnecting { wait_s }).await.is_err() {
+            return;
+        }
+        let pause = tokio::time::sleep(Duration::from_secs(wait_s));
+        tokio::pin!(pause);
+        loop {
+            tokio::select! {
+                () = &mut pause => break,
+                c = control.recv() => match c {
+                    Some(Control::Tune(hz)) => target.dial_hz = hz,
+                    Some(Control::Stop) | None => {
+                        let _ = events.send(Event::Ended(End::Stopped)).await;
+                        return;
+                    }
+                },
+            }
+        }
+    }
+}
+
+/// One connection: the status page, the stream, then audio until it ends. Returns how it ended
+/// and whether it streamed; a retune while connected moves `target`'s dial.
+async fn listen(
+    target: &mut Target,
+    events: &mpsc::Sender<Event>,
+    control: &mut mpsc::Receiver<Control>,
+    after_gap: bool,
+) -> (End, bool) {
+    let mut streamed = false;
+    let end = connection(target, events, control, after_gap, &mut streamed).await;
+    (end, streamed)
+}
+
+async fn connection(
+    target: &mut Target,
+    events: &mpsc::Sender<Event>,
+    control: &mut mpsc::Receiver<Control>,
+    after_gap: bool,
+    streamed: &mut bool,
+) -> End {
     match fetch_status(&target.host, target.port).await {
         Ok(s) if s.too_full(target.free_channels) => return End::Busy,
         Ok(_) => {}
@@ -427,7 +515,11 @@ async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mps
     let now_s = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let connect = tokio_tungstenite::connect_async(url(&target.host, target.port, now_s));
+    let req = match request(&target.host, target.port, now_s) {
+        Ok(r) => r,
+        Err(e) => return End::Error(e),
+    };
+    let connect = tokio_tungstenite::connect_async(req);
     let mut ws = match tokio::time::timeout(TIMEOUT, connect).await {
         Ok(Ok((ws, _))) => ws,
         Ok(Err(e)) => return End::Error(e.to_string()),
@@ -436,8 +528,8 @@ async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mps
     if ws.send(Message::Text("SET auth t=kiwi p=".into())).await.is_err() {
         return End::Error("the receiver closed the connection at once".into());
     }
-    let mut dial = target.dial_hz;
     let mut tuned = false;
+    let mut gap_next = after_gap;
     let mut clock = Clock::new(target.latency_s);
     let mut last_notice: Option<String> = None;
     let mut keepalive = tokio::time::interval(KEEPALIVE);
@@ -466,7 +558,8 @@ async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mps
                                         return End::Refused(format!("its audio rate is {rate} Hz, and QSP takes {RATE_HZ} Hz"));
                                     }
                                     tuned = true;
-                                    for c in setup_commands(&target.listener, dial) {
+                                    *streamed = true;
+                                    for c in setup_commands(&target.listener, target.dial_hz) {
                                         if ws.send(Message::Text(c.into())).await.is_err() {
                                             return End::Closed(last_notice);
                                         }
@@ -488,6 +581,8 @@ async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mps
                     }
                     Some(Upstream::Snd { seq, samples, .. }) if tuned => {
                         for (utc_us, samples, gap) in clock.push(now_us(), seq, samples) {
+                            let after = std::mem::take(&mut gap_next);
+                            let gap = gap || after;
                             if events.send(Event::Audio { utc_us, samples, gap }).await.is_err() {
                                 let _ = ws.close(None).await;
                                 return End::Stopped;
@@ -499,8 +594,8 @@ async fn listen(target: &Target, events: &mpsc::Sender<Event>, control: &mut mps
             }
             c = control.recv() => match c {
                 Some(Control::Tune(hz)) => {
-                    dial = hz;
-                    if tuned && ws.send(Message::Text(tune_command(dial).into())).await.is_err() {
+                    target.dial_hz = hz;
+                    if tuned && ws.send(Message::Text(tune_command(hz).into())).await.is_err() {
                         return End::Closed(last_notice);
                     }
                 }
@@ -638,6 +733,16 @@ mod tests {
         let f = c.push(at(i) + 2_000_000, i as u32, frame());
         assert!(!f[0].2);
         assert!((f[0].0 - (1_000_000 + i * dur + 2_000_000)).abs() < 200);
+    }
+
+    #[test]
+    fn reconnects_after_a_drop_or_failure_and_never_after_a_refusal_a_limit_or_a_stop() {
+        assert!(End::Closed(None).reconnects());
+        assert!(End::Error("reset".into()).reconnects());
+        assert!(!End::Closed(Some("inactivity_timeout=1".into())).reconnects());
+        assert!(!End::Busy.reconnects());
+        assert!(!End::Refused("it wants a password".into()).reconnects());
+        assert!(!End::Stopped.reconnects());
     }
 
     #[test]
