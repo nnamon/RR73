@@ -29,6 +29,7 @@ use rr73_corpus::{Entry, SlotMode, Tolerance, discover, match_entries, normalise
 use rr73_decode::demod::{Demodulator, MaxLogDemod};
 use rr73_decode::layout::{CODEWORD_BITS, FrameLayout};
 use rr73_decode::ldpc::{LdpcDecoder, LdpcScratch, ParityGraph, SumProduct};
+use rr73_decode::refine::{BasebandRefine, RefineScratch, Refined};
 use rr73_decode::search::CostasSearch;
 use rr73_decode::stages::Subtractor;
 use rr73_decode::subtract::{ModelSubtract, SubtractScratch};
@@ -133,6 +134,11 @@ pub struct Miss {
     pub resid_grid: Option<Genie>,
     /// Genie on the residual, fine grid.
     pub resid_fine: Option<Genie>,
+    /// Genie on the original audio: the fine grid's genie position refined on a baseband
+    /// (`refine.kind=baseband`), with the symbol levels read there.
+    pub orig_refined: Option<Genie>,
+    /// The same on the residual.
+    pub resid_refined: Option<Genie>,
 }
 
 /// Counts for one slot.
@@ -275,6 +281,9 @@ fn analyse_slot(
         .collect();
     let graph = ParityGraph::ft8();
     let pipeline = Pipeline::from_config(&stages[0].1);
+    let mut refiners = [RefineScratch::default(), RefineScratch::default()];
+    refiners[0].prepare(layout, samples, false);
+    refiners[1].prepare(layout, &residual, false);
     let decoded_texts: Vec<String> = decodes.iter().map(|d| normalise_text(&d.text)).collect();
     let (dt_lo, dt_hi) = stages
         .iter()
@@ -357,6 +366,29 @@ fn analyse_slot(
                 genie_at(&view, cw, freq, dt, graph, pipeline.ldpc.as_ref())
             })
         };
+        let orig_fine = genie(1, 0);
+        let resid_fine = genie(1, 1);
+        let mut refined = |which: usize, at: &Option<Genie>| -> Option<Genie> {
+            let (cw, at) = (codeword.as_ref()?, at.as_ref()?);
+            let (t, f, _) = GRIDS[1];
+            let view = SymbolView {
+                spec: &specs[1][which],
+                layout,
+                time_osr: t,
+                freq_osr: f,
+                live: &[],
+            };
+            Some(genie_refined(
+                &view,
+                cw,
+                at,
+                &mut refiners[which],
+                graph,
+                pipeline.ldpc.as_ref(),
+            ))
+        };
+        let orig_refined = refined(0, &orig_fine);
+        let resid_refined = refined(1, &resid_fine);
         out.push(Miss {
             path: path.to_string(),
             text: e.text.clone(),
@@ -370,9 +402,11 @@ fn analyse_slot(
             near_candidates: near.len(),
             nearest,
             orig_grid: genie(0, 0),
-            orig_fine: genie(1, 0),
+            orig_fine,
             resid_grid: genie(0, 1),
-            resid_fine: genie(1, 1),
+            resid_fine,
+            orig_refined,
+            resid_refined,
         });
     }
     (
@@ -393,6 +427,7 @@ fn outcome_name(o: TraceOutcome) -> &'static str {
         TraceOutcome::BelowFloor => "below-floor",
         TraceOutcome::Decoded(_) => "decoded",
         TraceOutcome::NoSync => "no-sync",
+        TraceOutcome::Repeat => "repeat",
     }
 }
 
@@ -496,6 +531,58 @@ fn genie_at(
     }
 }
 
+/// Refines the genie position `at` on `view`'s grid with [`BasebandRefine`] and decodes the
+/// symbol levels read there.
+fn genie_refined(
+    view: &SymbolView<'_>,
+    codeword: &[u8; CODEWORD_BITS],
+    at: &Genie,
+    scratch: &mut RefineScratch,
+    graph: &ParityGraph,
+    ldpc: &dyn LdpcDecoder,
+) -> Genie {
+    let bw = view.spec.bin_width_hz();
+    if bw <= 0.0 {
+        return Genie::default();
+    }
+    let frame = view.frame_for_dt(at.dt_s).round() as i32;
+    let bin = (at.freq_hz / bw - view.spec.min_bin() as f32).round() as i32;
+    let mut cand = Candidate::new(frame, bin, at.score);
+    let refiner = BasebandRefine { skip_repeats: false };
+    if refiner.refine(view, &mut cand, scratch) != Refined::Levels {
+        return Genie::default();
+    }
+    let symbols = SymbolView {
+        spec: scratch.symbols(),
+        layout: view.layout,
+        time_osr: 1,
+        freq_osr: 1,
+        live: &[],
+    };
+    let mut llr = [0.0f32; CODEWORD_BITS];
+    MaxLogDemod { variance: 24.0 }.llrs(&symbols, &Candidate::new(0, 0, 0.0), &mut llr);
+    let hard_errors = llr
+        .iter()
+        .zip(codeword)
+        .filter(|&(&l, &b)| u8::from(l > 0.0) != b)
+        .count() as u32;
+    let mut s = LdpcScratch::default();
+    let mut cw = [0u8; CODEWORD_BITS];
+    let bp = SumProduct { max_iterations: 25 }
+        .decode(graph, &llr, &mut s, &mut cw)
+        .converged
+        && cw == *codeword;
+    let full = ldpc.decode(graph, &llr, &mut s, &mut cw).converged && cw == *codeword;
+    Genie {
+        hard_errors,
+        freq_hz: view.freq_hz(&cand),
+        dt_s: view.dt_s(&cand),
+        score: at.score,
+        bp,
+        ldpc: full,
+    }
+}
+
 /// The breakdown tables printed after the analysis.
 pub fn render(report: &MissReport) -> String {
     let expected: usize = report.slots.iter().map(|s| s.expected).sum();
@@ -524,25 +611,28 @@ pub fn render(report: &MissReport) -> String {
             "grid"
         } else if ok(&m.resid_fine) {
             "fine"
-        } else if ok(&m.orig_grid) || ok(&m.orig_fine) {
+        } else if ok(&m.resid_refined) {
+            "refined"
+        } else if ok(&m.orig_grid) || ok(&m.orig_fine) || ok(&m.orig_refined) {
             "orig-only"
         } else {
             "none"
         }
     };
     out.push_str(&format!(
-        "{:<12} {:>6} {:>8} {:>8} {:>10} {:>8}\n",
-        "class", "misses", "g:grid", "g:fine", "g:orig-only", "g:none"
+        "{:<12} {:>6} {:>8} {:>8} {:>9} {:>11} {:>8}\n",
+        "class", "misses", "g:grid", "g:fine", "g:refined", "g:orig-only", "g:none"
     ));
     for c in classes {
         let ms: Vec<&Miss> = report.misses.iter().filter(|m| m.class == c).collect();
         let count = |g: &str| ms.iter().filter(|m| genie_class(m) == g).count();
         out.push_str(&format!(
-            "{:<12} {:>6} {:>8} {:>8} {:>10} {:>8}\n",
+            "{:<12} {:>6} {:>8} {:>8} {:>9} {:>11} {:>8}\n",
             c,
             ms.len(),
             count("grid"),
             count("fine"),
+            count("refined"),
             count("orig-only"),
             count("none")
         ));
@@ -600,6 +690,11 @@ pub fn render(report: &MissReport) -> String {
         "Genie hard errors on the residual, fine grid",
         &[20.0, 30.0, 40.0, 55.0],
         &|m| m.resid_fine.as_ref().map(|g| f64::from(g.hard_errors)),
+    ));
+    out.push_str(&buckets(
+        "Genie hard errors on the residual, refined",
+        &[20.0, 30.0, 40.0, 55.0],
+        &|m| m.resid_refined.as_ref().map(|g| f64::from(g.hard_errors)),
     ));
     out.push_str(&buckets(
         "Genie sync score on the residual, preset grid, dB",

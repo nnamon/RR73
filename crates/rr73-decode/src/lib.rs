@@ -26,6 +26,7 @@ pub mod layout;
 pub mod ldpc;
 pub mod osd;
 pub mod pipeline;
+pub mod refine;
 pub mod report;
 pub mod search;
 pub mod session;

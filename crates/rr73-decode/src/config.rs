@@ -163,6 +163,9 @@ pub struct SearchParams {
 pub enum RefineKind {
     /// Keep the search grid position.
     None,
+    /// Start and frequency from the Costas arrays on a complex baseband of the candidate's
+    /// band, and symbol levels read there with a one-symbol window (`crate::refine`).
+    Baseband,
 }
 
 /// Refinement parameters.
@@ -171,6 +174,14 @@ pub enum RefineKind {
 pub struct RefineParams {
     /// Implementation.
     pub kind: RefineKind,
+    /// Skip a candidate whose refined position repeats one tried in the pass (used by
+    /// `baseband`).
+    #[serde(default = "yes")]
+    pub skip_repeats: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 /// Demodulator implementations.
@@ -394,6 +405,7 @@ impl DecoderConfig {
             },
             refine: RefineParams {
                 kind: RefineKind::None,
+                skip_repeats: true,
             },
             demod: DemodParams {
                 kind: DemodKind::MaxLog,

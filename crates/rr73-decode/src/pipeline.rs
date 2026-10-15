@@ -11,6 +11,7 @@ use crate::demod::{Demodulator, MaxLogDemod};
 use crate::layout::{CODEWORD_BITS, FrameLayout};
 use crate::ldpc::{LdpcDecoder, LdpcScratch, MinSum, ParityGraph, SumProduct};
 use crate::osd::{BpOsd, OsdParams};
+use crate::refine::{BasebandRefine, RefineScratch};
 use crate::report::DecodeReport;
 use crate::search::{CandidateSearch, CostasSearch};
 use crate::session::{DecodeSession, Stage};
@@ -114,6 +115,7 @@ pub(crate) struct Workspace {
     pub(crate) audio: Vec<f32>,
     pub(crate) seen: Vec<Payload>,
     pub(crate) subtract: SubtractScratch,
+    pub(crate) refine: RefineScratch,
     pub(crate) chunk: Vec<Candidate>,
 }
 
@@ -136,6 +138,7 @@ impl Default for Workspace {
             audio: Vec::new(),
             seen: Vec::new(),
             subtract: SubtractScratch::default(),
+            refine: RefineScratch::default(),
             chunk: Vec::new(),
         }
     }
@@ -183,6 +186,9 @@ impl Pipeline {
         };
         let refine: Box<dyn SyncRefine> = match config.refine.kind {
             RefineKind::None => Box::new(NoRefine),
+            RefineKind::Baseband => Box::new(BasebandRefine {
+                skip_repeats: config.refine.skip_repeats,
+            }),
         };
         // The block demodulator runs in the session; this one gives the spectrogram LLRs
         // that `demod.spectrogram_first` tries first.
