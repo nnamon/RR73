@@ -120,7 +120,7 @@ Set summary:
 
 ## Comparing
 
-`rr73-bench compare a.json b.json [--limit N]` prints, per set, recall, matched, false decodes, unmatched real decodes, SNR50 and the median and 90th percentile time per slot for a and b with the change; then time per slot over all slots; then every decode gained (present in b and missing from a) and lost (present in a and missing from b) with its slot path, SNR, frequency, DT and whether it matched an expected entry. Two decodes are the same signal when their text is equal and their frequencies are within 10 Hz. Slim files compare summaries only. Decoder commits carry this output (AGENTS.md).
+`rr73-bench compare a.json b.json [--limit N] [--exact]` prints, per set, recall, matched, false decodes, unmatched real decodes, SNR50 and the median and 90th percentile time per slot for a and b with the change; then time per slot over all slots; then every decode gained (present in b and missing from a) and lost (present in a and missing from b) with its slot path, SNR, frequency, DT and whether it matched an expected entry. Two decodes are the same signal when their text is equal and their frequencies are within 10 Hz. Slim files compare summaries only. Decoder commits carry this output (AGENTS.md). `--exact` adds a check that every decode field (text, frequency, DT, SNR, pass, stage, LDPC iterations, hard errors, sync score, OSD distance, AP kind) and every slot's counters are the same, and lists the slots that differ with their first difference; changes that must not move any decode, such as speed work, carry it (experiment 0009).
 
 ## Other decoders
 

@@ -119,6 +119,10 @@ enum Command {
         /// Most gained and most lost decodes listed.
         #[arg(long, default_value_t = 200)]
         limit: usize,
+        /// Also check that every decode field and every slot's counters are the same, and
+        /// list the slots that differ.
+        #[arg(long)]
+        exact: bool,
     },
     /// Exit with status 1 when results regress beyond the thresholds.
     Gate {
@@ -343,10 +347,13 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             );
             Ok(ExitCode::SUCCESS)
         }
-        Command::Compare { a, b, limit } => {
+        Command::Compare { a, b, limit, exact } => {
             let a = results::load(&a)?;
             let b = results::load(&b)?;
             print!("{}", compare::report(&a, &b, limit));
+            if exact {
+                print!("{}", compare::exact_report(&a, &b, limit));
+            }
             Ok(ExitCode::SUCCESS)
         }
         Command::Gate {

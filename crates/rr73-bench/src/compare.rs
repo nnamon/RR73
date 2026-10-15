@@ -54,6 +54,75 @@ fn missing<'a>(
     })
 }
 
+/// Slots present in both files whose decode lists differ in any recorded field (text,
+/// frequency, DT, SNR, pass, stage, LDPC iterations, hard errors, sync score, OSD flag and
+/// distance, AP kind, match), or whose decoder counters differ: each slot's path and the
+/// first difference. Timings are left out.
+pub fn differences(a: &Results, b: &Results) -> Vec<(String, String)> {
+    let index: BTreeMap<&str, &SlotResult> = a.slots.iter().map(|s| (s.path.as_str(), s)).collect();
+    let mut out = Vec::new();
+    for sb in &b.slots {
+        let Some(sa) = index.get(sb.path.as_str()) else {
+            continue;
+        };
+        let what = if sa.error != sb.error {
+            Some(format!("error {:?} > {:?}", sa.error, sb.error))
+        } else if sa.decodes != sb.decodes {
+            let i = sa
+                .decodes
+                .iter()
+                .zip(&sb.decodes)
+                .position(|(x, y)| x != y)
+                .unwrap_or_else(|| sa.decodes.len().min(sb.decodes.len()));
+            Some(match (sa.decodes.get(i), sb.decodes.get(i)) {
+                (Some(x), Some(y)) => format!("decode {i}: {x:?} > {y:?}"),
+                _ => format!("{} decodes > {}", sa.decodes.len(), sb.decodes.len()),
+            })
+        } else if sa.stats != sb.stats {
+            Some(format!("counters {:?} > {:?}", sa.stats, sb.stats))
+        } else {
+            None
+        };
+        if let Some(what) = what {
+            out.push((sb.path.clone(), what));
+        }
+    }
+    out
+}
+
+/// The exact comparison: how many slots in both files have the same decodes in every field
+/// and the same counters, then at most `limit` slots that differ.
+pub fn exact_report(a: &Results, b: &Results, limit: usize) -> String {
+    let mut out = String::new();
+    if a.slim || b.slim {
+        let _ = writeln!(out, "Exact: decode lists are not in slim results files.");
+        return out;
+    }
+    let paths: BTreeSet<&str> = a.slots.iter().map(|s| s.path.as_str()).collect();
+    let both: Vec<&SlotResult> = b
+        .slots
+        .iter()
+        .filter(|s| paths.contains(s.path.as_str()))
+        .collect();
+    let decodes: usize = both.iter().map(|s| s.decodes.len()).sum();
+    let diff = differences(a, b);
+    let _ = writeln!(
+        out,
+        "Exact: {} of {} slots identical in every decode field and counter ({} decodes in b); {} differ.",
+        both.len() - diff.len(),
+        both.len(),
+        decodes,
+        diff.len()
+    );
+    for (path, what) in diff.iter().take(limit) {
+        let _ = writeln!(out, "! {path}: {what}");
+    }
+    if diff.len() > limit {
+        let _ = writeln!(out, "! ... {} more", diff.len() - limit);
+    }
+    out
+}
+
 fn opt(v: Option<f64>, digits: usize) -> String {
     v.map(|x| format!("{x:.digits$}")).unwrap_or_else(|| "-".into())
 }
@@ -316,6 +385,36 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("corpus/public/x/a.wav"));
+    }
+
+    #[test]
+    fn exact_report_finds_any_field_or_counter_that_moved() {
+        let a = results(vec![
+            rec("CQ K1ABC FN42", 1000.0, true),
+            rec("K1ABC W9XYZ -10", 1500.0, true),
+        ]);
+        assert!(differences(&a, &a.clone()).is_empty());
+        assert!(
+            exact_report(&a, &a.clone(), 10).contains("1 of 1 slots identical"),
+            "{}",
+            exact_report(&a, &a, 10)
+        );
+        // An SNR moved by 0.01 dB: the same decodes for `changes`, a difference here.
+        let mut b = a.clone();
+        b.slots[0].decodes[1].snr_db = -10.01;
+        assert_eq!(changes(&a, &b), (Vec::new(), Vec::new()));
+        let diff = differences(&a, &b);
+        assert_eq!(diff.len(), 1);
+        assert!(diff[0].1.starts_with("decode 1:"), "{}", diff[0].1);
+        // A counter moved with the decodes unchanged.
+        let mut c = a.clone();
+        c.slots[0].stats.ldpc_attempts += 1;
+        assert!(differences(&a, &c)[0].1.starts_with("counters"));
+        // Timings do not count.
+        let mut d = a.clone();
+        d.slots[0].time_s *= 2.0;
+        assert!(differences(&a, &d).is_empty());
+        assert!(exact_report(&a, &c, 10).contains("0 of 1 slots identical"));
     }
 
     #[test]
