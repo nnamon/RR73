@@ -55,6 +55,21 @@ export const STATUS = {
   afc: (on: boolean) => (on ? 'AFC on' : 'AFC off'),
   macroSet: (set: string) => `${set} macros`,
   textCleared: 'Text cleared',
+  /** Rig control (docs/design/cat.md): PTT and the radio's state. */
+  pttRefused: 'Radio refused PTT',
+  pttNoReply: 'Radio did not answer PTT',
+  radioDown: 'Radio not connected',
+  radioLost: 'Radio disconnected · Tx off',
+  /** While keyed: the radio stopped answering, or said receive (its own Time-Out Timer, its PTT). */
+  radioSilent: 'No reply from radio · Tx off',
+  radioReceive: 'Radio stopped transmitting · Tx off',
+  /** PTT off went unanswered: the radio may still transmit. */
+  pttUnconfirmed: 'PTT off not confirmed',
+  /** The radio's dial is on another band than RR73's: "Radio on 40m". */
+  radioBand: (band: string) => `Radio on ${band}`,
+  radioOutside: 'Radio outside the bands',
+  /** The IC-705's USB SEND keys on a line of the port: RR73 refuses to transmit until it is OFF. */
+  usbSend: 'Set USB SEND to OFF',
 } as const;
 
 /** Why a call paused on its last message, after the message in the status line: "Tx1 · VK2LAW 9V1NE OJ11 · no reply". */
