@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Rig control › Keep Tx audio centred moves the IC-705’s dial in 500 Hz steps for each FT8 and FT4 transmission, so its audio sits at 1500 to 2000 Hz inside the transmit passband and the signal stays on the Tx frequency. The dial goes back after each transmission. It is off by default and works with Key the radio with CAT on.
+
 ## 0.22.0 · 2026-10-15
 
 - Settings › Rig control connects an Icom IC-705 by USB in Chrome and Edge on a computer: RR73 reads its dial and mode, sets them from the band sheet, and logs the dial it reads. Key the radio with CAT, off until turned on, keys the radio for every transmission, and Test keying checks it first.

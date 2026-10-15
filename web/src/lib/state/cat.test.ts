@@ -8,7 +8,7 @@ import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
-import { dialNow, onRadioNotice, rig, rigGate, txKeyer } from './radio.svelte';
+import { dialNow, onRadioNotice, rig, rigGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
@@ -22,6 +22,9 @@ interface Sim {
   readonly frequency: number;
   readonly mode: string;
   readonly data: boolean;
+  /** Frequency, mode and data mode sets that arrived while the radio transmitted. */
+  readonly sets_while_transmitting: number;
+  press_mode(mode: string, filter: number): Uint8Array;
 }
 
 type TestWasm = Wasm & CatWasm & { CatSimForTests: new () => Sim };
@@ -48,6 +51,10 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
   ignorePttOff = false;
   /** PTT on is answered OK, and the radio stays in receive (PTT Lock). */
   lockPtt = false;
+  /** How the radio answers the next frequency sets, in turn: `ng` refuses and keeps the dial. */
+  dialAnswers: ('ok' | 'ng')[] = [];
+  /** Each frame written, with Date.now() then. */
+  writes: { frame: string; at: number }[] = [];
   private controller: ReadableStreamDefaultController<Uint8Array> | null = null;
   private readableValue: ReadableStream<Uint8Array> | null = null;
   private writableValue: WritableStream<Uint8Array> | null = null;
@@ -69,7 +76,12 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
       write: (chunk) => {
         const frame = hex(chunk);
         this.log.push(frame);
+        this.writes.push({ frame, at: Date.now() });
         if (this.silent) return;
+        if (frame.startsWith('FE FE A4 E0 05') && this.dialAnswers.shift() === 'ng') {
+          setTimeout(() => this.send(Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0xfa, 0xfd])), 10);
+          return;
+        }
         if (frame === 'FE FE A4 E0 1C 00 00 FD' && this.ignorePttOff) return;
         if (frame === 'FE FE A4 E0 1C 00 01 FD' && this.lockPtt) {
           setTimeout(() => this.send(Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0xfb, 0xfd])), 10);
@@ -90,6 +102,8 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
   }
   async close() {
     this.log.push('close');
+    // Answers still on their way after this are lost, as on a closed port.
+    this.controller = null;
     this.readableValue = null;
     this.writableValue = null;
   }
@@ -299,31 +313,31 @@ describe('the dial', () => {
   });
 });
 
-describe('keying', () => {
-  /** A fake audio clock for the scheduler: context time 0 is UTC `base`. */
-  function fakeAudio(base: number, lengthMs: number) {
-    const played: { when: number; stopped: boolean }[] = [];
-    const audio: TxAudio = {
-      sampleRate: 12000,
-      get currentTime() {
-        return (Date.now() - base) / 1000;
-      },
-      toContextTime: (utc) => (utc - base) / 1000,
-      toUtcMs: (t) => t * 1000 + base,
-      play(_s, when) {
-        const p = { when, stopped: false };
-        played.push(p);
-        const handle = {
-          onended: null as (() => void) | null,
-          stop: () => void (p.stopped = true),
-        };
-        setTimeout(() => !p.stopped && handle.onended?.(), (when - audio.currentTime) * 1000 + lengthMs);
-        return handle;
-      },
-    };
-    return { audio, played };
-  }
+/** A fake audio clock for the scheduler: context time 0 is UTC `base`. */
+function fakeAudio(base: number, lengthMs: number) {
+  const played: { when: number; stopped: boolean }[] = [];
+  const audio: TxAudio = {
+    sampleRate: 12000,
+    get currentTime() {
+      return (Date.now() - base) / 1000;
+    },
+    toContextTime: (utc) => (utc - base) / 1000,
+    toUtcMs: (t) => t * 1000 + base,
+    play(_s, when) {
+      const p = { when, stopped: false };
+      played.push(p);
+      const handle = {
+        onended: null as (() => void) | null,
+        stop: () => void (p.stopped = true),
+      };
+      setTimeout(() => !p.stopped && handle.onended?.(), (when - audio.currentTime) * 1000 + lengthMs);
+      return handle;
+    },
+  };
+  return { audio, played };
+}
 
+describe('keying', () => {
   /** A transmission whose slot starts 2 s from now, `lengthMs` long: FT8 at slot + 0.5 s, WSPR at slot + 1 s. */
   async function transmit(lengthMs = 2000, mode: 'FT8' | 'WSPR' = 'FT8') {
     const base = Date.now();
@@ -648,5 +662,195 @@ describe('keying', () => {
     expect(chosen.ptt.slice(0, 2)).toEqual(['01', '00']);
     off();
     offHalt();
+  });
+});
+
+describe('Keep Tx audio centred', () => {
+  const TX_DIAL = 'FE FE A4 E0 05 00 50 07 14 00 FD';
+  const RX_DIAL = 'FE FE A4 E0 05 00 40 07 14 00 FD';
+
+  /**
+   * A CQ at audio `f0Hz` whose slot starts 2 s from now, through a scheduler with Operate's keyer and
+   * shift, `lengthMs` long, with the frequency it was synthesised at.
+   */
+  function cq(f0Hz: number, lengthMs = 2000) {
+    const base = Date.now();
+    const { audio, played } = fakeAudio(base, lengthMs);
+    const reports: TxReport[] = [];
+    const synthHz: number[] = [];
+    const sched = new TxScheduler({
+      audio: () => audio,
+      encoder: {
+        synthesize: async (_text, _mode, f0) => {
+          synthHz.push(f0);
+          return new Float32Array(24000);
+        },
+      },
+      gate: () => rigGate(),
+      report: (r) => reports.push(r),
+      keyer: txKeyer,
+      shift: txShiftHz,
+    });
+    const done = sched.schedule({ text: 'CQ 9V1NE OJ11', mode: 'FT8', slotStartMs: base + 2000, startOffsetS: 0.5, f0Hz, level: 0.5 });
+    return { base, done, reports, played, synthHz, sched };
+  }
+
+  const on = (shiftDial: boolean, keyPtt = true) => void updateSettings({ cat: { ...settings.cat, keyPtt, shiftDial } });
+  /** Frames from `from` on, without the reads. */
+  const sets = (from: number) => chosen.log.slice(from).filter((l) => /^FE FE A4 E0 (05|1C 00 0[01])/.test(l));
+
+  it('is off by default', () => {
+    expect(CAT_DEFAULTS.shiftDial).toBe(false);
+    expect(settings.cat.shiftDial).toBe(false);
+  });
+
+  it('sets the dial 1000 Hz up before PTT on for a CQ at 2800 Hz, plays it at 1800 Hz, and sets the receive dial back after PTT off', async () => {
+    on(true);
+    await connect();
+    const n = chosen.log.length;
+    const { base, done, played, synthHz, reports } = cq(2800);
+    await run(2200);
+    await done;
+    expect(synthHz).toEqual([1800]);
+    expect(sets(n)).toEqual([TX_DIAL, 'FE FE A4 E0 1C 00 01 FD']);
+    // The dial at the pre-roll, at the slot edge; PTT on after its OK; the audio on time at slot + 0.5 s.
+    const dialAt = chosen.writes.find((w) => w.frame === TX_DIAL)!.at - base;
+    const pttAt = chosen.writes.find((w) => w.frame === 'FE FE A4 E0 1C 00 01 FD')!.at - base;
+    expect(dialAt).toBe(2000);
+    expect(pttAt).toBeGreaterThan(dialAt);
+    expect(pttAt - dialAt).toBeLessThan(50);
+    expect(played[0].when).toBeCloseTo(2.5, 6);
+    // On the air: RF = Tx dial + audio = receive dial + 2800 Hz. RR73 shows, decodes and logs the receive dial.
+    expect([chosen.sim.frequency, chosen.sim.transmit]).toEqual([14_075_000, true]);
+    expect(chosen.sim.frequency + synthHz[0]).toBe(14_074_000 + 2800);
+    expect(rig.hz).toBe(14_074_000);
+    expect(configNow().dialHz).toBe(14_074_000);
+    await run(4000);
+    expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    const after = chosen.log.slice(n);
+    const off = after.indexOf('FE FE A4 E0 1C 00 00 FD');
+    expect(after.slice(off, off + 3)).toEqual(['FE FE A4 E0 1C 00 00 FD', 'FE FE A4 E0 1C 00 FD', RX_DIAL]);
+    expect([chosen.sim.frequency, chosen.sim.transmit, chosen.sim.sets_while_transmitting]).toEqual([14_074_000, false, 0]);
+    expect(rig.hz).toBe(14_074_000);
+  });
+
+  it('leaves the dial alone with the switch off, inside the window, and without Key the radio with CAT', async () => {
+    await connect();
+    for (const [shiftDial, keyPtt, f0, ptt] of [
+      [false, true, 2800, true],
+      [true, true, 1700, true],
+      [true, false, 2800, false],
+    ] as const) {
+      on(shiftDial, keyPtt);
+      const n = chosen.log.length;
+      const { done, synthHz, played } = cq(f0);
+      await run(2200);
+      await done;
+      await run(4000);
+      const what = JSON.stringify({ shiftDial, keyPtt, f0 });
+      expect(synthHz, what).toEqual([f0]);
+      expect(played, what).toHaveLength(1);
+      expect(sets(n), what).toEqual(ptt ? ['FE FE A4 E0 1C 00 01 FD', 'FE FE A4 E0 1C 00 00 FD'] : []);
+      expect(chosen.sim.frequency, what).toBe(14_074_000);
+    }
+  });
+
+  it('shifts only in USB, where the dial and the audio add up to the RF', async () => {
+    on(true);
+    await connect();
+    expect(txShiftHz('FT8', 2800)).toBe(1000);
+    expect(txShiftHz('FT4', 900)).toBe(-1000);
+    expect(txShiftHz('WSPR', 1450)).toBe(0);
+    expect(txShiftHz('RTTY', 2800)).toBe(0);
+    chosen.send(chosen.sim.press_mode('"lsb"', 1));
+    await run(20);
+    expect(rig.mode).toBe('lsb');
+    expect(txShiftHz('FT8', 2800)).toBe(0);
+  });
+
+  it('refuses the transmission when the radio refuses the Tx dial, sends no PTT, and sets the receive dial', async () => {
+    on(true);
+    await connect();
+    const n = chosen.log.length;
+    chosen.dialAnswers = ['ng'];
+    const { done, played, reports } = cq(2800);
+    await run(2200);
+    await done;
+    expect(played).toEqual([]);
+    expect(reports).toMatchObject([{ type: 'refused', reason: 'Radio did not set Tx dial' }]);
+    expect(chosen.ptt).toEqual([]);
+    await run(200);
+    expect(sets(n)).toEqual([TX_DIAL, RX_DIAL]);
+    expect(chosen.sim.frequency).toBe(14_074_000);
+  });
+
+  it('Halt during a shifted transmission sends PTT off at once, then sets the receive dial back', async () => {
+    on(true);
+    await connect();
+    const { done, played, sched } = cq(2800, 10_000);
+    const offHalt = onHalt(() => sched.halt());
+    await run(3000);
+    await done;
+    expect([chosen.sim.frequency, chosen.sim.transmit]).toEqual([14_075_000, true]);
+    const n = chosen.log.length;
+    halt();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(chosen.log[n]).toBe('FE FE A4 E0 1C 00 00 FD');
+    expect(played[0].stopped).toBe(true);
+    await run(200);
+    expect(sets(n).at(-1)).toBe(RX_DIAL);
+    expect([chosen.sim.frequency, chosen.sim.transmit, chosen.sim.sets_while_transmitting]).toEqual([14_074_000, false, 0]);
+    offHalt();
+  });
+
+  it('a lost port during a shifted transmission turns Tx off; the next connection sends PTT off and sets the receive dial back', async () => {
+    on(true);
+    await connect();
+    const { done } = cq(2800, 10_000);
+    await run(3000);
+    await done;
+    chosen.unplug();
+    await run(10);
+    expect(rig.status).toBe('lost');
+    expect(chosen.sim.frequency).toBe(14_075_000);
+    chosen.log = [];
+    const again = connectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await again;
+    expect(sets(0)).toEqual(['FE FE A4 E0 1C 00 00 FD', RX_DIAL]);
+    expect([chosen.sim.frequency, chosen.sim.transmit]).toEqual([14_074_000, false]);
+    expect(rig.hz).toBe(14_074_000);
+  });
+
+  it('says so and turns Tx off when the radio does not take the receive dial back, and shows the dial it reads', async () => {
+    on(true);
+    await connect();
+    const notices: [string, boolean, boolean][] = [];
+    const off = onRadioNotice((t, txOff, always) => notices.push([t, txOff, always]));
+    chosen.dialAnswers = ['ok', 'ng'];
+    const { done } = cq(2800);
+    await run(2200);
+    await done;
+    await run(4000);
+    expect(notices).toEqual([['Rx dial not restored · Tx off', true, true]]);
+    expect(chosen.sim.frequency).toBe(14_075_000);
+    expect(rig.hz).toBe(14_075_000);
+    off();
+  });
+
+  it('Disconnect radio during a shifted transmission confirms PTT off and sets the receive dial back before the port closes', async () => {
+    on(true);
+    await connect();
+    const { done, sched } = cq(2800, 10_000);
+    const offSched = onHalt(() => sched.halt());
+    await run(3000);
+    await done;
+    const closing = disconnectRadio();
+    await run(300);
+    await closing;
+    const tail = chosen.log.slice(chosen.log.lastIndexOf('FE FE A4 E0 1C 00 00 FD'));
+    expect(tail).toEqual(['FE FE A4 E0 1C 00 00 FD', 'FE FE A4 E0 1C 00 FD', RX_DIAL, 'FE FE A4 E0 03 FD', 'close']);
+    expect([chosen.sim.frequency, chosen.sim.transmit]).toEqual([14_074_000, false]);
+    offSched();
   });
 });

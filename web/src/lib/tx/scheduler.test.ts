@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { PRE_ROLL_MS, TxScheduler, cutStart, type Encoder, type Playing, type TxAudio, type TxReport } from './scheduler';
-import { PTT_SETTLE_MS, PTT_TAIL_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from './keyer';
+import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TAIL_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from './keyer';
 
 /** Lets promises and the scheduler's async steps run. */
 const settle = () => new Promise((r) => setTimeout(r, 0));
@@ -65,6 +65,8 @@ class FakeKeyer implements Keyer {
   log: string[] = [];
   keyed = false;
   maxMs: number[] = [];
+  /** The dial shift of each keying, Hz. */
+  shifts: number[] = [];
   last: (Keying & { taken: boolean }) | null = null;
   constructor(
     private readonly clock: FakeClock,
@@ -74,9 +76,10 @@ class FakeKeyer implements Keyer {
   private utc() {
     return this.clock.toUtcMs(this.clock.currentTime)! - T0;
   }
-  key(maxMs: number): Keying {
+  key(maxMs: number, shiftHz = 0): Keying {
     this.keyed = true;
     this.maxMs.push(maxMs);
+    this.shifts.push(shiftHz);
     this.log.push(`on@${this.utc()}`);
     let released = false;
     const result = new Promise<KeyResult>((resolve) => {
@@ -102,7 +105,7 @@ class FakeKeyer implements Keyer {
   }
 }
 
-function setup(gate: () => string | null = () => null, encoderDelay = 0, keyed?: { answer?: KeyResult; delayMs?: number }) {
+function setup(gate: () => string | null = () => null, encoderDelay = 0, keyed?: { answer?: KeyResult; delayMs?: number }, shift?: (mode: string, f0Hz: number) => number) {
   const clock = new FakeClock();
   const keyer = keyed ? new FakeKeyer(clock, keyed.answer, keyed.delayMs) : null;
   const reports: TxReport[] = [];
@@ -120,6 +123,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0, keyed?:
     gate,
     report: (r) => reports.push(r),
     keyer: () => keyer,
+    shift,
     timer: (fn, ms) => {
       const t = { at: clock.currentTime + ms / 1000, fn };
       clock.timers.push(t);
@@ -586,5 +590,90 @@ describe('TxScheduler keying the radio', () => {
     await done;
     expect(keyer.log).toEqual([`on@${120_500}`]);
     expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 121_000)!, 9);
+  });
+});
+
+describe('TxScheduler with a dial shift', () => {
+  async function runTo(clock: FakeClock, ms: number) {
+    const end = clock.toContextTime(ms)!;
+    for (;;) {
+      await settle();
+      const ends = clock.played.filter((p) => p.stoppedAt === null).map((p) => p.when + p.samples / clock.sampleRate);
+      const next = Math.min(end, ...clock.timers.map((t) => t.at), ...ends);
+      clock.advanceTo(clock.toUtcMs(Math.max(next, clock.currentTime))!);
+      await settle();
+      if (next >= end) return;
+    }
+  }
+
+  /** The app's rule for a 1500 to 2000 Hz window in 500 Hz steps, switchable. */
+  const window = { on: true };
+  const shift = (_mode: string, f0: number) => (!window.on || (f0 >= 1500 && f0 < 2000) ? 0 : Math.floor((f0 - 1500) / 500) * 500);
+
+  it('synthesises at the Tx frequency less the shift, keys with the shift at the pre-roll, and starts on time', async () => {
+    window.on = true;
+    const { clock, texts, sched, keyer } = setup(() => null, 0, { delayMs: 20 }, shift);
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req({ f0Hz: 2800 }));
+    await runTo(clock, T0 + 15100);
+    await done;
+    expect(texts).toEqual(['CQ 9V1NE OJ11@1800/48000/FT8']);
+    expect(keyer.shifts).toEqual([1000]);
+    expect(keyer.log).toEqual([`on@${15000}`]);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 15500)!, 9);
+    // The keying's limit leaves room for the dial's answer too.
+    expect(keyer.maxMs[0]).toBeGreaterThanOrEqual(500 + DIAL_TIMEOUT_MS + PTT_TIMEOUT_MS + PTT_SETTLE_MS + 12_640);
+  });
+
+  it('keys with no shift inside the window or with the switch off', async () => {
+    for (const [on, f0] of [
+      [true, 1700],
+      [false, 2800],
+    ] as const) {
+      window.on = on;
+      const { clock, texts, sched, keyer } = setup(() => null, 0, { delayMs: 20 }, shift);
+      clock.advanceTo(T0 + 3000);
+      const done = sched.schedule(req({ f0Hz: f0 }));
+      await runTo(clock, T0 + 15100);
+      await done;
+      expect(texts).toEqual([`CQ 9V1NE OJ11@${f0}/48000/FT8`]);
+      expect(keyer.shifts).toEqual([0]);
+    }
+  });
+
+  it('lets the slot go by when the shift changed between the synthesis and the pre-roll', async () => {
+    window.on = true;
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 20 }, shift);
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req({ f0Hz: 2800 }));
+    await runTo(clock, T0 + 10_000);
+    window.on = false;
+    await runTo(clock, T0 + 16_000);
+    await done;
+    expect(clock.played).toEqual([]);
+    expect(keyer.log).toEqual([]);
+    expect(reports).toEqual([{ type: 'missed', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'busy' }]);
+  });
+
+  it('plays nothing when the radio does not set the Tx dial, and says so', async () => {
+    window.on = true;
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { answer: 'dial' }, shift);
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req({ f0Hz: 2800 }));
+    await runTo(clock, T0 + 16_000);
+    await done;
+    expect(clock.played).toEqual([]);
+    expect(reports).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'Radio did not set Tx dial' }]);
+    expect(keyer.keyed).toBe(false);
+  });
+
+  it('a shift without a keyer lets the slot go by: the audio was made for a moved dial', async () => {
+    const { clock, reports, sched } = setup(() => null, 0, undefined, () => 1000);
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req({ f0Hz: 2800 }));
+    await runTo(clock, T0 + 16_000);
+    await done;
+    expect(clock.played).toEqual([]);
+    expect(reports).toMatchObject([{ type: 'missed', reason: 'busy' }]);
   });
 });

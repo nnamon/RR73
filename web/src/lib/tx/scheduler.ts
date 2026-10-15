@@ -20,11 +20,16 @@
  * drops a transmission before it plays release it at once. The keying's limit takes PTT back by
  * itself when the audio has not ended long after it should (an audio clock that stalls); the audio
  * stops with it, so nothing plays to the radio once PTT is off, where VOX could key it.
+ *
+ * With a dial shift (lib/cat/passband.ts) the audio is synthesised at the Tx frequency minus the
+ * shift, and the keying moves the radio's dial by the shift before PTT on, at the pre-roll: the
+ * RF frequency stays where the operator put it. The dial's OK and PTT's OK share the 0.5 s
+ * pre-roll; a slower pair starts the audio late, as any late start.
  */
 
 import type { SlotMode as Mode } from '../clock/slots';
 import { LATE_S, SHIFT_LIMIT_S } from '../qso/sequencer';
-import { PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, tailMs, type Keyer, type Keying } from './keyer';
+import { DIAL_TIMEOUT_MS, PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, tailMs, type Keyer, type Keying } from './keyer';
 
 /** Where a transmission starts in its slot, s. */
 export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
@@ -116,6 +121,7 @@ export class TxScheduler {
   private readonly gate: () => string | null;
   private readonly report: (r: TxReport) => void;
   private readonly keyer: () => Keyer | null;
+  private readonly shift: (mode: Mode, f0Hz: number) => number;
   private readonly timer: (fn: () => void, ms: number) => unknown;
   private readonly clear: (h: unknown) => void;
   private readonly now: () => number;
@@ -135,6 +141,8 @@ export class TxScheduler {
     report: (r: TxReport) => void;
     /** The radio's PTT, or null to play the audio alone (VOX). */
     keyer?: () => Keyer | null;
+    /** The radio's dial shift for a transmission at `f0Hz`, Hz; 0, the default, for none. Applies only with a keyer. */
+    shift?: (mode: Mode, f0Hz: number) => number;
     timer?: (fn: () => void, ms: number) => unknown;
     clear?: (h: unknown) => void;
     /** UTC ms; the page's clock times the wait until the audio clock has its mapping. */
@@ -145,6 +153,7 @@ export class TxScheduler {
     this.gate = opts.gate;
     this.report = opts.report;
     this.keyer = opts.keyer ?? (() => null);
+    this.shift = opts.shift ?? (() => 0);
     this.timer = opts.timer ?? ((fn, ms) => setTimeout(fn, ms));
     this.now = opts.now ?? (() => Date.now());
     this.clear = opts.clear ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
@@ -165,9 +174,11 @@ export class TxScheduler {
       this.report({ type: 'refused', slotStartMs: req.slotStartMs, text: req.text, reason: why ?? 'Audio is not running.' });
       return;
     }
+    // The dial moves up by the shift and the audio down by it: the same RF frequency.
+    const shiftHz = this.shift(req.mode, req.f0Hz);
     let samples: Float32Array;
     try {
-      samples = await this.encoder.synthesize(req.text, req.mode, req.f0Hz, audio.sampleRate);
+      samples = await this.encoder.synthesize(req.text, req.mode, req.f0Hz - shiftHz, audio.sampleRate);
     } catch {
       if (gen === this.generation) this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'encode' });
       return;
@@ -202,12 +213,19 @@ export class TxScheduler {
     }
     let earliestS = MIN_LEAD_S;
     const keyer = this.keyer();
+    // The audio was made for the shift of that moment: with the switch, the keying or the radio's
+    // mode changed since, this slot goes by and the next is made again.
+    if (this.shift(req.mode, req.f0Hz) !== shiftHz || (shiftHz !== 0 && !keyer)) {
+      this.report({ type: 'missed', slotStartMs: req.slotStartMs, text: req.text, reason: 'busy' });
+      return;
+    }
     let keying: Keying | null = null;
     let limitTimer: unknown = null;
     if (keyer) {
       // PTT goes off by itself once the transmission should long be over, and the audio with it.
-      const maxMs = Math.max(0, (target - now.currentTime) * 1000) + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + tailMs(now) + 1000;
-      const k = keyer.key(maxMs);
+      const dialMs = shiftHz !== 0 ? DIAL_TIMEOUT_MS : 0;
+      const maxMs = Math.max(0, (target - now.currentTime) * 1000) + dialMs + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + tailMs(now) + 1000;
+      const k = shiftHz !== 0 ? keyer.key(maxMs, shiftHz) : keyer.key(maxMs);
       keying = k;
       limitTimer = this.timer(() => this.limitReached(k), maxMs);
       this.keying = keying;

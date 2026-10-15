@@ -11,6 +11,7 @@ import { STATUS } from '../qso/status';
 import { dialHz, isBand, type BandId } from '../radio/bands';
 import { operatingDialHz } from '../radio/hound-dial';
 import { rttyDialHz } from '../rtty/dial';
+import { txDialShiftHz } from '../cat/passband';
 import type { Mode } from '../clock/slots';
 import type { Keyer } from '../tx/keyer';
 import { settings } from './settings.svelte';
@@ -132,6 +133,18 @@ export function provideKeyer(k: Keyer | null) {
  */
 export function txKeyer(): Keyer | null {
   return settings.cat.keyPtt && rigConnected() ? keyer : null;
+}
+
+/**
+ * The radio's dial shift for a transmission at audio `hz` in `mode`, Hz (lib/cat/passband.ts): with
+ * Keep Tx audio centred on, the radio keyed by CAT and in USB, for FT8 and FT4; 0 otherwise. The
+ * dial moves up by it and the audio down, so the RF frequency stays the receive dial plus `hz`. In
+ * another mode than USB the dial and the audio would not add up to the same RF. WSPR (1410 to
+ * 1590 Hz) and RTTY are left out (docs/design/cat.md, Passband shift).
+ */
+export function txShiftHz(mode: Mode, hz: number): number {
+  if (!settings.cat.shiftDial || (mode !== 'FT8' && mode !== 'FT4') || !txKeyer() || rig.mode !== 'usb' || rig.hz === null) return 0;
+  return txDialShiftHz(hz);
 }
 
 /**

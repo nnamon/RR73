@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * Settings › Rig control (docs/design/cat.md): the radio, Connect radio and its state, keying by
-   * CAT and Test keying, and the radio's menu settings with what to change. Shown only where the
-   * browser has Web Serial (desktop Chrome and Edge). Keying by CAT is off until the operator turns
-   * it on; until then the radio keys by VOX and RR73 only reads and sets its dial and mode.
+   * CAT, Keep Tx audio centred and Test keying, and the radio's menu settings with what to change.
+   * Shown only where the browser has Web Serial (desktop Chrome and Edge). Keying by CAT is off
+   * until the operator turns it on; until then the radio keys by VOX and RR73 only reads and sets
+   * its dial and mode. Keep Tx audio centred needs keying by CAT and is off by default.
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -102,6 +103,8 @@
     return out;
   });
 
+  const shiftText = $derived(!settings.cat.keyPtt ? 'Needs Key the radio with CAT' : settings.cat.shiftDial ? 'Signal stays on your Tx frequency' : 'Off: the dial stays put');
+
   const testing = $derived(rig.test?.state === 'running');
   const testResult = $derived(rig.test?.state === 'done' ? rig.test : null);
 </script>
@@ -161,6 +164,19 @@
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
   </div>
 
+  <div class="section">
+    <div class="group">
+      <label class="row" class:off={!settings.cat.keyPtt}>
+        <span class="row-main">
+          <span class="row-title">Keep Tx audio centred</span>
+          <span class="row-sub" data-testid="rig-shift">{shiftText}</span>
+        </span>
+        <input type="checkbox" role="switch" class="switch" checked={settings.cat.shiftDial} disabled={!settings.cat.keyPtt} onchange={(e) => void updateSettings({ cat: { ...settings.cat, shiftDial: e.currentTarget.checked } })} />
+      </label>
+    </div>
+    <p class="section-foot">The radio’s dial moves during each FT8 and FT4 Tx, then goes back.</p>
+  </div>
+
   {#if connected}
     <div class="section">
       <h2 class="section-head">Radio settings</h2>
@@ -201,6 +217,10 @@
   }
 
   .act:disabled .row-title {
+    opacity: 0.4;
+  }
+
+  .off .row-title {
     opacity: 0.4;
   }
 

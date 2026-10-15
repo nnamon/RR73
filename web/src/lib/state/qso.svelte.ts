@@ -29,7 +29,7 @@ import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
-import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
+import { dialNow, onRadioNotice, rigGate, txKeyer, txShiftHz } from './radio.svelte';
 import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
 import type { QsoContext } from '../decode/types';
 
@@ -134,6 +134,7 @@ const scheduler = new TxScheduler({
   gate: () => (audio.status !== 'running' ? STATUS.audioOff : (rigGate() ?? notReady(qso.st))),
   report: onTxReport,
   keyer: txKeyer,
+  shift: txShiftHz,
 });
 
 /** Applies one event to the sequencer and carries out its effects. */

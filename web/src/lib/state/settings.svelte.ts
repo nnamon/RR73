@@ -69,6 +69,12 @@ export interface CatSettings {
   radio: CatRadioId;
   /** Transmissions key the radio by PTT over CI-V. Off: the radio keys by VOX, and RR73 only reads and sets its dial and mode. */
   keyPtt: boolean;
+  /**
+   * FT8 and FT4 transmissions move the radio's dial so their audio sits at 1500 to 2000 Hz, in the
+   * middle of the transmit passband, at the same RF frequency (lib/cat/passband.ts). Works only
+   * with keyPtt, as the dial moves before PTT on and back after PTT off.
+   */
+  shiftDial: boolean;
   /** The operator connected a radio and has not disconnected it: RR73 opens its port again when the app opens. */
   connect: boolean;
   /** USB IDs of the port chosen, to find it among the ports the browser allows; null when the browser gave none. */
@@ -76,7 +82,7 @@ export interface CatSettings {
   usbProductId: number | null;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, connect: false, usbVendorId: null, usbProductId: null };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -292,7 +298,7 @@ export function normaliseMinutes(v: number): number | null {
 function validateCat(raw: unknown): CatSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const c = { ...CAT_DEFAULTS };
-  for (const k of ['keyPtt', 'connect'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  for (const k of ['keyPtt', 'shiftDial', 'connect'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
   for (const k of ['usbVendorId', 'usbProductId'] as const) {
     const v = r[k];
     if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffff) c[k] = v;

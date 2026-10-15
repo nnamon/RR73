@@ -33,8 +33,8 @@ import { DISPLAY_RATE } from '../waterfall/spectrum';
 import { settings, updateSettings } from './settings.svelte';
 import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
-import { dialNow, radioNotice, rig, tuneGate, txKeyer } from './radio.svelte';
-import { PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
+import { dialNow, radioNotice, rig, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
+import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 import { STATUS } from '../qso/status';
 
 export interface SlotSummary {
@@ -728,7 +728,9 @@ let tuneKeying: Keying | null = null;
 /**
  * Plays the Tune tone at the Tx frequency (`hz`; FT8 and FT4's by default) for 10 s. Call from the
  * tap. With rig control keying the radio: PTT on, the radio's OK, and the tone 0.1 s later; without
- * an OK no tone plays and the status line says why.
+ * an OK no tone plays and the status line says why. In FT8 and FT4 with Keep Tx audio centred on,
+ * the dial shifts as for a transmission there, and the tone plays at `hz` minus the shift: the
+ * carrier goes out on the Tx frequency's RF.
  */
 export function startTune(hz: number = settings.txHz) {
   playClip(silentClipUri(), document, undefined, chosenOutput());
@@ -749,10 +751,13 @@ export function startTune(hz: number = settings.txHz) {
     return;
   }
   output.halt();
+  const shiftHz = txShiftHz(settings.mode, hz);
+  const dialMs = shiftHz !== 0 ? DIAL_TIMEOUT_MS : 0;
   tx.tuning = true;
-  tx.endsAtMs = performance.now() + PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000;
+  tx.endsAtMs = performance.now() + dialMs + PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000;
   wake?.set(true);
-  const k = keyer.key(PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000 + tailMs(ctx) + 1000);
+  const maxMs = dialMs + PTT_TIMEOUT_MS + PTT_SETTLE_MS + TUNE.seconds * 1000 + tailMs(ctx) + 1000;
+  const k = shiftHz !== 0 ? keyer.key(maxMs, shiftHz) : keyer.key(maxMs);
   tuneKeying = k;
   void k.result.then(async (answer) => {
     if (gen !== tuneGen) return k.release();
@@ -773,7 +778,7 @@ export function startTune(hz: number = settings.txHz) {
       refuseTune(STATUS.pttTaken);
       return;
     }
-    playTune(ctx, hz, k);
+    playTune(ctx, hz, k, hz - shiftHz);
   });
 }
 
@@ -782,14 +787,14 @@ function refuseTune(text: string) {
   radioNotice(text);
 }
 
-/** The Tune tone itself, with PTT released when it ends. */
-function playTune(ctx: AudioContext, hz: number, keying: Keying | null) {
+/** The Tune tone itself, with PTT released when it ends. `toneHz`: the audio played, `hz` less a dial shift. */
+function playTune(ctx: AudioContext, hz: number, keying: Keying | null, toneHz = hz) {
   const now = Date.now();
   markTransmitted(now, now + TUNE.seconds * 1000);
   emitTxWave(toneWave(now, hz, TUNE.seconds));
   const t0 = performance.now();
   const baseline = audio.status === 'running' ? median(levelLog.filter(([t]) => t > t0 - 2000).map(([, db]) => db)) : null;
-  const handle = output.tune(ctx, { ...TUNE, hz, level: txLevel(settings.outputLevel) });
+  const handle = output.tune(ctx, { ...TUNE, hz: toneHz, level: txLevel(settings.outputLevel) });
   tx.tuning = true;
   tx.endsAtMs = handle.endsAtMs;
   wake?.set(true);
