@@ -18,7 +18,7 @@
 //! RTTY, a continuous mode, has its own streaming exports in [`rtty`].
 //!
 //! Rig control has its own exports in [`cat`]: CI-V requests to bytes, and bytes from the radio
-//! to events.
+//! to events. [`cat_kx2`] does the same with Elecraft's text commands for the KX2.
 
 use std::cell::RefCell;
 
@@ -29,6 +29,7 @@ use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
 pub mod cat;
+pub mod cat_kx2;
 pub mod rtty;
 
 thread_local! {

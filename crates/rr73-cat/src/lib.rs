@@ -1,4 +1,5 @@
-//! Rig control for RR73: Icom's CI-V protocol and the IC-705 commands the app uses.
+//! Rig control for RR73: Icom's CI-V protocol and the IC-705 commands the app uses, and Elecraft's
+//! text protocol and the KX2 commands it uses.
 //!
 //! - [`frame`] writes and reads CI-V frames: the preamble `FE FE`, the receiving and sending
 //!   addresses, the command, the sub-command and data, and the end code `FD`.
@@ -8,6 +9,10 @@
 //!   events.
 //! - [`sim`] is a simulated IC-705 that answers frames in the formats the reference guide
 //!   gives, for tests.
+//! - [`elecraft`] turns typed requests for the KX2 (VFO A, the mode, the data sub-mode, transmit
+//!   and receive, the option modules, VOX and a menu setting) into Elecraft's semicolon-terminated
+//!   commands, and the radio's answers into events.
+//! - [`sim_kx2`] is a simulated KX2 behind a Digirig, for tests.
 //!
 //! A request and its answer, against the simulated radio:
 //!
@@ -33,13 +38,22 @@
 //! - IC-705 Basic Manual, A7560D-1EX-9, December 2025.
 //! - IC-705 Advanced Manual, A7560-7EX-5, April 2026.
 //!
+//! The KX2's facts come from Elecraft's published documents, also cited by printed page:
+//!
+//! - Elecraft K3S/K3/KX3/KX2 Programmer's Reference, Rev. G5, 20 February 2019.
+//! - Elecraft KX2 Owner's Manual, Rev. B2, 22 March 2023.
+//!
+//! The Digirig's PTT line comes from Digirig's documentation (digirig.net).
+//!
 //! Where the documents are silent, the code says so and `docs/design/cat.md` lists the point as
 //! unverified. No other rig-control program's source was read.
 
 pub mod bcd;
+pub mod elecraft;
 pub mod frame;
 pub mod ic705;
 pub mod sim;
+pub mod sim_kx2;
 
 pub use frame::{Decoded, Frame, FrameDecoder, FrameError};
 pub use ic705::{Addresses, Event, Fault, Filter, MenuItem, Mode, Parser, Request, RequestError, Vfo};
