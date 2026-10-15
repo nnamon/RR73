@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.4 · 2026-10-15
 
 - The filter chips over the decode list and the RTTY macro row scroll sideways only. A vertical drag no longer moves them.
 - The empty decode list says decodes appear 13.5 s into each FT8 slot (6 s into FT4).
