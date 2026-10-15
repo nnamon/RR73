@@ -179,9 +179,8 @@ const KEY = 'settings';
  * 10. Decode colours left as 0.8.0 to 0.19.2 shipped them, every category on or the Quiet
  *     preset, take RR73's scheme (highlight.ts) in the same form. Colours the operator changed
  *     stay.
- * 11. Light is the default theme. A stored System, which 0.5.0 and earlier stored for everyone
- *     with the whole record, becomes Light; Light and Dark stay. The LoTW users feature is gone,
- *     and validate() drops its stored switch.
+ * 11. Light is the default theme; a stored theme stays. The LoTW users feature is gone, and
+ *     validate() ignores its stored switch.
  */
 export const SETTINGS_SCHEMA = 11;
 
@@ -240,7 +239,6 @@ export function migration(raw: unknown): Record<string, unknown> {
     const h = updateShippedColours((raw as Record<string, unknown>).highlights);
     if (h) patch.highlights = h;
   }
-  if (from < 11 && raw && typeof raw === 'object' && (raw as Record<string, unknown>).theme === 'system') patch.theme = 'light';
   return patch;
 }
 

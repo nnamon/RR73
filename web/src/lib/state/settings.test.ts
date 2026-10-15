@@ -170,18 +170,11 @@ describe('the colour scheme migration', () => {
   });
 });
 
-describe('the light theme migration', () => {
-  it('turns a stored System into Light once, and keeps Light and Dark', async () => {
-    // 0.5.0 and earlier stored the whole record, System included, for everyone who changed a setting.
-    const stored = { callsign: '9V1NE', theme: 'system', schema: 10 };
-    expect(migration(stored)).toEqual({ schema: SETTINGS_SCHEMA, theme: 'light' });
-    expect(migration({ theme: 'dark', schema: 10 })).toEqual({ schema: SETTINGS_SCHEMA });
-    expect(migration({ theme: 'light', schema: 10 })).toEqual({ schema: SETTINGS_SCHEMA });
-    expect(migration({ theme: 'system', schema: SETTINGS_SCHEMA })).toEqual({});
-    await setKv('settings', stored);
-    await loadSettings();
-    expect(settings.theme).toBe('light');
-    await expect.poll(() => getKv('settings')).toEqual({ ...stored, theme: 'light', schema: SETTINGS_SCHEMA });
+describe('schema 11', () => {
+  it('keeps a stored theme, System included', () => {
+    expect(migration({ theme: 'system', schema: 10 })).toEqual({ schema: SETTINGS_SCHEMA });
+    expect(validate({ theme: 'system' }).theme).toBe('system');
+    expect(validate({}).theme).toBe('light');
   });
 
   it('drops the LoTW users switch an older phone stored', () => {

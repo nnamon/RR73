@@ -59,7 +59,7 @@ Check it with `curl https://relay.example.org/qsp/about`. The API reference is a
 
 - `access_keys`: keys RR73 sends as `Authorization: Bearer <key>`, at least 16 characters; `openssl rand -hex 24` makes one. Empty: anyone may use the instance, still only for the receivers listed.
 - `allowed_origins`: the sites a browser may call QSP from. RR73's is `https://nnamon.github.io`.
-- `[[sdr.receivers]]`: each receiver offered, with `free_channels` (QSP does not connect when fewer would remain for other listeners) and `max_sessions`, the connections QSP may hold on the receiver at once: sessions on the same dial share one. QSP connects to these receivers and no others. Settings files from 0.16.0 to 0.19.4 may hold `user_receivers`; QSP loads them, warns and ignores the line.
+- `[[sdr.receivers]]`: each receiver offered, with `free_channels` (QSP does not connect when fewer would remain for other listeners) and `max_sessions`, the connections QSP may hold on the receiver at once: sessions on the same dial share one. QSP connects to these receivers and no others.
 - `[pskreporter]`: `enabled` reports the app's decodes to PSK Reporter over UDP, by its developer page's rules. `test = true` marks every record as a test.
 
 Log detail: `RUST_LOG=debug`. QSP logs no request bodies.

@@ -23,12 +23,6 @@ describe('the relay', () => {
     expect(validateRelay({ base: B, relays: [], receiver: 'r1', receiverName: 'R1' })).toMatchObject({ base: '', receiver: null, receiverName: '' });
   });
 
-  it('forgets a receiver 0.19.4 added by address: relays offer their own only', () => {
-    const stored = { base: A, relays: [{ base: A, key: '', receivers: [{ host: 'kiwi.example.org', port: 8074 }] }], sdrOn: true, receiver: 'kiwisdr://kiwi.example.org:8074', receiverName: 'kiwi.example.org:8074' };
-    expect(validateRelay(stored)).toEqual({ base: A, relays: [{ base: A, key: '' }], sdrOn: true, receiver: null, receiverName: '' });
-    expect(validateRelay({ ...stored, receiver: 'sarts-web888', receiverName: 'SARTS Web-888' })).toMatchObject({ receiver: 'sarts-web888', receiverName: 'SARTS Web-888' });
-  });
-
   it('shows by host', () => {
     expect(relayName('')).toBe('None');
     expect(relayName('https://relay.example.org:8443/qsp')).toBe('relay.example.org:8443');

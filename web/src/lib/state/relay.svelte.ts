@@ -71,14 +71,12 @@ export function validateRelay(raw: unknown): RelaySettings {
     if (base && !relays.some((s) => s.base === base)) relays.push({ base, key: str(o.key, '') });
   }
   const base = typeof r.base === 'string' && relays.some((s) => s.base === r.base) ? r.base : '';
-  // 0.19.4 kept receivers added by address under kiwisdr:// ids; relays offer their own only.
-  const added = typeof r.receiver === 'string' && r.receiver.startsWith('kiwisdr://');
   return {
     base,
     relays,
     sdrOn: typeof r.sdrOn === 'boolean' ? r.sdrOn : RELAY_DEFAULTS.sdrOn,
-    receiver: base && !added && typeof r.receiver === 'string' && r.receiver ? r.receiver : null,
-    receiverName: base && !added ? str(r.receiverName, RELAY_DEFAULTS.receiverName) : '',
+    receiver: base && typeof r.receiver === 'string' && r.receiver ? r.receiver : null,
+    receiverName: base ? str(r.receiverName, RELAY_DEFAULTS.receiverName) : '',
   };
 }
 
