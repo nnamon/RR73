@@ -8,6 +8,7 @@ mod misses;
 mod results;
 mod rtty;
 mod run;
+mod subdepth;
 mod synth;
 mod util;
 
@@ -205,6 +206,22 @@ enum Command {
         /// Corpus files or directories with reference decode lists.
         #[arg(required = true)]
         paths: Vec<PathBuf>,
+    },
+    /// Measure how much of a decoded FT8 signal the subtractor removes, on steady, fading and
+    /// drifting signals in white noise.
+    Subtraction {
+        /// Decoder preset.
+        #[arg(long, default_value = "subtract-3-osd2")]
+        preset: String,
+        /// Configuration override; repeat for several.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        overrides: Vec<String>,
+        /// Slots per case.
+        #[arg(long, default_value_t = 40)]
+        per_case: usize,
+        /// Threads (default: all CPUs).
+        #[arg(long)]
+        threads: Option<usize>,
     },
     /// Print a preset's configuration as JSON, or list the presets.
     Presets {
@@ -474,6 +491,19 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
             }
             print!("{}", misses::render(&report));
+            Ok(ExitCode::SUCCESS)
+        }
+        Command::Subtraction {
+            preset,
+            overrides,
+            per_case,
+            threads,
+        } => {
+            let config = rr73_decode::DecoderConfig::preset(&preset)
+                .and_then(|c| c.with_overrides(&overrides))
+                .map_err(|e| e.to_string())?;
+            let rows = subdepth::depth(&config, per_case, threads)?;
+            print!("{}", subdepth::render_rows(&rows));
             Ok(ExitCode::SUCCESS)
         }
         Command::Rtty { command } => run_rtty(command),
