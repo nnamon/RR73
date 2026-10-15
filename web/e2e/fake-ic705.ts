@@ -2,13 +2,15 @@
 // control tests (rig.spec.ts). It answers the CI-V frames RR73 sends in the formats of Icom's
 // IC-705 CI-V Reference Guide, A7560-8EX-6 (p. 2 layout and OK/NG, p. 14 transmit, p. 17
 // frequency and mode, p. 22 data mode, pp. 6 and 8 menu settings), 5 ms after each frame, and logs
-// every frame with the UTC time it was written. Like Chromium on Windows, opening the port raises
+// every frame with the UTC time and the app's audio clock time it was written. Like Chromium on Windows, opening the port raises
 // DTR and RTS; setSignals sets them.
-import type { Page } from '@playwright/test';
+import { expect, type Page } from '@playwright/test';
 
 export interface RigFrame {
   /** Date.now() when written. */
   at: number;
+  /** The app's audio clock when written, s: AudioContext.currentTime, or null before audio starts. */
+  ctxS: number | null;
   /** "FE FE A4 E0 1C 00 01 FD". */
   hex: string;
 }
@@ -26,6 +28,8 @@ export interface FakeRig {
   forgotten: boolean;
   granted: boolean;
   menu: Record<string, number>;
+  /** The app's AudioContext, once it makes one: frames are timed on its clock too. */
+  ctx: AudioContext | null;
   /** The radio ignores PTT off: no answer, and it keeps transmitting. */
   ignorePttOff: boolean;
   /** The operator turns the dial: a transceive frame to address 00. */
@@ -71,6 +75,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
         menu: { '0125': 0, '0119': 1, '0043': 2 },
         ignorePttOff: false,
+        ctx: null,
         turnDial(f) {
           rig.hz = f;
           send([0xfe, 0xfe, 0x00, 0xa4, 0x00, ...freqBytes(f), 0xfd]);
@@ -85,6 +90,15 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         },
       };
       window.__rig = rig;
+      // The app's audio clock, to time PTT against the audio on the clock that plays it: under
+      // load the mapping from the audio clock to UTC can be off by more than the margins.
+      const Ctx = window.AudioContext;
+      window.AudioContext = class extends Ctx {
+        constructor(o?: AudioContextOptions) {
+          super(o);
+          rig.ctx = this;
+        }
+      };
       const send = (bytes: number[]) => setTimeout(() => controller?.enqueue(Uint8Array.from(bytes)), 5);
       const reply = (data: number[]) => send([0xfe, 0xfe, 0xe0, 0xa4, ...data, 0xfd]);
       const ok = (yes = true) => reply([yes ? 0xfb : 0xfa]);
@@ -129,7 +143,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
           if (start < 0 || end < 0) return;
           const frame = buffer.slice(start, end + 1);
           buffer = buffer.slice(end + 1);
-          rig.log.push({ at: Date.now(), hex: hex(frame) });
+          rig.log.push({ at: Date.now(), ctxS: rig.ctx ? rig.ctx.currentTime : null, hex: hex(frame) });
           if (frame[1] === 0xfe && frame[2] === 0xa4 && frame[3] === 0xe0) answer(frame.slice(4, -1));
         }
       }
@@ -184,6 +198,27 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
 }
 
 /** Frames written since index `from`, by their bytes after the addresses: "1C 00 01". */
-export function rigFrames(log: RigFrame[], from = 0): { at: number; body: string }[] {
-  return log.slice(from).map((f) => ({ at: f.at, body: f.hex.slice(12, -3) }));
+export function rigFrames(log: RigFrame[], from = 0): { at: number; ctxS: number | null; body: string }[] {
+  return log.slice(from).map((f) => ({ at: f.at, ctxS: f.ctxS, body: f.hex.slice(12, -3) }));
+}
+
+/** Every frame the fake radio has received. */
+export const rigLog = (page: Page) => page.evaluate(() => window.__rig.log) as Promise<RigFrame[]>;
+
+/** The PTT on and off frames the fake radio has received. */
+export const ptt = async (page: Page) => rigFrames(await rigLog(page)).filter((f) => f.body === '1C 00 01' || f.body === '1C 00 00');
+
+/** Settings › Rig control › Connect radio; the fake browser's chooser returns the fake radio. */
+export async function connect(page: Page) {
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await page.getByRole('button', { name: 'Connect radio' }).click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+}
+
+/** Turns Key the radio with CAT on or off in Settings › Rig control. */
+export async function setKeying(page: Page, on: boolean) {
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  const sw = page.getByRole('switch', { name: /Key the radio with CAT/ });
+  if ((await sw.isChecked()) !== on) await sw.click();
+  await expect(sw).toBeChecked({ checked: on });
 }

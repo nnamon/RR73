@@ -6,6 +6,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - Settings › Rig control connects an Icom IC-705 by USB in Chrome and Edge on a computer: RR73 reads its dial and mode, sets them from the band sheet, and logs the dial it reads. Key the radio with CAT, off until turned on, keys the radio for every transmission, and Test keying checks it first.
 - Settings › Radio and audio › Input finds the chosen input again by its name when the browser gives it a new ID.
+- A CQ or call tapped in the first 0.2 s after Start audio goes out in its slot. It was refused with "Audio is not running."
 
 ## 0.21.10 · 2026-10-15
 

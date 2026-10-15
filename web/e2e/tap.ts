@@ -10,7 +10,7 @@ import { PRESET } from '../src/lib/decode/worker-client';
 
 declare global {
   interface Window {
-    __tx: { startUtc: number; endUtc: number; frames: number; sampleRate: number; samples: Float32Array }[];
+    __tx: { startUtc: number; endUtc: number; startS: number; endS: number; frames: number; sampleRate: number; samples: Float32Array }[];
     __b64: (x: Float32Array) => string;
   }
 }
@@ -78,7 +78,7 @@ export async function installTap(page: Page) {
                 return;
               }
               const { start, end, rate, samples } = e.data;
-              window.__tx.push({ startUtc: onsetUtc, endUtc: base + (end / rate) * 1000, frames: end - start + 1, sampleRate: rate, samples });
+              window.__tx.push({ startUtc: onsetUtc, endUtc: base + (end / rate) * 1000, startS: start / rate, endS: end / rate, frames: end - start + 1, sampleRate: rate, samples });
             };
             return node;
           }),
@@ -100,6 +100,9 @@ export interface Captured {
   startUtc: number;
   /** When the last sample is heard, UTC ms (mapped at that moment). */
   endUtc: number;
+  /** The first and the last sound on the audio clock, s (AudioContext.currentTime). */
+  startS: number;
+  endS: number;
   /** Frames from the first to the last sound: the length on the audio clock. */
   frames: number;
   sampleRate: number;
@@ -108,10 +111,10 @@ export interface Captured {
 
 /** Transmissions recorded so far. */
 export async function captured(page: Page): Promise<Captured[]> {
-  const raw = await page.evaluate(() => window.__tx.map((t) => ({ startUtc: t.startUtc, endUtc: t.endUtc, frames: t.frames, sampleRate: t.sampleRate, b64: window.__b64(t.samples) })));
+  const raw = await page.evaluate(() => window.__tx.map((t) => ({ startUtc: t.startUtc, endUtc: t.endUtc, startS: t.startS, endS: t.endS, frames: t.frames, sampleRate: t.sampleRate, b64: window.__b64(t.samples) })));
   return raw.map((t) => {
     const bytes = Buffer.from(t.b64, 'base64');
-    return { startUtc: t.startUtc, endUtc: t.endUtc, frames: t.frames, sampleRate: t.sampleRate, samples: new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4) };
+    return { startUtc: t.startUtc, endUtc: t.endUtc, startS: t.startS, endS: t.endS, frames: t.frames, sampleRate: t.sampleRate, samples: new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4) };
   });
 }
 

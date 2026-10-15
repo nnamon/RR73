@@ -19,7 +19,7 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 | `webkit` | WebKit | Updating beside an older copy of RR73 |
 | `webkit-375x667`, `webkit-393x852` | WebKit, iPhone viewports | Layout in the light theme. Theme changes colours only (`tokens.css`), so geometry is checked once. Tests tagged `@ci-375` run at 375 x 667; those that depend on the screen size are also tagged `@ci-393` |
 | `webkit-1180x820`, `webkit-852x393`, `chromium-1440x900` | WebKit on an iPad and a phone on its side, Chromium on a desktop | Large screens (`large.spec.ts`) in the light theme: one geometry test per size class, regular width on an iPad on its side and upright (`@ci-regular`) and compact height (`@ci-compact-height`), and the keyboard shortcuts (`@ci-keys`) |
-| `transmit`, `tx-cq`, `webkit-tx` | Chromium, WebKit | Transmit timing, Halt and a QSO through the decoder, after the projects above |
+| `transmit`, `tx-cq`, `webkit-tx` | Chromium, WebKit | Transmit timing, Halt, a QSO through the decoder and rig control's PTT, after the projects above |
 | `practice` | Chromium | The practice band in real time, after the transmit projects |
 
 CI runs the suite on two machines: `RR73_E2E_PART=transmit` runs the transmit and practice projects, which need a machine with no other test running, and `RR73_E2E_PART=quiet` runs the rest. Unset, one run holds both, the transmit projects last.
@@ -39,7 +39,16 @@ CI runs the suite on two machines: `RR73_E2E_PART=transmit` runs the transmit an
 
 `e2e/rtty-tx.spec.ts` (project `tx-cq`) records RTTY's output in Chromium (tap.ts) while a line goes out with Return and more is typed on air, and decodes it in Node with `rr73-rtty`'s receiver: the text must come back whole, with no run of silence over 2 ms inside the transmission and no underrun in the stream worklet. It then checks that Halt silences the output within 100 ms and keeps the text not yet sent. The practice project's RTTY test decodes the practice band's RTTY stations in real time through the app's receiver and works JA1XYZ with the Answer macro.
 
-`e2e/rig.spec.ts` (project `chromium`) replaces `navigator.serial` with a fake IC-705 in the page (`e2e/fake-ic705.ts`), which answers CI-V frames in the formats of Icom's CI-V guide and logs each frame with its time, and records the app's output (`tap.ts`). It connects, reads the dial, sets the radio from the band sheet, follows the radio's dial, opens the port again after a reload, runs Test keying, and times PTT against the audio of a CQ and Tune with Key the radio with CAT off and on, and RTTY, with Halt, audio stopping and a lost port. The tests that wait for slots get 2 retries, as the transmit projects do. A run took 1.7 min with 5 workers.
+`e2e/rig.spec.ts` (project `chromium`) replaces `navigator.serial` with a fake IC-705 in the page (`e2e/fake-ic705.ts`), which answers CI-V frames in the formats of Icom's CI-V guide and logs each frame with the page's time and the audio clock's. It connects, reads the dial, sets the radio from the band sheet, follows the radio's dial, opens the port again after a reload, and runs Test keying with a radio that answers and one that keeps transmitting.
+
+`e2e/rig-tx.spec.ts` (project `tx-cq`) records the app's output (`tap.ts`) beside the fake IC-705 and times PTT against the audio of a CQ and Tune with Key the radio with CAT off and on, and of RTTY, with Halt, audio stopping and a lost port. PTT and the audio are compared on the audio clock: the fake radio notes `AudioContext.currentTime` as each frame arrives, and the tap the frames of the first and the last sound. Only the start of a CQ is checked against UTC.
+
+These tests needed retries while they ran in the `chromium` project, for two reasons found on 2026-10-16:
+
+- A CQ tapped within about 0.2 s of Start audio was refused with "Audio is not running.", as the audio clock had no mapping to UTC yet, and went a cycle later. The transmit scheduler now times its wait by the page's clock until the mapping exists (`scheduler.test.ts`).
+- Beside the rest of the suite, at load averages of 16 to 19, Chromium's fake audio device fell behind real time: 12.8 s of audio clock in 14.9 s. The audio then started up to 0.76 s late against UTC, the tap's mapping of the end was off by 0.6 s, and the keying's limit, timed by the page's clock, ended PTT before the audio ended on the audio clock. The scheduler now stops the audio with PTT at the limit (`scheduler.test.ts`).
+
+`rig-tx.spec.ts` runs after the rest of the suite, as the other transmit tests do, with no retries. Each test measures the audio clock against the page's clock from PTT on to PTT off, and when it fell more than 0.25 s behind it skips with the measurement, such as "Host overloaded: the audio clock fell 1.44 s behind in 14.8 s." On GitHub Actions it fails instead, as `decode.spec.ts` does.
 
 `e2e/hound.spec.ts` runs Hound with injected decodes: the band sheet's dial frequency (refused outside the band, then set), calling the Fox, the report read from a multi-call message, and the Hound item in •••. CI runs it in light at 375 x 667; the review projects run it in both themes at both sizes and save its 4 screenshots.
 
