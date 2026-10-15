@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.20.0 · 2026-10-15
 
 - Settings › Logging backs up the log to one file, with every QSO, activation and what Wavelog holds, through the share sheet.
 - Import a log restores that backup, or takes ADIF from any logger. QSOs the log holds already are skipped, and imported QSOs are not sent to Wavelog. Undo takes an import back out.
