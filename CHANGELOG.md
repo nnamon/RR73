@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.8 · 2026-10-15
 
 - Start activation suggests POTA and SOTA references as you type them, with their names.
 - Find nearby parks and summits lists the active ones near the phone, nearest first, and sets the grid.
