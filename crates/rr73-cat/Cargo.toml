@@ -1,6 +1,6 @@
 [package]
 name = "rr73-cat"
-description = "Rig control: Icom CI-V frames, the IC-705 commands RR73 uses and a simulated IC-705"
+description = "Rig control: Icom CI-V frames and Elecraft text commands, the IC-705 and KX2 commands RR73 uses, and simulated radios"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
