@@ -717,8 +717,8 @@ describe('Keep Tx audio centred', () => {
     const dialAt = chosen.writes.find((w) => w.frame === TX_DIAL)!.at - base;
     const pttAt = chosen.writes.find((w) => w.frame === 'FE FE A4 E0 1C 00 01 FD')!.at - base;
     expect(dialAt).toBe(2000);
-    expect(pttAt).toBeGreaterThan(dialAt);
-    expect(pttAt - dialAt).toBeLessThan(50);
+    // The simulated radio answers 10 ms after each frame.
+    expect(pttAt - dialAt).toBe(10);
     expect(played[0].when).toBeCloseTo(2.5, 6);
     // On the air: RF = Tx dial + audio = receive dial + 2800 Hz. RR73 shows, decodes and logs the receive dial.
     expect([chosen.sim.frequency, chosen.sim.transmit]).toEqual([14_075_000, true]);

@@ -7,8 +7,8 @@
  * Tone Control/TBW > TX > SSB-D > TBW, p. 8-2). The setting's lower edge is 100, 200, 300 or 500 Hz
  * and its upper edge 2500, 2700, 2800 or 2900 Hz (CI-V guide p. 20, item 0022 on p. 5), so audio
  * between TX_WINDOW_LOW_HZ and TX_WINDOW_HIGH_HZ, with an FT4 signal's 83 Hz above it, sits inside
- * every setting, at least 500 Hz from either edge. A tone at 1500 Hz or above has its second
- * harmonic at 3000 Hz or above, outside the widest upper edge.
+ * every setting, 400 Hz or more from either edge (600 Hz from the default edges). A tone at 1500 Hz
+ * or above has its second harmonic at 3000 Hz or above, outside the widest upper edge.
  *
  * Audio outside the window moves into it by whole TX_SHIFT_STEP_HZ steps, and the dial moves the
  * other way by the same amount: Tx dial = receive dial + shift, Tx audio = audio − shift, so the

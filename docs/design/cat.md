@@ -2,7 +2,7 @@
 
 RR73 controls the radio over Web Serial in desktop Chrome and Edge, inside the same app. The Icom IC-705 comes first, over its USB cable; the Elecraft KX2 follows. The iPhone keeps VOX: Safari has no Web Serial, so the rig control settings never show there.
 
-Two branches built it. The first (0.21.7) added the protocol and the pieces under it: the CI-V crate (`crates/rr73-cat`), its WebAssembly exports (`crates/rr73-wasm/src/cat.rs`), the serial link (`web/src/lib/cat/serial.ts`) and the choice of audio output. The second added Settings › Rig control, the link to the radio (`web/src/lib/cat/radio.ts`, `web/src/lib/state/cat.svelte.ts`), PTT for every transmission, the band sheet and the dial QSOs log, and the input device remembered by name.
+Two branches built it. The first (0.21.7) added the protocol and the pieces under it: the CI-V crate (`crates/rr73-cat`), its WebAssembly exports (`crates/rr73-wasm/src/cat.rs`), the serial link (`web/src/lib/cat/serial.ts`) and the choice of audio output. The second added Settings › Rig control, the link to the radio (`web/src/lib/cat/radio.ts`, `web/src/lib/state/cat.svelte.ts`), PTT for every transmission, the band sheet and the dial QSOs log, and the input device remembered by name. A third added Keep Tx audio centred, the dial shift that keeps FT8 and FT4 transmit audio in the middle of the transmit passband (Passband shift, below).
 
 ## Decision
 
@@ -10,6 +10,7 @@ Two branches built it. The first (0.21.7) added the protocol and the pieces unde
 - CI-V over the IC-705's USB (A) port, which Windows lists as IC-705 Serial Port A (CI-V) (CI-V guide p. 2).
 - The protocol in Rust, run in the app through `rr73-wasm`. The port, the timing and the user interface in TypeScript.
 - Transmit keyed by CI-V command `1C 00`, and only once the operator turns on Key the radio with CAT. It is off by default: a connected radio then has its dial and mode read and set, and transmissions key by VOX as without rig control. Audio both ways over the IC-705's USB audio.
+- With Keep Tx audio centred on as well (off by default), each FT8 and FT4 transmission moves the dial in 500 Hz steps so its audio sits at 1500 to 2000 Hz, on the same RF, and the receive dial goes back after it.
 - Connecting sends no PTT and changes no setting on the radio: not its power, its VOX or any menu item. RR73 reads the radio's menu settings and says what to change.
 - Protocol facts come only from Icom's published documents, listed below. No other rig-control program's source is read.
 
@@ -27,8 +28,8 @@ Downloaded from Icom's site (icomjapan.com/support/manual) on 15 October 2026. P
 
 | Document | Code, date | Used for |
 | --- | --- | --- |
-| IC-705 CI-V Reference Guide | A7560-8EX-6, January 2023 | Frame layout, command table, data formats |
-| IC-705 Basic Manual | A7560D-1EX-9, December 2025 | Menu items and defaults, filters, coverage, the USB port |
+| IC-705 CI-V Reference Guide | A7560-8EX-6, January 2023 | Frame layout, command table, data formats, the range of the SSB-D transmit bandwidth |
+| IC-705 Basic Manual | A7560D-1EX-9, December 2025 | Menu items and defaults, filters, coverage, the USB port, the USB-D transmit passband |
 | IC-705 Advanced Manual | A7560-7EX-5, April 2026 | USB SEND and keying, serial port settings, data modes |
 | IC-705 Firmware Update Information | Versions 1.11 to 1.40 | Checked for changed CI-V commands: none of those below changed |
 | USB Driver Installation Guide (Windows 11) | A7560-9EX-5, August 2026 | Windows support, port names, USB audio driver |
@@ -135,6 +136,7 @@ RR73 sets USB, FIL1 with `06 01 01`, then data mode on with FIL1 with `1A 06 01 
 - Turning the radio's dial: RR73 follows within about 1 s, by polling or at once by transceive. A dial read on another band than the last one moves RR73 to that band, and to FT8 there when the mode has no dial on it. On connecting, RR73 moves to the radio's band.
 - While the radio's dial is on another band than RR73's, or outside every band RR73 has, transmissions are refused ("Radio on 40m", "Radio outside the bands"), so no QSO logs the wrong band.
 - The sequencer's state machine is unchanged: it reads the dial from its configuration, which follows the radio.
+- While a shifted transmission has the radio on its Tx dial, everything above keeps the receive dial (Passband shift, below).
 
 ## Transmit
 
@@ -203,8 +205,82 @@ The radio must never stay keyed by RR73. Each path below has a test.
 | A CAT error while keyed: no answers, or the radio says receive | PTT off, Tx off | `radio.test.ts`, `cat.test.ts` |
 | Disconnect radio while keyed | Halt, then PTT off confirmed before the port closes; unconfirmed, Rig control keeps the error and the next connection sends PTT off if the radio transmits | `cat.test.ts` |
 | A stuck keying, or audio that outlasts it (an audio clock that falls behind) | PTT goes off by itself at the keying's limit, and the transmission's audio stops with it | `radio.test.ts`, `scheduler.test.ts` |
+| A shifted keying's Tx dial | Set before PTT on, only once any earlier PTT off is confirmed; PTT on only after the radio's OK; no PTT and no audio without it ("Radio did not set Tx dial"), and the receive dial goes back | `radio.test.ts`, `scheduler.test.ts`, `cat.test.ts`, `rig-tx.spec.ts` |
+| Any dial or mode set while RR73 may hold PTT | Refused at the wire, whoever asked; the simulated IC-705 counts sets that arrive while it transmits, and the tests expect none | `radio.test.ts`, `cat.test.ts`, `sim.rs` |
+| Halt, a fault, audio stopping or the page going during a shifted transmission | PTT off at once, then the receive dial once a read confirms receive; Halt before PTT on went out sends no PTT and sets the receive dial back | `radio.test.ts`, `cat.test.ts`, `rig-tx.spec.ts` |
+| The receive dial refused or unanswered | "Rx dial not restored · Tx off": Tx goes off, and RR73 reads the dial and uses what the radio reports | `radio.test.ts`, `cat.test.ts` |
+| The port lost or Disconnect radio during a shifted transmission | Lost: the next connection in the page sets the receive dial back if the radio still reads the Tx dial. Disconnect: PTT off confirmed and the receive dial back before the port closes | `radio.test.ts`, `cat.test.ts` |
 
 Connecting sends no PTT. The one exception is the recovery above: when this page lost the port while RR73 may have held PTT on, the next connection sends PTT off if the radio reports transmitting. A reload does not know, and the radio's Time-Out Timer is the backstop then.
+
+## Passband shift
+
+Settings › Rig control › Keep Tx audio centred moves the radio's dial for each FT8 and FT4 transmission so the transmit audio sits in the middle of the IC-705's transmit passband, at the RF the operator chose on the waterfall. It is off by default and works only with Key the radio with CAT on: the dial moves before PTT on and back after PTT off, an order only CAT keying can hold. The arithmetic is in `lib/cat/passband.ts`, the decision when it applies in `txShiftHz` (`lib/state/radio.svelte.ts`), and the dial sets in `CatRadio.key` (`lib/cat/radio.ts`).
+
+### Decision
+
+- Window: the lowest tone at 1500 Hz up to 2000 Hz (`TX_WINDOW_LOW_HZ`, `TX_WINDOW_HIGH_HZ`). A Tx frequency inside it needs no shift.
+- Step: 500 Hz, the window's width. Outside the window the dial moves by the whole number of steps that brings the audio into it: Tx dial = receive dial + shift, Tx audio = Tx frequency − shift, so the RF (dial + audio in USB) is the receive dial plus the Tx frequency, as without the shift. A Tx frequency of 2800 Hz on 14.074 MHz goes out as 1800 Hz of audio on 14.075 MHz. The FT8 and FT4 range, 200 to 2800 Hz, takes shifts from −1500 to +1000 Hz.
+- Only while the radio reads USB, with or without data mode. In another mode the dial and the audio do not add up to the same RF, and transmissions go out unshifted.
+- FT8 and FT4 transmissions, and Tune in those modes. WSPR and RTTY are left out (below).
+- Each transmission: the Tx dial and its OK, PTT on and its OK, the audio, PTT off confirmed by a read, the receive dial and its OK, and a read of the dial.
+
+### Reason
+
+- In USB-D the IC-705 transmits 300 Hz to 2700 Hz of audio by default (Basic Manual p. 4-8). SET > Tone Control/TBW > TX > SSB-D > TBW changes the edges (p. 8-2): the lower edge is 100, 200, 300 or 500 Hz and the upper edge 2500, 2700, 2800 or 2900 Hz (CI-V guide p. 20, item `0022` on p. 5). Audio near an edge is attenuated on the filter's skirt. The window, with an FT4 signal's 83 Hz above its lowest tone, sits 600 Hz or more inside the default edges and 400 Hz or more inside every setting, so RR73 does not read the setting.
+- A tone at 1500 Hz or above has its second harmonic at 3000 Hz or above, outside the widest upper edge. Below 1350 Hz the second harmonic of the computer's audio falls inside the default passband and goes out on the air with the signal.
+- A step equal to the window's width gives every Tx frequency exactly one shift: a larger step leaves gaps, and a smaller one gives a choice of two.
+
+### Order and timing
+
+1. At the pre-roll, 500 ms before the audio on the audio clock, where PTT on went without the shift, the keying sends `05` with the Tx dial and waits up to 300 ms (`DIAL_TIMEOUT_MS`) for the radio's OK. PTT on goes out on the OK.
+2. The audio goes to the output after PTT's OK, 100 ms or more after it, as without the shift. The dial's OK and PTT's OK share the 500 ms pre-roll, so the audio starts on time at slot + 0.5 s while the two take 400 ms or less together. A slower radio starts the audio late, as a late start does, and the transmission is missed past the late-start limit (1.5 s in FT8).
+3. After the audio, PTT off as without the shift (PTT off, above). Once a read confirms receive, `05` with the receive dial, and a read of the dial.
+
+The pre-roll runs on the audio clock, which the page's clock places up to the output latency before the slot edge: the dial goes out at the moment PTT on went out before, and the receiver leaves the receive dial then, one dial round trip earlier than it went into transmit without the shift. Setting the dial earlier would move the end of the slot before, so the dial gets no more time than this.
+
+Measured on 2026-10-16:
+
+| Where | Tx dial | PTT on | Audio start | PTT off | Receive dial |
+| --- | --- | --- | --- | --- | --- |
+| Simulated IC-705, answers after 10 ms, fake clocks (`cat.test.ts`) | Slot edge | 10 ms after the dial | Slot + 0.5 s | After the audio and the tail | After the read that confirms receive |
+| Fake IC-705, answers after 5 ms, headless Chromium under load, audio clock (`rig-tx.spec.ts`) | 32 ms before the slot edge on the page's clock | 12 ms after the dial, 486 ms before the audio | 0 ms from slot + 0.5 s | 134 ms after the audio | 12 ms after PTT off |
+
+Without the shift the same test measured PTT on 499 ms before the audio and off 132 ms after it (Transmit, above): the shift costs the PTT lead one dial round trip.
+
+### Consecutive transmissions
+
+The receive dial goes back after every transmission, Repeat CQ and the messages of a QSO included. In FT8 and FT4 every transmission is followed by a slot RR73 decodes. Keeping the Tx dial into it would shift that slot's decodes, the waterfall, saved slots and the dial QSOs log by the shift. The receive dial is back about 150 ms after the audio ends (measured above), at about 13.3 s into the FT8 slot, 1.7 s before the next one. The cost is 2 dial sets and 2 reads per transmission.
+
+### Receive
+
+- From the Tx dial set until the receive dial is back, `CatRadio` keeps the receive dial in its state: reads and transceive frames of the frequency leave it alone, the dial is not polled, and the band sheet's dial and mode sets wait (`busy`) and go out after. The top bar, decoding, the waterfall, saved slots, spots and reports use the receive dial.
+- A QSO logs the receive dial plus the Tx frequency, as before: the RF of the transmission.
+- The radio's own screen shows the Tx dial while it transmits.
+
+### WSPR, RTTY and Tune
+
+- WSPR: left out. Its Tx frequency stays at 1410 to 1590 Hz (`FREQ_LIMITS` in `lib/waterfall/pick.ts`), within 100 Hz of the passband's middle and 1100 Hz from either default edge.
+- RTTY: left out. RR73 places the pair at 1415 and 1585 Hz (`RTTY_DEFAULTS`, centre 1500 Hz), in the middle of the passband, and the pair moves only when the operator tunes it to another station, anywhere from 200 to 2900 Hz (`TONE_LIMITS`). A stream has no set length, and its transmitter is set up in the keyboard worker, so a shift would retune that transmitter for each transmission. Open risk below.
+- Tune: in FT8 and FT4 it shifts as a transmission at the same Tx frequency would, and plays the tone at the Tx frequency less the shift: the carrier goes out on the Tx frequency's RF with its audio in the window. In WSPR and RTTY, Tune is unshifted.
+
+### Safety
+
+- No dial or mode set goes out while RR73 may hold PTT: the link refuses them at the wire (`CatRadio.send`) from PTT on until a read confirms receive. A shifted keying that finds PTT held by an earlier keying, or in its tail, sends PTT off first and waits for its confirmation.
+- The Tx dial refused (NG) or unanswered within 300 ms: no PTT on and no audio, "Radio did not set Tx dial" in the status line, and the receive dial goes back, after the 250 ms drain when the answer went missing. FT8 and FT4 try again in the next slot, as after a refused PTT.
+- Halt, a fault, audio stopping and the page going send PTT off at once, as before, and the receive dial goes back once a read confirms receive. Released before its PTT on went out, a keying sends no PTT and sets the receive dial back.
+- The receive dial refused or unanswered: "Rx dial not restored · Tx off", Tx goes off, and RR73 reads the dial and uses the one the radio reports, so decodes and logged QSOs follow the radio.
+- The port lost while the radio is on a Tx dial: Tx goes off as for any lost port, and the next connection in the page sets the receive dial back if the radio still reads the Tx dial. A dial the operator turned meanwhile stays. A reload does not know.
+- Disconnect radio: Halt, PTT off confirmed, and the receive dial back before the port closes.
+- A transmission whose shift changed between its synthesis and the pre-roll (the switch, the keying or the radio's mode changed) lets its slot go by, and the next is made again.
+
+### Alternatives rejected
+
+- Keeping the Tx dial between transmissions: the slots between them would be decoded at the wrong dial.
+- Setting the Tx dial earlier than the pre-roll for more time: the end of the slot before would be received on the Tx dial.
+- Reading the SSB-D transmit bandwidth (`1A 05 0022`) and centring in it: the window sits inside every setting the radio offers.
+- Split (`0F`, CI-V guide p. 3), with the Tx dial on the other VFO: it changes a radio setting that outlasts RR73, so after a crash or a lost port the radio's own PTT would transmit on the other VFO, and it needs the other VFO kept in USB-D. RR73 changes no radio setting.
+- A smaller window: more Tx frequencies would need a shift, for no gain inside a 2400 Hz passband.
 
 ## Audio
 
@@ -226,15 +302,16 @@ Changing the output halts Tune and any transmission, so no transmission moves be
 ## Testing
 
 - `crates/rr73-cat/tests/reference.rs`: frames worked from the guide's layouts, with their pages.
-- `crates/rr73-cat/tests/sim.rs`: each request against the simulated IC-705 (`rr73_cat::sim`), with Echo Back and Transceive on and off, transceive frames to `00`, and USB SEND keying on a port A line.
+- `crates/rr73-cat/tests/sim.rs`: each request against the simulated IC-705 (`rr73_cat::sim`), with Echo Back and Transceive on and off, transceive frames to `00`, USB SEND keying on a port A line, and the dial and mode sets that arrive while it transmits (`sets_while_transmitting`).
 - `crates/rr73-cat/tests/fuzz.rs`: random bytes and frame-shaped input against the frame reader, the parser and the simulator; random frequencies through the BCD format; random requests answered exactly once.
 - `crates/rr73-wasm/src/cat.rs` and `web/src/lib/cat/wasm.test.ts`: the JSON form of requests and events through the WebAssembly exports. `CatSimForTests` exposes the simulator to the app's unit tests; the app never uses it.
 - `web/src/lib/cat/serial.test.ts`: the serial link against a fake port, the lines lowered before any write.
-- `web/src/lib/cat/radio.test.ts`: the link against a fake port answered by the simulator on a fake clock: the queue, PTT ahead of it, polling, transceive, menu settings read again, lost requests and the drain, PTT and its confirmation, the keying limit and whether a keying still holds PTT, sets refused while keyed, faults while keyed and the 100 ms after the OK, the lost port and the recovery.
-- `web/src/lib/tx/scheduler.test.ts`: keying around FT8, FT4 and WSPR on a fake audio clock, its timing, refusals, Halt, cancel, late starts, PTT taken back before the audio, and the audio stopped at the keying's limit.
-- `web/src/lib/state/cat.test.ts` (jsdom): Settings › Rig control's actions against a fake Web Serial and the simulator: connecting, the port chosen and the others forgotten, opening again, USB SEND on a line, Disconnect (and Disconnect while keyed), the dial followed by transceive and by polling, the dial QSOs log, the dial set, the keying switch off and on for FT8 and WSPR, Halt, page hide, the lost port, faults, PTT off unconfirmed, and Test keying with each of its answers.
-- `web/e2e/rig.spec.ts` (Playwright `chromium`): `navigator.serial` replaced by a fake IC-705 in the page (`e2e/fake-ic705.ts`): connecting, the dial shown, a band change setting the radio, the radio's dial followed, opening again after a reload, and Test keying with a radio that answers and one that keeps transmitting.
-- `web/e2e/rig-tx.spec.ts` (Playwright `tx-cq`, after the rest of the suite): the output recorded (`e2e/tap.ts`) and PTT timed against it on the audio clock: a CQ with the switch off (no PTT) and on (PTT before and after the audio, at slot + 0.5 s), Halt, Tune with the switch off and on, RTTY, audio stopping and a lost port. It skips, and fails on GitHub Actions, when the audio clock falls behind real time (docs/testing.md).
+- `web/src/lib/cat/radio.test.ts`: the link against a fake port answered by the simulator on a fake clock: the queue, PTT ahead of it, polling, transceive, menu settings read again, lost requests and the drain, PTT and its confirmation, the keying limit and whether a keying still holds PTT, sets refused while keyed, faults while keyed and the 100 ms after the OK, the lost port and the recovery. With a dial shift: the Tx dial before PTT on and the receive dial after PTT off is confirmed, the state on the receive dial through reports of the Tx dial, a refused and an unanswered Tx dial, Halt, a release before PTT on, PTT off for an earlier keying first, the band sheet held back, a refused restore, and the receive dial set back after a lost port.
+- `web/src/lib/cat/passband.test.ts`: every FT8 and FT4 Tx frequency lands in the window in whole steps, with the RF unchanged.
+- `web/src/lib/tx/scheduler.test.ts`: keying around FT8, FT4 and WSPR on a fake audio clock, its timing, refusals, Halt, cancel, late starts, PTT taken back before the audio, and the audio stopped at the keying's limit. With a shift: the synthesis at the Tx frequency less the shift, the keying with it, no shift inside the window or with the switch off, a shift changed before the pre-roll, and a refused Tx dial.
+- `web/src/lib/state/cat.test.ts` (jsdom): Settings › Rig control's actions against a fake Web Serial and the simulator: connecting, the port chosen and the others forgotten, opening again, USB SEND on a line, Disconnect (and Disconnect while keyed), the dial followed by transceive and by polling, the dial QSOs log, the dial set, the keying switch off and on for FT8 and WSPR, Halt, page hide, the lost port, faults, PTT off unconfirmed, and Test keying with each of its answers. Keep Tx audio centred: off by default, a CQ at 2800 Hz with its frames and timing and the RF it goes out on, no shift with the switch off, inside the window or without CAT keying, USB only, a refused Tx dial, Halt, a lost port, a refused restore and Disconnect radio.
+- `web/e2e/rig.spec.ts` (Playwright `chromium`): `navigator.serial` replaced by a fake IC-705 in the page (`e2e/fake-ic705.ts`): connecting, the dial shown, a band change setting the radio, the radio's dial followed, opening again after a reload, Test keying with a radio that answers and one that keeps transmitting, and Keep Tx audio centred off by default and usable only with CAT keying on.
+- `web/e2e/rig-tx.spec.ts` (Playwright `tx-cq`, after the rest of the suite): the output recorded (`e2e/tap.ts`) and PTT timed against it on the audio clock: a CQ with the switch off (no PTT) and on (PTT before and after the audio, at slot + 0.5 s), Halt, Tune with the switch off and on, RTTY, audio stopping and a lost port. With Keep Tx audio centred: a CQ at 2800 Hz sends the Tx dial, PTT on, the audio at 1800 Hz (decoded) on time, PTT off and the receive dial, with the fake radio reporting each dial set by transceive and Operate showing the receive dial throughout, then Halt; and Tune at 2800 Hz plays 1800 Hz on the dial 1000 Hz up. It skips, and fails on GitHub Actions, when the audio clock falls behind real time (docs/testing.md).
 - `e2e/layout.spec.ts` in WebKit checks that Settings has no Rig control without Web Serial.
 - The output and input choices: unit tests of the engine and the settings, and `e2e/output.spec.ts` in the chromium project with fake devices.
 
@@ -270,3 +347,9 @@ Not tested on a device: everything above ran against the simulator and a fake ra
 - The answer to PTT on with PTT Lock on: Test keying reports what `1C 00` reads.
 - The output and input choices were measured in headless Chromium on Linux.
 - Port B in the chooser: an operator who picks it gets no answer from the radio until they pick port A.
+- Unverified: how long the IC-705 takes to answer `05` with OK. The shift's audio starts on time while that and PTT's OK take 400 ms or less together.
+- Unverified: whether the IC-705 sends a transceive frame for a frequency set by CI-V. RR73 ignores frequency reports while shifted, so either way the receive dial stays on screen.
+- Unverified: whether moving the dial by up to 1500 Hz just before PTT on changes anything on the transmitter, such as an antenna tuner or a band filter, or affects the first symbols. The shift stays within the band.
+- Unverified: `05` with the radio in split, memory mode or with XIT on. RR73 reads none of these. With split on, the radio may transmit on the other VFO, unshifted.
+- A dial the operator turns on the radio during a shifted transmission is set back to the receive dial afterwards.
+- RTTY transmits unshifted: a pair tuned within about 100 Hz of a passband edge, or below 1350 Hz with its harmonics in the passband, goes out attenuated or with them. Not measured on a device.
