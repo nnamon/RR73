@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- A dupe is a station worked on the band and mode in the same UTC day and the same activation. After starting an activation at a second park, Repeat CQ and Hunt answer stations worked at the first.
+- Hunt follows Work dupes. On, it calls dupes after the other CQs. Off, the default, it skips them.
+
 ## 0.21.8 · 2026-10-15
 
 - The dial reset button in the band sheet is a plain anticlockwise arrow in the accent colour, centred on the dial's digits.

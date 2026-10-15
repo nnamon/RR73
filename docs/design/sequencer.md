@@ -25,7 +25,7 @@ A station the operator calls by hand always follows the answering path, also whi
 
 **Run.** A switch in Operate's ••• menu, stored, off by default. It decides what follows a QSO from CQ:
 
-- On: a station that called in the slot just decoded is answered in the very next slot, or Tx6 goes out when none did. The callers of that slot queue in the order the operator chose: First (decode order), Strongest, Weakest, Farthest, New (callsigns never worked first). Dupes for the band and mode in the current activation, or in the UTC day outside an activation, are skipped unless the operator works dupes.
+- On: a station that called in the slot just decoded is answered in the very next slot, or Tx6 goes out when none did. The callers of that slot queue in the order the operator chose: First (decode order), Strongest, Weakest, Farthest, New (callsigns never worked first). Dupes (below) are skipped unless Work dupes is on, and come last when it is.
   - Only the latest slot's callers count, as with Run off. Until 0.14.3 a caller stayed queued for 4 slots, but on the air a station that loses a pileup usually moves on to another CQ, and a report to one that has gone repeats into silence for up to 4 transmissions, 2 min of FT8, before the drop. A station that still wants the QSO calls in the next slot or answers the next CQ.
   - The decode list marks the callers waiting on their latest message to you, where a CQ row has its country: Next in the tint, then 2nd, 3rd in grey, and Dupe for one Repeat CQ skips. The station being worked has no mark. Until 0.14.2 a panel at the top of the list repeated those messages in answering order; with one caller it only repeated the row under it, so it went.
 - Off: Tx turns off once the QSO ends, as WSJT-X does with "Disable Tx after sending 73".
@@ -36,7 +36,7 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 **Hunt.** A main button. Hunt answers CQs one after another until the operator stops it:
 
 - At each final decoding pass with nobody in a QSO, it calls the first CQ in Hunt's order among the plain CQs heard in the slot just decoded, in the next slot of the opposite parity. Hunt started within the late-start window of a slot picks from the slot before at once.
-- It skips stations heard sending anything other than CQ in that slot (in a QSO), dupes (as for Run), and stations that ignored Hunt in the last 10 min: no reply after the repeats, or a second answer to another station while Hunt called them.
+- It skips stations heard sending anything other than CQ in that slot (in a QSO), dupes unless Work dupes is on (below), and stations that ignored Hunt in the last 10 min: no reply after the repeats, or a second answer to another station while Hunt called them. With Work dupes on, dupes come after the other CQs, whatever the order.
 - Orders, chosen in •••: Not worked (on this band and mode on any day, then strongest; the default), Strongest, Newest (the station whose run of CQs started most recently), Farthest, New call (never worked).
 - Directed CQs only where the operator is the station asked for, by the country file (`lib/qso/directed.ts`): an activity (CQ POTA, CQ SOTA, CQ WWFF, CQ IOTA, CQ QRP) always; a continent (CQ EU) on that continent; CQ DX from another continent than the caller's; a prefix (CQ JA) in the DXCC entity it names. Contest CQs (CQ TEST, CQ WW, CQ FD, CQ RU), frequency CQs (CQ 290), other words and calls the country file cannot place are skipped. Every word of a modifier must pass. Until the country file has loaded, Hunt calls plain CQs only.
 - Hunt and CQ stop each other. Starting Hunt during a QSO lets the QSO finish and picks after it. Stopping Hunt during a QSO lets it finish, then Tx goes off. Halt, End QSO, an audio stop and the watchdog stop Hunt.
@@ -47,6 +47,17 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 **Lost station.** When the station we call, before it has answered us, sends a report, `R<report>`, RR73, RRR or 73 to another station, calling stops and a notice names it: "VK2LAW answered DV5CEL." A CQ or a call with a grid from that station is not a QSO under way, and calling continues.
 
 **Tail-end.** A setting, on by default. After a lost station sends RR73, RRR or 73 to the other station, or calls CQ, the sequencer calls it once more in the next slot of the opposite parity, with the late start allowed. One unanswered call ends the attempt. Nothing goes out while the station is in its QSO, Tx on included. Waiting ends after 8 slots. With tail-end off, the call pauses at once. Hunt never tail-ends: it moves on to the next CQ as soon as the station it calls answers another, whatever the setting, because another CQ is a quicker QSO than waiting out theirs.
+
+## Dupes
+
+A dupe is a station the phone's log holds a QSO with on the same band, in the same mode (FT8 or FT4), on the same UTC day and in the same activation. A QSO belongs to the activation running when it was logged, or to the one Edit QSO moved it into. QSOs logged outside an activation, or while Activations is off, belong to none and count only against each other. A new activation starts with no dupes: a station worked at the first park of the day can be worked again at the second.
+
+Repeat CQ and Hunt skip dupes while Work dupes is off, the default. The switch is in Operate's ••• and in Settings › FT8 and FT4. On, both answer a dupe only when no other caller or CQ in the slot can be answered: dupes come last in Repeat CQ's queue and in Hunt's order. A CQ carries the activator's callsign and never the park, so an activator who moves to a new park the same day stays a dupe for Hunt; Work dupes on lets Hunt call them.
+
+- An activation is identified by its id: the `activationId` the log stores on each QSO, set when the QSO is logged or moved, and the running activation's id, which `configure` carries as `activationId`. It is null with no activation running or with Activations off, as the log then attaches none. Editing an activation's references keeps its id and its dupes. A new activation gets a new id, also at the same park.
+- Rejected: the set of references as the identity. The log links QSOs to activations by id, the references can change while an activation runs, and two activations with overlapping sets (2 parks, then one of them) have no clear answer.
+- Dupes, Hunt's Not worked and New call orders, and Repeat CQ's New order come from the phone's log only. By the owner's rule, any data from Wavelog, such as a future copy of what it holds as worked, stays cosmetic (decode colours, the New chip, Hide worked) unless a clearly labelled switch says otherwise.
+- Up to 0.21.8 a dupe was any QSO on the band and mode in the UTC day, whatever the activation, and Hunt skipped dupes with Work dupes on as well.
 
 ## Timing
 
@@ -111,16 +122,18 @@ The sequencer emits `LogQso` at the moment of completion with start and end time
 ```text
 events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | callCq | enableTx(on)
          | hunt(on) | stopAfterQso(on) | halt | txStarted(slotStart) | txEnded(slotStart) | audioStopped
-         | endQso | configure(band, mode, dialHz, ...) | touch(t) | tick(t) | editMessage(slot, text)
+         | endQso | configure(band, mode, dialHz, ...) | setWorked(worked) | touch(t) | tick(t)
+         | editMessage(slot, text)
 effects: scheduleTx(text, slotStart, startOffsetS, freqHz) | cancelTx | logQso(record)
          | notice(kind, text) | queueChanged(callers)
 ```
 
-`state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Hunt's order, Hound and the watchdog limit come in through `configure`. `freqHz` is null except where Hound sets the Tx frequency. The UI renders from state; the audio layer executes effects.
+`state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Work dupes, Hunt's order, Hound, the watchdog limit and the running activation's id come in through `configure`; the log's FT8 and FT4 QSOs, each with its activation, come in through `setWorked`. `freqHz` is null except where Hound sets the Tx frequency. The UI renders from state; the audio layer executes effects.
 
 ## Open risks
 
 - Hunt's "in a QSO" test only sees the slot just decoded: a station that answered a caller we did not decode looks free. The lost-station check stops the call one slot later.
 - Hunt's pick uses the SNR of one decode; fading can make a weaker station look strongest for a slot. Not tested on a device.
 - Tail-end waits at most 8 slots. A long QSO with repeats outlasts it, and the call pauses.
+- POTA counts a repeat of the same call, band and mode once in a UTC day over every activation at a park, and WWFF once per reference. A second activation at the same park on the same UTC day starts with no dupes, so Repeat CQ and Hunt work stations again that those programmes count once.
 - A late start that leaves out its first part, and a CQ replaced on air, are measured on synthetic slots only. Not tested on a device: between the CQ stopping and the call starting the output is silent while the call synthesises, up to the 0.2 s the sequencer allows for it, which VOX hang time should bridge.

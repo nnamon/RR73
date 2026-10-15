@@ -3,6 +3,7 @@
   import BackLink from '../ui/BackLink.svelte';
   import { href } from '../lib/app/router.svelte';
   import { normaliseMinutes, settings, updateSettings } from '../lib/state/settings.svelte';
+  import { features } from '../lib/state/features.svelte';
 
   let watchdogMin = $state(String(settings.watchdogMin));
   $effect(() => {
@@ -46,7 +47,8 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">Same day, band and mode</span></span>
+        <!-- Dupes count within one activation (docs/design/sequencer.md). With Activations off, QSOs are logged outside any. -->
+        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">{features.activations ? 'Same day, band, mode and activation' : 'Same day, band and mode'}</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">

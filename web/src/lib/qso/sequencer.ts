@@ -83,7 +83,13 @@ export interface SeqConfig {
   /** Hunt: calls to a station that has not answered before Hunt moves on. Defaults to 1 + maxRetries. */
   huntCalls?: number;
   order: QueueOrder;
+  /** Repeat CQ and Hunt answer dupes too, after every other caller or CQ. */
   workDupes: boolean;
+  /**
+   * The running activation's id: the activation the log attaches to the next QSO, null outside
+   * one or while Activations is off. Dupes count within one activation (dupeOf).
+   */
+  activationId: string | null;
   /** Run: after a QSO from CQ, answer the next caller or call CQ again. Off: Tx goes off after the QSO. */
   run: boolean;
   /** Call a lost station once more after it ends its QSO with the other station. */
@@ -115,6 +121,8 @@ export interface Worked {
   /** UTC day, YYYYMMDD. */
   day: string;
   grid: string | null;
+  /** The activation the QSO belongs to in the log, or null for none. */
+  activationId: string | null;
 }
 
 export interface Caller {
@@ -403,10 +411,14 @@ function workedHere(worked: Worked[], call: string, c: SeqConfig): boolean {
   return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode);
 }
 
-/** Worked today on this band and mode: a dupe. */
+/**
+ * A dupe: worked on this band and mode, on this UTC day, in the running activation, or outside
+ * any activation when none runs. A new activation the same day, at a second park for example,
+ * starts with no dupes.
+ */
 function dupeOf(worked: Worked[], call: string, c: SeqConfig, nowMs: number): boolean {
   const day = dayOf(nowMs);
-  return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode && w.day === day);
+  return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode && w.day === day && w.activationId === c.activationId);
 }
 
 /** Plain CQs in Hunt's order. */
@@ -427,13 +439,15 @@ export function orderHunt(cqs: HeardCq[], order: HuntOrder, worked: Worked[], co
 
 /**
  * The CQs Hunt may answer after the slot starting at `slotStartMs`: plain CQs heard in it, less
- * dupes and stations that ignored Hunt in the last 10 min, in Hunt's order.
+ * stations that ignored Hunt in the last 10 min, in Hunt's order. Dupes are left out unless the
+ * operator works dupes; then they come after the other CQs, as in Repeat CQ's queue.
  */
 export function huntCandidates(st: SeqState, slotStartMs: number, nowMs: number): HeardCq[] {
   const c = st.config;
   const ignored = st.ignored.filter((i) => nowMs - i.atMs < IGNORE_MS);
-  const open = st.cqs.filter((q) => q.heardMs === slotStartMs && !dupeOf(st.worked, q.call, c, nowMs) && !ignored.some((i) => sameCall(i.call, q.call)));
-  return orderHunt(open, c.huntOrder, st.worked, c);
+  const dupe = (q: HeardCq) => dupeOf(st.worked, q.call, c, nowMs);
+  const open = st.cqs.filter((q) => q.heardMs === slotStartMs && (c.workDupes || !dupe(q)) && !ignored.some((i) => sameCall(i.call, q.call)));
+  return orderHunt(open, c.huntOrder, st.worked, c).sort((a, b) => Number(dupe(a)) - Number(dupe(b)));
 }
 
 const ENDS: ExchangeKind[] = ['rr73', 'rrr', '73'];
@@ -669,7 +683,7 @@ class Machine {
       stationCallsign: c.myCall,
       myGridsquare: c.myGrid,
     };
-    st.worked.push({ call: record.call, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid });
+    st.worked.push({ call: record.call, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid, activationId: c.activationId });
     st.completed++;
     if (st.hunt) st.huntQsos++;
     this.fx.push({ type: 'logQso', record });
@@ -1426,7 +1440,9 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       }
       // Run off: the queue goes; the QSO in progress carries on.
       if (changed('run') && !st.config.run) m.clearQueue();
-      if (changed('order') || changed('workDupes')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
+      // A new activation starts with no dupes: callers waiting are marked again at once.
+      if (changed('activationId')) m.markQueue(e.nowMs);
+      if (changed('order') || changed('workDupes') || changed('activationId')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
       // Only a change to the message text plans the transmission again; Settings sends every
       // value whenever one changes, and a new plan would replace a transmission about to start.
       if (st.next && !st.onAir && st.current && (changed('myCall') || changed('myGrid') || changed('ack') || changed('cqModifier'))) m.plan(st.current, e.nowMs);

@@ -13,6 +13,7 @@ const CONFIG: SeqConfig = {
   maxRetries: 3,
   order: 'first',
   workDupes: false,
+  activationId: null,
   run: false,
   tailEnd: true,
   huntOrder: 'unworked',

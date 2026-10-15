@@ -83,18 +83,18 @@ describe('frequencies', () => {
 });
 
 describe('worked before', () => {
-  it('comes from the log: FT8 and FT4 QSOs that are not deleted, by UTC day', async () => {
+  it('comes from the log: FT8 and FT4 QSOs that are not deleted, by UTC day and activation', async () => {
     const { workedFrom } = await import('./qso.svelte');
-    const base = { gridsquare: '', submode: '', deletedAt: null, band: '20m', start: Date.UTC(2026, 9, 13, 23, 59) } as const;
+    const base = { gridsquare: '', submode: '', deletedAt: null, band: '20m', start: Date.UTC(2026, 9, 13, 23, 59), activationId: null } as const;
     const qsos = [
-      { ...base, call: 'JA1KXM', mode: 'FT8', gridsquare: 'PM95' },
+      { ...base, call: 'JA1KXM', mode: 'FT8', gridsquare: 'PM95', activationId: 'a1' },
       { ...base, call: 'K1ABC', mode: 'MFSK', submode: 'FT4', band: '40m' },
       { ...base, call: 'VK2ESN', mode: 'SSB' },
       { ...base, call: 'ZL1TQK', mode: 'FT8', deletedAt: 1 },
     ] as never[];
     expect(workedFrom(qsos)).toEqual([
-      { call: 'JA1KXM', band: '20m', mode: 'FT8', day: '20261013', grid: 'PM95' },
-      { call: 'K1ABC', band: '40m', mode: 'FT4', day: '20261013', grid: null },
+      { call: 'JA1KXM', band: '20m', mode: 'FT8', day: '20261013', grid: 'PM95', activationId: 'a1' },
+      { call: 'K1ABC', band: '40m', mode: 'FT4', day: '20261013', grid: null, activationId: null },
     ]);
   });
 });
@@ -123,6 +123,23 @@ describe('the call on air', () => {
     expect(configNow()).toMatchObject({ myCall: '9V1NE', myGrid: 'OJ11' });
     settings.features.activations = true;
     expect(configNow()).toMatchObject({ myCall: 'VK3/9V1NE', myGrid: 'QF22' });
+    settings.features.activations = false;
+    log.activations = [];
+  });
+});
+
+describe('the running activation', () => {
+  it('reaches the sequencer only while Activations is on, as the log attaches it to new QSOs', async () => {
+    const { configPatch } = await import('./qso.svelte');
+    const { log } = await import('../log/log.svelte');
+    const running: Activation = { id: 'a1', refs: [{ programme: 'POTA', ref: 'VK-0921' }], callsign: '9V1NE', operator: '9V1NE', grid: 'QF22', gridSource: 'typed', wavelogStationId: null, startedAt: 1, endedAt: null, updatedAt: 1 };
+    log.activations = [running];
+    settings.features.activations = false;
+    expect(configPatch().activationId).toBeNull();
+    settings.features.activations = true;
+    expect(configPatch().activationId).toBe('a1');
+    log.activations = [{ ...running, endedAt: 2 }];
+    expect(configPatch().activationId).toBeNull();
     settings.features.activations = false;
     log.activations = [];
   });

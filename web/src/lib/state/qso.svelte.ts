@@ -2,11 +2,12 @@
  * The QSO runtime: feeds the sequencer (lib/qso) with decodes, audio and band state, touches
  * and a 1 s tick, and carries out its effects through the transmit scheduler (lib/tx).
  * Completed QSOs go to the log (lib/log logQso), which stores them, shows the Logged notice
- * and sends them on; the log's QSOs are also the worked-before list for dupes.
+ * and sends them on; the log's QSOs are also the worked-before list for dupes and Hunt. Only
+ * this phone's log feeds that list (docs/design/sequencer.md, Dupes).
  */
 
 import { untrack } from 'svelte';
-import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
+import { HOUND_MIN_HZ, houndCallHz, initialState, messages, notReady, reduce, ourSlot, type Caller, type NoticeKind, type SeqConfig, type SeqEvent, type SeqState, type Worked } from '../qso/sequencer';
 import { bare, parseExchange, type TxNum } from '../qso/messages';
 import { answersDirected } from '../qso/directed';
 import { reference } from '../reference';
@@ -71,12 +72,17 @@ function ftMode(): FtMode {
   return isFt(settings.mode) ? settings.mode : 'FT8';
 }
 
-/** The call and grid on air: the running activation's (with Activations on), else Settings. Exported for tests. */
+/**
+ * The sequencer's configuration from Settings and the running activation. With Activations off
+ * the running activation is hidden, as when the log attaches it to new QSOs: the call and grid on
+ * air come from Settings, and dupes count outside activations. Exported for tests.
+ */
 export function configNow() {
   const a = features.activations ? log.current : null;
   return {
     myCall: a?.callsign || settings.callsign,
     myGrid: a?.grid || settings.grid,
+    activationId: a?.id ?? null,
     mode: ftMode(),
     band: settings.band,
     dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz, settings.ftDialHz) ?? 0,
@@ -332,14 +338,17 @@ export function callStart(slotStartMs: number, nowMs = Date.now()): { startMs: n
   return { startMs: s.slotStartMs + s.offsetS * 1000, parity, tooLateFor: s.tooLateFor };
 }
 
-/** FT8 and FT4 QSOs in the log, as the sequencer's worked-before list. */
+/**
+ * FT8 and FT4 QSOs in the log, as the sequencer's worked-before list, each with the activation it
+ * belongs to: the one running when it was logged, or the one Edit QSO moved it into.
+ */
 export function workedFrom(qsos: readonly Qso[]): Worked[] {
   const out: Worked[] = [];
   for (const q of qsos) {
     if (q.deletedAt !== null) continue;
     const mode = q.mode === 'FT8' ? 'FT8' : q.mode === 'MFSK' && q.submode === 'FT4' ? 'FT4' : null;
     if (!mode) continue;
-    out.push({ call: q.call, band: q.band, mode, day: new Date(q.start).toISOString().slice(0, 10).replace(/-/g, ''), grid: q.gridsquare || null });
+    out.push({ call: q.call, band: q.band, mode, day: new Date(q.start).toISOString().slice(0, 10).replace(/-/g, ''), grid: q.gridsquare || null, activationId: q.activationId });
   }
   return out;
 }
@@ -353,6 +362,31 @@ export function runRate(nowMs: number): { total: number; hour: number } {
 /** The caller queue in answering order. */
 export function queue(): Caller[] {
   return qso.st.queue;
+}
+
+/** What Settings and the running activation change in the sequencer's configuration, sent with `configure`. Exported for tests. */
+export function configPatch(): Partial<SeqConfig> {
+  const c = configNow();
+  return {
+    myCall: c.myCall,
+    myGrid: c.myGrid,
+    band: c.band,
+    mode: c.mode,
+    dialHz: c.dialHz,
+    txHz: c.txHz,
+    ack: c.ack,
+    order: c.order,
+    workDupes: c.workDupes,
+    activationId: c.activationId,
+    cqParity: c.cqParity,
+    run: c.run,
+    tailEnd: c.tailEnd,
+    huntOrder: c.huntOrder,
+    watchdogMs: c.watchdogMs,
+    watchdogRefresh: c.watchdogRefresh,
+    huntCalls: c.huntCalls,
+    hound: c.hound,
+  };
 }
 
 let started = false;
@@ -420,27 +454,9 @@ export function startQso() {
       untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));
     });
     $effect(() => {
-      const c = configNow();
-      const patch = {
-        myCall: c.myCall,
-        myGrid: c.myGrid,
-        band: c.band,
-        mode: c.mode,
-        dialHz: c.dialHz,
-        txHz: c.txHz,
-        ack: c.ack,
-        order: c.order,
-        workDupes: c.workDupes,
-        cqParity: c.cqParity,
-        run: c.run,
-        tailEnd: c.tailEnd,
-        huntOrder: c.huntOrder,
-        watchdogMs: c.watchdogMs,
-        watchdogRefresh: c.watchdogRefresh,
-        huntCalls: c.huntCalls,
-        hound: c.hound,
-      };
-      // The dispatch reads and writes the sequencer state; only Settings should re-run this.
+      const patch = configPatch();
+      // The dispatch reads and writes the sequencer state; only Settings and the running
+      // activation should re-run this.
       untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
     });
   });

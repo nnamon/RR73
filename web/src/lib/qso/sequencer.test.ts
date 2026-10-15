@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IGNORE_MS, LATE_S, loggable, notReady, ourSlot, reduce, type HuntOrder, type QueueOrder, type SeqState, type Worked } from './sequencer';
+import { IGNORE_MS, LATE_S, huntCandidates, loggable, notReady, ourSlot, reduce, type HuntOrder, type QueueOrder, type SeqState, type Worked } from './sequencer';
 import { Sim, T0, decode } from '../testing/qso-sim';
 import type { Decode } from '../decode/types';
 
@@ -209,7 +209,7 @@ describe('Run mode', () => {
 
   function run(order: QueueOrder, worked: string[] = []) {
     const s = new Sim({ order, run: true });
-    if (worked.length) s.send({ type: 'setWorked', worked: worked.map((call) => ({ call, band: '40m', mode: 'FT8', day: '20261001', grid: null })), nowMs: s.at(0) });
+    if (worked.length) s.send({ type: 'setWorked', worked: worked.map((call) => ({ call, band: '40m', mode: 'FT8', day: '20261001', grid: null, activationId: null })), nowMs: s.at(0) });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
     s.run(0, 2, { 1: callers });
     return s;
@@ -246,8 +246,8 @@ describe('Run mode', () => {
     expect(s.st.queue).toEqual([]);
   });
 
-  it('skips dupes from the same UTC day, band and mode unless dupes are worked', () => {
-    const today = { band: '20m', mode: 'FT8' as const, day: '20261013', grid: null };
+  it('skips dupes from the same UTC day, band, mode and activation unless dupes are worked', () => {
+    const today = { band: '20m', mode: 'FT8' as const, day: '20261013', grid: null, activationId: null };
     const s = new Sim({ run: true });
     s.send({ type: 'setWorked', worked: [{ call: 'K1ABC', ...today }], nowMs: s.at(0) });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
@@ -264,10 +264,63 @@ describe('Run mode', () => {
 
   it('does not count a QSO on another band or day as a dupe', () => {
     const s = new Sim({ run: true });
-    s.send({ type: 'setWorked', worked: [{ call: 'K1ABC', band: '40m', mode: 'FT8', day: '20261013', grid: null }, { call: 'K1ABC', band: '20m', mode: 'FT8', day: '20261012', grid: null }], nowMs: s.at(0) });
+    s.send({
+      type: 'setWorked',
+      worked: [
+        { call: 'K1ABC', band: '40m', mode: 'FT8', day: '20261013', grid: null, activationId: null },
+        { call: 'K1ABC', band: '20m', mode: 'FT8', day: '20261012', grid: null, activationId: null },
+      ],
+      nowMs: s.at(0),
+    });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
     s.run(0, 2, { 1: [callers[0]] });
     expect(texts(s).at(-1)).toBe('2:K1ABC 9V1NE -15');
+  });
+
+  /** True when K1ABC, calling in slot 1, gets our report in slot 2 with `worked` in the log. */
+  function answers(worked: Partial<Worked>[], over: ConstructorParameters<typeof Sim>[0] = {}): boolean {
+    const s = new Sim({ run: true, ...over });
+    const k1abc: Worked = { call: 'K1ABC', band: '20m', mode: 'FT8', day: '20261013', grid: null, activationId: null };
+    s.send({ type: 'setWorked', worked: worked.map((w) => ({ ...k1abc, ...w })), nowMs: s.at(0) });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 2, { 1: [callers[0]] });
+    return texts(s).at(-1) === '2:K1ABC 9V1NE -15';
+  }
+
+  it('counts a dupe only in the activation it was worked in, or outside activations', () => {
+    expect(answers([{ activationId: 'A' }], { activationId: 'A' })).toBe(false);
+    expect(answers([{ activationId: null }], { activationId: null })).toBe(false);
+    // A new activation the same UTC day, at a second park for example.
+    expect(answers([{ activationId: 'A' }], { activationId: 'B' })).toBe(true);
+    // Worked outside any activation, then in one, and the other way round.
+    expect(answers([{ activationId: null }], { activationId: 'A' })).toBe(true);
+    expect(answers([{ activationId: 'A' }], { activationId: null })).toBe(true);
+  });
+
+  it('does not count a QSO in the other mode as a dupe in the same activation', () => {
+    // FT8 at the first park, then FT4 at the second: FT8 at the second is a new QSO, FT4 a dupe.
+    const log: Partial<Worked>[] = [{ activationId: 'A' }, { mode: 'FT4', activationId: 'B' }];
+    expect(answers(log, { activationId: 'B' })).toBe(true);
+    const f = new Sim({ run: true, mode: 'FT4', activationId: 'B' });
+    f.send({ type: 'setWorked', worked: log.map((w) => ({ call: 'K1ABC', band: '20m', mode: 'FT8' as const, day: '20261013', grid: null, activationId: null, ...w })), nowMs: f.at(0) });
+    f.send({ type: 'callCq', nowMs: f.at(0, 0.1) });
+    f.run(0, 2, { 1: [callers[0]] });
+    expect(texts(f).at(-1)).toBe('2:CQ 9V1NE OJ11');
+    expect(f.st.queue).toMatchObject([{ call: 'K1ABC', dupe: true }]);
+  });
+
+  it('skips a station worked in this activation, and answers it once a new activation starts', () => {
+    const s = new Sim({ run: true, activationId: 'A' });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 8, { 1: ['9V1NE K1ABC FN42'], 3: ['9V1NE K1ABC R-12'], 7: ['9V1NE K1ABC FN42'] });
+    expect(s.logged().map((r) => r.call)).toEqual(['K1ABC']);
+    expect(texts(s).slice(-2)).toEqual(['6:CQ 9V1NE OJ11', '8:CQ 9V1NE OJ11']);
+    expect(s.st.queue).toMatchObject([{ call: 'K1ABC', dupe: true }]);
+    // The operator starts an activation at the next park: the waiting caller is no longer a dupe.
+    s.send({ type: 'configure', patch: { activationId: 'B' }, nowMs: s.at(8, 1) });
+    expect(s.st.queue).toMatchObject([{ call: 'K1ABC', dupe: false }]);
+    s.run(9, 10, { 9: ['9V1NE K1ABC FN42'] });
+    expect(texts(s).at(-1)).toBe('10:K1ABC 9V1NE -10');
   });
 
   it('repeats RR73 without Run when the caller repeats the R-report', () => {
@@ -533,7 +586,7 @@ describe('Hunt', () => {
   const cqs = [decode('CQ JA1KXM PM95', -5, 900), decode('CQ K1ABC FN42', -15, 600), decode('CQ VK3QRP QF22', -20, 1200)];
   // Stronger, and skipped: a directed CQ, a CQ with a modifier and a station in a QSO.
   const skipped = [decode('CQ DX ZL1TQK RF70', 3, 1500), decode('CQ POTA W1AW FN31', 2, 1700), decode('ZL2AA ZL1BB -10', 4, 1800)];
-  const worked = (call: string, over: Partial<Worked> = {}): Worked => ({ call, band: '20m', mode: 'FT8', day: '20261001', grid: null, ...over });
+  const worked = (call: string, over: Partial<Worked> = {}): Worked => ({ call, band: '20m', mode: 'FT8', day: '20261001', grid: null, activationId: null, ...over });
 
   function pick(order: HuntOrder, w: Worked[] = []) {
     const s = new Sim({ huntOrder: order });
@@ -572,7 +625,7 @@ describe('Hunt', () => {
     expect(s.st.next).toMatchObject({ tx: 1 });
   });
 
-  it('skips dupes, and picks nothing when only skipped stations call', () => {
+  it('skips dupes with Work dupes off, and picks nothing when only skipped stations call', () => {
     const s = new Sim({ huntOrder: 'strongest' });
     s.send({ type: 'setWorked', worked: [worked('JA1KXM', { day: '20261013' })], nowMs: s.at(0) });
     s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
@@ -580,6 +633,44 @@ describe('Hunt', () => {
     expect(s.st.partner).toBeNull();
     s.hear(3, [...skipped, ...cqs]);
     expect(s.st.partner?.call).toBe('K1ABC');
+  });
+
+  it('answers dupes with Work dupes on, after the other CQs as Repeat CQ does', () => {
+    const hunt = () => {
+      const s = new Sim({ huntOrder: 'strongest', workDupes: true });
+      s.send({ type: 'setWorked', worked: [worked('JA1KXM', { day: '20261013' })], nowMs: s.at(0) });
+      s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+      return s;
+    };
+    const alone = hunt();
+    alone.hear(1, [...skipped, cqs[0]]);
+    expect(alone.st.partner?.call).toBe('JA1KXM');
+    expect(alone.st.next).toMatchObject({ tx: 1, text: 'JA1KXM 9V1NE OJ11', slotStartMs: alone.at(2) });
+    // JA1KXM is the strongest, and the dupe: the other CQs come first.
+    const all = hunt();
+    all.hear(1, [...skipped, ...cqs]);
+    expect(huntCandidates(all.st, all.at(1), all.at(2, 0.1)).map((q) => q.call)).toEqual(['K1ABC', 'VK3QRP', 'JA1KXM']);
+    expect(all.st.partner?.call).toBe('K1ABC');
+  });
+
+  it('turns to dupes when Work dupes goes on during Hunt', () => {
+    const s = new Sim({ huntOrder: 'strongest' });
+    s.send({ type: 'setWorked', worked: [worked('JA1KXM', { day: '20261013' })], nowMs: s.at(0) });
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    s.hear(1, [cqs[0]]);
+    expect(s.st.partner).toBeNull();
+    s.send({ type: 'configure', patch: { workDupes: true }, nowMs: s.at(2, 3) });
+    s.hear(3, [cqs[0]]);
+    expect(s.st.partner?.call).toBe('JA1KXM');
+  });
+
+  it('counts a dupe only in the activation it was worked in', () => {
+    const s = new Sim({ huntOrder: 'strongest', activationId: 'B' });
+    s.send({ type: 'setWorked', worked: [worked('JA1KXM', { day: '20261013', activationId: 'A' }), worked('K1ABC', { day: '20261013', activationId: 'B' })], nowMs: s.at(0) });
+    s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+    s.hear(1, [cqs[1], cqs[0]]);
+    expect(s.st.partner?.call).toBe('JA1KXM');
+    expect(huntCandidates(s.st, s.at(1), s.at(2, 0.1)).map((q) => q.call)).toEqual(['JA1KXM']);
   });
 
   it('answers in the slot after the CQ, completes and logs the QSO, then picks the next', () => {

@@ -22,6 +22,7 @@ export function config(over: Partial<SeqConfig> = {}): SeqConfig {
     maxRetries: 3,
     order: 'first',
     workDupes: false,
+    activationId: null,
     run: false,
     tailEnd: true,
     huntOrder: 'unworked',
