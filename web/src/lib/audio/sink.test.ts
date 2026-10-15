@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { applySink, matchOutput, outputChange, outputChoices, outputChoiceSupported } from './sink';
+import { applySink, inputChoices, matchInput, matchOutput, outputChange, outputChoices, outputChoiceSupported } from './sink';
 
 const device = (kind: MediaDeviceKind, deviceId: string, label = ''): MediaDeviceInfo => ({ kind, deviceId, label, groupId: '', toJSON: () => ({}) });
 
@@ -55,5 +55,21 @@ describe('output choice', () => {
     // Two devices of that name: no guess.
     const two = [...list, device('audiooutput', 'other-id', 'USB Audio CODEC')];
     expect(matchOutput(two, 'old-id', 'USB Audio CODEC')).toBe('old-id');
+  });
+
+  it('finds the chosen input again by its name when its ID changed, among inputs only', () => {
+    const list = [
+      device('audioinput', 'default', 'Default - Microphone (USB Audio CODEC)'),
+      device('audioinput', 'communications', 'Communications - Microphone (USB Audio CODEC)'),
+      device('audioinput', 'mic', 'Microphone Array'),
+      device('audioinput', 'new-in', 'Microphone (USB Audio CODEC)'),
+      device('audiooutput', 'out', 'Microphone (USB Audio CODEC)'),
+    ];
+    expect(inputChoices(list).map((d) => d.deviceId)).toEqual(['mic', 'new-in']);
+    expect(matchInput(list, 'new-in', 'Microphone (USB Audio CODEC)')).toBe('new-in');
+    expect(matchInput(list, 'old-in', 'Microphone (USB Audio CODEC)')).toBe('new-in');
+    expect(matchInput(list, 'old-in', 'Line In')).toBe('old-in');
+    const two = [...list, device('audioinput', 'other-in', 'Microphone (USB Audio CODEC)')];
+    expect(matchInput(two, 'old-in', 'Microphone (USB Audio CODEC)')).toBe('old-in');
   });
 });

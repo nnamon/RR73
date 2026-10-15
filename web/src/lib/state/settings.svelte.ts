@@ -86,6 +86,8 @@ export interface Settings {
   mode: Mode;
   /** Input device, or null for the system default. */
   inputDeviceId: string | null;
+  /** The input device's name, to find it again when the browser gives it a new ID; empty when unknown. */
+  inputDeviceLabel: string;
   /** Output device for transmit audio, or null for the system default. Chromium only (lib/audio/sink.ts). */
   outputDeviceId: string | null;
   /** The output device's name, to find it again when the browser gives it a new ID; empty when unknown. */
@@ -160,6 +162,7 @@ export const DEFAULTS: Settings = {
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,
+  inputDeviceLabel: '',
   outputDeviceId: null,
   outputDeviceLabel: '',
   outputLevel: 0.5,
@@ -318,6 +321,7 @@ export function validate(raw: unknown): Settings {
   if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';
   if (typeof r.inputDeviceId === 'string' && r.inputDeviceId) s.inputDeviceId = r.inputDeviceId;
+  if (typeof r.inputDeviceLabel === 'string') s.inputDeviceLabel = r.inputDeviceLabel;
   if (typeof r.outputDeviceId === 'string' && r.outputDeviceId) s.outputDeviceId = r.outputDeviceId;
   if (typeof r.outputDeviceLabel === 'string') s.outputDeviceLabel = r.outputDeviceLabel;
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;

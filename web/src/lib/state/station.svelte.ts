@@ -12,7 +12,7 @@ import { CaptureEngine, type Chunk, type InputSource, type StartError, type Stop
 import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } from '../audio/unlock';
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
-import { matchOutput, outputChange, outputChoices, outputChoiceSupported, type OutputState } from '../audio/sink';
+import { inputChoices, matchInput, matchOutput, outputChange, outputChoices, outputChoiceSupported, type OutputState } from '../audio/sink';
 import type { CaptureReport } from '../audio/report';
 import type { AudioClockMapper } from '../clock/mapping';
 import { RxCalibration, clockWarns } from '../clock/calibration';
@@ -262,7 +262,10 @@ function getEngine(): CaptureEngine {
     }
     wake?.set(s.status === 'running' || tx.tuning);
     // Device names are readable once the microphone is allowed.
-    if (changed && s.status === 'running') void refindOutput();
+    if (changed && s.status === 'running') {
+      void refindOutput();
+      void refindInput();
+    }
   });
   engine.onReport((r) => (audio.report = r));
   engine.onChunk(onChunk);
@@ -597,11 +600,20 @@ function checkKeyingAt(toneStartMs: number) {
   }, wait);
 }
 
-/** Starts audio, and loads the decoder the first time. Call from a tap: the start clip must play inside it. */
+/**
+ * Starts audio, and loads the decoder the first time. Call from a tap: the start clip must play
+ * inside it. A chosen input the browser lists under a new ID is found by its name and started.
+ */
 export function startAudio() {
   const toneAt = playStartClip();
   decoder.load();
-  const started = getEngine().start(settings.inputDeviceId);
+  const started = getEngine()
+    .start(settings.inputDeviceId)
+    .then(async (st) => {
+      if (st.status !== 'failed' || st.error !== 'no-device') return st;
+      const id = await refindInput();
+      return id === null ? st : getEngine().start(id);
+    });
   // The practice band has no radio to key.
   if (toneAt !== null && !practice.on) checkKeyingAt(toneAt);
   return started;
@@ -636,6 +648,21 @@ export function useInput(deviceId: string | null) {
 export async function inputDevices(): Promise<MediaDeviceInfo[]> {
   if (typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return [];
   return (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+}
+
+/**
+ * Finds the chosen input again by its name when the browser lists it under a new ID, as Chromium
+ * does after cleared site data, and saves the new ID. Returns it, or null when nothing changed.
+ * Names are readable once the microphone is allowed.
+ */
+export async function refindInput(): Promise<string | null> {
+  const saved = settings.inputDeviceId;
+  if (!saved || !settings.inputDeviceLabel || typeof navigator === 'undefined' || !navigator.mediaDevices?.enumerateDevices) return null;
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  const id = matchInput(devices, saved, settings.inputDeviceLabel);
+  if (id === saved || settings.inputDeviceId !== saved || !inputChoices(devices).some((d) => d.deviceId === id)) return null;
+  await updateSettings({ inputDeviceId: id });
+  return id;
 }
 
 /** The audio outputs the browser lists; none where it cannot choose one (Safari). */

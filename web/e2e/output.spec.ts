@@ -1,6 +1,7 @@
 // Settings › Radio and audio › Output in Chromium, whose fake devices list 3 outputs: the choice
 // lists them, is saved, Tune, the start chime and capture's context play to it, capture keeps
 // running when it changes, and a missing device shows as not connected (docs/design/cat.md, Audio).
+// The Input choice is found again by its name, as the output is.
 import { expect, test, type Page } from '@playwright/test';
 
 // Fake devices for this file: the chromium project runs without them.
@@ -140,4 +141,23 @@ test('an output the browser cannot find or refuses says so, and audio plays on',
   await outputSelect(page).selectOption({ label: 'System default' });
   await expect(page.getByTestId('output-foot')).toHaveCount(0);
   expect(await contextSink(page)).toBe('');
+});
+
+test('the chosen input is found again by its name when the browser gives it a new ID', async ({ page }) => {
+  await page.goto('./#/settings/radio');
+  const input = page.getByRole('combobox', { name: /^Input/ });
+  await expect(input.locator('option')).toContainText(['Fake Audio Input 2']);
+  await input.selectOption({ label: 'Fake Audio Input 2' });
+  const inputId = (label: string) => page.evaluate(async (l) => (await navigator.mediaDevices.enumerateDevices()).find((d) => d.kind === 'audioinput' && d.label === l)?.deviceId ?? '', label);
+  const id1 = await inputId('Fake Audio Input 2');
+  await expect(input).toHaveValue(id1);
+
+  // A new ID on the next load: the choice is found by its name, and audio starts on it.
+  await page.reload();
+  const again = await inputId('Fake Audio Input 2');
+  expect(again).not.toBe(id1);
+  await expect(input).toHaveValue(again);
+  await expect(input.locator('option:checked')).toHaveText('Fake Audio Input 2');
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /^−\d+ dBFS$/, { timeout: 15_000 });
 });

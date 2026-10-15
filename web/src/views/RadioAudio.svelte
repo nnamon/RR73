@@ -14,7 +14,7 @@
   import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
-  import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
+  import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindInput, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
   import { txKeyer } from '../lib/state/radio.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
@@ -35,7 +35,10 @@
   });
 
   function listDevices() {
-    void inputDevices().then((d) => (devices = d));
+    // The chosen input may be listed under a new ID too.
+    void refindInput()
+      .then(() => inputDevices())
+      .then((d) => (devices = d));
     // The chosen output may be listed under a new ID; find it by name before showing the list.
     void refindOutput()
       .then(() => outputDevices())
@@ -197,7 +200,8 @@
 
   function pickInput(e: Event) {
     const id = (e.currentTarget as HTMLSelectElement).value || null;
-    void updateSettings({ inputDeviceId: id });
+    const label = devices.find((d) => d.deviceId === id)?.label ?? '';
+    void updateSettings({ inputDeviceId: id, inputDeviceLabel: label });
     void useInput(id);
   }
 

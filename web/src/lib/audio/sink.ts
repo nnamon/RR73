@@ -64,15 +64,29 @@ export function outputChange(chosen: string | null, wasListed: boolean, devices:
   return null;
 }
 
+/** The audio inputs among `devices`, without the browser's own "default" and "communications" entries. */
+export function inputChoices(devices: readonly MediaDeviceInfo[]): MediaDeviceInfo[] {
+  return devices.filter((d) => d.kind === 'audioinput' && d.deviceId && d.deviceId !== 'default' && d.deviceId !== 'communications');
+}
+
 /**
- * The ID to play to for the output saved as `savedId` and `savedLabel`: the saved ID while the
- * browser lists it; otherwise the ID of the one output with the saved name, as when the browser
+ * The ID of the device saved as `savedId` and `savedLabel` among `choices`: the saved ID while the
+ * browser lists it; otherwise the ID of the one device with the saved name, as when the browser
  * gave the device a new ID (another USB port, cleared site data, a private window); otherwise the
- * saved ID. Two outputs with the same name are not guessed between.
+ * saved ID. Two devices with the same name are not guessed between.
  */
-export function matchOutput(devices: readonly MediaDeviceInfo[], savedId: string, savedLabel: string): string {
-  const outputs = outputChoices(devices);
-  if (outputs.some((d) => d.deviceId === savedId) || !savedLabel) return savedId;
-  const named = outputs.filter((d) => d.label === savedLabel);
+export function matchDevice(choices: readonly MediaDeviceInfo[], savedId: string, savedLabel: string): string {
+  if (choices.some((d) => d.deviceId === savedId) || !savedLabel) return savedId;
+  const named = choices.filter((d) => d.label === savedLabel);
   return named.length === 1 ? named[0].deviceId : savedId;
+}
+
+/** matchDevice for the outputs. */
+export function matchOutput(devices: readonly MediaDeviceInfo[], savedId: string, savedLabel: string): string {
+  return matchDevice(outputChoices(devices), savedId, savedLabel);
+}
+
+/** matchDevice for the inputs. */
+export function matchInput(devices: readonly MediaDeviceInfo[], savedId: string, savedLabel: string): string {
+  return matchDevice(inputChoices(devices), savedId, savedLabel);
 }

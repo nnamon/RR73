@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Radio and audio › Input finds the chosen input again by its name when the browser gives it a new ID.
+
 ## 0.21.10 · 2026-10-15
 
 - Settings › Radio and audio › Waterfall colours sets the waterfall in RR73’s colours, Fire or Grey. Fire and Grey get lighter in even steps from the noise to the strongest signals.
