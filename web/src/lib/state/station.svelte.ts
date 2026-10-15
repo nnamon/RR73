@@ -13,7 +13,7 @@ import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import type { CaptureReport } from '../audio/report';
 import type { AudioClockMapper } from '../clock/mapping';
-import { RxCalibration } from '../clock/calibration';
+import { RxCalibration, clockWarns } from '../clock/calibration';
 import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
 import { SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
@@ -114,6 +114,20 @@ let heardBack: HeardBack[] = [];
 const HEARD_KEEP = 6;
 /** Receive calibration from the DT of strong decodes; moves capture stamps only. */
 const calibration = new RxCalibration();
+
+/**
+ * The clock warning: how far the phone's clock is off by the decodes, s, positive slow, while it
+ * is 1 s or more off (lib/clock/calibration.ts); null otherwise. It stays through gaps in the
+ * decodes, and goes with another input: a web SDR's audio carries the relay's clock.
+ */
+export const clockCheck = $state({ offS: null as number | null });
+const clockListeners = new Set<(offS: number) => void>();
+
+/** Listens for the clock warning coming on. */
+export function onClockWarning(fn: (offS: number) => void): () => void {
+  clockListeners.add(fn);
+  return () => clockListeners.delete(fn);
+}
 
 /**
  * Notes output from `fromUtcMs` to `toUtcMs`: the slots it overlaps hold RR73's own signal, so
@@ -357,6 +371,12 @@ function calibrate(entry: DecodedSlot) {
   if (entry.skipped || inputSource) return;
   calibration.add(entry.startUtcMs, entry.decodes, Date.now());
   if (engine) engine.mapper.inputOffsetS = calibration.offsetS;
+  const clockS = calibration.clockS;
+  if (clockS === null) return;
+  const before = clockCheck.offS !== null;
+  const warns = clockWarns(clockS, before);
+  clockCheck.offS = warns ? clockS : null;
+  if (warns && !before) for (const l of clockListeners) l(clockS);
 }
 
 /** Timing measurements for Settings › Radio and audio and the timing report. */
@@ -375,6 +395,7 @@ export function timingSnapshot(): TimingSnapshot {
     gapMs: (e?.timing.gapS ?? 0) * 1000,
     inputOffsetS: calibration.offsetS,
     medianDtS: calibration.medianDtS,
+    clockS: calibration.clockS,
     strongDecodes: calibration.count,
     heardBack: heardBack.map((h) => ({ ...h })),
     resumes: e?.timing.resumes ?? [],
@@ -521,6 +542,7 @@ export function startAudio() {
 export function setInputSource(src: InputSource | null) {
   if (src === inputSource) return;
   inputSource = src;
+  if (src) clockCheck.offS = null;
   engine?.useSource(src);
   if (engine) engine.mapper.inputOffsetS = inputOffsetS();
 }

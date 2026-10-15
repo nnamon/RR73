@@ -9,6 +9,9 @@
    * In regular width (lib/app/layout.svelte.ts) the bar is 52 pt and stays above every screen:
    * tabs for Operate, Log, Spots and Settings sit in its middle in place of the buttons, and on
    * the other screens, while Tx is on, it says so ("On air · Tx3") and carries Halt.
+   *
+   * While the phone's clock is 1 s or more off by the decodes, a Clock badge opens Radio and
+   * audio at Timing, which says how far and what to do.
    */
   import Icon from './Icon.svelte';
   import LevelMeter from './LevelMeter.svelte';
@@ -31,6 +34,7 @@
     spots,
     practice = false,
     sdr = false,
+    clockOff = null,
     onband,
     regular = false,
     tab = 'operate',
@@ -58,6 +62,8 @@
     practice?: boolean;
     /** Receive audio comes from a web SDR. */
     sdr?: boolean;
+    /** The clock warning: "1.2 s slow"; null without one. */
+    clockOff?: string | null;
     onband: () => void;
     /** Regular width: tabs in the middle, and Halt on the other screens while Tx is on. */
     regular?: boolean;
@@ -88,6 +94,10 @@
   </button>
 {/snippet}
 
+{#snippet clockBadge()}
+  {#if clockOff}<a class="clockoff" href={href('settings', 'radio', 'timing')} aria-label="Phone clock {clockOff}. Open Timing"><span class="badge">Clock</span></a>{/if}
+{/snippet}
+
 {#snippet clock()}
   <div class="clk" role="timer" aria-label="{progress === null ? 'UTC time' : 'UTC time and slot progress'}. {state}">
     {#if progress !== null}<SlotRing {progress} {tone} />{/if}
@@ -101,6 +111,7 @@
       {@render bandButton()}
       {#if practice}<span class="practice">Practice</span>{/if}
       {#if sdr}<span class="sdr">Web SDR</span>{/if}
+      {@render clockBadge()}
     </div>
     <nav class="tabs" aria-label="Screens">
       {#each tabs as t (t.id)}
@@ -121,6 +132,7 @@
     {@render bandButton()}
     {#if practice}<span class="practice">Practice</span>{/if}
     {#if sdr}<span class="sdr">Web SDR</span>{/if}
+    {@render clockBadge()}
     <span class="grow"></span>
     {@render clock()}
     <nav class="icons" aria-label="Screens">
@@ -208,7 +220,8 @@
 
   /* A status badge: the warning tint, so practice never passes for the air. */
   .practice,
-  .sdr {
+  .sdr,
+  .badge {
     flex: none;
     height: 21px;
     margin-left: var(--rr-space-1);
@@ -220,6 +233,25 @@
     font-weight: var(--rr-weight-bold);
     line-height: 21px;
     white-space: nowrap;
+  }
+
+  /* The Clock badge sits in a 44 pt link. */
+  .clockoff {
+    display: flex;
+    flex: none;
+    align-items: center;
+    min-height: var(--rr-tap);
+    color: inherit;
+    text-decoration: none;
+  }
+
+  .clockoff:focus-visible {
+    outline: none;
+  }
+
+  .clockoff:focus-visible .badge {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: 2px;
   }
 
   /* The web SDR badge uses the accent tint. */

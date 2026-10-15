@@ -22,6 +22,8 @@ export const STATUS = {
   noClear: 'Not enough audio yet',
   decodesCleared: 'Decodes cleared',
   practice: (scenario: string) => `Practice · ${scenario}`,
+  /** The clock warning came on: "Phone clock 1.2 s slow". */
+  clock: (off: string) => `Phone clock ${off}`,
   webSdrBusy: 'Web SDR busy',
   webSdrRefused: 'Web SDR refused the connection',
   webSdrClosed: 'Web SDR closed',

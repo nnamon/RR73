@@ -1,17 +1,18 @@
 <script lang="ts">
-  import { onDestroy } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
   import LevelMeter from '../ui/LevelMeter.svelte';
   import TuneSheet from '../ui/TuneSheet.svelte';
-  import { href } from '../lib/app/router.svelte';
+  import { href, route } from '../lib/app/router.svelte';
   import { signed, utcHm, utcTime } from '../lib/clock/format';
   import { timingReport, type TimingSnapshot } from '../lib/clock/timing';
+  import { clockText } from '../lib/clock/calibration';
   import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
-  import { audio, band, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
+  import { audio, band, clockCheck, halt, inputDevices, startAudio, startTune, timingSnapshot, tx, useInput } from '../lib/state/station.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let tuneOpen = $state(false);
@@ -103,6 +104,22 @@
   const medianText = $derived(
     timing.medianDtS === null ? 'Waiting for strong decodes' : `${secs(timing.medianDtS)} from ${timing.strongDecodes} decodes`,
   );
+  // The Clock badge in the top bar opens this screen at Timing (#/settings/radio/timing).
+  let timingSection = $state<HTMLElement>();
+  // After the update: the app and the settings split put a newly opened screen at the top first.
+  $effect(() => {
+    if (route.path[2] !== 'timing') return;
+    void tick().then(() => timingSection?.scrollIntoView({ block: 'start' }));
+  });
+  const clockRowText = $derived(timing.clockS === null ? 'Waiting for strong decodes' : `${clockText(timing.clockS)} by the decodes`);
+  // The clock warning: what it means on the air and how to set the clock.
+  const clockFoot = $derived.by(() => {
+    const off = clockCheck.offS;
+    if (off === null) return null;
+    const by = clockText(off);
+    const air = `${Math.abs(off).toFixed(1)} s ${off > 0 ? 'late' : 'early'}`;
+    return `The phone’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input reads the same.' : ''} Turn on Set Automatically in the phone’s Settings › General › Date & Time. It needs a network.`;
+  });
   const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
   const sourceText = $derived(
     timing.source === 'output' ? 'Output timestamps' : timing.source === 'current-time' ? 'Audio clock time' : 'Unknown until audio starts',
@@ -272,12 +289,15 @@
     </ul>
   </div>
 
-  <div class="section">
+  <div class="section" bind:this={timingSection}>
     <h2 class="section-head">Timing</h2>
     <div class="group" data-testid="timing">
       <div class="row">
         <span class="row-main"><span class="row-title">Decoder</span></span>
         <span class="row-value" data-testid="decoder-status">{decoderText}</span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Phone clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
       </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
@@ -311,6 +331,7 @@
         </span>
       </div>
     </div>
+    {#if clockFoot}<p class="section-foot" data-testid="timing-clock-foot">{clockFoot}</p>{/if}
     <div class="start">
       <button class="btn" onclick={() => void copyReport()}>Copy timing report</button>
       {#if copyState === 'copied'}<span class="copied" role="status">Copied</span>{/if}
@@ -319,7 +340,7 @@
       <p class="section-foot">The phone refused to copy. Select the report below and copy it.</p>
       <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
     {/if}
-    <p class="section-foot">Transmit timing shows only in Your Tx, heard back.</p>
+    <p class="section-foot">Your Tx, heard back shows the timing of the transmit audio.</p>
   </div>
 </section>
 
@@ -442,6 +463,10 @@
   }
 
   .mark.warn {
+    color: var(--rr-warn);
+  }
+
+  .row-sub.off {
     color: var(--rr-warn);
   }
 </style>

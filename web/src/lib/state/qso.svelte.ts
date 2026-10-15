@@ -13,6 +13,7 @@ import { reference } from '../reference';
 import { STATUS } from '../qso/status';
 import type { LostMark } from '../decode/lost';
 import { SLOT_MS, isFt, parity as parityOf, type FtMode, type Parity } from '../clock/slots';
+import { clockText } from '../clock/calibration';
 import { operatingDialHz } from '../radio/hound-dial';
 import type { Decode } from '../decode/types';
 import type { BandId } from '../radio/bands';
@@ -27,7 +28,7 @@ import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
 import { settings, updateSettings } from './settings.svelte';
 import { txLevel } from './practice.svelte';
-import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
+import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
 import type { QsoContext } from '../decode/types';
 
 export interface SentRow {
@@ -385,6 +386,7 @@ export function startQso() {
   if (started || typeof window === 'undefined') return;
   started = true;
   provideQsoContext(qsoContextNow);
+  onClockWarning((offS) => showNotice(STATUS.clock(clockText(offS))));
   onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, directed: directedFor(decodes), nowMs: Date.now() }));
   onAudioStatus((s) => {
     if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });

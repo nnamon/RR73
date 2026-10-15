@@ -21,7 +21,8 @@
   import { webSdrInput } from '../lib/state/relay.svelte';
   import { houndOn, qso } from '../lib/state/qso.svelte';
   import { settings } from '../lib/state/settings.svelte';
-  import { audio, halt, tx } from '../lib/state/station.svelte';
+  import { audio, clockCheck, halt, tx } from '../lib/state/station.svelte';
+  import { clockText } from '../lib/clock/calibration';
   import { wspr } from '../lib/state/wspr.svelte';
 
   let { regular = false, tab = 'operate' }: { regular?: boolean; tab?: Tab } = $props();
@@ -73,6 +74,7 @@
   spots={spotsShown()}
   practice={practice.on}
   sdr={!practice.on && webSdrInput() !== null}
+  clockOff={clockCheck.offS === null ? null : clockText(clockCheck.offS)}
   onband={() => (sheets.band = true)}
   {regular}
   {tab}

@@ -78,7 +78,7 @@
 
   // A screen opened from another starts at the top, as on iOS. Going back returns to where the
   // earlier screen was. Settings › Optional features and a version opened from the update notice
-  // scroll to their own place.
+  // scroll to their own place, as does Radio and audio opened at Timing by the Clock badge.
   const scrolls = new Map<string, number>();
   let scrollNow = 0;
   let shownPath = route.path.join('/');
@@ -89,7 +89,7 @@
     shownPath = path;
     scrolls.set(prev, scrollNow);
     const back = prev.startsWith(`${path}/`);
-    const own = path === 'settings/features' || (path.startsWith('settings/versions/') && path !== 'settings/versions');
+    const own = path === 'settings/features' || path === 'settings/radio/timing' || (path.startsWith('settings/versions/') && path !== 'settings/versions');
     // Effects run after the DOM update and before paint, so the new screen never shows at the old
     // offset and anything measuring it afterwards sees the final position.
     const pane = document.querySelector<HTMLElement>('main .pane.scroll');

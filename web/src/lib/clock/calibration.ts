@@ -7,6 +7,10 @@
  * The offset changes by at most 0.08 s per decoded slot and stays within ±2.5 s, the range in
  * which FT8 still decodes. The slot assembler applies a change at the next slot boundary, so a
  * slot's audio carries the offset in force when the slot started; its DTs are read against that.
+ *
+ * The same median measures the phone's clock (clockS). Transmit timing runs on that clock, so a
+ * clock 1.2 s slow puts every transmission 1.2 s late on the air; the clock warning (CLOCK_WARN)
+ * tells the operator, who sets the clock right.
  */
 
 import type { Decode } from '../decode/types';
@@ -27,6 +31,21 @@ export const CALIBRATION = {
   /** Largest offset, s. */
   maxOffsetS: 2.5,
 } as const;
+
+/** The clock warning: on from 1 s off, off again below 0.8 s, so a clock near 1 s does not flicker it. */
+export const CLOCK_WARN = { onS: 1, offS: 0.8 } as const;
+
+/** Whether the clock warning holds for a clock `clockS` off (RxCalibration.clockS), given whether it held before. */
+export function clockWarns(clockS: number, before: boolean): boolean {
+  return Math.abs(clockS) >= (before ? CLOCK_WARN.offS : CLOCK_WARN.onS);
+}
+
+/** "1.2 s slow", "0.9 s fast", "On time" within 0.05 s. */
+export function clockText(clockS: number): string {
+  const s = Math.abs(clockS);
+  if (s < 0.05) return 'On time';
+  return `${s.toFixed(1)} s ${clockS > 0 ? 'slow' : 'fast'}`;
+}
 
 interface Entry {
   slotStartMs: number;
@@ -81,6 +100,15 @@ export class RxCalibration {
   /** Strong decodes held. */
   get count(): number {
     return this.entries.length;
+  }
+
+  /**
+   * How far the phone's clock runs behind the stations heard, s: positive slow, negative fast;
+   * null below 8 strong decodes. Minus the median DT the decodes would have with no offset.
+   * Input latency counts as fast: a few tens of ms through a cable.
+   */
+  get clockS(): number | null {
+    return this.entries.length >= CALIBRATION.minDecodes ? -median(this.entries.map((e) => e.rawS)) : null;
   }
 
   /** Median DT of the strong decodes held, as decoded, s; null with none. */

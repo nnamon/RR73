@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { CALIBRATION, RxCalibration } from './calibration';
+import { CALIBRATION, CLOCK_WARN, RxCalibration, clockText, clockWarns } from './calibration';
 import type { Decode } from '../decode/types';
 
 const T0 = Date.UTC(2026, 9, 13, 13, 35, 0);
@@ -93,5 +93,35 @@ describe('RxCalibration', () => {
     expect(cal.offsetS).toBe(0);
     expect(cal.count).toBe(0);
     expect(cal.medianDtS).toBeNull();
+  });
+
+  it('measures the clock from the decodes as they would read with no offset', () => {
+    const cal = new RxCalibration();
+    cal.add(T0, band(-1.2, 5), T0 + 16000);
+    expect(cal.clockS).toBeNull();
+    // DTs 1.2 s early: the phone's clock runs 1.2 s slow.
+    cal.add(T0 + 15000, band(-1.2, 5), T0 + 31000);
+    expect(cal.clockS).toBeCloseTo(1.2, 9);
+    // The offset moves the DTs as decoded; the clock reading stays.
+    const settled = new RxCalibration();
+    settle(settled, -1.2, 60);
+    expect(Math.abs(settled.medianDtS!)).toBeLessThan(0.05);
+    expect(settled.clockS).toBeCloseTo(1.2, 1);
+  });
+});
+
+describe('the clock warning', () => {
+  it('comes on from 1 s off and goes off below 0.8 s', () => {
+    expect(clockWarns(0.99, false)).toBe(false);
+    expect(clockWarns(CLOCK_WARN.onS, false)).toBe(true);
+    expect(clockWarns(-1.3, false)).toBe(true);
+    expect(clockWarns(0.85, true)).toBe(true);
+    expect(clockWarns(-0.79, true)).toBe(false);
+  });
+
+  it('says how far off and which way', () => {
+    expect(clockText(1.24)).toBe('1.2 s slow');
+    expect(clockText(-0.96)).toBe('1.0 s fast');
+    expect(clockText(0.04)).toBe('On time');
   });
 });

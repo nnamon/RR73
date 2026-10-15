@@ -63,6 +63,7 @@ describe('timingReport', () => {
       gapMs: 820,
       inputOffsetS: 0.08,
       medianDtS: -0.8,
+      clockS: 0.88,
       strongDecodes: 23,
       heardBack: [
         { slotStartUtcMs: T0 - 30000, text: 'CQ N0CALL EM12', dtS: -0.7, snrDb: 24 },
@@ -83,6 +84,7 @@ describe('timingReport', () => {
         'Audio gaps bridged: 12, 820.0 ms',
         'Input offset: 0.080 s',
         'Median DT: −0.800 s from 23 decodes at -10 dB or stronger',
+        'Phone clock by the decodes: 0.880 s slow',
         'Your Tx, heard back:',
         '  13:50:30 CQ N0CALL EM12: DT −0.70 s, SNR 24 dB',
         '  13:50:00 CQ N0CALL EM12: not heard',
