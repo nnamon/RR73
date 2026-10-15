@@ -342,6 +342,23 @@ impl SpectrogramPlan {
         let half = (n / 2) as isize;
         let start_a = (t * self.config.hop) as isize - half;
         let start_b = start_a + self.config.hop as isize;
+        // Frames wholly inside the input take slices, a loop without bounds checks that
+        // vectorises; the values are those of `sample_at`.
+        let end = if pair { start_b } else { start_a } + n as isize;
+        if start_a >= 0 && end <= samples.len() as isize {
+            let a = &samples[start_a as usize..start_a as usize + n];
+            if pair {
+                let b = &samples[start_b as usize..start_b as usize + n];
+                for (((c, &w), &x), &y) in self.buf.iter_mut().zip(&self.window).zip(a).zip(b) {
+                    *c = Complex32::new(w * clean(x), w * clean(y));
+                }
+            } else {
+                for ((c, &w), &x) in self.buf.iter_mut().zip(&self.window).zip(a) {
+                    *c = Complex32::new(w * clean(x), 0.0);
+                }
+            }
+            return;
+        }
         for (i, (c, &w)) in self.buf.iter_mut().zip(&self.window).enumerate() {
             let re = w * sample_at(samples, start_a + i as isize);
             let im = if pair {
@@ -357,18 +374,37 @@ impl SpectrogramPlan {
     fn store(&self, t: usize, pair: bool, out: &mut Spectrogram) {
         let n = self.config.fft_size;
         let bins = out.bins;
-        let scale = self.config.scale;
-        for (b, k) in (self.config.min_bin..self.config.max_bin).enumerate() {
+        let (min, max) = (self.config.min_bin, self.config.max_bin);
+        let rows = if pair { 2 } else { 1 };
+        let (row_a, rest) = out.data[t * bins..(t + rows) * bins].split_at_mut(bins);
+        // X_a = (Z[k] + conj(Z[N-k])) / 2, X_b = (Z[k] - conj(Z[N-k])) / 2j. Powers first, in a
+        // loop that vectorises; bin 0 mirrors onto itself, every other bin onto N - k.
+        let separate = |k: usize, zm: Complex32| {
             let z = self.buf[k];
-            let zc = self.buf[(n - k) % n].conj();
-            // X_a = (Z[k] + conj(Z[N-k])) / 2, X_b = (Z[k] - conj(Z[N-k])) / 2j.
-            let xa = (z + zc) * 0.5;
-            let pa = xa.norm_sqr() * self.norm;
-            out.data[t * bins + b] = to_scale(pa, scale);
+            let zc = zm.conj();
+            let pa = ((z + zc) * 0.5).norm_sqr() * self.norm;
+            let pb = ((z - zc) * 0.5).norm_sqr() * self.norm;
+            (pa, pb)
+        };
+        let first = usize::from(min == 0);
+        if first == 1 {
+            let (pa, pb) = separate(0, self.buf[0]);
+            row_a[0] = pa;
             if pair {
-                let d = (z - zc) * 0.5;
-                let pb = d.norm_sqr() * self.norm;
-                out.data[(t + 1) * bins + b] = to_scale(pb, scale);
+                rest[0] = pb;
+            }
+        }
+        let mirrored = self.buf[n + 1 - max..n + 1 - min - first].iter().rev();
+        for ((b, k), &zm) in (first..max - min).zip(min + first..max).zip(mirrored) {
+            let (pa, pb) = separate(k, zm);
+            row_a[b] = pa;
+            if pair {
+                rest[b] = pb;
+            }
+        }
+        if self.config.scale == Scale::Db {
+            for v in out.data[t * bins..(t + rows) * bins].iter_mut() {
+                *v = to_scale(*v, Scale::Db);
             }
         }
     }
@@ -383,8 +419,19 @@ fn sample_at(samples: &[f32], i: isize) -> f32 {
         return 0.0;
     }
     match samples.get(i as usize) {
-        Some(&x) if x.is_finite() => x.clamp(-SAMPLE_LIMIT, SAMPLE_LIMIT),
-        _ => 0.0,
+        Some(&x) => clean(x),
+        None => 0.0,
+    }
+}
+
+/// A sample as the spectrogram reads it: non-finite values as zero, finite ones clamped to
+/// [`SAMPLE_LIMIT`].
+#[inline]
+fn clean(x: f32) -> f32 {
+    if x.is_finite() {
+        x.clamp(-SAMPLE_LIMIT, SAMPLE_LIMIT)
+    } else {
+        0.0
     }
 }
 
@@ -555,5 +602,92 @@ mod tests {
         let b = (320 - s.min_bin()) as isize;
         let p = s.get(20, b).expect("cell");
         assert!((p - 0.25).abs() < 1e-3, "{p}");
+    }
+
+    /// Frame loading and bin separation as they were before experiment 0009, one value at a
+    /// time; the faster loops must give the same values bit for bit.
+    fn reference(plan: &mut SpectrogramPlan, samples: &[f32], frames: usize, out: &mut Spectrogram) {
+        plan.begin(frames, out);
+        let n = plan.config.fft_size;
+        let bins = out.bins;
+        let mut t = 0;
+        while t < frames {
+            let pair = t + 1 < frames;
+            let half = (n / 2) as isize;
+            let start_a = (t * plan.config.hop) as isize - half;
+            let start_b = start_a + plan.config.hop as isize;
+            for (i, (c, &w)) in plan.buf.iter_mut().zip(&plan.window).enumerate() {
+                let re = w * sample_at(samples, start_a + i as isize);
+                let im = if pair {
+                    w * sample_at(samples, start_b + i as isize)
+                } else {
+                    0.0
+                };
+                *c = Complex32::new(re, im);
+            }
+            plan.fft.process_with_scratch(&mut plan.buf, &mut plan.scratch);
+            for (b, k) in (plan.config.min_bin..plan.config.max_bin).enumerate() {
+                let z = plan.buf[k];
+                let zc = plan.buf[(n - k) % n].conj();
+                let xa = (z + zc) * 0.5;
+                let pa = xa.norm_sqr() * plan.norm;
+                out.data[t * bins + b] = to_scale(pa, plan.config.scale);
+                if pair {
+                    let d = (z - zc) * 0.5;
+                    let pb = d.norm_sqr() * plan.norm;
+                    out.data[(t + 1) * bins + b] = to_scale(pb, plan.config.scale);
+                }
+            }
+            t += if pair { 2 } else { 1 };
+        }
+    }
+
+    #[test]
+    fn faster_loops_match_the_reference_bit_for_bit() {
+        let mut noisy: Vec<f32> = (0..200_000)
+            .map(|i| ((i * 7919) % 1000) as f32 / 1000.0 - 0.5 + 0.3 * (i as f32 * 0.37).sin())
+            .collect();
+        noisy[500] = f32::NAN;
+        noisy[90_000] = f32::INFINITY;
+        noisy[90_001] = f32::NEG_INFINITY;
+        noisy[120_000..120_010].fill(3e7);
+        noisy[150_000..150_100].fill(0.0);
+        let mut configs = Vec::new();
+        for (sps, tosr, fosr) in [
+            (1920, 2, 2),
+            (1920, 4, 4),
+            (1920, 8, 4),
+            (576, 2, 2),
+            (576, 4, 4),
+            (1920, 1, 1),
+        ] {
+            let mut c =
+                SpectrogramConfig::oversampled(sps, tosr, fosr, 200.0, 3000.0, 12_000).expect("config");
+            configs.push(c.clone());
+            c.window_len = sps * 2.min(fosr);
+            configs.push(c.clone());
+            c.scale = Scale::Power;
+            configs.push(c);
+        }
+        // Bin 0 and the Nyquist bin.
+        let mut wide = SpectrogramConfig::oversampled(64, 2, 2, 0.0, 6000.0, 12_000).expect("config");
+        assert_eq!((wide.min_bin, wide.max_bin), (0, 65));
+        configs.push(wide.clone());
+        wide.scale = Scale::Power;
+        configs.push(wide);
+        let mut plans = FftPlans::new();
+        for config in configs {
+            for len in [0usize, 100, 5_000, 90_000, 135_000, 180_000, 200_000] {
+                let samples = &noisy[..len];
+                // More frames than the audio covers, so edge frames read zeros.
+                let frames = config.frames_for(len) + 3;
+                let mut plan = SpectrogramPlan::new(config.clone(), &mut plans).expect("plan");
+                let (mut want, mut got) = (Spectrogram::new(), Spectrogram::new());
+                reference(&mut plan, samples, frames, &mut want);
+                plan.compute(samples, frames, &mut got);
+                let bits = |s: &Spectrogram| s.data().iter().map(|v| v.to_bits()).collect::<Vec<_>>();
+                assert!(bits(&want) == bits(&got), "{config:?} length {len}");
+            }
+        }
     }
 }
