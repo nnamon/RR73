@@ -175,6 +175,7 @@ The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A
 ## Platform constraints
 
 - Safari on iOS 26 is the target. No Web Serial, WebUSB, Web Bluetooth, UDP or background execution.
+- Desktop Chrome and Edge add Web Serial, which rig control uses (`docs/design/cat.md`). The rig control settings show only where it exists.
 - GitHub Pages cannot send cross-origin isolation headers, so workers receive copies of slot audio. Shared memory waits for a measured gain.
 - Every network call has an offline path. The log is the source of truth; destinations get copies.
 
