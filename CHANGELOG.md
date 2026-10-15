@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.21.8 · 2026-10-15
 
 - The dial reset button in the band sheet is a plain anticlockwise arrow in the accent colour, centred on the dial's digits.
 
