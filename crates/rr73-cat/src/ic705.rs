@@ -656,6 +656,12 @@ fn settings(data: &[u8]) -> Event {
             };
             Event::DataMode { on, filter }
         }
+        // The guide gives the data mode and its filter (p. 22). An answer with the data mode
+        // alone is read too, with no filter.
+        [SUB_DATA_MODE, on] => match flag(*on) {
+            Some(on) => Event::DataMode { on, filter: None },
+            None => bad(Fault::Code),
+        },
         [SUB_DATA_MODE, ..] => bad(Fault::Length),
         [SUB_MENU, a, b, value @ ..] => {
             let Some(item) = MenuItem::from_bytes([*a, *b]) else {

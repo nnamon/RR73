@@ -145,6 +145,18 @@ fn page_22_data_mode_with_filter() {
             filter: None
         }]
     );
+    // An answer with the data mode alone is read too, with no filter.
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x1A, 0x06, 0x01, 0xFD]),
+        [Event::DataMode {
+            on: true,
+            filter: None
+        }]
+    );
+    assert!(matches!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x1A, 0x06, 0x02, 0xFD])[..],
+        [Event::Malformed { .. }]
+    ));
 }
 
 #[test]

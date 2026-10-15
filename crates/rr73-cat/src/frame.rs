@@ -8,6 +8,9 @@
 //! The guide gives no escaping, so a frame cannot carry `FE` or `FD` between its preamble and
 //! its end code. [`Frame::encode`] refuses them, and [`FrameDecoder`] treats an `FE` inside a
 //! frame as the start of the next one: the bytes before it are dropped as noise.
+//!
+//! The guide's preamble is two `FE` bytes. [`FrameDecoder`] also reads a frame whose first `FE`
+//! was lost, so one `FE` followed by an address starts a frame.
 
 use thiserror::Error;
 
@@ -105,7 +108,7 @@ enum State {
     Idle,
     /// One preamble byte seen.
     Preamble,
-    /// Two preamble bytes seen; collecting the body until the end code.
+    /// One or more preamble bytes seen; collecting the body until the end code.
     Body,
 }
 
@@ -116,6 +119,8 @@ enum State {
 pub struct FrameDecoder {
     state: State,
     body: Vec<u8>,
+    /// Preamble bytes counted for the frame in progress: 1 or 2.
+    preamble: usize,
 }
 
 impl Default for FrameDecoder {
@@ -130,6 +135,7 @@ impl FrameDecoder {
         Self {
             state: State::Idle,
             body: Vec::new(),
+            preamble: 2,
         }
     }
 
@@ -144,7 +150,7 @@ impl FrameDecoder {
         match self.state {
             State::Idle => 0,
             State::Preamble => 1,
-            State::Body => 2 + self.body.len(),
+            State::Body => self.preamble + self.body.len(),
         }
     }
 
@@ -162,20 +168,26 @@ impl FrameDecoder {
                     }
                 }
                 State::Preamble => {
+                    self.body.clear();
                     if b == PREAMBLE {
                         self.state = State::Body;
-                        self.body.clear();
-                    } else {
-                        // A lone FE and the byte after it.
+                        self.preamble = 2;
+                    } else if b == END {
+                        // A lone FE and an end code.
                         noise += 2;
                         self.state = State::Idle;
+                    } else {
+                        // One FE, then the receiving address: a frame whose first FE was lost.
+                        self.state = State::Body;
+                        self.preamble = 1;
+                        self.body.push(b);
                     }
                 }
                 State::Body => {
                     if b == PREAMBLE {
                         if !self.body.is_empty() {
                             // A new preamble inside a frame: the frame was cut short.
-                            noise += 2 + self.body.len();
+                            noise += self.preamble + self.body.len();
                             self.body.clear();
                             self.state = State::Preamble;
                         }
@@ -189,12 +201,12 @@ impl FrameDecoder {
                                 }
                                 out.push(Decoded::Frame(Frame::new(*to, *from, *command, data)));
                             }
-                            short => noise += 3 + short.len(),
+                            short => noise += self.preamble + 1 + short.len(),
                         }
                         self.body.clear();
                         self.state = State::Idle;
                     } else if self.body.len() == MAX_BODY {
-                        noise += 3 + self.body.len();
+                        noise += self.preamble + 1 + self.body.len();
                         self.body.clear();
                         self.state = State::Idle;
                     } else {
@@ -293,6 +305,21 @@ mod tests {
     }
 
     #[test]
+    fn reads_a_frame_whose_first_preamble_byte_was_lost() {
+        let mut d = FrameDecoder::new();
+        assert_eq!(
+            d.push(&[0x00, 0xFE, 0xE0, 0xA4, 0xFB, 0xFD]),
+            [Decoded::Noise(1), Decoded::Frame(Frame::new(0xE0, 0xA4, OK, []))]
+        );
+        d.push(&[0xFE, 0xE0]);
+        assert_eq!(d.pending(), 2);
+        assert_eq!(
+            d.push(&[0xA4, 0xFA, 0xFD]),
+            [Decoded::Frame(Frame::new(0xE0, 0xA4, NG, []))]
+        );
+    }
+
+    #[test]
     fn a_preamble_inside_a_frame_starts_the_next_one() {
         let mut d = FrameDecoder::new();
         let out = d.push(&[
@@ -309,7 +336,8 @@ mod tests {
     fn short_and_overlong_bodies_are_noise() {
         let mut d = FrameDecoder::new();
         assert_eq!(d.push(&[0xFE, 0xFE, 0xE0, 0xA4, 0xFD]), [Decoded::Noise(5)]);
-        assert_eq!(d.push(&[0xFE, 0x01]), [Decoded::Noise(2)]);
+        assert_eq!(d.push(&[0xFE, 0xFD]), [Decoded::Noise(2)]);
+        assert_eq!(d.push(&[0xFE, 0x01, 0xFD]), [Decoded::Noise(3)]);
         let mut long = vec![0xFE, 0xFE];
         long.extend(std::iter::repeat_n(0x11, MAX_BODY + 1));
         assert_eq!(d.push(&long), [Decoded::Noise(MAX_BODY + 3)]);
