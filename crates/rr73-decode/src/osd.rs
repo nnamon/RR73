@@ -116,8 +116,17 @@ pub struct OsdScratch {
     rows: Vec<Bits>,
     pivots: Vec<usize>,
     order: Vec<usize>,
+    /// Sort keys of the reliability order.
+    keys: Vec<u64>,
     reliability: Vec<f32>,
+    /// Per code bit, the change in distance when a flip changes that bit: +reliability where
+    /// the order-0 codeword agrees with the hard decision, -reliability where it does not.
+    signed: Vec<f32>,
     deltas: Vec<f32>,
+    /// `member[bit * window + r]` is 1 when window row `r` has `bit`, else 0.
+    member: Vec<f32>,
+    /// Overlaps of one window row with the rows after it.
+    overlap: Vec<f32>,
     found: Vec<(f32, u16, u16)>,
 }
 
@@ -179,12 +188,20 @@ pub fn osd(
         return None;
     }
     let rel = &s.reliability;
+    // Reliability order, most reliable first, ties by position: the keys sort as the
+    // reliabilities' bit patterns, which order non-negative floats as their values do.
+    s.keys.clear();
+    s.keys.extend(
+        rel.iter()
+            .enumerate()
+            .map(|(i, r)| (u64::from(!r.to_bits()) << 32) | i as u64),
+    );
+    s.keys.sort_unstable();
     s.order.clear();
-    s.order.extend(0..N);
-    s.order
-        .sort_unstable_by(|&a, &b| rel[b].total_cmp(&rel[a]).then(a.cmp(&b)));
+    s.order.extend(s.keys.iter().map(|&k| (k & 0xffff_ffff) as usize));
 
-    // Gauss-Jordan elimination with pivots taken in reliability order.
+    // Gauss-Jordan elimination with pivots taken in reliability order. Rows are cleared of the
+    // pivot column with a mask, so the inner loop has no branch on the data.
     s.rows.clear();
     s.rows.extend_from_slice(generator());
     s.pivots.clear();
@@ -198,10 +215,12 @@ pub fn osd(
         };
         s.rows.swap(p, r);
         let pivot_row = s.rows[p];
+        let (word, shift) = (col >> 6, 63 - (col & 63));
         for (q, row) in s.rows.iter_mut().enumerate() {
-            if q != p && get(row, col) {
-                xor(row, &pivot_row);
-            }
+            let mask = ((row[word] >> shift) & u64::from(q != p)).wrapping_neg();
+            row[0] ^= pivot_row[0] & mask;
+            row[1] ^= pivot_row[1] & mask;
+            row[2] ^= pivot_row[2] & mask;
         }
         s.pivots.push(col);
     }
@@ -221,7 +240,12 @@ pub fn osd(
     let mut base_metric = 0.0f32;
     for_each_bit(&diff, |i| base_metric += rel[i]);
     // Flipping bit i changes the metric by +rel (new disagreement) or -rel (fixed).
-    let signed = |i: usize| if get(&diff, i) { -rel[i] } else { rel[i] };
+    s.signed.clear();
+    s.signed.extend(
+        rel.iter()
+            .enumerate()
+            .map(|(i, &r)| if get(&diff, i) { -r } else { r }),
+    );
 
     let limit = params.max_distance * total;
     s.found.clear();
@@ -230,29 +254,56 @@ pub fn osd(
     }
     let window = params.window.clamp(1, K);
     let first = K - window;
+    let OsdScratch {
+        rows,
+        signed,
+        deltas,
+        member,
+        overlap,
+        found,
+        ..
+    } = s;
     if params.order >= 1 {
-        s.deltas.clear();
-        for j in first..K {
+        deltas.clear();
+        for (j, row) in rows.iter().enumerate().skip(first) {
             let mut d = 0.0;
-            for_each_bit(&s.rows[j], |i| d += signed(i));
-            s.deltas.push(d);
+            for_each_bit(row, |i| d += signed[i]);
+            deltas.push(d);
             let m = base_metric + d;
             if m <= limit {
-                s.found.push((m, j as u16, NONE));
+                found.push((m, j as u16, NONE));
             }
         }
     }
     if params.order >= 2 {
-        for j in first..K {
-            for k in (j + 1)..K {
-                let a = &s.rows[j];
-                let b = &s.rows[k];
-                let both = [a[0] & b[0], a[1] & b[1], a[2] & b[2]];
-                let mut overlap = 0.0;
-                for_each_bit(&both, |i| overlap += signed(i));
-                let m = base_metric + s.deltas[j - first] + s.deltas[k - first] - 2.0 * overlap;
+        // The overlap of rows j and k sums the signed reliabilities of the bits both rows
+        // have, in increasing bit order. For one j the sums for every k run side by side:
+        // walking the bits of row j, each k adds the bit's value times 1 when it has the bit
+        // and times 0 when not. A sum that starts at +0 never becomes -0, so adding a zero
+        // leaves it unchanged, and every overlap equals the bit-by-bit sum exactly.
+        member.clear();
+        member.resize(N * window, 0.0);
+        for r in 0..window {
+            for_each_bit(&rows[first + r], |i| member[i * window + r] = 1.0);
+        }
+        overlap.clear();
+        overlap.resize(window, 0.0);
+        for r in 0..window {
+            let ov = &mut overlap[r + 1..];
+            ov.fill(0.0);
+            for_each_bit(&rows[first + r], |i| {
+                let x = signed[i];
+                let has = &member[i * window + r + 1..(i + 1) * window];
+                for (o, &h) in ov.iter_mut().zip(has) {
+                    *o += x * h;
+                }
+            });
+            let dj = deltas[r];
+            for (c, &o) in ov.iter().enumerate() {
+                let q = r + 1 + c;
+                let m = base_metric + dj + deltas[q] - 2.0 * o;
                 if m <= limit {
-                    s.found.push((m, j as u16, k as u16));
+                    found.push((m, (first + r) as u16, (first + q) as u16));
                 }
             }
         }
@@ -510,5 +561,250 @@ mod tests {
         }
         assert!(loose_hits > 0, "expected chance CRC passes without limits");
         assert_eq!(tight_hits, 0);
+    }
+
+    /// The OSD of 0.21.8, before the speed work of experiment 0009. The faster search must
+    /// give the same codewords, distances and candidate lists bit for bit.
+    mod before {
+        use super::super::*;
+
+        pub(super) fn reference(
+            params: &OsdParams,
+            source: impl Fn(usize) -> f32,
+            channel: &[f32],
+            s: &mut OsdScratch,
+        ) -> Option<OsdResult> {
+            if channel.len() < N {
+                return None;
+            }
+            s.reliability.clear();
+            let mut hard: Bits = [0; 3];
+            let mut channel_hard: Bits = [0; 3];
+            let mut erased: Bits = [0; 3];
+            let mut total = 0.0f32;
+            for (i, &c) in channel.iter().enumerate().take(N) {
+                let v = source(i);
+                let v = if v.is_finite() { v } else { 0.0 };
+                if v > 0.0 {
+                    set(&mut hard, i);
+                }
+                if c > 0.0 {
+                    set(&mut channel_hard, i);
+                }
+                if c == 0.0 || !c.is_finite() {
+                    set(&mut erased, i);
+                }
+                s.reliability.push(v.abs());
+                total += v.abs();
+            }
+            if total.is_nan() || total <= 0.0 {
+                return None;
+            }
+            let rel = &s.reliability;
+            s.order.clear();
+            s.order.extend(0..N);
+            s.order
+                .sort_unstable_by(|&a, &b| rel[b].total_cmp(&rel[a]).then(a.cmp(&b)));
+
+            // Gauss-Jordan elimination with pivots taken in reliability order.
+            s.rows.clear();
+            s.rows.extend_from_slice(generator());
+            s.pivots.clear();
+            for &col in &s.order {
+                let p = s.pivots.len();
+                if p == K {
+                    break;
+                }
+                let Some(r) = (p..K).find(|&r| get(&s.rows[r], col)) else {
+                    continue;
+                };
+                s.rows.swap(p, r);
+                let pivot_row = s.rows[p];
+                for (q, row) in s.rows.iter_mut().enumerate() {
+                    if q != p && get(row, col) {
+                        xor(row, &pivot_row);
+                    }
+                }
+                s.pivots.push(col);
+            }
+            if s.pivots.len() < K {
+                return None;
+            }
+
+            // Order 0: re-encode the hard decisions of the information set.
+            let mut base: Bits = [0; 3];
+            for (p, &col) in s.pivots.iter().enumerate() {
+                if get(&hard, col) {
+                    xor(&mut base, &s.rows[p]);
+                }
+            }
+            let mut diff = base;
+            xor(&mut diff, &hard);
+            let mut base_metric = 0.0f32;
+            for_each_bit(&diff, |i| base_metric += rel[i]);
+            // Flipping bit i changes the metric by +rel (new disagreement) or -rel (fixed).
+            let signed = |i: usize| if get(&diff, i) { -rel[i] } else { rel[i] };
+
+            let limit = params.max_distance * total;
+            s.found.clear();
+            if base_metric <= limit {
+                s.found.push((base_metric, NONE, NONE));
+            }
+            let window = params.window.clamp(1, K);
+            let first = K - window;
+            if params.order >= 1 {
+                s.deltas.clear();
+                for j in first..K {
+                    let mut d = 0.0;
+                    for_each_bit(&s.rows[j], |i| d += signed(i));
+                    s.deltas.push(d);
+                    let m = base_metric + d;
+                    if m <= limit {
+                        s.found.push((m, j as u16, NONE));
+                    }
+                }
+            }
+            if params.order >= 2 {
+                for j in first..K {
+                    for k in (j + 1)..K {
+                        let a = &s.rows[j];
+                        let b = &s.rows[k];
+                        let both = [a[0] & b[0], a[1] & b[1], a[2] & b[2]];
+                        let mut overlap = 0.0;
+                        for_each_bit(&both, |i| overlap += signed(i));
+                        let m = base_metric + s.deltas[j - first] + s.deltas[k - first] - 2.0 * overlap;
+                        if m <= limit {
+                            s.found.push((m, j as u16, k as u16));
+                        }
+                    }
+                }
+            }
+            s.found
+                .sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+
+            for &(metric, j, k) in &s.found {
+                let mut c = base;
+                if j != NONE {
+                    xor(&mut c, &s.rows[j as usize]);
+                }
+                if k != NONE {
+                    xor(&mut c, &s.rows[k as usize]);
+                }
+                if c == [0; 3] {
+                    continue;
+                }
+                let mut errors = c;
+                xor(&mut errors, &channel_hard);
+                let hard_errors = if params.erasures_as_errors {
+                    let received = [
+                        errors[0] & !erased[0],
+                        errors[1] & !erased[1],
+                        errors[2] & !erased[2],
+                    ];
+                    popcount(&received) + popcount(&erased)
+                } else {
+                    popcount(&errors)
+                };
+                if hard_errors > params.max_hard_errors {
+                    continue;
+                }
+                let mut message = [0u8; 12];
+                message[..8].copy_from_slice(&c[0].to_be_bytes());
+                message[8..].copy_from_slice(&c[1].to_be_bytes()[..4]);
+                if crc::check(&message).is_some() {
+                    return Some(OsdResult {
+                        bits: c,
+                        distance: metric / total,
+                        hard_errors,
+                    });
+                }
+            }
+            None
+        }
+    }
+
+    /// A linear congruential generator and Box-Muller normal deviates.
+    struct Lcg(u64);
+
+    impl Lcg {
+        fn uniform(&mut self) -> f32 {
+            self.0 = self
+                .0
+                .wrapping_mul(6364136223846793005)
+                .wrapping_add(1442695040888963407);
+            (self.0 >> 40) as f32 / (1u64 << 24) as f32
+        }
+
+        fn normal(&mut self) -> f32 {
+            let u = self.uniform().max(1e-7);
+            let v = self.uniform();
+            (-2.0 * u.ln()).sqrt() * (std::f32::consts::TAU * v).cos()
+        }
+    }
+
+    type Found = Vec<(u32, u16, u16)>;
+
+    fn exact(r: Option<OsdResult>, s: &OsdScratch) -> (Option<([u64; 3], u32, u32)>, Found) {
+        (
+            r.map(|r| (r.bits, r.distance.to_bits(), r.hard_errors)),
+            s.found.iter().map(|&(m, j, k)| (m.to_bits(), j, k)).collect(),
+        )
+    }
+
+    #[test]
+    fn faster_search_matches_the_reference_bit_for_bit() {
+        let mut rng = Lcg(2026);
+        let (mut a, mut b) = (OsdScratch::default(), OsdScratch::default());
+        let (mut cases, mut decoded) = (0, 0);
+        for trial in 0..100usize {
+            let cw = codeword(trial as u8);
+            // Noise from clean to none of the codeword left.
+            let sigma = [0.5f32, 0.8, 1.1, 1.5, 50.0][trial % 5];
+            let noisy = |rng: &mut Lcg| -> Vec<f32> {
+                (0..N)
+                    .map(|i| 4.0 * (if cw[i] == 1 { 1.0 } else { -1.0 } + sigma * rng.normal()))
+                    .collect()
+            };
+            let mut channel = noisy(&mut rng);
+            if trial % 7 == 0 {
+                // Erased bits, as at the end of a partial slot.
+                channel[150..].fill(0.0);
+            }
+            if trial % 11 == 0 {
+                // Ties in the reliability order.
+                channel.iter_mut().for_each(|v| *v = v.round());
+            }
+            // The BP state orders some runs, so the order differs from the channel's.
+            let source = if trial % 3 == 0 {
+                noisy(&mut rng)
+            } else {
+                channel.clone()
+            };
+            for order in 0..=2u8 {
+                for window in [1usize, 2, 17, 40, 91] {
+                    for (max_distance, max_hard_errors) in [(1.0f32, N as u32), (0.07, 30)] {
+                        let p = OsdParams {
+                            order,
+                            window,
+                            source: OsdSource::Channel,
+                            max_hard_errors,
+                            max_distance,
+                            erasures_as_errors: trial % 2 == 0,
+                        };
+                        let want = before::reference(&p, |i| source[i], &channel, &mut a);
+                        let got = osd(&p, |i| source[i], &channel, &mut b);
+                        assert_eq!(
+                            exact(want, &a),
+                            exact(got, &b),
+                            "trial {trial}, order {order}, window {window}, limit {max_distance}"
+                        );
+                        cases += 1;
+                        decoded += usize::from(got.is_some());
+                    }
+                }
+            }
+        }
+        assert_eq!(cases, 3000);
+        assert!(decoded > 500 && decoded < cases, "{decoded} of {cases} decoded");
     }
 }
