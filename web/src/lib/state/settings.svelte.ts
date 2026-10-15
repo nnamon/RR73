@@ -112,6 +112,8 @@ export interface Settings {
   highlights: HighlightEntry[];
   /** How many dB over the noise reach the top of the waterfall's colours (waterfall/levels.ts). */
   waterfallContrast: Contrast;
+  /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall. */
+  waterfallCalls: boolean;
   wspr: WsprSettings;
   /** The operator's name and QTH, for {MYNAME} and {MYQTH} in keyboard macros. */
   myName: string;
@@ -152,6 +154,7 @@ export const DEFAULTS: Settings = {
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
+  waterfallCalls: true,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',
   myQth: '',
@@ -297,6 +300,7 @@ export function validate(raw: unknown): Settings {
   if (f && typeof f === 'object') for (const k of FEATURE_IDS) if (typeof f[k] === 'boolean') s.features[k] = f[k];
   if (r.highlights !== undefined) s.highlights = normaliseHighlights(r.highlights);
   if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
+  if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
   s.wspr = validateWspr(r.wspr);
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);
   s.rtty = validateRtty(r.rtty);

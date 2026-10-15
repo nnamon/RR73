@@ -24,6 +24,7 @@
   import { SLOT_MS, isFt } from '../../lib/clock/slots';
   import { TouchFreeze } from '../../lib/decode/freeze';
   import { RX_PANE_HZ, buildList, filterCounts, rowFacts, type Classify, type Filter, type Outgoing } from '../../lib/decode/list';
+  import { waterfallCalls } from '../../lib/waterfall/calls';
   import { queueMarks, type QueueMark } from '../../lib/decode/queue';
   import { CHASE_MS, chaseMark, spots } from '../../lib/state/spots.svelte';
   import { applyFocus, focusCall } from '../../lib/decode/focus';
@@ -249,6 +250,12 @@
   // Rx frequency has few rows: it takes the whole hour.
   const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true, facts }), focus) : []);
   const counts = $derived(filterCounts(shown, settings.callsign, settings.rxHz, { hideWorked, facts }));
+  // Callsigns on the waterfall: the senders in the slots it can show, at most a minute of FT8.
+  $effect(() => {
+    const wf = waterfall;
+    const calls = settings.waterfallCalls ? waterfallCalls(shown.slice(0, 8), facts, settings.callsign, settings.highlights) : [];
+    wf?.setCalls(calls);
+  });
   // A filtered list that leaves the screen part empty draws further back.
   $effect(() => {
     void items;

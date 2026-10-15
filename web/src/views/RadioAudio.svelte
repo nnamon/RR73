@@ -180,6 +180,10 @@
           {/each}
         </span>
       </div>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Callsigns on the waterfall</span><span class="row-sub">FT8 and FT4</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={settings.waterfallCalls} onchange={(e) => void updateSettings({ waterfallCalls: e.currentTarget.checked })} />
+      </label>
       <div class="row">
         <span class="row-main"><span class="row-title">Sample rate</span><span class="row-sub">{rateText}</span></span>
       </div>

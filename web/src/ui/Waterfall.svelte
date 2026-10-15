@@ -22,11 +22,17 @@
    * green while receiving and red on air. A tap tunes to the strongest signal near it (`onfind`);
    * a drag moves the pair with the finger, keeping the shift (`ontune` on each move). With the
    * keyboard up it shrinks to a 48 pt strip without its ruler (`strip`).
+   *
+   * FT8 and FT4 can write the callsigns of a slot's decodes over their signals (`setCalls`,
+   * lib/waterfall/calls.ts): a row at the bottom of the slot, beside its time, and a second row
+   * above where the slot is tall enough. A label with a decode colour carries it on its left edge,
+   * and a message to the operator a red one.
    */
   import { onMount } from 'svelte';
   import { WaterfallClient } from '../lib/waterfall/client';
   import { paletteFrom } from '../lib/waterfall/colormap';
   import type { FrameInfo } from '../lib/waterfall/renderer';
+  import { placeCalls, type WaterfallCall } from '../lib/waterfall/calls';
   import { FREQ_LIMITS, hzAtX, xOfHz } from '../lib/waterfall/pick';
   import { STEP_HZ_OF, classify, dragHz, grabbed, isTap, labelLeft, type Gesture, type Marker } from '../lib/waterfall/drag';
   import { bracket, denseRuler, ruler } from '../lib/waterfall/axis';
@@ -34,7 +40,7 @@
   import { viewOf } from '../lib/waterfall/spectrum';
   import type { Contrast } from '../lib/waterfall/levels';
   import { utcHm, utcTime } from '../lib/clock/format';
-  import type { Mode } from '../lib/clock/slots';
+  import { SLOT_MS, type Mode } from '../lib/clock/slots';
   import { onAudioChunk, onTxWave, recentTxWaves } from '../lib/state/station.svelte';
 
   let {
@@ -93,6 +99,31 @@
   const timeText = $derived(mode === 'WSPR' ? utcHm : utcTime);
   const labels = $derived(
     marks.map((b) => ({ key: b.utcMs, text: `${timeText(b.utcMs)}${sent.has(b.utcMs) ? ' Tx' : ''}`, top: b.y - 14 })).filter((l) => l.top >= 0 && l.top + 13 <= height - rulerH),
+  );
+
+  // Callsigns over their signals. The label font is monospaced: a hidden probe of 10 characters,
+  // padded as a label, and one of 20 give a character's width and the padding.
+  let calls = $state.raw<WaterfallCall[]>([]);
+  let probe10 = $state(0);
+  let probe20 = $state(0);
+  /** The callsigns to write over the slots on screen, highest rank first; [] for none. */
+  export function setCalls(c: WaterfallCall[]) {
+    calls = c;
+  }
+  const placed = $derived(
+    calls.length && frame && !strip && mode !== 'WSPR' && mode !== 'RTTY' && probe20 > probe10
+      ? placeCalls(calls, {
+          lines: marks,
+          slotPx: SLOT_MS[mode] / frame.rowMs / dpr,
+          width,
+          bottom: height - rulerH,
+          charPx: (probe20 - probe10) / 10,
+          padPx: probe10 - (probe20 - probe10),
+          // The time label: 6 px in, "13:14:15" in the same monospaced size.
+          timeRight: 6 + timeText(0).length * ((probe20 - probe10) / 10),
+          xOf: (hz) => xOfHz(hz, mode),
+        })
+      : [],
   );
   // Regular width: labels as dense as 12 pt numbers allow, and four FT8 slots in the picture.
   const regular = $derived(layout.size === 'regular');
@@ -256,6 +287,11 @@
       {#each labels as l (l.key)}
         <span class="tl" style:top="{l.top}px" aria-hidden="true">{l.text}</span>
       {/each}
+      {#each placed as c (c.key)}
+        <span class="wc" class:edge={c.you || !!c.colour} style:--rr-wc-edge={c.you ? 'var(--rr-wf-tx)' : c.colour} style:left="{c.x}px" style:top="{c.top}px" aria-hidden="true" data-testid="wf-call">{c.text}</span>
+      {/each}
+      <span class="wc probe" aria-hidden="true" bind:clientWidth={probe10}>0000000000</span>
+      <span class="wc probe" aria-hidden="true" bind:clientWidth={probe20}>00000000000000000000</span>
       {#if stoppedAtUtcMs !== null}
         <span class="gap">No audio since {utcTime(stoppedAtUtcMs)}</span>
       {/if}
@@ -445,6 +481,31 @@
   .tl {
     left: 6px;
     color: var(--rr-wf-text);
+  }
+
+  /* A callsign over its signal: as the time labels, on a tag, with the decode colour on its edge. */
+  .wc {
+    position: absolute;
+    height: 13px;
+    padding: 0 var(--rr-space-half);
+    border-radius: var(--rr-radius-xs);
+    background: var(--rr-wf-tag-bg);
+    color: var(--rr-wf-text);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-ruler);
+    font-weight: var(--rr-weight-semibold);
+    line-height: 13px;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+
+  .wc.edge {
+    border-radius: 0 var(--rr-radius-xs) var(--rr-radius-xs) 0;
+    box-shadow: inset 2px 0 0 var(--rr-wc-edge);
+  }
+
+  .wc.probe {
+    visibility: hidden;
   }
 
   /* The ruler over the bottom of the picture: ticks on the bottom edge, a tick every 100 Hz and a

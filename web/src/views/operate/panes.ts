@@ -14,6 +14,7 @@
 
 import type { Component } from 'svelte';
 import { isKeyboard, type Mode } from '../../lib/clock/slots';
+import type { WaterfallCall } from '../../lib/waterfall/calls';
 import FtPane from './FtPane.svelte';
 import WsprPane from './WsprPane.svelte';
 import KeyboardPane from './KeyboardPane.svelte';
@@ -22,6 +23,8 @@ import KeyboardPane from './KeyboardPane.svelte';
 export interface WaterfallHandle {
   /** The quietest Tx frequency in the last slots, Hz, or null. */
   quietest(): Promise<number | null>;
+  /** The callsigns to write over the slots on screen, highest rank first (lib/waterfall/calls.ts). */
+  setCalls(calls: WaterfallCall[]): void;
 }
 
 export interface PaneProps {

@@ -93,6 +93,17 @@ test('practice on shows the tag and decodes the band without a microphone', asyn
   await expect.poll(() => rows(page).count(), { timeout: 50_000, intervals: [1000] }).toBeGreaterThanOrEqual(5);
   await expect(row(page, /^CQ /).first()).toBeVisible();
   expect(media).toEqual([]);
+
+  // The waterfall writes each sender over its signal; Radio and audio turns that off.
+  const label = page.getByTestId('wf-call').first();
+  await expect(label).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByTestId('decode-list').locator('.c-msg', { hasText: (await label.textContent())! }).first()).toBeVisible();
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Radio and audio/ }).click();
+  await page.getByRole('switch', { name: /^Callsigns on the waterfall/ }).uncheck();
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await page.getByRole('link', { name: 'Operate' }).click();
+  await expect(page.getByTestId('wf-call')).toHaveCount(0);
 });
 
 test('calling CQ gets a caller and logs a practice QSO; the log is untouched', async ({ page }) => {

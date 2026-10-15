@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The FT8 and FT4 waterfall writes each decoded callsign over its signal, in the decode colour. Settings › Radio and audio turns it off.
+
 ## 0.19.11 · 2026-10-15
 
 - Operate's New chip lists the decodes your decode colours mark as new: new DXCC entities, grids and calls, as Settings › Decode colours sets them.
