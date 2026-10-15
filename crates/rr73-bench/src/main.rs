@@ -31,7 +31,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Command {
     /// Write named synthetic sets (smoke, noise-ci, noise, snr-sweep, crowded, wspr-smoke,
-    /// wspr-noise, wspr-snr-sweep, wspr-band) into the corpus.
+    /// wspr-noise, wspr-snr-sweep, wspr-band, late-start, ap-sweep, ft4-sweep) into the corpus.
     Synth {
         /// Set to write; repeat for several.
         #[arg(long = "set", required = true, value_name = "NAME")]

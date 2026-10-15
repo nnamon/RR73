@@ -100,6 +100,14 @@ pub fn gate(results: &Results, baseline: &Results, config: &GateConfig) -> Vec<C
         for stage in &r.then {
             d.push_str(&format!(" then {stage}"));
         }
+        // An early pass decodes a different slot from the whole one: the cut must match too.
+        if let Some(s) = r.audio_s {
+            let fill = match r.audio_fill.unwrap_or_default() {
+                crate::run::AudioFill::Absent => "absent",
+                crate::run::AudioFill::Zero => "zero",
+            };
+            d.push_str(&format!(" on the first {s} s, rest {fill}"));
+        }
         d
     };
     let (want, have) = (describe(baseline), describe(results));
@@ -369,6 +377,15 @@ mod tests {
             .map(|k| k.metric)
             .collect();
         assert_eq!(failed, vec!["preset"]);
+        let mut early = results(vec![("synthetic/smoke", summary(0.9, 0, Some(-19.0), 1.0))]);
+        early.audio_s = Some(13.5);
+        let failed: Vec<String> = gate(&early, &base, &c)
+            .into_iter()
+            .filter(|k| !k.pass)
+            .map(|k| k.metric)
+            .collect();
+        assert_eq!(failed, vec!["preset"]);
+        assert!(gate(&early, &early, &c).iter().all(|k| k.pass));
         let no_fit = results(vec![("synthetic/smoke", summary(0.85, 0, None, 1.0))]);
         assert!(
             gate(&no_fit, &base, &c)

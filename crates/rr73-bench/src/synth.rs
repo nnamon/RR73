@@ -25,6 +25,7 @@ pub const SETS: &[&str] = &[
     "wspr-band",
     "late-start",
     "ap-sweep",
+    "ft4-sweep",
 ];
 
 /// The operator and the QSO partner of the `ap-sweep` set.
@@ -96,6 +97,15 @@ pub struct Job {
 pub fn sweep_steps() -> impl Iterator<Item = i32> {
     -28..=-8
 }
+
+/// SNR steps of the `ft4-sweep` set, in dB.
+pub fn ft4_sweep_steps() -> impl Iterator<Item = i32> {
+    -24..=-6
+}
+
+/// Least spacing between base tones in the `ft4-sweep` crowded slots, Hz: FT4's 83 Hz
+/// bandwidth plus a guard.
+pub const FT4_SPACING_HZ: f64 = 100.0;
 
 /// SNR steps of the `wspr-snr-sweep` set, in dB.
 pub fn wspr_sweep_steps() -> impl Iterator<Item = i32> {
@@ -233,6 +243,29 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
                         i += 1;
                     }
                 }
+            }
+        }
+        "ft4-sweep" => {
+            // FT4 alone: one message per slot in AWGN and with fading at each step, a band of
+            // 10 at -16 to 0 dB, and noise slots, for FT4 measurements such as early decoding.
+            for (sub, fading) in [("awgn", None), ("fading", Some(Watterson::MODERATE))] {
+                let mut i = 0;
+                for snr in ft4_sweep_steps() {
+                    for _ in 0..opts.per_step {
+                        push(sub, i, &mut |r| {
+                            JobScene::Ft(single(Mode::Ft4, f64::from(snr), fading, r))
+                        });
+                        i += 1;
+                    }
+                }
+            }
+            for i in 0..opts.crowded_count {
+                push("crowded", i, &mut |r| {
+                    JobScene::Ft(crowded(Mode::Ft4, 10, false, (-16.0, 0.0), FT4_SPACING_HZ, r))
+                });
+            }
+            for i in 0..opts.noise_count {
+                push("noise", i, &mut |_| JobScene::Ft(noise_only(Mode::Ft4)));
             }
         }
         "crowded" => {
@@ -485,6 +518,10 @@ mod tests {
             Ok(15 * 3 * 2)
         );
         assert_eq!(jobs_for("wspr-band", base, &opts).map(|j| j.len()), Ok(2));
+        assert_eq!(
+            jobs_for("ft4-sweep", base, &opts).map(|j| j.len()),
+            Ok(19 * 3 * 2 + 2 + 7)
+        );
         // FT8: 4 ways x 12 delays, FT4: 4 x 11, each at 8 SNRs.
         assert_eq!(
             jobs_for("late-start", base, &opts).map(|j| j.len()),
