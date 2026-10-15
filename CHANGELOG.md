@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT4 runs the same 2 finer searches after each slot as FT8 and decodes signals about 1.2 dB weaker. Their decodes join the slot within 2 s.
+
 ## 0.21.4 · 2026-10-15
 
 - The filter chips over the decode list and the RTTY macro row scroll sideways only. A vertical drag no longer moves them.

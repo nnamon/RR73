@@ -171,8 +171,9 @@ jobs:
       - name: Gate subtract-3-osd2 against bench/subtract-3-osd2.json
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: cargo run --release -p rr73-bench -- gate results/ci-subtract-3-osd2.json --baseline bench/subtract-3-osd2.json
-      # The later FT8 stages the app runs after subtract-3-osd2 (DEEP in
+      # The later stages the app runs after subtract-3-osd2 on FT8 and FT4 slots (DEEP in
       # web/src/lib/decode/worker-client.ts), gated against bench/subtract-3-osd2-deep.json.
+      # The smoke set's 6 FT4 slots run them too.
       - name: Run subtract-3-osd2 with the later stages
         if: ${{ !cancelled() && steps.ready.outputs.ready == 'true' }}
         run: >-

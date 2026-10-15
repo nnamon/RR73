@@ -1,6 +1,6 @@
-# 0007. Deeper FT8 stages after the shipped preset
+# 0007. Deeper FT8 and FT4 stages after the shipped preset
 
-Status: accepted, 2026-10-14
+Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages (FT4, 2026-10-15).
 
 ## Context
 
@@ -8,19 +8,19 @@ The shipped preset, `subtract-3-osd2`, decodes an FT8 slot in about 70 ms of the
 
 ## Decision
 
-- FT8 slots run three stages as one `DecoderSession` in the decoder worker:
+- FT8 slots, and FT4 slots from 2026-10-15, run three stages as one `DecoderSession` in the decoder worker:
   1. `subtract-3-osd2`, as shipped.
   2. `subtract-3-osd2` on a grid of 4 frames per symbol and 4 bins per tone spacing (`spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2`).
   3. `subtract-3-osd2` on 8 frames per symbol and 4 bins per tone spacing, with 400 candidates from a 2 dB sync threshold and OSD over all 91 information bits (`spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2`).
 
-  Stages 2 and 3 also leave frames that overlap digital silence out of the sync score (`search.skip_silent_frames=true`) and accept OSD decodes from -23 dB (`validate.osd_min_snr_db=-23`, 1 dB above the preset). The plan is `DEEP` in `web/src/lib/decode/worker-client.ts`; CI gates it against `bench/subtract-3-osd2-deep.json`.
-- Stage 1's decodes go to the list, the sequencer and the receive calibration at once, as before. The decodes of stages 2 and 3 are added to the slot in the list as each stage ends, and reach the sequencer as a later pass of the slot (`pass: 'late'`). The sequencer acts on a later pass as on the final one, on its new decodes only: a reply, the partner answering another station, a caller for the queue, a CQ for Hunt. The answer goes in the slot that follows when it can still start within the late-start limit (1.5 s in FT8), else a cycle later; a transmission already on air plays on. What a later pass lacks repeats nothing and counts no retry. The calibration keeps to stage 1 decodes, whose timing it needs.
+  Stages 2 and 3 also leave frames that overlap digital silence out of the sync score (`search.skip_silent_frames=true`) and accept OSD decodes from -23 dB (`validate.osd_min_snr_db=-23`, 1 dB above the preset). In FT4 every stage keeps the preset's -19 dB floor (`validate.osd_ft4_min_snr_db`, experiment 0002). The plan is `DEEP` in `web/src/lib/decode/worker-client.ts`; CI gates it against `bench/subtract-3-osd2-deep.json`.
+- Stage 1's decodes go to the list, the sequencer and the receive calibration at once, as before. The decodes of stages 2 and 3 are added to the slot in the list as each stage ends, and reach the sequencer as a later pass of the slot (`pass: 'late'`). The sequencer acts on a later pass as on the final one, on its new decodes only: a reply, the partner answering another station, a caller for the queue, a CQ for Hunt. The answer goes in the slot that follows when it can still start within the late-start limit (`LATE_S` in `web/src/lib/qso/sequencer.ts`: 4 s in FT8, 1.25 s in FT4), else a cycle later; a transmission already on air plays on. What a later pass lacks repeats nothing and counts no retry. The calibration keeps to stage 1 decodes, whose timing it needs.
 - Budget: the worker steps stages 2 and 3 in slices of at most 40 ms and yields to its message loop between slices, so a request to pack or synthesise a transmission waits at most one slice and one step. The later stages stop when they finish, 2000 ms after the slot's decoding started, or when the next slot (FT8, FT4 or WSPR) reaches the worker. The next slot frees the session first, so the decoder context (callsign hashes) is back with the worker before it decodes.
-- FT4 slots, and slots RR73 transmitted in, decode with the preset alone. The stages were measured on FT8 only.
+- Slots RR73 transmitted in, and the early pass's partial slots (experiment 0006), decode with the preset alone. Until 2026-10-15 FT4 slots did too, as the stages had been measured on FT8 only.
 
 ## Measurements
 
-Sets: the 60 ft8_lib public files (1298 WSJT-X decodes), the 350 SARTS slots from the KiwiSDR corpus in two sets (4210 `jt9 -8 -d 3` decodes), 5000 noise slots, `noise-ci`, `crowded`, `smoke` and the SNR sweep. Release build in the `rust` container on the Apple M4 (10 CPUs). Recall counts decodes matching the reference within 10 Hz and 0.5 s.
+FT8. Sets: the 60 ft8_lib public files (1298 WSJT-X decodes), the 350 SARTS slots from the KiwiSDR corpus in two sets (4210 `jt9 -8 -d 3` decodes), 5000 noise slots, `noise-ci`, `crowded`, `smoke` and the SNR sweep. Release build in the `rust` container on the Apple M4 (10 CPUs). Recall counts decodes matching the reference within 10 Hz and 0.5 s.
 
 | Set | Preset alone | Through stage 2 | Through stage 3 |
 | --- | --- | --- | --- |
@@ -71,6 +71,54 @@ The WebKit worker stays well inside the limits set for this work (median under 2
 ## Open risks
 
 - Not tested on a device. The budget bounds the later stages to 2 s from the start of decoding whatever the phone's speed; on a phone slower than the budget allows, stage 3 ends early with its best candidates tried.
-- A reply that only stage 2 or 3 finds often arrives after our next transmission has started (stage 3 ends at a WebKit p50 of 264 ms after decoding starts, the transmission at 0.5 s): that transmission plays out and the answer goes a cycle later, one period after it would have with stage 1. The sequencer tests cover this; it is not tested on air.
+- A reply that only stage 2 or 3 finds often arrives after our next transmission has started (stage 3 ends at a WebKit p50 of 264 ms after decoding starts, the transmission at 0.5 s): that transmission plays out and the answer goes a cycle later, one period after it would have with stage 1. In FT4 stage 3 ends at a WebKit p50 of 181 ms. The sequencer tests cover this; it is not tested on air.
 - The later stages raise the unmatched decodes on the recordings from 68 to 132; about 2 of the new 64 look false. The noise sets cannot show interference-shaped false decodes.
 - The later stages take about 7 times the CPU time of stage 1 per FT8 slot (native mean 260 ms against 37 ms). Battery use is not measured.
+
+## FT4, 2026-10-15
+
+### Decision
+
+FT4 slots run the same three stages as FT8 slots, with the same plan (`DEEP`) and the same 2000 ms budget. The early pass's partial slots and slots RR73 transmitted in decode with the preset alone, as in FT8. On the bench the stages lower FT4's SNR50 by 1.2 dB in AWGN and 1.4 dB with fading and add no false decode on 10000 noise slots. In Chromium and WebKit workers on the M4 all three end within 386 ms of the start of decoding, in a slot of 7.5 s.
+
+### Measurements
+
+Release build of `rr73-bench` 0.21.3 in the `rust` container on the Apple M4 (10 CPUs, 10 threads), the preset alone against the preset with the two `--then` stages of `DEEP`. `ft4-sweep` (experiment 0006): one FT4 message per slot at -24 to -6 dB in 1 dB steps, 40 slots per step in AWGN and with moderate Watterson fading, 20 crowded slots of 10 signals and 10000 FT4 noise slots. `late-start` (`docs/bench.md`): 40 slots per step in each of its 44 FT4 subsets (14080 slots) and 48 FT8 subsets (15360 slots).
+
+| Set | Preset alone | Through stage 3 |
+| --- | --- | --- |
+| `ft4-sweep/awgn` (760 slots), matched, SNR50 | 350, -14.25 dB | 397, -15.42 dB |
+| `ft4-sweep/fading` (760 slots), matched, SNR50 | 215, -10.83 dB | 268, -12.19 dB |
+| `ft4-sweep/crowded` (200 signals), matched | 183 | 198 |
+| `ft4-sweep/noise` (10000 slots), false | 0 | 0 |
+| `ft4-sweep`, time per slot, p50, p90 | 11.0, 16.5 ms | 246.3, 270.3 ms |
+| `late-start`, FT4 subsets, matched, false | 4977, 1 | 5704, 6 |
+| `late-start`, FT8 subsets, matched, false | 6055, 0 | 6796, 4 |
+
+`compare` against the preset alone: on `ft4-sweep`, 115 decodes gained, all matched, and 0 lost; on `late-start`, 1477 gained (1468 matched, 9 false) and 0 lost. The FT8 rows measure the stages FT8 slots already run, on a set the FT8 measurements above did not include.
+
+Every false decode on `late-start` is an OSD codeword with 24 to 30 hard errors. The preset's one, in FT4, is `292RZQ S47NQS R RR91` (-16.4 dB, 24 hard errors). The stages add 5 in FT4 at 28 to 30 hard errors and -18.6 to -7.8 dB, such as `8M3VPW 9V4TKH R DE05` (-17.7 dB) and `6V7BAS/R KS8ZGV R KF30` (-9.3 dB), and 4 in FT8 at 28 or 29 hard errors and -21.0 to -13.5 dB, such as `805LAW 5A1AOA R PH83` (-13.5 dB).
+
+Time per slot in browsers on 154 FT4 slots of `ft4-sweep` rendered with 3 slots per step (57 AWGN, 57 fading, 20 crowded, 20 noise), each slot's fastest of 3 runs: `tools/wasm-cost/ft8.mjs --mode FT4` in the `e2e` container, decoding in a dedicated module worker with the app's three-stage plan and 2000 ms budget, which no slot reached.
+
+| p50, p95, max | Chromium 153 worker | WebKit 26.6 worker |
+| --- | --- | --- |
+| Preset alone | 10, 30, 34 ms | 9, 28, 33 ms |
+| Through stage 2 | 40, 89, 93 ms | 34, 79, 87 ms |
+| Through stage 3 | 201, 251, 386 ms | 181, 231, 365 ms |
+| Longest step | 5.9 ms | 6.0 ms |
+
+The browsers decode as many messages per stage as the native build on the same 154 slots: 228, 18 and 2, all matched.
+
+### Alternatives rejected
+
+- FT4 on the preset alone, as before: 1.2 dB of SNR50 in AWGN and 1.4 dB with fading forgone, and 727 matches on the FT4 `late-start` subsets.
+- An OSD limit of 27 hard errors in FT4 (30 now): removes the 5 false decodes the stages add on `late-start` and loses 78 true OSD decodes, 66 on `late-start` and 12 on `ft4-sweep`.
+
+### Open risks
+
+- Not tested on a device: the stages' time on an iPhone in FT4. The budget bounds them to 2 s from the start of decoding, and FT4 slots come every 7.5 s, so a phone slower than the budget allows spends up to 2 s of each slot in them.
+- False decodes on `late-start` in both modes: 5 in 14080 FT4 slots and 4 in 15360 FT8 slots from the stages, against 0 on 10000 FT4 and 5000 FT8 noise slots. All are OSD codewords at 28 to 30 hard errors, reported at -21.0 to -7.8 dB, above the SNR floors.
+- No FT4 recordings in the corpus: the FT4 figures rest on synthetic signals, and interference-shaped false decodes are unmeasured.
+- CI runs the stages on the smoke set's 6 FT4 slots only, with no FT4 noise slots.
+- In FT4 the three stages take about 21 times the time of the preset alone per slot (native mean 252 ms against 12 ms on `ft4-sweep`, 10 threads), in slots half as long as FT8's. Battery use is not measured.

@@ -28,7 +28,7 @@ export interface WorkerLike {
 
 interface Pending {
   resolve: (d: Decode[]) => void;
-  /** Receives the later stages' decodes of an FT8 slot. */
+  /** Receives the later stages' decodes of an FT8 or FT4 slot. */
   more?: (d: Decode[]) => void;
   reject: (e: Error) => void;
   /** Set for a WSPR slot. */
@@ -50,15 +50,15 @@ interface Request<T> {
 export const PRESET = 'subtract-3-osd2';
 
 /**
- * Later stages for FT8 slots, after PRESET. Each decodes what the stages before it left: the
- * first on a grid of 4 frames per symbol and 4 bins per tone spacing, the second on 8 frames
- * per symbol with 400 candidates from a 2 dB sync threshold and OSD over all 91 information
- * bits. Both leave frames that overlap digital silence out of the sync score and accept OSD
- * decodes from -23 dB, 1 dB above the preset, as they try more candidates. Their a priori
- * decoding stays near the QSO partner's frequency, which keeps its cost to 4%
- * (crates/rr73-decode/src/ap.rs). CI gates them
- * against bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has the
- * measurements and the budget.
+ * Later stages for FT8 and FT4 slots, after PRESET. Each decodes what the stages before it
+ * left: the first on a grid of 4 frames per symbol and 4 bins per tone spacing, the second on
+ * 8 frames per symbol with 400 candidates from a 2 dB sync threshold and OSD over all 91
+ * information bits. Both leave frames that overlap digital silence out of the sync score. In
+ * FT8 they accept OSD decodes from -23 dB, 1 dB above the preset, as they try more
+ * candidates; FT4 keeps the preset's -19 dB. Their a priori decoding stays near the QSO
+ * partner's frequency, which keeps its cost to 4% (crates/rr73-decode/src/ap.rs). CI gates
+ * them against bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has
+ * the measurements and the budget.
  */
 export const DEEP: DeepStages = {
   plan: [
@@ -130,7 +130,7 @@ export class WorkerDecoder implements DecoderClient {
 
   /**
    * Decodes one slot. The samples are transferred to the worker: pass a copy. With `more`, an
-   * FT8 slot also runs the later stages, and `more` receives what each finds after the
+   * FT8 or FT4 slot also runs the later stages, and `more` receives what each finds after the
    * returned decodes. A partial slot (the early pass) runs the preset only.
    */
   decodeSlot(slot: SlotAudio, more?: (d: Decode[]) => void): Promise<Decode[]> {
@@ -139,7 +139,7 @@ export class WorkerDecoder implements DecoderClient {
     if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
     if (this.pending.size >= this.maxPending) return Promise.reject(new DecoderBusyError(`${this.pending.size} slots waiting`));
     const id = this.nextId++;
-    const deep = more && slot.mode === 'FT8' && !slot.partial && this.deep ? this.deep : undefined;
+    const deep = more && (slot.mode === 'FT8' || slot.mode === 'FT4') && !slot.partial && this.deep ? this.deep : undefined;
     const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject, more: deep && more }));
     this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}), ...(slot.qso ? { qso: slot.qso } : {}), ...(slot.partial ? { partial: true } : {}) }, [slot.samples.buffer]);
     return done;

@@ -92,15 +92,26 @@ describe('WorkerDecoder', () => {
     expect(more).toEqual([['CQ 9V1NE OJ11']]);
   });
 
-  it('runs no later stages for FT4, for a partial slot, or without a listener', () => {
+  it('runs the same later stages for FT4, and none for a partial slot or without a listener', async () => {
     const { d, workers } = setup();
-    void d.decodeSlot({ ...slot(), mode: 'FT4', samples: new Float32Array(90000) }, () => undefined);
+    const more: string[][] = [];
+    const done = d.decodeSlot({ ...slot(), mode: 'FT4', samples: new Float32Array(90000) }, (x) => more.push(x.map((m) => m.text)));
+    expect(workers[0].sent[1].m).toMatchObject({ type: 'decode', id: 1, mode: 'FT4', deep: DEEP });
+    workers[0].reply({ type: 'decoded', id: 1, decodes: [], ms: 10 });
+    await expect(done).resolves.toEqual([]);
+    workers[0].reply({ type: 'decodedMore', id: 1, decodes: [{ text: 'CQ 9V1NE OJ11', freq_hz: 900, dt_s: 0.2, snr_db: -16 }], ms: 180, done: true });
+    expect(more).toEqual([['CQ 9V1NE OJ11']]);
+    // Without a listener, FT8 and FT4 slots decode with the preset alone.
     void d.decodeSlot(slot());
-    expect(workers[0].sent.slice(1).map((s) => 'deep' in s.m)).toEqual([false, false]);
-    const { d: d2, workers: w2 } = setup();
-    void d2.decodeSlot({ ...slot(), samples: new Float32Array(162000), partial: true }, () => undefined);
-    expect(w2[0].sent[1].m).toMatchObject({ type: 'decode', partial: true });
-    expect(w2[0].sent[1].m).not.toHaveProperty('deep');
+    void d.decodeSlot({ ...slot(), mode: 'FT4', samples: new Float32Array(90000) });
+    expect(workers[0].sent.slice(2).map((s) => 'deep' in s.m)).toEqual([false, false]);
+    // The early pass: the first 13.5 s of an FT8 slot, the first 6 s of an FT4 slot.
+    for (const [mode, n] of [['FT8', 162000], ['FT4', 72000]] as const) {
+      const { d: d2, workers: w2 } = setup();
+      void d2.decodeSlot({ ...slot(), mode, samples: new Float32Array(n), partial: true }, () => undefined);
+      expect(w2[0].sent[1].m).toMatchObject({ type: 'decode', mode, partial: true });
+      expect(w2[0].sent[1].m).not.toHaveProperty('deep');
+    }
   });
 
   it('refuses a third waiting slot', async () => {
