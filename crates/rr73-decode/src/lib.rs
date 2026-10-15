@@ -46,5 +46,5 @@ pub use config::{ConfigError, DecoderConfig, PRESETS};
 pub use layout::FrameLayout;
 pub use pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, decode};
 pub use report::{Decode, DecodeReport, DecodeStats, StageTimings};
-pub use session::{DecodeSession, Stage, StepOutcome};
+pub use session::{CandidateTrace, DecodeSession, Stage, StepOutcome, TraceOutcome};
 pub use view::Candidate;

@@ -10,6 +10,7 @@ repository.workspace = true
 [dependencies]
 rr73-ft8.workspace = true
 rr73-decode.workspace = true
+rr73-dsp.workspace = true
 rr73-chansim.workspace = true
 rr73-corpus.workspace = true
 rr73-rtty.workspace = true

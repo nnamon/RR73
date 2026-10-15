@@ -86,6 +86,42 @@ impl Stage {
     }
 }
 
+/// What became of one candidate, recorded while tracing is on
+/// ([`DecodeSession::set_trace`]). The bench uses it to tell search misses from candidates
+/// that failed to decode.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CandidateTrace {
+    /// Stage index.
+    pub stage: usize,
+    /// Pass within the stage, from 1.
+    pub pass: u32,
+    /// Base-tone frequency after refinement, in Hz.
+    pub freq_hz: f32,
+    /// DT after refinement, in seconds.
+    pub dt_s: f32,
+    /// Sync score, in dB.
+    pub score: f32,
+    /// What decoding made of it.
+    pub outcome: TraceOutcome,
+}
+
+/// The fate of a traced candidate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TraceOutcome {
+    /// No codeword: belief propagation and OSD failed, and no a priori hypothesis held.
+    NoCodeword,
+    /// A codeword the validator refused (CRC, unpack, plausibility).
+    Rejected,
+    /// A message already decoded in the slot.
+    Duplicate,
+    /// An OSD or AP codeword whose SNR lies below its floor.
+    BelowFloor,
+    /// A new decode: its index in [`DecodeSession::decodes`].
+    Decoded(usize),
+    /// No soft bits tried: too few sync symbols matched for the block demodulator.
+    NoSync,
+}
+
 /// What one step did.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StepOutcome {
@@ -149,6 +185,8 @@ pub struct DecodeSession {
     stage_seconds: Vec<f64>,
     /// A priori hypotheses from the context's QSO, built once per slot.
     hyps: Vec<Hypothesis>,
+    /// Candidate records, kept only while tracing is on.
+    trace: Option<Vec<CandidateTrace>>,
 }
 
 impl std::fmt::Debug for DecodeSession {
@@ -224,7 +262,24 @@ impl DecodeSession {
             timings: StageTimings::default(),
             stage_seconds: vec![0.0; count],
             hyps,
+            trace: None,
         }
+    }
+
+    /// Turns the candidate trace on or off. On, every candidate tried from then on is
+    /// recorded with its fate ([`DecodeSession::trace`]); off, the records are dropped.
+    pub fn set_trace(&mut self, on: bool) {
+        self.trace = if on { Some(Vec::new()) } else { None };
+    }
+
+    /// The candidates tried while tracing was on, in order.
+    pub fn trace(&self) -> &[CandidateTrace] {
+        self.trace.as_deref().unwrap_or(&[])
+    }
+
+    /// The audio as the next step sees it: the slot with the decodes subtracted so far.
+    pub fn residual(&self) -> &[f32] {
+        &self.audio
     }
 
     /// The mode being decoded.
@@ -586,6 +641,8 @@ impl DecodeSession {
         let stats = &mut self.stats;
         let timings = &mut self.timings;
         let mode = self.layout.mode;
+        let trace = &mut self.trace;
+        let (stage_index, pass) = (self.stage, self.pass);
         for i in from..to {
             let mut cand: Candidate = ws.candidates[i];
             let sw = Stopwatch::start();
@@ -627,6 +684,16 @@ impl DecodeSession {
                 timings.refine_s += sw.elapsed_s();
                 if !ready && !spectrogram_llrs {
                     // No soft bits, so nothing for a priori decoding either.
+                    if let Some(t) = trace.as_mut() {
+                        t.push(CandidateTrace {
+                            stage: stage_index,
+                            pass,
+                            freq_hz: view.freq_hz(&cand),
+                            dt_s: view.dt_s(&cand),
+                            score: cand.score,
+                            outcome: TraceOutcome::NoSync,
+                        });
+                    }
                     continue;
                 }
                 for (k, &n) in blocks
@@ -698,13 +765,31 @@ impl DecodeSession {
                 }
                 timings.ldpc_s += sw.elapsed_s();
             }
+            let mut record = |outcome: TraceOutcome| {
+                if let Some(t) = trace.as_mut() {
+                    t.push(CandidateTrace {
+                        stage: stage_index,
+                        pass,
+                        freq_hz: view.freq_hz(&cand),
+                        dt_s: view.dt_s(&cand),
+                        score: cand.score,
+                        outcome,
+                    });
+                }
+            };
             let Some(valid) = valid else {
+                record(if outcome.converged {
+                    TraceOutcome::Rejected
+                } else {
+                    TraceOutcome::NoCodeword
+                });
                 continue;
             };
             let sw = Stopwatch::start();
             if pipeline.validator.is_duplicate(&valid, &ws.seen) {
                 stats.duplicates += 1;
                 timings.validate_s += sw.elapsed_s();
+                record(TraceOutcome::Duplicate);
                 continue;
             }
             let tones = rr73_ft8::tones::from_payload(self.layout.mode, &valid.payload);
@@ -716,6 +801,7 @@ impl DecodeSession {
             {
                 stats.implausible += 1;
                 timings.validate_s += sw.elapsed_s();
+                record(TraceOutcome::BelowFloor);
                 continue;
             }
             ws.seen.push(valid.payload);
@@ -737,6 +823,7 @@ impl DecodeSession {
                 ap: found_by,
                 block: if found_by.is_some() { None } else { by_block },
             };
+            record(TraceOutcome::Decoded(self.decodes.len()));
             found.push(decode.clone());
             self.decodes.push(decode);
             self.stage_of.push(self.stage);

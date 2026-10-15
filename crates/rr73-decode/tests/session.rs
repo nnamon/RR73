@@ -274,3 +274,38 @@ fn block_stages_transform_each_pass_and_match_decode() {
     }
     assert!(texts(session.decodes()).contains(&"CQ EA4XYZ IN80".to_string()));
 }
+
+#[test]
+fn trace_records_every_candidate_and_points_at_its_decodes() {
+    use rr73_decode::TraceOutcome;
+    let audio = crowded();
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let config = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let whole = decode(&slot, &config, &mut DecodeContext::new());
+
+    let mut session = DecodeSession::new(&slot, vec![Stage::preset("subtract-3-osd2").expect("stage")]);
+    assert!(session.trace().is_empty());
+    session.set_trace(true);
+    session.run_to_end();
+    // Tracing changes nothing the session decodes.
+    assert_eq!(session.decodes(), &whole.decodes[..]);
+    let trace = session.trace();
+    // One entry per candidate tried, whatever number of soft-bit sets it took.
+    assert_eq!(trace.len() as u32, whole.stats.candidates);
+    let mut pointed = Vec::new();
+    for t in trace {
+        if let TraceOutcome::Decoded(i) = t.outcome {
+            let d = &session.decodes()[i];
+            assert_eq!((t.freq_hz, t.dt_s, t.pass), (d.freq_hz, d.dt_s, d.pass));
+            pointed.push(i);
+        }
+    }
+    assert_eq!(pointed, (0..whole.decodes.len()).collect::<Vec<_>>());
+    assert!(trace.iter().any(|t| t.outcome == TraceOutcome::NoCodeword));
+    // The residual holds the slot with the subtracted decodes taken out: less power.
+    let power = |x: &[f32]| x.iter().map(|&v| f64::from(v).powi(2)).sum::<f64>();
+    assert_eq!(session.residual().len(), audio.len());
+    assert!(power(session.residual()) < power(&audio));
+    session.set_trace(false);
+    assert!(session.trace().is_empty());
+}

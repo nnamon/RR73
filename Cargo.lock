@@ -742,6 +742,7 @@ dependencies = [
  "rr73-chansim",
  "rr73-corpus",
  "rr73-decode",
+ "rr73-dsp",
  "rr73-ft8",
  "rr73-rtty",
  "serde",

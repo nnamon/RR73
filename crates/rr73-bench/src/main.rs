@@ -4,6 +4,7 @@ mod compare;
 mod gate;
 mod import;
 mod loop_fixture;
+mod misses;
 mod results;
 mod rtty;
 mod run;
@@ -179,6 +180,31 @@ enum Command {
         /// Time between the start offsets checked, in seconds.
         #[arg(long, default_value_t = 0.05)]
         step_s: f64,
+    },
+    /// Decode recorded slots with a candidate trace and classify every reference decode the
+    /// run misses: search, failed candidates, subtraction, DT range, hashed callsigns.
+    Misses {
+        /// Decoder preset of the first stage.
+        #[arg(long, default_value = "subtract-3-osd2")]
+        preset: String,
+        /// Configuration override of the first stage; repeat for several.
+        #[arg(long = "set", value_name = "KEY=VALUE")]
+        overrides: Vec<String>,
+        /// A later stage, as for `run --then`; repeat for more.
+        #[arg(long, value_name = "STAGE")]
+        then: Vec<String>,
+        /// Decoder threads (default: all CPUs).
+        #[arg(long)]
+        threads: Option<usize>,
+        /// Reference key to score against, as for `run`.
+        #[arg(long)]
+        reference: Option<String>,
+        /// JSON file for the per-miss records.
+        #[arg(long)]
+        out: Option<PathBuf>,
+        /// Corpus files or directories with reference decode lists.
+        #[arg(required = true)]
+        paths: Vec<PathBuf>,
     },
     /// Print a preset's configuration as JSON, or list the presets.
     Presets {
@@ -425,6 +451,30 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             } else {
                 ExitCode::from(1)
             })
+        }
+        Command::Misses {
+            preset,
+            overrides,
+            then,
+            threads,
+            reference,
+            out,
+            paths,
+        } => {
+            let report = misses::misses(&misses::MissOptions {
+                preset,
+                overrides,
+                then,
+                paths,
+                threads,
+                reference,
+            })?;
+            if let Some(path) = &out {
+                let text = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;
+                std::fs::write(path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+            }
+            print!("{}", misses::render(&report));
+            Ok(ExitCode::SUCCESS)
         }
         Command::Rtty { command } => run_rtty(command),
         Command::Presets { name } => {
