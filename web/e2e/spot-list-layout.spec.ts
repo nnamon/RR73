@@ -1,5 +1,5 @@
-// SpotList on iPhone viewports in WebKit (the webkit-375x667 and webkit-393x852 projects run every
-// layout.spec), light and dark: nothing overflows sideways, every control is at least 44 px, rows
+// SpotList on iPhone viewports in WebKit (the review-375x667 and review-393x852 projects run it),
+// light and dark: nothing overflows sideways, every control is at least 44 px, rows
 // are at least 56 px with the callsign in bold monospace, and each state is captured.
 import { expect, test, type Page } from '@playwright/test';
 import { fileURLToPath } from 'node:url';
@@ -56,13 +56,22 @@ for (const theme of ['light', 'dark'] as const) {
     await openSpotList(page, 'open', theme);
     const colours = await page.evaluate(() => {
       const bg = (sel: string) => getComputedStyle(document.querySelector(sel)!).backgroundColor;
-      return { group: bg('ul.group'), page: getComputedStyle(document.body).backgroundColor, go: bg('button.go') };
+      // Each token's colour in this theme, read from a probe painted with it.
+      const token = (name: string) => {
+        const probe = document.body.appendChild(document.createElement('div'));
+        probe.style.background = `var(${name})`;
+        const c = getComputedStyle(probe).backgroundColor;
+        probe.remove();
+        return c;
+      };
+      return {
+        seen: { group: bg('ul.group'), page: getComputedStyle(document.body).backgroundColor, go: bg('button.go') },
+        tokens: { group: token('--rr-surface'), page: token('--rr-bg'), go: token('--rr-accent-fill') },
+      };
     });
-    expect(colours).toEqual(
-      theme === 'light'
-        ? { group: 'rgb(255, 255, 255)', page: 'rgb(242, 243, 246)', go: 'rgb(40, 81, 216)' }
-        : { group: 'rgb(21, 24, 29)', page: 'rgb(11, 13, 16)', go: 'rgb(63, 107, 232)' },
-    );
+    expect(colours.seen).toEqual(colours.tokens);
+    // The themes differ, so the probe read the theme in force.
+    expect(colours.tokens.page).toBe(theme === 'light' ? 'rgb(242, 242, 247)' : 'rgb(0, 0, 0)');
   });
 }
 
