@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.19.12 · 2026-10-15
 
 - The FT8 and FT4 waterfall writes each decoded callsign over its signal, in the decode colour. Settings › Radio and audio turns it off.
 
