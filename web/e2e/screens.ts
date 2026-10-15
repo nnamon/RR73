@@ -42,6 +42,7 @@ export const SCREENS: readonly Screen[] = [
   { name: 'ft8-settings', path: '#/settings/ft8', heading: 'FT8 and FT4' },
   { name: 'wspr-settings', path: '#/settings/wspr', heading: 'WSPR' },
   { name: 'versions', path: '#/settings/versions', heading: 'Version history' },
+  { name: 'credits', path: '#/settings/credits', heading: 'Credits' },
   { name: 'logging', path: '#/settings/logging', heading: 'Logging' },
   { name: 'colours', path: '#/settings/colours', heading: 'Decode colours' },
   { name: 'wavelog', path: '#/settings/logging/wavelog', heading: 'Wavelog' },

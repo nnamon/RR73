@@ -151,6 +151,23 @@ test('Settings shows the version, and it opens the version history', async ({ pa
   await expect(section).toContainText('This version');
 });
 
+test('Settings › About › Credits shows each third-party licence in full', async ({ page }) => {
+  await page.goto('./#/settings');
+  await page.getByRole('link', { name: 'Credits' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide']);
+  const text = (await page.locator('main .pane:not([hidden])').innerText()).replace(/\s+/g, ' ');
+  // Lucide's ISC licence, word for word.
+  const isc = readFileSync(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8').split('```text\nISC License')[1].split('```')[0];
+  expect(text).toContain(`ISC License ${isc.replace(/\s+/g, ' ').trim()}`);
+  // ft8_lib's MIT licence, as kept beside the crate.
+  const mit = readFileSync(new URL('../../crates/rr73-ft8/LICENSE-ft8_lib', import.meta.url), 'utf8');
+  expect(text).toContain(mit.replace(/\s+/g, ' ').trim());
+  expect(text).toContain('Kārlis Goba');
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
+});
+
 test('after an update, a notice opens the version history at the new version', async ({ page }) => {
   await page.addInitScript(() => {
     if (!sessionStorage.getItem('seeded')) {

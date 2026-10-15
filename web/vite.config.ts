@@ -13,15 +13,15 @@ const build = (process.env.GITHUB_SHA ?? '').slice(0, 7) || 'local';
 const base = process.env.BASE_PATH ?? '/';
 
 /**
- * Serves the repository's CHANGELOG.md as `virtual:changelog`, read from disk on every load, so
- * dev and build both work while the file lives outside the Vite root (web/).
+ * Serves a file of the repository as the module `id`, its text the default export, read from disk
+ * on every load, so dev and build both work while the file lives outside the Vite root (web/):
+ * CHANGELOG.md for Version history, THIRD_PARTY_NOTICES.md for Credits.
  */
-function changelog(): Plugin {
-  const id = 'virtual:changelog';
+function repoText(id: string, path: string): Plugin {
   const resolved = `\0${id}`;
-  const file = fileURLToPath(new URL('../CHANGELOG.md', import.meta.url));
+  const file = fileURLToPath(new URL(`../${path}`, import.meta.url));
   return {
-    name: 'rr73-changelog',
+    name: `rr73-${id.replace('virtual:', '')}`,
     resolveId: (source) => (source === id ? resolved : null),
     load(source) {
       if (source !== resolved) return null;
@@ -40,7 +40,8 @@ export default defineConfig({
   },
   plugins: [
     svelte(),
-    changelog(),
+    repoText('virtual:changelog', 'CHANGELOG.md'),
+    repoText('virtual:notices', 'THIRD_PARTY_NOTICES.md'),
     VitePWA({
       // A new version installs and waits; the app lets it take over at a safe moment and reloads
       // (src/lib/app/update.svelte.ts registers the worker). Taking over at once (autoUpdate)

@@ -23,6 +23,7 @@
   import Settings from './views/Settings.svelte';
   import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
+  import Credits from './views/Credits.svelte';
   import WavelogSettings from './views/WavelogSettings.svelte';
   import { go, redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
   import { layout, split } from './lib/app/layout.svelte';
@@ -205,6 +206,8 @@
     <DecodeColours />
   {:else if sub === 'versions'}
     <VersionHistory focus={route.path[2] ?? null} />
+  {:else if sub === 'credits'}
+    <Credits />
   {:else}
     <Settings section={sub} />
   {/if}

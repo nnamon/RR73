@@ -156,7 +156,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/wsprnet` | WSPR spots to WSPRnet, straight from the phone: the form-encoded records as WSJT-X sends them, and the queue that sends them 0 to 20 s after each slot, 200 ms apart. The switch lives in `lib/state/wsprnet.svelte.ts`. See `docs/design/qsp.md`, WSPRnet. |
 | `lib/log` | QSO records, the delivery ledger, the outbox, destinations (Wavelog, files) and activations. See `docs/design/log.md`. |
 | `lib/reference` | Country file (callsign to DXCC entity), POTA parks and SOTA summits, Maidenhead grids, distance and bearing. See `docs/reference-data.md`. |
-| `lib/app` | Routing, updates (the service worker, stale builds), the version history, the size classes (`layout.svelte.ts`: compact, compact height, regular) and the keyboard shortcuts (`shortcuts.ts`). See `docs/decisions/0008-large-screens.md`. |
+| `lib/app` | Routing, updates (the service worker, stale builds), the version history, the credits (`notices.ts`, from `THIRD_PARTY_NOTICES.md`), the size classes (`layout.svelte.ts`: compact, compact height, regular) and the keyboard shortcuts (`shortcuts.ts`). See `docs/decisions/0008-large-screens.md`. |
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`), as two parts the frame places by size class: FT8 and FT4, WSPR, and the keyboard modes (`KeyboardPane`, with RTTY's tuning row). |
 

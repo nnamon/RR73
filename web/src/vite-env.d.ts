@@ -12,3 +12,9 @@ declare module 'virtual:changelog' {
   const text: string;
   export default text;
 }
+
+declare module 'virtual:notices' {
+  /** The repository's THIRD_PARTY_NOTICES.md, or an empty string when the file is missing. */
+  const text: string;
+  export default text;
+}

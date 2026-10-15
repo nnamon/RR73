@@ -55,10 +55,10 @@
     ],
   ]);
 
-  /** The section a path belongs to: Wavelog under Logging, Version history under About. */
+  /** The section a path belongs to: Wavelog under Logging, Version history and Credits under About. */
   const current = $derived.by(() => {
     const sub = route.path[1] ?? 'station';
-    if (sub === 'versions') return 'about';
+    if (sub === 'versions' || sub === 'credits') return 'about';
     return groups.flat().some((i) => i.id === sub) ? sub : 'station';
   });
 

@@ -50,7 +50,7 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
 
   test(`pushed screens start with a 44 pt back bar and bar buttons follow iOS in ${theme}`, ci(theme, 375), async ({ page }) => {
     const titles: { path: string; top: number; fontSize: string }[] = [];
-    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/ft8', '#/settings/wspr', '#/settings/versions', '#/settings/colours', '#/settings/practice', '#/settings/relay', '#/settings/sdr', '#/settings/pskreporter']) {
+    for (const path of ['#/log', '#/spots', '#/settings', '#/settings/logging', '#/settings/logging/wavelog', '#/settings/radio', '#/settings/ft8', '#/settings/wspr', '#/settings/versions', '#/settings/credits', '#/settings/colours', '#/settings/practice', '#/settings/relay', '#/settings/sdr', '#/settings/pskreporter']) {
       await open(page, path, theme, undefined, path === '#/spots' ? { activations: true } : undefined);
       const pane = page.locator('main .pane:not([hidden])');
       const back = (await pane.locator('.bar').first().boundingBox())!;

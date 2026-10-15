@@ -348,6 +348,10 @@
         <span class="row-value">{__APP_VERSION__}</span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
+      <a class="row link" href={href('settings', 'credits')}>
+        <span class="row-main"><span class="row-title">Credits</span></span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>
