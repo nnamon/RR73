@@ -70,6 +70,20 @@ fn partial_slots_decode_to_json() {
 }
 
 #[test]
+fn partial_sessions_decode_as_decode_partial() {
+    let audio = two_signals();
+    for len in [60_000usize, 120_000, 141_600, 162_000] {
+        let early = &audio[..len];
+        let want = decode_partial_json(early, "FT8", "subtract-3-osd2").expect("decode");
+        let mut session = DecoderSession::create_partial(early, "FT8", "subtract-3-osd2").expect("session");
+        let got = session.next_stage_json().expect("stage").expect("decodes");
+        assert_eq!(got, want, "length {len}");
+        assert_eq!(session.next_stage_json(), Ok(None));
+    }
+    assert!(DecoderSession::create_partial(&audio, "FT8", "nope").is_err());
+}
+
+#[test]
 fn sessions_return_each_stage_once_and_stop_anywhere() {
     let audio = two_signals();
     // Stage by stage: the baseline finds the strong signal, the second stage the weak one

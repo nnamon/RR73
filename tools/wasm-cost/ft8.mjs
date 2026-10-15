@@ -11,8 +11,10 @@
 // `key=value` overrides. Every slot is decoded `--runs` times per plan and browser; a slot's
 // time is its fastest run. With `--budget-ms`, a run stops stepping once that much time has
 // passed since it started, as the app's worker does. `--mode FT4` decodes the slots as FT4
-// (default FT8). `--stage-timings` times the decoder's own stages with performance.now() and
-// prints their mean per slot; the clock reads add to the totals, so time totals without it.
+// (default FT8). `--audio-s` decodes only the first that many seconds of each slot as a partial
+// slot, as the app's early pass does (13.5 s in FT8, 6 s in FT4). `--stage-timings` times the
+// decoder's own stages with performance.now() and prints their mean per slot; the clock reads
+// add to the totals, so time totals without it.
 // Slots are WAV files (16-bit mono, 12 kHz) under the given paths, or listed
 // one per line in a file given with `--list`.
 import { createServer } from 'node:http';
@@ -24,7 +26,7 @@ const require = createRequire(new URL('../../web/package.json', import.meta.url)
 const playwright = require('@playwright/test');
 
 const args = process.argv.slice(2);
-const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, mode: 'FT8', stageTimings: false, out: null, lists: [], paths: [], browsers: [] };
+const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, mode: 'FT8', audioS: 0, stageTimings: false, out: null, lists: [], paths: [], browsers: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--pkg') opts.pkg = args[++i];
@@ -32,6 +34,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--runs') opts.runs = Number(args[++i]);
   else if (a === '--budget-ms') opts.budgetMs = Number(args[++i]);
   else if (a === '--mode') opts.mode = args[++i];
+  else if (a === '--audio-s') opts.audioS = Number(args[++i]);
   else if (a === '--stage-timings') opts.stageTimings = true;
   else if (a === '--out') opts.out = args[++i];
   else if (a === '--list') opts.lists.push(args[++i]);
@@ -90,19 +93,20 @@ const ready = init({ module_or_path: '/pkg/rr73_wasm_bg.wasm' });
 self.onmessage = (e) => run(e).catch((err) => self.postMessage({ error: String(err && err.stack || err) }));
 async function run(e) {
   await ready;
-  const { plans, count, runs, budgetMs, mode, stageTimings } = e.data;
+  const { plans, count, runs, budgetMs, mode, audioS, stageTimings } = e.data;
   if (stageTimings) {
     if (!wasm.enable_stage_timings) throw new Error('this build has no enable_stage_timings');
     wasm.enable_stage_timings();
   }
   const results = plans.map(() => []);
   for (let s = 0; s < count; s++) {
-    const samples = new Float32Array(await (await fetch('/slot/' + s)).arrayBuffer());
+    const whole = new Float32Array(await (await fetch('/slot/' + s)).arrayBuffer());
+    const samples = audioS > 0 ? whole.slice(0, Math.round(audioS * 12000)) : whole;
     plans.forEach((plan, p) => {
       const best = { total: Infinity, stages: [], decodes: [], stopped: false, stepMax: 0, timings: null };
       for (let r = 0; r < runs; r++) {
         const t0 = performance.now();
-        const session = new DecoderSession(samples, mode, plan);
+        const session = audioS > 0 ? DecoderSession.partial(samples, mode, plan) : new DecoderSession(samples, mode, plan);
         const stages = [];
         const decodes = [];
         let stepMax = 0;
@@ -169,15 +173,15 @@ const pct = (v, q) => {
   const s = [...v].sort((a, b) => a - b);
   return s[Math.min(s.length - 1, Math.max(0, Math.ceil(q * s.length) - 1))];
 };
-const report = { files, mode: opts.mode, plans: opts.plans, runs: opts.runs, budgetMs: opts.budgetMs, browsers: {} };
-console.log(`${files.length} ${opts.mode} slots, ${opts.runs} runs each, best run per slot${opts.budgetMs ? `, budget ${opts.budgetMs} ms` : ''}`);
+const report = { files, mode: opts.mode, plans: opts.plans, runs: opts.runs, budgetMs: opts.budgetMs, audioS: opts.audioS, browsers: {} };
+console.log(`${files.length} ${opts.mode} slots${opts.audioS ? `, first ${opts.audioS} s` : ''}, ${opts.runs} runs each, best run per slot${opts.budgetMs ? `, budget ${opts.budgetMs} ms` : ''}`);
 for (const name of opts.browsers) {
   const browser = await playwright[name].launch();
   const page = await browser.newPage();
   await page.goto(`${origin}/`);
   page.on('console', (m) => console.log(`  [${name}] ${m.text()}`));
   const out = await page.evaluate(
-    ({ plans, count, runs, budgetMs, mode, stageTimings }) =>
+    ({ plans, count, runs, budgetMs, mode, audioS, stageTimings }) =>
       new Promise((ok, fail) => {
         const w = new Worker('/worker.js', { type: 'module' });
         w.onerror = (e) => fail(new Error(e.message));
@@ -186,9 +190,9 @@ for (const name of opts.browsers) {
           else if (e.data.error) fail(new Error(e.data.error));
           else ok(e.data);
         };
-        w.postMessage({ plans, count, runs, budgetMs, mode, stageTimings });
+        w.postMessage({ plans, count, runs, budgetMs, mode, audioS, stageTimings });
       }),
-    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs, mode: opts.mode, stageTimings: opts.stageTimings },
+    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs, mode: opts.mode, audioS: opts.audioS, stageTimings: opts.stageTimings },
   );
   report.browsers[name] = { version: browser.version(), wasm: out.version, results: out.results };
   console.log(`\n${name} ${browser.version()}, rr73-wasm ${out.version}`);

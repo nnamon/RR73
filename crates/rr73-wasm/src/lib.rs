@@ -186,13 +186,27 @@ struct AppStep<'a> {
 impl DecoderSession {
     /// [`DecoderSession::new`] without the JavaScript error type.
     pub fn create(samples: &[f32], mode: &str, plan: &str) -> Result<Self, String> {
+        Self::create_with(samples, mode, plan, false)
+    }
+
+    /// [`DecoderSession::partial`] without the JavaScript error type.
+    pub fn create_partial(samples: &[f32], mode: &str, plan: &str) -> Result<Self, String> {
+        Self::create_with(samples, mode, plan, true)
+    }
+
+    fn create_with(samples: &[f32], mode: &str, plan: &str, partial: bool) -> Result<Self, String> {
         let mode = parse_mode(mode)?;
         let stages = Stage::plan(plan).map_err(|e| e.to_string())?;
         if stages.is_empty() {
             return Err("the plan names no stage".into());
         }
+        let audio = if partial {
+            SlotAudio::partial(samples, mode)
+        } else {
+            SlotAudio::new(samples, mode)
+        };
         let ctx = CONTEXT.with(|c| std::mem::take(&mut *c.borrow_mut()));
-        let session = DecodeSession::with_context(&SlotAudio::new(samples, mode), stages, ctx);
+        let session = DecodeSession::with_context(&audio, stages, ctx);
         Ok(Self {
             stages: session.stage_count(),
             inner: Some(session),
@@ -256,6 +270,13 @@ impl DecoderSession {
     #[wasm_bindgen(constructor)]
     pub fn new(samples: &[f32], mode: &str, plan: &str) -> Result<DecoderSession, JsError> {
         Self::create(samples, mode, plan).map_err(|e| JsError::new(&e))
+    }
+
+    /// As [`DecoderSession::new`] for the start of a slot still being received, as
+    /// [`decode_partial`] reads it: symbols after the last sample count as missing. For
+    /// measurement tools (`tools/wasm-cost`), which time the early pass stage by stage.
+    pub fn partial(samples: &[f32], mode: &str, plan: &str) -> Result<DecoderSession, JsError> {
+        Self::create_partial(samples, mode, plan).map_err(|e| JsError::new(&e))
     }
 
     /// Does one bounded unit of work and returns JSON
