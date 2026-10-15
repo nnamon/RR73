@@ -1,6 +1,7 @@
 /**
  * The phone's position as a Maidenhead grid, for Settings and the activation form. Callers get the
- * grid and the fix's accuracy; RR73 stores the grid only, never the position.
+ * grid, the fix's accuracy and the position; RR73 stores the grid only. The activation form uses the
+ * position once, to find the parks and summits nearby.
  *
  * A 6-character subsquare is 5' of longitude by 2.5' of latitude, about 4.6 km north to south. A
  * fix less accurate than `FINE_ACCURACY_M` can land in the wrong subsquare, so it gives the
@@ -19,7 +20,7 @@ export const LOCATE_TIMEOUT_MS = 20_000;
 export const LOCATE_MAX_AGE_MS = 60_000;
 
 export type LocateResult =
-  | { ok: true; grid: string; accuracyM: number; note: string }
+  | { ok: true; grid: string; accuracyM: number; note: string; at: { lat: number; lon: number } }
   | { ok: false; message: string };
 
 // GeolocationPositionError codes; the constants are missing outside browsers.
@@ -37,7 +38,7 @@ export function gridFromPosition(coords: Pick<GeolocationCoordinates, 'latitude'
   const note = coarse
     ? `Position accurate to ${Number.isFinite(coords.accuracy) ? accuracyText(coords.accuracy) : 'an unknown distance'}, so the grid has 4 characters. For ${chars}, try again in the open.`
     : '';
-  return { ok: true, grid, accuracyM: coords.accuracy, note };
+  return { ok: true, grid, accuracyM: coords.accuracy, note, at: { lat: coords.latitude, lon: coords.longitude } };
 }
 
 /**

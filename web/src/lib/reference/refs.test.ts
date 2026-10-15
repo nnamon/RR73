@@ -77,6 +77,18 @@ describe('parks', () => {
     expect(await parks.available()).toBe(true);
   });
 
+  it('suggests parks whose reference begins with the text, active first, reading one shard', async () => {
+    const { parks, origin } = setup(potaFiles('v1', PARKS));
+    expect((await parks.suggest('sg-')).map((p) => p.ref)).toEqual(['SG-0001', 'SG-0002', 'SG-0099']);
+    expect((await parks.suggest('SG-000')).map((p) => p.ref)).toEqual(['SG-0001', 'SG-0002']);
+    expect((await parks.suggest(' sg-0002 ')).map((p) => p.name)).toEqual(['Ang Mo Kio Town Garden East National Park']);
+    expect((await parks.suggest('SG-', 1)).map((p) => p.ref)).toEqual(['SG-0001']);
+    expect(origin.state.requests).toEqual(['pota/index.v1.json', 'pota/SG.v1.json']);
+    // Without the key's separator, an unknown key or another programme's form: none, and no request.
+    for (const t of ['SG', 'XX-0', 'W7O/CN', '', 'Admiralty']) expect(await parks.suggest(t), t).toEqual([]);
+    expect(origin.state.requests).toEqual(['pota/index.v1.json', 'pota/SG.v1.json']);
+  });
+
   it('gives the nearest active parks with distance and bearing, reading only the shards it needs', async () => {
     const { parks, origin } = setup(potaFiles('v1', PARKS));
     const near = await parks.nearest(SINGAPORE, { limit: 3 });
@@ -229,6 +241,14 @@ describe('summits', () => {
       validFrom: '2010-01-01',
       validTo: null,
     });
+  });
+
+  it('suggests summits whose reference begins with the text, those that count today first', async () => {
+    const list = summits();
+    // On 13 October 2026 AA-001 and BB-003 count; AA-003 is retired and BB-001 not yet valid.
+    expect((await list.suggest('xa/')).map((x) => x.ref)).toEqual(['XA/AA-001', 'XA/BB-003', 'XA/AA-003', 'XA/BB-001']);
+    expect((await list.suggest('XA/BB')).map((x) => x.ref)).toEqual(['XA/BB-003', 'XA/BB-001']);
+    expect(await list.suggest('XA')).toEqual([]);
   });
 
   it('counts a summit only between its valid-from and valid-to dates', async () => {

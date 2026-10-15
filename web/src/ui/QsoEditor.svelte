@@ -23,6 +23,8 @@
   import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
   import { isFt } from '../lib/clock/slots';
   import { features } from '../lib/state/features.svelte';
+  import { typedSuggestions, type RefSuggestion } from '../lib/log/ref-suggest';
+  import Icon from './Icon.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
   let { qsoId, inline = false, onclose }: { qsoId: string | null; inline?: boolean; onclose: () => void } = $props();
@@ -50,6 +52,33 @@
   let saving = $state(false);
   /** The running activation a QSO can join: only with Activations on. */
   const running = $derived(features.activations ? log.current : null);
+  /** The reference being typed in Their park or summit: the last one in the field. */
+  const lastRef = $derived(refs.split(/[,\s]+/).at(-1) ?? '');
+  let refSuggestions = $state<RefSuggestion[]>([]);
+  // POTA and SOTA references that begin with it, from the lists Activations brings.
+  $effect(() => {
+    const t = lastRef;
+    const lists = { parks: reference.parks(features.activations), summits: reference.summits(features.activations) };
+    const programme = /^[A-Z0-9]{1,4}-\d{0,5}$/i.test(t) ? 'POTA' : t.includes('/') ? 'SOTA' : null;
+    let current = true;
+    const timer = setTimeout(() => {
+      void (programme ? typedSuggestions(programme, t, lists) : Promise.resolve([])).then((x) => {
+        if (current) refSuggestions = x.filter((r) => r.ref !== t.toUpperCase());
+      });
+    }, 120);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  });
+
+  /** Puts a suggested reference in place of the one being typed. */
+  function pickRef(r: RefSuggestion) {
+    const before = refs.slice(0, refs.length - lastRef.length).replace(/[,\s]*$/, '').toUpperCase();
+    refs = before ? `${before}, ${r.ref}` : r.ref;
+    refSuggestions = [];
+  }
+
   /** An existing QSO can join the running activation when it is in none, or leave it. */
   const movable = $derived(!!original && !!running && (original.activationId === null || original.activationId === running.id));
 
@@ -361,6 +390,15 @@
         <span class="row-title">Their park or summit</span>
         <input class="row-field mono up" bind:value={refs} autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="Optional" />
       </label>
+      {#each refSuggestions as r (r.ref)}
+        <button type="button" class="row sug" aria-label="Use {r.programme} {r.ref}, {r.name}" onclick={() => pickRef(r)}>
+          <span class="row-main">
+            <span class="mono sug-ref">{r.ref}</span>
+            <span class="row-sub sug-name">{r.name}</span>
+          </span>
+          <Icon name={r.programme === 'POTA' ? 'tree' : 'mountain'} size={18} class="sug-i" />
+        </button>
+      {/each}
       <label class="row">
         <span class="row-title">Comment</span>
         <input class="row-field" bind:value={comment} autocomplete="off" maxlength="200" placeholder="Optional" />
@@ -421,6 +459,20 @@
 {/snippet}
 
 <style>
+  .sug-ref {
+    font-weight: var(--rr-weight-bold);
+  }
+
+  .sug-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sug :global(.sug-i) {
+    color: var(--rr-accent);
+  }
+
   .form {
     margin-top: var(--rr-space-3);
   }

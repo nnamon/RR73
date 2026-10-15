@@ -19,7 +19,7 @@ const SG = { latitude: 1.3521, longitude: 103.8198 };
 
 describe('gridFromPosition', () => {
   it('gives the 6-character grid for a fine fix', () => {
-    expect(gridFromPosition({ ...SG, accuracy: 30 }, 6)).toEqual({ ok: true, grid: 'OJ11vi', accuracyM: 30, note: '' });
+    expect(gridFromPosition({ ...SG, accuracy: 30 }, 6)).toEqual({ ok: true, grid: 'OJ11vi', accuracyM: 30, note: '', at: { lat: 1.3521, lon: 103.8198 } });
   });
 
   it('gives the 4-character square and says why when the fix is coarse', () => {

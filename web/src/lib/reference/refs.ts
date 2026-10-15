@@ -230,6 +230,23 @@ export class ReferenceList<T extends Reference> {
     return (await this.loadShard(info, index)).get(parts.ref) ?? null;
   }
 
+  /**
+   * References whose id begins with the text typed, for suggestions as the operator types: active
+   * ones first, then in order of id, at most `limit`. Only the shard the text names is read:
+   * "VK-09" reads VK, "W7O/CN" reads W7O. Text without its key and separator gives none.
+   */
+  async suggest(text: string, limit = 5): Promise<T[]> {
+    const t = text.trim().toUpperCase().replace(/\s+/g, '');
+    const m = this.programme === 'POTA' ? /^([A-Z0-9]{1,4})-\d{0,5}$/.exec(t) : /^([A-Z0-9]{1,6})\/[A-Z0-9-]{0,6}$/.exec(t);
+    if (!m) return [];
+    const index = await this.loadIndex();
+    const info = index.shards.find((s) => s.key === m[1]);
+    if (!info) return [];
+    const refs = [...(await this.loadShard(info, index)).values()].filter((r) => r.ref.startsWith(t));
+    refs.sort((a, b) => Number(b.active) - Number(a.active) || a.ref.localeCompare(b.ref, 'en', { numeric: true }));
+    return refs.slice(0, limit);
+  }
+
   /** The references nearest a position, such as the phone's GPS fix. */
   async nearest(at: LatLon, opts: NearestOptions = {}): Promise<NearestResult<T>> {
     const limit = opts.limit ?? 10;
