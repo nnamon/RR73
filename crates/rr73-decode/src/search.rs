@@ -181,41 +181,102 @@ impl CandidateSearch for CostasSearch {
     }
 
     fn search(&self, view: &SymbolView<'_>, frames: std::ops::RangeInclusive<i32>, out: &mut Vec<Candidate>) {
-        out.clear();
-        if self.max_candidates == 0 {
-            return;
+        scan(view, frames, self.max_candidates, |_| self.min_score_db, out);
+    }
+}
+
+/// [`CostasSearch`] with a threshold of its own for positions whose sync symbols do not all
+/// lie inside the slot: a transmission that starts before the slot or runs past its end.
+/// Their score averages fewer sync symbols and varies more in noise, so at one threshold
+/// more noise positions pass there.
+#[derive(Clone, Debug, PartialEq)]
+pub struct CostasPartialSearch {
+    /// Most candidates kept.
+    pub max_candidates: usize,
+    /// Lowest score kept where every sync symbol lies inside the slot, in dB.
+    pub min_score_db: f32,
+    /// Lowest score kept at the other positions, in dB.
+    pub partial_min_score_db: f32,
+}
+
+impl CostasPartialSearch {
+    /// Whether every sync symbol of a candidate at `frame` lies inside the slot, from the first
+    /// frame to the last frame of a whole slot. In a partial slot (audio still arriving) a
+    /// symbol past the audio but inside the slot counts as inside, so the early pass keeps the
+    /// main threshold for transmissions that are on time.
+    pub fn whole(view: &SymbolView<'_>, frame: i32) -> bool {
+        let layout = view.layout;
+        let (Some(first), Some(last)) = (layout.sync.first(), layout.sync.last()) else {
+            return true;
+        };
+        let end = last.start + last.tones.len().saturating_sub(1);
+        let slot_frames = layout.slot_samples().div_ceil(view.spec.hop().max(1));
+        view.symbol_frame(frame, first.start) >= 0 && view.symbol_frame(frame, end) < slot_frames as isize
+    }
+}
+
+impl CandidateSearch for CostasPartialSearch {
+    fn name(&self) -> &'static str {
+        "costas-partial"
+    }
+
+    fn search(&self, view: &SymbolView<'_>, frames: std::ops::RangeInclusive<i32>, out: &mut Vec<Candidate>) {
+        let threshold = |frame: i32| {
+            if Self::whole(view, frame) {
+                self.min_score_db
+            } else {
+                self.partial_min_score_db
+            }
+        };
+        scan(view, frames, self.max_candidates, threshold, out);
+    }
+}
+
+/// Fills `out` with the `max_candidates` best Costas positions in `frames` that score at least
+/// `min_score(frame)` dB, best first. Scores a whole frame at once
+/// ([`CostasSearch::frame_scores`]).
+fn scan(
+    view: &SymbolView<'_>,
+    frames: std::ops::RangeInclusive<i32>,
+    max_candidates: usize,
+    min_score: impl Fn(i32) -> f32,
+    out: &mut Vec<Candidate>,
+) {
+    out.clear();
+    if max_candidates == 0 {
+        return;
+    }
+    // `out` is a min-heap on quality while scanning: out[0] is the worst kept.
+    let mut scores = Vec::new();
+    for frame in frames {
+        if !CostasSearch::frame_scores(view, frame, &mut scores) {
+            continue;
         }
-        // `out` is a min-heap on quality while scanning: out[0] is the worst kept.
-        let mut scores = Vec::new();
-        for frame in frames {
-            if !Self::frame_scores(view, frame, &mut scores) {
+        let min_score_db = min_score(frame);
+        for (bin, &score) in view.bin_range().zip(&scores) {
+            if score.is_nan() || score < min_score_db {
                 continue;
             }
-            for (bin, &score) in view.bin_range().zip(&scores) {
-                if score.is_nan() || score < self.min_score_db {
-                    continue;
-                }
-                let cand = Candidate::new(frame, bin, score);
-                if out.len() < self.max_candidates {
-                    out.push(cand);
-                    let last = out.len() - 1;
-                    sift_up(out, last);
-                } else if better(&cand, &out[0]) {
-                    out[0] = cand;
-                    sift_down(out, 0);
-                }
+            let cand = Candidate::new(frame, bin, score);
+            if out.len() < max_candidates {
+                out.push(cand);
+                let last = out.len() - 1;
+                sift_up(out, last);
+            } else if better(&cand, &out[0]) {
+                out[0] = cand;
+                sift_down(out, 0);
             }
         }
-        out.sort_by(|a, b| {
-            if better(a, b) {
-                std::cmp::Ordering::Less
-            } else if better(b, a) {
-                std::cmp::Ordering::Greater
-            } else {
-                std::cmp::Ordering::Equal
-            }
-        });
     }
+    out.sort_by(|a, b| {
+        if better(a, b) {
+            std::cmp::Ordering::Less
+        } else if better(b, a) {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Equal
+        }
+    });
 }
 
 fn sift_up(heap: &mut [Candidate], mut i: usize) {
@@ -393,6 +454,52 @@ mod tests {
         .search(&v, v.frame_range(-2.3, 2.5), &mut strict);
         assert!(strict.iter().all(|c| c.score >= 3.0));
         assert_eq!(strict.len(), all.iter().filter(|c| c.score >= 3.0).count());
+    }
+
+    #[test]
+    fn partial_search_holds_positions_past_the_slot_to_their_own_threshold() {
+        let layout = test_layouts::ft8();
+        let tones = testsig::random_tones(&layout, 31);
+        // DT 3.5 s: the third Costas array lies past the end of the slot.
+        let audio = testsig::render(&layout, &tones, 1500.0, 3.5, -8.0, Some(32));
+        let spec = testsig::spectrogram(&layout, &audio);
+        let v = view(&spec, &layout);
+        let range = v.frame_range(-2.3, 4.5);
+        let late = |c: &Candidate| !CostasPartialSearch::whole(&v, c.frame);
+        let mut plain = Vec::new();
+        CostasSearch {
+            max_candidates: 100_000,
+            min_score_db: 2.0,
+        }
+        .search(&v, range.clone(), &mut plain);
+        let found = *plain
+            .iter()
+            .find(|c| (v.freq_hz(c) - 1500.0).abs() < 3.0 && (v.dt_s(c) - 3.5).abs() < 0.1)
+            .expect("the late signal is a candidate");
+        assert!(late(&found));
+        assert!(plain.iter().any(|c| !late(c)));
+        // One threshold everywhere gives the plain search.
+        let mut same = Vec::new();
+        CostasPartialSearch {
+            max_candidates: 100_000,
+            min_score_db: 2.0,
+            partial_min_score_db: 2.0,
+        }
+        .search(&v, range.clone(), &mut same);
+        assert_eq!(same, plain);
+        // A threshold above the signal's score drops it and nothing whole.
+        let partial_min = found.score + 0.1;
+        let mut strict = Vec::new();
+        CostasPartialSearch {
+            max_candidates: 100_000,
+            min_score_db: 2.0,
+            partial_min_score_db: partial_min,
+        }
+        .search(&v, range, &mut strict);
+        assert!(!strict.contains(&found));
+        assert!(strict.iter().all(|c| !late(c) || c.score >= partial_min));
+        let whole = |l: &[Candidate]| l.iter().filter(|c| !late(c)).copied().collect::<Vec<_>>();
+        assert_eq!(whole(&strict), whole(&plain));
     }
 
     #[test]
