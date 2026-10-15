@@ -83,6 +83,76 @@ impl CostasSearch {
         }
         if n == 0 { None } else { Some(sum / n as f32) }
     }
+
+    /// The scores of every bin of [`SymbolView::bin_range`] at `frame`, into `out`, equal bit
+    /// for bit to [`CostasSearch::score`] of each bin. Returns `false` where `score` gives
+    /// `None` for every bin: no sync symbol lies inside the spectrogram.
+    ///
+    /// The bin range keeps every tone and its neighbours inside the spectrogram, so at one
+    /// frame all its bins make the same comparisons in the same order. The sums then run as
+    /// slice operations across the bins, which vectorise, and each bin's sum takes its terms
+    /// in the order `score` adds them.
+    pub fn frame_scores(view: &SymbolView<'_>, frame: i32, out: &mut Vec<f32>) -> bool {
+        let width = view.bin_range().len();
+        out.clear();
+        out.resize(width, 0.0);
+        let layout = view.layout;
+        let last_tone = layout.tones.saturating_sub(1);
+        let step = view.freq_osr;
+        let frames = view.spec.frames() as isize;
+        let tosr = view.time_osr as isize;
+        let mut n = 0u32;
+        for group in &layout.sync {
+            for (k, &tone) in group.tones.iter().enumerate() {
+                let f = view.symbol_frame(frame, group.start + k);
+                if f < 0 {
+                    continue;
+                }
+                if f >= frames {
+                    break;
+                }
+                let Some(row) = view.row(f) else { break };
+                if !view.is_live(f) {
+                    continue;
+                }
+                let sm = tone as usize;
+                let p = sm * step;
+                let level = &row[p..p + width];
+                let mut add = |other: &[f32]| {
+                    for ((s, &l), &o) in out.iter_mut().zip(level).zip(other) {
+                        *s += l - o;
+                    }
+                    n += 1;
+                };
+                if sm > 0 {
+                    add(&row[p - step..p - step + width]);
+                }
+                if sm < last_tone {
+                    add(&row[p + step..p + step + width]);
+                }
+                if k > 0
+                    && view.is_live(f - tosr)
+                    && let Some(r) = view.row(f - tosr)
+                {
+                    add(&r[p..p + width]);
+                }
+                if k + 1 < group.tones.len()
+                    && view.is_live(f + tosr)
+                    && let Some(r) = view.row(f + tosr)
+                {
+                    add(&r[p..p + width]);
+                }
+            }
+        }
+        if n == 0 || width == 0 {
+            return false;
+        }
+        let n = n as f32;
+        for s in out.iter_mut() {
+            *s /= n;
+        }
+        true
+    }
 }
 
 /// Sort order of candidate lists: best first (see [`better`]).
@@ -116,11 +186,12 @@ impl CandidateSearch for CostasSearch {
             return;
         }
         // `out` is a min-heap on quality while scanning: out[0] is the worst kept.
+        let mut scores = Vec::new();
         for frame in frames {
-            for bin in view.bin_range() {
-                let Some(score) = Self::score(view, frame, bin) else {
-                    continue;
-                };
+            if !Self::frame_scores(view, frame, &mut scores) {
+                continue;
+            }
+            for (bin, &score) in view.bin_range().zip(&scores) {
                 if score.is_nan() || score < self.min_score_db {
                     continue;
                 }
@@ -338,5 +409,70 @@ mod tests {
             .search(&v, -40..=40, &mut out);
             assert!(out.is_empty(), "len {len}");
         }
+    }
+
+    #[test]
+    fn frame_scores_equal_the_per_bin_score_bit_for_bit() {
+        use rr73_dsp::{FftPlans, SpectrogramConfig, SpectrogramPlan};
+        let mut checked = 0usize;
+        for (layout, seed) in [(test_layouts::ft8(), 3u64), (test_layouts::ft4(), 4)] {
+            let tones = testsig::random_tones(&layout, seed);
+            let slot = layout.slot_samples();
+            let mut audio = testsig::render(&layout, &tones, 1234.5, 0.3, -12.0, Some(seed));
+            for (i, x) in testsig::noise(slot, seed + 1).iter().enumerate() {
+                audio[i] += x;
+            }
+            // Whole and cut slots, and a slot with a silent start and a hole.
+            let mut silent = audio.clone();
+            silent[..slot / 7].fill(0.0);
+            silent[slot / 2..slot / 2 + 3000].fill(0.0);
+            let cut = audio[..slot * 2 / 3].to_vec();
+            for samples in [&audio, &silent, &cut] {
+                for (tosr, fosr) in [(2usize, 2usize), (4, 4), (8, 4), (1, 1)] {
+                    let config = SpectrogramConfig::oversampled(
+                        layout.samples_per_symbol,
+                        tosr,
+                        fosr,
+                        200.0,
+                        3000.0,
+                        12_000,
+                    )
+                    .expect("config");
+                    let frames = config.frames_for(samples.len());
+                    let mut plans = FftPlans::new();
+                    let mut plan = SpectrogramPlan::new(config.clone(), &mut plans).expect("plan");
+                    let mut spec = Spectrogram::new();
+                    plan.compute(samples, frames, &mut spec);
+                    let mut live = Vec::new();
+                    crate::silence::live_frames(samples, &config, frames, &mut live);
+                    for mask in [&live[..], &[]] {
+                        let view = SymbolView {
+                            spec: &spec,
+                            layout: &layout,
+                            time_osr: tosr,
+                            freq_osr: fosr,
+                            live: mask,
+                        };
+                        let mut scores = Vec::new();
+                        let reach = (layout.symbols * tosr) as i32;
+                        // Every fifth frame: 5 is prime to every time_osr, so all phases occur.
+                        for frame in (-reach - 2..frames as i32 + 2).step_by(5) {
+                            let some = CostasSearch::frame_scores(&view, frame, &mut scores);
+                            for (bin, &s) in view.bin_range().zip(&scores) {
+                                let want = CostasSearch::score(&view, frame, bin);
+                                assert_eq!(
+                                    want.map(f32::to_bits),
+                                    some.then_some(s.to_bits()),
+                                    "{:?} osr {tosr}/{fosr} frame {frame} bin {bin}",
+                                    layout.mode
+                                );
+                                checked += 1;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 300_000, "{checked}");
     }
 }
