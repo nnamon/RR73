@@ -224,7 +224,7 @@
         />
         <span class="mhz">MHz</span>
         {#if rttyOwn && rttyUsualHz !== null}
-          <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><Icon name="reset" size={26} /></button>
+          <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><span class="face"><Icon name="reset" size={22} /></span></button>
         {/if}
       </div>
       <p class="m">USB</p>
@@ -249,7 +249,7 @@
         />
         <span class="mhz">MHz</span>
         {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
-          <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" size={26} /></button>
+          <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><span class="face"><Icon name="reset" size={22} /></span></button>
         {/if}
       </div>
       <p class="m">USB</p>
@@ -391,10 +391,14 @@
     margin-top: var(--rr-space-1);
   }
 
-  /* The dial as a field: the same size as the dial shown for the other modes, in a box that says it can be edited. */
+  /*
+   * The dial as a field: the same size as the dial shown for the other modes, in a box that says it
+   * can be edited. It narrows no further than its 7 characters and the caret, so a 375 pt screen
+   * with the reset button shows every digit.
+   */
   .dialf {
     width: 7ch;
-    min-width: 0;
+    min-width: calc(7ch - 0.1em);
     height: var(--rr-leading-dial);
     padding: 0 var(--rr-space-1-5);
     border: 2px solid var(--rr-accent);
@@ -421,7 +425,7 @@
     line-height: var(--rr-leading-dial);
   }
 
-  /* Back to the usual dial: a 44 pt target after the unit. */
+  /* Back to the usual dial: a round face after the unit, centred on the field, in a 44 pt target that reaches into the gap and the card's padding. */
   .reset {
     display: flex;
     flex: none;
@@ -429,8 +433,27 @@
     justify-content: center;
     width: var(--rr-tap);
     height: var(--rr-tap);
-    margin-left: auto;
+    margin: 0 calc((var(--rr-dial-reset) - var(--rr-tap)) / 2);
+  }
+
+  .reset .face {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--rr-dial-reset);
+    height: var(--rr-dial-reset);
+    border-radius: var(--rr-radius-pill);
+    background: var(--rr-fill-bg);
     color: var(--rr-accent);
+  }
+
+  .reset:focus-visible {
+    outline: none;
+  }
+
+  .reset:focus-visible .face {
+    outline: 2px solid var(--rr-accent);
+    outline-offset: 2px;
   }
 
   .note {

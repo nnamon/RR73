@@ -291,11 +291,15 @@ for (const theme of ['light', 'dark'] as const) {
     await expect(band.getByRole('radio', { name: '2m', exact: true })).toBeDisabled();
     const reset = band.getByRole('button', { name: /^Reset to/ });
     await expect(reset).toHaveCount(0);
+    // Pixels of the dial's text out of view, before and after the reset button shows.
+    const hidden = () => dial.evaluate((el: HTMLInputElement) => el.scrollWidth - el.clientWidth);
+    const hiddenAlone = await hidden();
     await dial.fill('14085');
     await dial.press('Enter');
     await expect(dial).toHaveValue('14.0850');
-    // Reset goes back to the band's usual dial.
+    // Reset goes back to the band's usual dial. On a 375 pt screen it leaves every digit in view.
     await expect(reset).toHaveAccessibleName('Reset to 14.0830 MHz');
+    expect(await hidden()).toBeLessThanOrEqual(hiddenAlone);
     await reset.click();
     await expect(dial).toHaveValue('14.0830');
     await expect(reset).toHaveCount(0);

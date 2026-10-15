@@ -100,6 +100,8 @@
   --rr-button-halt: 64px;
   /* The face of a bottom bar button, inside its 44 pt target. */
   --rr-bar-button: 36px;
+  /* The reset button after a dial field: a round face about the height of the dial's digits, inside its 44 pt target. */
+  --rr-dial-reset: 30px;
   --rr-chip: 28px;
   --rr-mark-bar: 4px;
   --rr-icon: 24px;
