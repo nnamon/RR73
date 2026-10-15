@@ -475,7 +475,7 @@ describe('keying', () => {
     expect(chosen.sim.transmit).toBe(false);
   });
 
-  it('Test keying keys for 1 s with no audio and releases, with the switch off', async () => {
+  it('Test keying keys for 1 s with no audio and releases, with the switch off and on', async () => {
     await connect();
     expect(settings.cat.keyPtt).toBe(false);
     const t = testKeying();
@@ -491,6 +491,15 @@ describe('keying', () => {
     // PTT off, then the read that confirmed receive, before the result.
     const off = chosen.log.lastIndexOf('FE FE A4 E0 1C 00 00 FD');
     expect(chosen.log.slice(off + 1)).toContain('FE FE A4 E0 1C 00 FD');
+    // The same with the switch on. Halt, which Test keying runs first, sends PTT off then.
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    const on = testKeying();
+    await run(TEST_KEY_MS + 200);
+    await on;
+    expect(chosen.ptt.slice(2).filter((p) => p === '01')).toEqual(['01']);
+    expect(chosen.ptt.at(-1)).toBe('00');
+    expect(chosen.sim.transmit).toBe(false);
+    expect(rig.test).toMatchObject({ state: 'done', ok: true });
   });
 
   it('Halt stops Test keying with PTT off at once', async () => {
