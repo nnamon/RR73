@@ -15,7 +15,8 @@
 //!
 //! The radio's CI-V address is `A4` unless the operator changed it; the controller's is `E0`.
 
-use rr73_cat::ic705::{Addresses, CONTROLLER_ADDRESS, Event, Parser, Request};
+use rr73_cat::ic705::{Addresses, CONTROLLER_ADDRESS, Event, Filter, MenuItem, Mode, Parser, Request};
+use rr73_cat::sim::SimIc705;
 use wasm_bindgen::prelude::*;
 
 fn addresses(radio_address: u8) -> Addresses {
@@ -99,10 +100,94 @@ impl CatParser {
     }
 }
 
+/// The simulated IC-705 of `rr73_cat::sim`, for the app's unit tests: a fake serial port answers
+/// the app's frames with [`CatSimForTests::receive`]. The app never uses it. Its choices where
+/// the CI-V guide is silent are listed in `rr73_cat::sim`.
+#[wasm_bindgen]
+pub struct CatSimForTests {
+    sim: SimIc705,
+}
+
+impl Default for CatSimForTests {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[wasm_bindgen]
+impl CatSimForTests {
+    /// A radio at `A4` on 14.074 MHz USB, FIL1, data mode off, receiving, with the menu defaults.
+    #[wasm_bindgen(constructor)]
+    pub fn new() -> CatSimForTests {
+        CatSimForTests { sim: SimIc705::new() }
+    }
+
+    /// Reads bytes from the app and returns the radio's bytes in reply.
+    pub fn receive(&mut self, bytes: &[u8]) -> Vec<u8> {
+        self.sim.receive(bytes)
+    }
+
+    /// The operator turns the dial to `hz` (Hz). Returns the transceive frame, if any.
+    pub fn turn_dial(&mut self, hz: u32) -> Vec<u8> {
+        self.sim.turn_dial(u64::from(hz))
+    }
+
+    /// The operator picks a mode (JSON string, as `"lsb"`) and filter (1 to 3). Returns the
+    /// transceive frame, if any, or nothing for a mode or filter the guide does not list.
+    pub fn press_mode(&mut self, mode_json: &str, filter: u8) -> Vec<u8> {
+        let mode = serde_json::from_str::<Mode>(mode_json).ok();
+        match (mode, Filter::from_code(filter)) {
+            (Some(m), Some(f)) => self.sim.press_mode(m, f),
+            _ => Vec::new(),
+        }
+    }
+
+    /// Changes a menu setting (JSON string, as `"usb_send"`) on the radio's screen.
+    pub fn set_setting(&mut self, item_json: &str, value: u16) {
+        if let Ok(item) = serde_json::from_str::<MenuItem>(item_json) {
+            self.sim.set_setting(item, value);
+        }
+    }
+
+    /// True while the radio transmits, by CI-V or by a port A line through USB SEND.
+    #[wasm_bindgen(getter)]
+    pub fn transmit(&self) -> bool {
+        self.sim.transmitting()
+    }
+
+    /// The app sets port A's DTR and RTS lines, as opening a port and `setSignals` do.
+    pub fn set_lines(&mut self, dtr: bool, rts: bool) {
+        self.sim.set_lines(dtr, rts);
+    }
+
+    /// The operating frequency, Hz.
+    #[wasm_bindgen(getter)]
+    pub fn frequency(&self) -> u32 {
+        u32::try_from(self.sim.selected.hz).unwrap_or(u32::MAX)
+    }
+
+    /// The operating mode as JSON, as `"usb"`.
+    #[wasm_bindgen(getter)]
+    pub fn mode(&self) -> String {
+        serde_json::to_string(&self.sim.selected.mode).unwrap_or_default()
+    }
+
+    /// True with the data mode on.
+    #[wasm_bindgen(getter)]
+    pub fn data(&self) -> bool {
+        self.sim.selected.data
+    }
+
+    /// The filter, 1 to 3.
+    #[wasm_bindgen(getter)]
+    pub fn filter(&self) -> u8 {
+        self.sim.selected.filter.code()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rr73_cat::sim::SimIc705;
 
     #[test]
     fn requests_encode_from_json() {
@@ -157,6 +242,40 @@ mod tests {
         assert_eq!(
             parser.push(&[0xA4, 0xFB, 0xFD]),
             r#"[{"type":"noise","bytes":3}]"#
+        );
+    }
+    #[test]
+    fn the_test_simulator_answers_like_the_crate_simulator() {
+        let mut radio = CatSimForTests::new();
+        assert_eq!(radio.frequency(), 14_074_000);
+        assert_eq!(radio.mode(), r#""usb""#);
+        assert!(!radio.data());
+        let key = cat_encode_bytes(r#"{"type":"set_transmit","on":true}"#, 0xA4).expect("encode");
+        assert_eq!(radio.receive(&key), [0xFE, 0xFE, 0xE0, 0xA4, 0xFB, 0xFD]);
+        assert!(radio.transmit());
+        assert_eq!(
+            radio.turn_dial(7_074_000),
+            [0xFE, 0xFE, 0x00, 0xA4, 0x00, 0x00, 0x40, 0x07, 0x07, 0x00, 0xFD]
+        );
+        assert_eq!(radio.frequency(), 7_074_000);
+        assert_eq!(
+            radio.press_mode(r#""lsb""#, 2),
+            [0xFE, 0xFE, 0x00, 0xA4, 0x01, 0x00, 0x02, 0xFD]
+        );
+        assert_eq!(radio.filter(), 2);
+        assert!(radio.press_mode(r#""ssb""#, 1).is_empty());
+        radio.set_setting(r#""usb_send""#, 1);
+        let off = cat_encode_bytes(r#"{"type":"set_transmit","on":false}"#, 0xA4).expect("encode");
+        radio.receive(&off);
+        radio.set_lines(true, false);
+        assert!(radio.transmit());
+        radio.set_lines(false, false);
+        assert!(!radio.transmit());
+        let read = cat_encode_bytes(r#"{"type":"read_setting","item":"usb_send"}"#, 0xA4).expect("encode");
+        let mut parser = CatParser::new(0xA4);
+        assert_eq!(
+            parser.push(&radio.receive(&read)),
+            r#"[{"type":"setting","item":"usb_send","value":1}]"#
         );
     }
 }
