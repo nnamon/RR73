@@ -14,6 +14,8 @@ class FakeClock implements TxAudio {
   played: { when: number; level: number; samples: number; stoppedAt: number | null; handle: Playing }[] = [];
   timers: { at: number; fn: () => void }[] = [];
   mapped = true;
+  /** Seconds a sound takes beyond its length, as when the audio thread stalls and its clock falls behind. */
+  lagS = 0;
 
   toContextTime(utcMs: number) {
     return this.mapped ? (utcMs - (T0 - 100_000)) / 1000 : null;
@@ -32,9 +34,13 @@ class FakeClock implements TxAudio {
     this.played.push(entry);
     return entry.handle;
   }
+  /** UTC now, ms, whether or not the clock has its mapping. */
+  utcNow() {
+    return this.currentTime * 1000 + (T0 - 100_000);
+  }
   /** Moves the clock to UTC `ms`, running due timers and ending sounds that finish. */
   advanceTo(ms: number) {
-    this.currentTime = this.toContextTime(ms)!;
+    this.currentTime = (ms - (T0 - 100_000)) / 1000;
     for (const t of [...this.timers].sort((a, b) => a.at - b.at)) {
       if (t.at <= this.currentTime) {
         this.timers.splice(this.timers.indexOf(t), 1);
@@ -42,8 +48,8 @@ class FakeClock implements TxAudio {
       }
     }
     for (const p of this.played) {
-      if (p.stoppedAt === null && p.when + p.samples / this.sampleRate <= this.currentTime) {
-        p.stoppedAt = p.when + p.samples / this.sampleRate;
+      if (p.stoppedAt === null && p.when + p.samples / this.sampleRate + this.lagS <= this.currentTime) {
+        p.stoppedAt = p.when + p.samples / this.sampleRate + this.lagS;
         p.handle.onended?.();
       }
     }
@@ -123,6 +129,7 @@ function setup(gate: () => string | null = () => null, encoderDelay = 0, keyed?:
       const i = clock.timers.indexOf(h as never);
       if (i >= 0) clock.timers.splice(i, 1);
     },
+    now: () => clock.utcNow(),
   });
   return { clock, reports, texts, sched, keyer: keyer! };
 }
@@ -254,10 +261,32 @@ describe('TxScheduler', () => {
     await closed.sched.schedule(req());
     expect(closed.reports).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'Confirm the band in the band sheet to transmit.' }]);
     expect(closed.clock.played).toEqual([]);
+    // The mapping still missing at the pre-roll.
     const unmapped = setup();
     unmapped.clock.mapped = false;
-    await unmapped.sched.schedule(req());
-    expect(unmapped.reports[0]).toMatchObject({ type: 'refused' });
+    unmapped.clock.advanceTo(T0 + 3000);
+    const done = unmapped.sched.schedule(req());
+    await settle();
+    unmapped.clock.advanceTo(T0 + 15000);
+    await done;
+    expect(unmapped.reports).toEqual([{ type: 'refused', slotStartMs: T0 + 15000, text: 'CQ 9V1NE OJ11', reason: 'Audio is not running.' }]);
+    expect(unmapped.clock.played).toEqual([]);
+  });
+
+  it('times the wait by the page clock when audio has only just started and its clock has no mapping yet', async () => {
+    const { clock, reports, sched } = setup();
+    clock.mapped = false;
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await settle();
+    expect(reports).toEqual([]);
+    // The mapping arrives a moment later; the transmission goes on time.
+    clock.mapped = true;
+    clock.advanceTo(T0 + 15000);
+    await done;
+    expect(clock.played).toHaveLength(1);
+    expect(clock.played[0].when).toBeCloseTo(clock.toContextTime(T0 + 15500)!, 9);
+    expect(reports).toEqual([]);
   });
 
   it('Halt stops a transmission on air at once and reports it incomplete', async () => {
@@ -384,7 +413,7 @@ describe('TxScheduler keying the radio', () => {
     const end = clock.toContextTime(ms)!;
     for (;;) {
       await settle();
-      const ends = clock.played.filter((p) => p.stoppedAt === null).map((p) => p.when + p.samples / clock.sampleRate);
+      const ends = clock.played.filter((p) => p.stoppedAt === null).map((p) => p.when + p.samples / clock.sampleRate + clock.lagS);
       const next = Math.min(end, ...clock.timers.map((t) => t.at), ...ends);
       clock.advanceTo(clock.toUtcMs(Math.max(next, clock.currentTime))!);
       await settle();
@@ -410,6 +439,23 @@ describe('TxScheduler keying the radio', () => {
     await runTo(clock, T0 + 15000 + 13200);
     expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
     expect(keyer.log).toEqual([`on@${15000}`, `off@${15000 + 500 + 12_640}+${PTT_TAIL_MS}`]);
+  });
+
+  it('stops the audio with PTT when the keying reaches its limit before the audio ends', async () => {
+    const { clock, reports, sched, keyer } = setup(() => null, 0, { delayMs: 20 });
+    // The sound takes 3 s longer than its length: past the limit, which leaves 1 s to spare.
+    clock.lagS = 3;
+    clock.advanceTo(T0 + 3000);
+    const done = sched.schedule(req());
+    await runTo(clock, T0 + 15100);
+    await done;
+    const limitAt = 15000 + keyer.maxMs[0];
+    await runTo(clock, T0 + limitAt + 10);
+    expect(keyer.log).toEqual([`on@${15000}`, `off@${limitAt}+0`]);
+    expect(clock.played[0].stoppedAt).toBeCloseTo(clock.toContextTime(T0 + limitAt)!, 6);
+    expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    expect(reports.at(-1)).toMatchObject({ type: 'ended', complete: false });
+    expect(sched.busy).toBe(false);
   });
 
   it('releases PTT after the output latency and the tail', async () => {

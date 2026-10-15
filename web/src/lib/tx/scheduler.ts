@@ -17,7 +17,9 @@
  * to start PTT_SETTLE_MS or more after it; without an OK the transmission is refused. The end of
  * the audio releases PTT after the output's latency and PTT_TAIL_MS (tailMs in lib/tx/keyer.ts),
  * as the audio thread ends a sound before its last sample is heard. Halt, cancel and anything that
- * drops a transmission before it plays release it at once.
+ * drops a transmission before it plays release it at once. The keying's limit takes PTT back by
+ * itself when the audio has not ended long after it should (an audio clock that stalls); the audio
+ * stops with it, so nothing plays to the radio once PTT is off, where VOX could key it.
  */
 
 import type { SlotMode as Mode } from '../clock/slots';
@@ -94,6 +96,20 @@ const MIN_LEAD_S = 0.02;
 /** How long before its start a transmission goes to the audio graph, and keys the radio with a keyer, ms. */
 export const PRE_ROLL_MS = PTT_LEAD_MS;
 
+/** A transmission handed to the audio graph. */
+interface Entry {
+  slotStartMs: number;
+  text: string;
+  when: number;
+  skippedS: number;
+  handle: Playing;
+  started: boolean;
+  startTimer: unknown;
+  keying: Keying | null;
+  /** Fires at the keying's limit; null without a keyer. */
+  limitTimer: unknown;
+}
+
 export class TxScheduler {
   private readonly audio: () => TxAudio | null;
   private readonly encoder: Encoder;
@@ -102,9 +118,10 @@ export class TxScheduler {
   private readonly keyer: () => Keyer | null;
   private readonly timer: (fn: () => void, ms: number) => unknown;
   private readonly clear: (h: unknown) => void;
+  private readonly now: () => number;
   /** Bumped by cancel and halt so a synthesis still running is dropped when it finishes. */
   private generation = 0;
-  private playing: { slotStartMs: number; text: string; when: number; skippedS: number; handle: Playing; started: boolean; startTimer: unknown; keying: Keying | null } | null = null;
+  private playing: Entry | null = null;
   /** PTT on for a transmission not yet handed to the audio graph. */
   private keying: Keying | null = null;
   /** The wait before a transmission goes to the audio graph; resolved early by cancel and halt. */
@@ -120,6 +137,8 @@ export class TxScheduler {
     keyer?: () => Keyer | null;
     timer?: (fn: () => void, ms: number) => unknown;
     clear?: (h: unknown) => void;
+    /** UTC ms; the page's clock times the wait until the audio clock has its mapping. */
+    now?: () => number;
   }) {
     this.audio = opts.audio;
     this.encoder = opts.encoder;
@@ -127,6 +146,7 @@ export class TxScheduler {
     this.report = opts.report;
     this.keyer = opts.keyer ?? (() => null);
     this.timer = opts.timer ?? ((fn, ms) => setTimeout(fn, ms));
+    this.now = opts.now ?? (() => Date.now());
     this.clear = opts.clear ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   }
 
@@ -153,9 +173,11 @@ export class TxScheduler {
       return;
     }
     if (gen !== this.generation) return;
+    // The audio clock has no mapping to UTC for a moment after audio starts: the page's clock times
+    // the wait then, and the mapping is needed only at the pre-roll.
     const clockNow = this.audio();
-    const nowUtc = clockNow?.toUtcMs(clockNow.currentTime) ?? null;
-    const wait = nowUtc === null ? 0 : req.slotStartMs + req.startOffsetS * 1000 - PRE_ROLL_MS - nowUtc;
+    const nowUtc = clockNow?.toUtcMs(clockNow.currentTime) ?? this.now();
+    const wait = req.slotStartMs + req.startOffsetS * 1000 - PRE_ROLL_MS - nowUtc;
     if (wait > 0) {
       await new Promise<void>((release) => {
         this.preroll = { timer: this.timer(release, wait), release };
@@ -181,10 +203,13 @@ export class TxScheduler {
     let earliestS = MIN_LEAD_S;
     const keyer = this.keyer();
     let keying: Keying | null = null;
+    let limitTimer: unknown = null;
     if (keyer) {
-      // PTT goes off by itself once the transmission should long be over.
+      // PTT goes off by itself once the transmission should long be over, and the audio with it.
       const maxMs = Math.max(0, (target - now.currentTime) * 1000) + PTT_TIMEOUT_MS + PTT_SETTLE_MS + (samples.length / now.sampleRate) * 1000 + tailMs(now) + 1000;
-      keying = keyer.key(maxMs);
+      const k = keyer.key(maxMs);
+      keying = k;
+      limitTimer = this.timer(() => this.limitReached(k), maxMs);
       this.keying = keying;
       const answer = await keying.result;
       if (gen !== this.generation || this.keying !== keying) {
@@ -224,7 +249,7 @@ export class TxScheduler {
     const skippedS = lateS > SHIFT_S[req.mode] + 1e-3 ? lateS : 0;
     const out = skippedS > 0 ? cutStart(samples, Math.round(skippedS * now.sampleRate), Math.round(CUT_FADE_S * now.sampleRate)) : samples;
     const handle = now.play(out, when, req.level);
-    const entry = { slotStartMs: req.slotStartMs, text: req.text, when, skippedS, handle, started: false, startTimer: null as unknown, keying };
+    const entry: Entry = { slotStartMs: req.slotStartMs, text: req.text, when, skippedS, handle, started: false, startTimer: null, keying, limitTimer };
     this.playing = entry;
     const startUtcMs = now.toUtcMs(when) ?? req.slotStartMs + (req.startOffsetS + (when - target)) * 1000;
     entry.startTimer = this.timer(() => {
@@ -236,6 +261,7 @@ export class TxScheduler {
       if (this.playing !== entry) return;
       this.playing = null;
       this.clear(entry.startTimer);
+      if (entry.limitTimer !== null) this.clear(entry.limitTimer);
       entry.keying?.release(tailMs(this.audio()));
       if (!entry.started) this.report({ type: 'started', slotStartMs: req.slotStartMs, text: req.text, startUtcMs, lateS: Math.max(0, lateS), skippedS });
       this.report({ type: 'ended', slotStartMs: req.slotStartMs, text: req.text, complete: true });
@@ -256,9 +282,20 @@ export class TxScheduler {
     this.endPreroll();
     this.dropKeying();
     const p = this.playing;
-    if (!p) return;
+    if (p) this.drop(p);
+  }
+
+  /** The keying's limit took PTT back while its audio still plays: the audio stops too. */
+  private limitReached(keying: Keying) {
+    const p = this.playing;
+    if (p && p.keying === keying) this.drop(p);
+  }
+
+  /** Stops a transmission handed to the audio graph at once, releases PTT, and reports it. */
+  private drop(p: Entry) {
     this.playing = null;
     this.clear(p.startTimer);
+    if (p.limitTimer !== null) this.clear(p.limitTimer);
     p.handle.onended = null;
     p.handle.stop();
     p.keying?.release();
@@ -288,6 +325,7 @@ export class TxScheduler {
     if (!p || this.audible(p)) return;
     this.playing = null;
     this.clear(p.startTimer);
+    if (p.limitTimer !== null) this.clear(p.limitTimer);
     p.handle.onended = null;
     p.handle.stop();
     p.keying?.release();
