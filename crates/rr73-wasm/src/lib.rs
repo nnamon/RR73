@@ -36,6 +36,21 @@ thread_local! {
     static WSPR_CONTEXT: RefCell<WsprContext> = RefCell::new(WsprContext::new());
 }
 
+#[wasm_bindgen]
+extern "C" {
+    /// `performance.now()`: milliseconds since the worker's time origin.
+    #[wasm_bindgen(js_namespace = performance, js_name = now)]
+    fn performance_now() -> f64;
+}
+
+/// Times the decoder's stages with `performance.now()`, for measurement tools
+/// (`tools/wasm-cost`). Without this call the stage timings read zero. Each timed step reads
+/// the clock a few times, which adds to the decoding time, so the app does not call it.
+#[wasm_bindgen]
+pub fn enable_stage_timings() {
+    rr73_decode::set_clock(|| performance_now() / 1000.0);
+}
+
 /// One decode as the app receives it.
 #[derive(Debug, Serialize)]
 struct AppDecode<'a> {
@@ -151,6 +166,8 @@ pub struct DecoderSession {
     /// `None` once every stage has run and the context went back to the worker.
     inner: Option<DecodeSession>,
     stages: usize,
+    /// The timings as JSON when the session finished, kept for [`DecoderSession::timings`].
+    finished: Option<String>,
 }
 
 /// What one [`DecoderSession::step`] did, as JSON.
@@ -179,6 +196,7 @@ impl DecoderSession {
         Ok(Self {
             stages: session.stage_count(),
             inner: Some(session),
+            finished: None,
         })
     }
 
@@ -222,6 +240,7 @@ impl DecoderSession {
     /// Gives the decoder context back to the worker.
     fn release(&mut self) {
         if let Some(session) = self.inner.take() {
+            self.finished = Some(timings_of(&session));
             let ctx = session.into_context();
             CONTEXT.with(|c| *c.borrow_mut() = ctx);
         }
@@ -269,6 +288,32 @@ impl DecoderSession {
     pub fn stage_count(&self) -> usize {
         self.stages
     }
+
+    /// Time so far as JSON `{ "stages": { "spectrogram_s", "search_s", "refine_s", "demod_s",
+    /// "ldpc_s", "validate_s", "subtract_s", "total_s" }, "stage_s": [...] }`, in seconds, by
+    /// pipeline stage and by plan stage. All zero unless [`enable_stage_timings`] was called.
+    pub fn timings(&self) -> String {
+        self.timings_json()
+    }
+}
+
+impl DecoderSession {
+    /// [`DecoderSession::timings`] for native callers and tests.
+    pub fn timings_json(&self) -> String {
+        match (&self.inner, &self.finished) {
+            (Some(session), _) => timings_of(session),
+            (None, Some(json)) => json.clone(),
+            (None, None) => "{}".into(),
+        }
+    }
+}
+
+fn timings_of(session: &DecodeSession) -> String {
+    serde_json::json!({
+        "stages": session.report().timings,
+        "stage_s": session.stage_seconds(),
+    })
+    .to_string()
 }
 
 impl Drop for DecoderSession {

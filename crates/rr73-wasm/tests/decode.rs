@@ -99,6 +99,17 @@ fn sessions_return_each_stage_once_and_stop_anywhere() {
     assert!(session.done());
     assert_eq!(session.stage(), 3);
     assert_eq!(session.next_stage_json(), Ok(None));
+    // The timings outlive the session's context: natively the stopwatch always runs.
+    let timings: serde_json::Value = serde_json::from_str(&session.timings_json()).expect("json");
+    let stage_s = timings["stage_s"].as_array().expect("stage_s");
+    assert_eq!(stage_s.len(), 3);
+    let total = timings["stages"]["total_s"].as_f64().expect("total_s");
+    let sum: f64 = stage_s.iter().filter_map(serde_json::Value::as_f64).sum();
+    assert!(total > 0.0 && (total - sum).abs() < 1e-9, "{timings}");
+    assert!(
+        timings["stages"]["spectrogram_s"].as_f64() > Some(0.0),
+        "{timings}"
+    );
 
     // Step by step, stopping after the first step that finds something: the session can be
     // dropped there and a new one created at once.

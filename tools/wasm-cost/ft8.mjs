@@ -11,7 +11,9 @@
 // `key=value` overrides. Every slot is decoded `--runs` times per plan and browser; a slot's
 // time is its fastest run. With `--budget-ms`, a run stops stepping once that much time has
 // passed since it started, as the app's worker does. `--mode FT4` decodes the slots as FT4
-// (default FT8). Slots are WAV files (16-bit mono, 12 kHz) under the given paths, or listed
+// (default FT8). `--stage-timings` times the decoder's own stages with performance.now() and
+// prints their mean per slot; the clock reads add to the totals, so time totals without it.
+// Slots are WAV files (16-bit mono, 12 kHz) under the given paths, or listed
 // one per line in a file given with `--list`.
 import { createServer } from 'node:http';
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
@@ -22,7 +24,7 @@ const require = createRequire(new URL('../../web/package.json', import.meta.url)
 const playwright = require('@playwright/test');
 
 const args = process.argv.slice(2);
-const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, mode: 'FT8', out: null, lists: [], paths: [], browsers: [] };
+const opts = { pkg: 'target/ft8-pkg', plans: [], runs: 3, budgetMs: 0, mode: 'FT8', stageTimings: false, out: null, lists: [], paths: [], browsers: [] };
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
   if (a === '--pkg') opts.pkg = args[++i];
@@ -30,6 +32,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--runs') opts.runs = Number(args[++i]);
   else if (a === '--budget-ms') opts.budgetMs = Number(args[++i]);
   else if (a === '--mode') opts.mode = args[++i];
+  else if (a === '--stage-timings') opts.stageTimings = true;
   else if (a === '--out') opts.out = args[++i];
   else if (a === '--list') opts.lists.push(args[++i]);
   else if (a === 'chromium' || a === 'webkit' || a === 'firefox') opts.browsers.push(a);
@@ -81,17 +84,22 @@ function readWav(file) {
 
 /** The worker: decodes each slot with each plan `runs` times and reports the times. */
 const WORKER = `
-import init, { DecoderSession, version } from '/pkg/rr73_wasm.js';
+import init, * as wasm from '/pkg/rr73_wasm.js';
+const { DecoderSession, version } = wasm;
 const ready = init({ module_or_path: '/pkg/rr73_wasm_bg.wasm' });
 self.onmessage = (e) => run(e).catch((err) => self.postMessage({ error: String(err && err.stack || err) }));
 async function run(e) {
   await ready;
-  const { plans, count, runs, budgetMs, mode } = e.data;
+  const { plans, count, runs, budgetMs, mode, stageTimings } = e.data;
+  if (stageTimings) {
+    if (!wasm.enable_stage_timings) throw new Error('this build has no enable_stage_timings');
+    wasm.enable_stage_timings();
+  }
   const results = plans.map(() => []);
   for (let s = 0; s < count; s++) {
     const samples = new Float32Array(await (await fetch('/slot/' + s)).arrayBuffer());
     plans.forEach((plan, p) => {
-      const best = { total: Infinity, stages: [], decodes: [], stopped: false, stepMax: 0 };
+      const best = { total: Infinity, stages: [], decodes: [], stopped: false, stepMax: 0, timings: null };
       for (let r = 0; r < runs; r++) {
         const t0 = performance.now();
         const session = new DecoderSession(samples, mode, plan);
@@ -120,8 +128,9 @@ async function run(e) {
           }
         }
         const total = performance.now() - t0;
+        const timings = stageTimings ? JSON.parse(session.timings()) : null;
         session.free();
-        if (total < best.total) Object.assign(best, { total, stages, decodes, stopped, stepMax });
+        if (total < best.total) Object.assign(best, { total, stages, decodes, stopped, stepMax, timings });
       }
       results[p].push(best);
     });
@@ -168,7 +177,7 @@ for (const name of opts.browsers) {
   await page.goto(`${origin}/`);
   page.on('console', (m) => console.log(`  [${name}] ${m.text()}`));
   const out = await page.evaluate(
-    ({ plans, count, runs, budgetMs, mode }) =>
+    ({ plans, count, runs, budgetMs, mode, stageTimings }) =>
       new Promise((ok, fail) => {
         const w = new Worker('/worker.js', { type: 'module' });
         w.onerror = (e) => fail(new Error(e.message));
@@ -177,9 +186,9 @@ for (const name of opts.browsers) {
           else if (e.data.error) fail(new Error(e.data.error));
           else ok(e.data);
         };
-        w.postMessage({ plans, count, runs, budgetMs, mode });
+        w.postMessage({ plans, count, runs, budgetMs, mode, stageTimings });
       }),
-    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs, mode: opts.mode },
+    { plans: opts.plans, count: files.length, runs: opts.runs, budgetMs: opts.budgetMs, mode: opts.mode, stageTimings: opts.stageTimings },
   );
   report.browsers[name] = { version: browser.version(), wasm: out.version, results: out.results };
   console.log(`\n${name} ${browser.version()}, rr73-wasm ${out.version}`);
@@ -197,6 +206,11 @@ for (const name of opts.browsers) {
     if (opts.budgetMs) {
       const stopped = r.filter((x) => x.stopped).length;
       console.log(`    stopped by the budget: ${stopped} of ${r.length} slots; longest step ${Math.max(...r.map((x) => x.stepMax)).toFixed(1)} ms`);
+    }
+    if (opts.stageTimings) {
+      const keys = ['spectrogram_s', 'search_s', 'refine_s', 'demod_s', 'ldpc_s', 'validate_s', 'subtract_s', 'total_s'];
+      const mean = (k) => (1000 * r.reduce((a, x) => a + (x.timings?.stages?.[k] ?? 0), 0)) / r.length;
+      console.log(`    decoder stages, mean ms per slot: ${keys.map((k) => `${k.slice(0, -2)} ${mean(k).toFixed(2)}`).join(', ')}`);
     }
   });
   await browser.close();

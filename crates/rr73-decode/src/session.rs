@@ -270,7 +270,8 @@ impl DecodeSession {
         &self.stage_of
     }
 
-    /// Wall time spent in each stage so far, in seconds (zero on wasm32).
+    /// Wall time spent in each stage so far, in seconds (zero on wasm32 without a clock from
+    /// [`crate::set_clock`]).
     pub fn stage_seconds(&self) -> &[f64] {
         &self.stage_seconds
     }

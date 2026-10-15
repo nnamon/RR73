@@ -41,6 +41,7 @@ pub mod wspr;
 mod testsig;
 
 pub use ap::{ApContext, ApKind};
+pub use clock::set_clock;
 pub use config::{ConfigError, DecoderConfig, PRESETS};
 pub use layout::FrameLayout;
 pub use pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, decode};

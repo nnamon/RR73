@@ -69,7 +69,8 @@ pub struct DecodeStats {
 }
 
 /// Wall time per stage for one slot, in seconds, summed over passes and candidates.
-/// All zero on `wasm32`, which has no monotonic clock in the standard library.
+/// All zero on `wasm32`, which has no monotonic clock in the standard library, unless the
+/// embedder sets one with [`crate::set_clock`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Serialize, Deserialize)]
 pub struct StageTimings {
     /// Spectrogram computation.
