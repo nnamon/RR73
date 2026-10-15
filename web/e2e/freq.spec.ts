@@ -152,7 +152,7 @@ test('Find clear Tx in the ••• menu says when there is not enough audio', 
   await expect(slider(page, 'Transmit')).toHaveValue('1500');
 });
 
-test('the band sheet takes an FT8 dial of the operator’s own per band, and an empty field goes back to the usual one', async ({ page }) => {
+test('the band sheet takes an FT8 dial of the operator’s own per band, and Reset goes back to the usual one', async ({ page }) => {
   await page.goto('./#/operate');
   const top = page.locator('.operate header.top');
   await top.getByRole('button', { name: /^Change band/ }).click();
@@ -161,6 +161,9 @@ test('the band sheet takes an FT8 dial of the operator’s own per band, and an 
   await top.getByRole('button', { name: /^Change band/ }).click();
   const dial = sheet.getByTestId('ft-dial');
   await expect(dial).toHaveValue('5.357');
+  // The usual dial: nothing to reset.
+  const reset = sheet.getByRole('button', { name: /^Reset to/ });
+  await expect(reset).toHaveCount(0);
 
   // Outside the band: refused, with the band edges.
   await dial.fill('7.074');
@@ -169,7 +172,7 @@ test('the band sheet takes an FT8 dial of the operator’s own per band, and an 
   await dial.fill('5.313');
   await dial.press('Enter');
   await expect(sheet.getByRole('alert')).toHaveCount(0);
-  await expect(sheet).toContainText('Usual FT8 dial on 60m: 5.357 MHz. Clear the field to go back to it.');
+  await expect(reset).toHaveAccessibleName('Reset to 5.357 MHz');
   await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.313');
 
   // A reload keeps it, once it is stored.
@@ -193,8 +196,14 @@ test('the band sheet takes an FT8 dial of the operator’s own per band, and an 
   await page.reload();
   await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.313');
   await top.getByRole('button', { name: /^Change band/ }).click();
+  await reset.click();
+  await expect(dial).toHaveValue('5.357');
+  await expect(reset).toHaveCount(0);
+  await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.357');
+  // An empty field goes back to it as well.
+  await dial.fill('5.313');
+  await dial.press('Enter');
   await dial.fill('');
   await dial.press('Enter');
   await expect(dial).toHaveValue('5.357');
-  await expect(top.getByRole('button', { name: /^Change band/ })).toContainText('5.357');
 });

@@ -58,6 +58,8 @@ export const ICONS = {
   // Reorder handle: three lines, as in iOS table views.
   grip: { stroke: ['M4.5 8H19.5M4.5 12H19.5M4.5 16H19.5'], width: 1.8 },
   back: { stroke: ['M15.5 3.5L7 12L15.5 20.5'], width: 2.6 },
+  // Back to the default value: an arrow going round anticlockwise.
+  reset: { stroke: ['M6.87 6.87A7.25 7.25 0 1 1 4.75 12', 'M6.87 2.75V6.87H11'], width: 1.9 },
   // Bar glyphs share one stroke weight and an 18-unit-wide ink box centred on 12, as SF Symbols do.
   share: { stroke: ['M12 14.5V3.6M8.2 7.2L12 3.4L15.8 7.2M8.4 10.3H6.1A2.2 2.2 0 0 0 3.9 12.5V18.8A2.2 2.2 0 0 0 6.1 21H17.9A2.2 2.2 0 0 0 20.1 18.8V12.5A2.2 2.2 0 0 0 17.9 10.3H15.6'], width: 1.8 },
   // Log, activations and destinations.

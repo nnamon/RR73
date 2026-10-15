@@ -12,6 +12,7 @@
    */
   import { tick } from 'svelte';
   import Sheet from './Sheet.svelte';
+  import Icon from './Icon.svelte';
   import { BAND_IDS, dialHz, type BandId } from '../lib/radio/bands';
   import { MODES, type Mode } from '../lib/clock/slots';
   import { mhz } from '../lib/clock/format';
@@ -92,6 +93,29 @@
     ftError = null;
     ftText = ftDialText(next[band] ?? usualHz ?? 0);
     if (next[band] !== settings.ftDialHz[m][band]) void updateSettings({ ftDialHz: { ...settings.ftDialHz, [m]: next } });
+  }
+
+  /** Back to the band's usual FT8 or FT4 dial. */
+  function resetFtDial() {
+    if (mode !== 'FT8' && mode !== 'FT4') return;
+    const next = { ...settings.ftDialHz[mode] };
+    delete next[band];
+    ftError = null;
+    ftText = usualHz === null ? '' : ftDialText(usualHz);
+    void updateSettings({ ftDialHz: { ...settings.ftDialHz, [mode]: next } });
+  }
+
+  // RTTY's usual dial on the band, and whether the operator's differs from it.
+  const rttyUsualHz = $derived(dialHz(band, 'RTTY'));
+  const rttyOwn = $derived(settings.rtty.dialHz[band] !== undefined && settings.rtty.dialHz[band] !== rttyUsualHz);
+
+  /** Back to the band's usual RTTY dial. */
+  function resetRttyDial() {
+    const next = { ...settings.rtty.dialHz };
+    delete next[band];
+    rttyError = null;
+    rttyText = rttyUsualHz === null ? '' : dial4(rttyUsualHz);
+    setRtty({ dialHz: next });
   }
 
   function saveRttyDial() {
@@ -199,6 +223,9 @@
           data-testid="rtty-dial"
         />
         <span class="mhz">MHz</span>
+        {#if rttyOwn && rttyUsualHz !== null}
+          <button class="reset" aria-label="Reset to {dial4(rttyUsualHz)} MHz" onclick={resetRttyDial}><Icon name="reset" size={26} /></button>
+        {/if}
       </div>
       <p class="m">USB</p>
     </div>
@@ -221,15 +248,14 @@
           data-testid="ft-dial"
         />
         <span class="mhz">MHz</span>
+        {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
+          <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" size={26} /></button>
+        {/if}
       </div>
       <p class="m">USB</p>
     </div>
     {#if ftError}<p class="err" role="alert">{ftError}</p>{/if}
-    {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
-      <p class="note">Usual {mode} dial on {band}: {ftDialText(usualHz)} MHz. Clear the field to go back to it.</p>
-    {:else}
-      <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.</p>
-    {/if}
+    <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.</p>
   {:else}
     <div class="setblock">
       <p class="k">Set the radio to</p>
@@ -393,6 +419,18 @@
     font-size: var(--rr-text-dial);
     font-weight: var(--rr-weight-bold);
     line-height: var(--rr-leading-dial);
+  }
+
+  /* Back to the usual dial: a 44 pt target after the unit. */
+  .reset {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--rr-tap);
+    height: var(--rr-tap);
+    margin-left: auto;
+    color: var(--rr-accent);
   }
 
   .note {
