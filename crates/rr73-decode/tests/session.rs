@@ -309,3 +309,57 @@ fn trace_records_every_candidate_and_points_at_its_decodes() {
     session.set_trace(false);
     assert!(session.trace().is_empty());
 }
+
+#[test]
+fn baseband_refinement_places_decodes_between_grid_points() {
+    let audio = crowded();
+    let config = DecoderConfig::preset("subtract-3-osd2")
+        .and_then(|c| c.with_overrides(&["refine.kind=baseband"]))
+        .expect("config");
+    let truth = [
+        ("CQ K1ABC FN42", 612.3, 0.17),
+        ("W9XYZ K1ABC -15", 1418.9, -0.33),
+        ("K1ABC W9XYZ R-08", 2237.0, 0.41),
+        ("CQ DL1ABC JO62", 1000.0, 0.0),
+        ("G4ABC DL1ABC -10", 1012.0, 0.3),
+        ("CQ EA4XYZ IN80", 1750.0, 1.1),
+    ];
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let whole = decode(&slot, &config, &mut DecodeContext::new());
+    let mut worst = (0.0f64, 0.0f64);
+    for (text, freq, dt) in truth {
+        let d = whole
+            .decodes
+            .iter()
+            .find(|d| d.text == text)
+            .unwrap_or_else(|| panic!("{text} missing: {:?}", whole.decodes));
+        worst.0 = worst.0.max((f64::from(d.freq_hz) - freq).abs());
+        worst.1 = worst.1.max((f64::from(d.dt_s) - dt).abs());
+    }
+    // The preset's grid alone (3.125 Hz bins, 80 ms frames) leaves up to 1.6 Hz and 40 ms.
+    assert!(worst.0 <= 0.2 && worst.1 <= 0.005, "{worst:?}");
+
+    // Stepping the session gives the same decodes as one call.
+    let stage = Stage::new("subtract-3-osd2 refine.kind=baseband", config.clone());
+    let mut session = DecodeSession::new(&slot, vec![stage]);
+    let mut stepped = Vec::new();
+    while !session.is_done() {
+        stepped.extend(session.step().decodes);
+    }
+    assert_eq!(stepped, whole.decodes);
+
+    // 11.8 s of the slot: symbols past the audio are erased, the strong signals still decode.
+    let early = &audio[..(11.8 * 12_000.0) as usize];
+    let r = decode(
+        &SlotAudio::partial(early, Mode::Ft8),
+        &config,
+        &mut DecodeContext::new(),
+    );
+    for text in ["CQ DL1ABC JO62", "K1ABC W9XYZ R-08"] {
+        assert!(
+            r.decodes.iter().any(|d| d.text == text),
+            "{text}: {:?}",
+            r.decodes
+        );
+    }
+}

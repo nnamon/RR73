@@ -203,6 +203,31 @@ impl Spectrogram {
         }
     }
 
+    /// Makes this a grid of `frames` rows of `bins` values in dB, all 0, with frames `hop`
+    /// samples apart and bins `sample_rate / fft_size` Hz apart from bin 0, for levels computed
+    /// outside a plan (such as symbol levels read for one candidate). Reuses the storage;
+    /// [`Spectrogram::frame_mut`] fills the rows.
+    pub fn reset(&mut self, frames: usize, bins: usize, hop: usize, fft_size: usize, sample_rate: u32) {
+        self.frames = frames;
+        self.bins = bins;
+        self.min_bin = 0;
+        self.hop = hop;
+        self.fft_size = fft_size;
+        self.sample_rate = sample_rate;
+        self.scale = Scale::Db;
+        self.data.clear();
+        self.data.resize(frames * bins, 0.0);
+    }
+
+    /// The values of frame `t` for writing, or `None` past the end.
+    pub fn frame_mut(&mut self, t: usize) -> Option<&mut [f32]> {
+        if t < self.frames {
+            Some(&mut self.data[t * self.bins..(t + 1) * self.bins])
+        } else {
+            None
+        }
+    }
+
     /// The value at frame `t`, stored bin `b`, or `None` outside the spectrogram. Signed
     /// indices let callers probe positions before the first frame.
     pub fn get(&self, t: isize, b: isize) -> Option<f32> {

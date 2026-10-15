@@ -24,6 +24,7 @@ use crate::config::{DecoderConfig, DemodKind, SubtractKind};
 use crate::layout::FrameLayout;
 use crate::ldpc::{LdpcDecoder, LdpcOutcome, LdpcScratch, ParityGraph};
 use crate::pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, layout};
+use crate::refine::Refined;
 use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
 use crate::snr::SnrScale;
 use crate::validate::{Rejection, Validated};
@@ -120,6 +121,8 @@ pub enum TraceOutcome {
     Decoded(usize),
     /// No soft bits tried: too few sync symbols matched for the block demodulator.
     NoSync,
+    /// Skipped: refinement moved it to a position already tried in the pass.
+    Repeat,
 }
 
 /// What one step did.
@@ -638,6 +641,13 @@ impl DecodeSession {
                 &[]
             },
         };
+        if from == 0 {
+            let sw = Stopwatch::start();
+            pipeline
+                .refine
+                .prepare(self.layout, &self.audio, self.partial, &mut ws.refine);
+            self.timings.refine_s += sw.elapsed_s();
+        }
         let stats = &mut self.stats;
         let timings = &mut self.timings;
         let mode = self.layout.mode;
@@ -646,8 +656,21 @@ impl DecodeSession {
         for i in from..to {
             let mut cand: Candidate = ws.candidates[i];
             let sw = Stopwatch::start();
-            pipeline.refine.refine(&view, &mut cand);
+            let refined = pipeline.refine.refine(&view, &mut cand, &mut ws.refine);
             timings.refine_s += sw.elapsed_s();
+            if refined == Refined::Repeat {
+                if let Some(t) = trace.as_mut() {
+                    t.push(CandidateTrace {
+                        stage: stage_index,
+                        pass,
+                        freq_hz: view.freq_hz(&cand),
+                        dt_s: view.dt_s(&cand),
+                        score: cand.score,
+                        outcome: TraceOutcome::Repeat,
+                    });
+                }
+                continue;
+            }
 
             // The first set of soft bits goes to `ws.llr`, which a priori decoding reads;
             // later sets to `ws.llr_alt`.
@@ -656,7 +679,22 @@ impl DecodeSession {
             let mut by_block = None;
             if spectrogram_llrs {
                 let sw = Stopwatch::start();
-                pipeline.demod.llrs(&view, &cand, &mut ws.llr);
+                if refined == Refined::Levels {
+                    // Symbol levels read at the refined position: one row per symbol, one
+                    // value per tone.
+                    let symbols = SymbolView {
+                        spec: &ws.refine.symbols,
+                        layout: self.layout,
+                        time_osr: 1,
+                        freq_osr: 1,
+                        live: &[],
+                    };
+                    pipeline
+                        .demod
+                        .llrs(&symbols, &Candidate::new(0, 0, cand.score), &mut ws.llr);
+                } else {
+                    pipeline.demod.llrs(&view, &cand, &mut ws.llr);
+                }
                 timings.demod_s += sw.elapsed_s();
                 (outcome, valid) = attempt(
                     pipeline,
