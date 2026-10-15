@@ -40,6 +40,7 @@ describe('settings', () => {
       queueOrder: 'strongest',
     });
     expect(validate({ grid: 'ZZ99', ack: 'R', cqParity: 'third', queueOrder: 'random' })).toMatchObject({ grid: '', ack: 'RR73', cqParity: 'even', queueOrder: 'first' });
+    expect(validate({ queueOrder: 'weakest' }).queueOrder).toBe('weakest');
   });
 
   it('reads Hold Tx and whether a frequency was set from the waterfall', () => {

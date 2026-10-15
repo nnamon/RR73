@@ -114,6 +114,7 @@
   const ORDERS: { id: QueueOrder; label: string }[] = [
     { id: 'first', label: 'First' },
     { id: 'strongest', label: 'Strongest' },
+    { id: 'weakest', label: 'Weakest' },
     { id: 'farthest', label: 'Farthest' },
     { id: 'new', label: 'New' },
   ];

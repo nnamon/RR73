@@ -18,7 +18,9 @@ import { gridPath } from '../reference/grid';
 import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
 
-export type QueueOrder = 'first' | 'strongest' | 'farthest' | 'new';
+/** Order Repeat CQ answers callers in: first heard, strongest, weakest, farthest, or never worked first. Ties go to the first heard. */
+export type QueueOrder = 'first' | 'strongest' | 'weakest' | 'farthest' | 'new';
+export const QUEUE_ORDERS: readonly QueueOrder[] = ['first', 'strongest', 'weakest', 'farthest', 'new'];
 /**
  * Order Hunt picks CQs in: not worked on this band and mode, strongest, newest (the CQ that
  * started most recently), farthest, or new call (never worked). Ties go to the strongest.
@@ -304,6 +306,7 @@ export function orderQueue(queue: Caller[], order: QueueOrder): Caller[] {
   const by: Record<QueueOrder, (a: Caller, b: Caller) => number> = {
     first: (a, b) => a.seq - b.seq,
     strongest: (a, b) => b.snrDb - a.snrDb || a.seq - b.seq,
+    weakest: (a, b) => a.snrDb - b.snrDb || a.seq - b.seq,
     farthest: (a, b) => (b.distanceKm ?? -1) - (a.distanceKm ?? -1) || a.seq - b.seq,
     new: (a, b) => Number(b.isNew) - Number(a.isNew) || a.seq - b.seq,
   };

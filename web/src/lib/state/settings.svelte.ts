@@ -7,7 +7,7 @@ import type { Mode } from '../clock/slots';
 import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
 import type { Contrast } from '../waterfall/levels';
 import { clampHz } from '../waterfall/pick';
-import { HUNT_ORDERS, type HuntOrder } from '../qso/sequencer';
+import { HUNT_ORDERS, QUEUE_ORDERS, type HuntOrder, type QueueOrder } from '../qso/sequencer';
 import { DEFAULT_POWER_DBM, isPowerDbm } from '../wspr/power';
 import { DEFAULT_STOP_AFTER_MIN, DEFAULT_TX_PCT, normalisePct, normaliseStopAfter } from '../wspr/schedule';
 import { SPOT_SORTS, type SpotSort } from '../wspr/spots';
@@ -88,7 +88,7 @@ export interface Settings {
   /** Parity for calling CQ: even is 1st. */
   cqParity: 'even' | 'odd';
   /** Order Run mode answers callers in. */
-  queueOrder: 'first' | 'strongest' | 'farthest' | 'new';
+  queueOrder: QueueOrder;
   /** Run: after a QSO from CQ, answer the next caller or call CQ again. Off: Tx goes off after the QSO. */
   run: boolean;
   /** Call a station that answered someone else once more when that QSO ends. */
@@ -274,7 +274,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.holdTx === 'boolean') s.holdTx = r.holdTx;
   if (typeof r.freqPicked === 'boolean') s.freqPicked = r.freqPicked;
   if (r.cqParity === 'even' || r.cqParity === 'odd') s.cqParity = r.cqParity;
-  if (r.queueOrder === 'first' || r.queueOrder === 'strongest' || r.queueOrder === 'farthest' || r.queueOrder === 'new') s.queueOrder = r.queueOrder;
+  if (QUEUE_ORDERS.includes(r.queueOrder as QueueOrder)) s.queueOrder = r.queueOrder as QueueOrder;
   for (const k of ['run', 'tailEnd', 'watchdog', 'watchdogRefresh'] as const) if (typeof r[k] === 'boolean') s[k] = r[k];
   if (HUNT_ORDERS.includes(r.huntOrder as HuntOrder)) s.huntOrder = r.huntOrder as HuntOrder;
   if (typeof r.huntCalls === 'number' && Number.isInteger(r.huntCalls) && r.huntCalls >= 1 && r.huntCalls <= 99) s.huntCalls = r.huntCalls;

@@ -153,6 +153,8 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(menu.getByRole('menuitem', { name: /^Transmit in/ })).toHaveText('Transmit in 2nd (Odd)');
   await menu.getByRole('menuitem', { name: /^Answer order/ }).click();
   await expect(menu.getByRole('menuitem', { name: /^Answer order/ })).toHaveText('Answer order Strongest');
+  await menu.getByRole('menuitem', { name: /^Answer order/ }).click();
+  await expect(menu.getByRole('menuitem', { name: /^Answer order/ })).toHaveText('Answer order Weakest');
   await menu.getByRole('menuitemcheckbox', { name: /^Work dupes/ }).click();
   await expect(menu.getByRole('menuitemcheckbox', { name: /^Work dupes/ })).toHaveAttribute('aria-checked', 'true');
   await menu.getByRole('menuitem', { name: /^Hunt order/ }).click();

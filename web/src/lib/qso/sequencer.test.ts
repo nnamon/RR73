@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IGNORE_MS, LATE_S, notReady, ourSlot, reduce, type HuntOrder, type SeqState, type Worked } from './sequencer';
+import { IGNORE_MS, LATE_S, notReady, ourSlot, reduce, type HuntOrder, type QueueOrder, type SeqState, type Worked } from './sequencer';
 import { Sim, T0, decode } from '../testing/qso-sim';
 import type { Decode } from '../decode/types';
 
@@ -207,7 +207,7 @@ describe('Run mode', () => {
     decode('9V1NE ZL1TQK RF70', -10, 1500),
   ];
 
-  function run(order: 'first' | 'strongest' | 'farthest' | 'new', worked: string[] = []) {
+  function run(order: QueueOrder, worked: string[] = []) {
     const s = new Sim({ order, run: true });
     if (worked.length) s.send({ type: 'setWorked', worked: worked.map((call) => ({ call, band: '40m', mode: 'FT8', day: '20261001', grid: null })), nowMs: s.at(0) });
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
@@ -218,6 +218,7 @@ describe('Run mode', () => {
   it('answers callers in the chosen order', () => {
     expect(texts(run('first')).at(-1)).toBe('2:K1ABC 9V1NE -15');
     expect(texts(run('strongest')).at(-1)).toBe('2:JA1KXM 9V1NE -05');
+    expect(texts(run('weakest')).at(-1)).toBe('2:VK3QRP 9V1NE -20');
     // From OJ11: FN42 (Boston) about 15000 km, the farthest.
     expect(texts(run('farthest')).at(-1)).toBe('2:K1ABC 9V1NE -15');
     expect(texts(run('new', ['K1ABC', 'JA1KXM'])).at(-1)).toBe('2:VK3QRP 9V1NE -20');
