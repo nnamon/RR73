@@ -35,7 +35,7 @@ test('POTA spots: the list, Go to a spot on 80m, and the station marked in the d
   await expect(sheet).toBeVisible();
   await expect(sheet.getByRole('radio', { name: '80m' })).toBeChecked();
   await expect(sheet.getByRole('radio', { name: 'FT8' })).toBeChecked();
-  await expect(sheet).toContainText('3.573');
+  await expect(sheet.getByTestId('ft-dial')).toHaveValue('3.573');
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
   await expect(page.getByRole('button', { name: /^Change band/ })).toContainText('80m');

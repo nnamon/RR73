@@ -113,7 +113,7 @@ export function currentDialHz(): number {
   const band = settings.band;
   const mode = settings.mode;
   if (isKeyboard(mode)) return rttyDialHz(band, settings.rtty.dialHz) ?? 0;
-  return operatingDialHz(band, mode, settings.houndBands.includes(band), settings.houndDialHz) ?? dialHz(band, mode) ?? 0;
+  return operatingDialHz(band, mode, settings.houndBands.includes(band), settings.houndDialHz, settings.ftDialHz) ?? dialHz(band, mode) ?? 0;
 }
 
 const NOTICES: Record<string, string> = {

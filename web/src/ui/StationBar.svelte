@@ -61,7 +61,7 @@
 <TopBar
   band={settings.band}
   mode={houndOn() ? `${settings.mode} Hound` : settings.mode}
-  dialHz={isWspr ? dialHz(settings.band, 'WSPR') : isKeyboard ? currentDialHz() : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz)}
+  dialHz={isWspr ? dialHz(settings.band, 'WSPR') : isKeyboard ? currentDialHz() : operatingDialHz(settings.band, settings.mode, houndOn(), settings.houndDialHz, settings.ftDialHz)}
   dialText={isKeyboard ? dial4(currentDialHz()) : undefined}
   utc={utcTime(clock.ms)}
   progress={hasSlots(settings.mode) ? slotProgress(clock.ms, settings.mode) : null}

@@ -77,7 +77,7 @@ export function configNow() {
     myGrid: a?.grid || settings.grid,
     mode: ftMode(),
     band: settings.band,
-    dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz) ?? 0,
+    dialHz: operatingDialHz(settings.band, ftMode(), houndOn(), settings.houndDialHz, settings.ftDialHz) ?? 0,
     txHz: settings.txHz,
     ack: settings.ack,
     maxRetries: 3,

@@ -20,7 +20,9 @@
   import { stateWords } from '../lib/log/view';
   import { activationPatch, adifMode, displayMode, formatReport, isGrid, normaliseCall, normaliseGrid, theirFields, theirRefs } from '../lib/log/qso';
   import { PROGRAMMES, type Qso, type Reference } from '../lib/log/types';
-  import { BAND_IDS, dialHz, isBand } from '../lib/radio/bands';
+  import { BAND_IDS, isBand } from '../lib/radio/bands';
+  import { operatingDialHz } from '../lib/radio/hound-dial';
+  import { rttyDialHz } from '../lib/rtty/dial';
   import { isFt } from '../lib/clock/slots';
   import { features } from '../lib/state/features.svelte';
   import { typedSuggestions, type RefSuggestion } from '../lib/log/ref-suggest';
@@ -85,7 +87,8 @@
   const isoDate = (ms: number) => new Date(ms).toISOString().slice(0, 10);
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
   const mhzText = (hz: number | null) => (hz ? String(Math.round(hz) / 1e6) : '');
-  const defaultFreq = (b: string, m: string) => (isBand(b) && (m === 'FT8' || m === 'FT4' || m === 'RTTY') ? mhzText(dialHz(b, m)) : '');
+  // The dial the band sheet sets for the band and mode.
+  const defaultFreq = (b: string, m: string) => (!isBand(b) ? '' : m === 'FT8' || m === 'FT4' ? mhzText(operatingDialHz(b, m, false, {}, settings.ftDialHz)) : m === 'RTTY' ? mhzText(rttyDialHz(b, settings.rtty.dialHz)) : '');
 
   /** The fields as loaded, to tell an edit in the pane. */
   let loaded = $state('');

@@ -202,7 +202,7 @@ for (const theme of ['light', 'dark'] as const) {
     await page.getByRole('button', { name: /^Change band/ }).click();
     const sheet = page.getByRole('dialog', { name: 'Change band' });
     await expect(sheet).toBeVisible();
-    await expect(sheet.getByText('14.074 MHz')).toBeVisible();
+    await expect(sheet.getByTestId('ft-dial')).toHaveValue('14.074');
     // No Use or Cancel step: a tap on a band applies it.
     await expect(sheet.getByRole('button', { name: /^Use / })).toHaveCount(0);
     const box = (await sheet.boundingBox())!;

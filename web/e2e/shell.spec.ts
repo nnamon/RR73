@@ -45,7 +45,7 @@ test('a tap on a band applies it at once', async ({ page }) => {
   const sheet = page.getByRole('dialog', { name: 'Change band' });
   // A mode applies and the sheet stays open; a band applies and closes it.
   await sheet.getByText('FT4', { exact: true }).click();
-  await expect(sheet.getByText('14.080 MHz')).toBeVisible();
+  await expect(sheet.getByTestId('ft-dial')).toHaveValue('14.080');
   await sheet.getByText('40m', { exact: true }).click();
   await expect(sheet).toBeHidden();
   const band = page.getByRole('button', { name: /^Change band/ });

@@ -2,7 +2,7 @@
 
 import { getKv, mergeKv, peekKv } from './db';
 import { dialHz, isBand, type BandId } from '../radio/bands';
-import { inBand, type HoundDials } from '../radio/hound-dial';
+import { inBand, type FtDials, type HoundDials } from '../radio/hound-dial';
 import type { Mode } from '../clock/slots';
 import { defaultHighlights, normaliseHighlights, type HighlightEntry } from '../decode/highlight';
 import type { Contrast } from '../waterfall/levels';
@@ -107,6 +107,8 @@ export interface Settings {
   houndBands: BandId[];
   /** The DXpedition's dial frequency entered for Hound mode, Hz, by band. */
   houndDialHz: HoundDials;
+  /** The operator's own FT8 and FT4 dials, Hz, by mode and band; the usual one where none. */
+  ftDialHz: FtDials;
   features: Features;
   /** Decode colours in priority order: the first enabled match colours a decode. */
   highlights: HighlightEntry[];
@@ -151,6 +153,7 @@ export const DEFAULTS: Settings = {
   huntCalls: 4,
   houndBands: [],
   houndDialHz: {},
+  ftDialHz: { FT8: {}, FT4: {} },
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
@@ -291,6 +294,13 @@ export function validate(raw: unknown): Settings {
   const dials = r.houndDialHz as Record<string, unknown> | undefined;
   if (dials && typeof dials === 'object') {
     for (const [b, hz] of Object.entries(dials)) if (ft8(b) && typeof hz === 'number' && inBand(b, hz)) s.houndDialHz[b] = Math.round(hz);
+  }
+  const own = r.ftDialHz as Record<string, unknown> | undefined;
+  s.ftDialHz = { FT8: {}, FT4: {} };
+  for (const m of ['FT8', 'FT4'] as const) {
+    const byBand = own && typeof own === 'object' ? (own[m] as Record<string, unknown> | undefined) : undefined;
+    if (byBand && typeof byBand === 'object')
+      for (const [b, hz] of Object.entries(byBand)) if (isBand(b) && dialHz(b, m) !== null && typeof hz === 'number' && inBand(b, hz)) s.ftDialHz[m][b] = Math.round(hz);
   }
   for (const k of ['rxHz', 'txHz'] as const) {
     const v = r[k];

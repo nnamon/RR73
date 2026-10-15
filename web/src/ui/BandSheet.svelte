@@ -6,7 +6,9 @@
    * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
    * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
    * RTTY has no calling frequency: the sheet takes the dial, in MHz or kHz, kept per band, and
-   * opens with that field focused, so a retune takes a few digits.
+   * opens with that field focused, so a retune takes a few digits. FT8 and FT4 take a dial of the
+   * operator's own per band and mode in the same field, such as a 60m channel; an empty field, or
+   * the usual dial, goes back to the usual one.
    */
   import { tick } from 'svelte';
   import Sheet from './Sheet.svelte';
@@ -15,7 +17,7 @@
   import { mhz } from '../lib/clock/format';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { setHound, setHoundDial } from '../lib/state/qso.svelte';
-  import { operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
+  import { dialText as ftDialText, operatingDialHz, parseDialMhz } from '../lib/radio/hound-dial';
   import { dial4, parseRttyDial, rttyDialHz } from '../lib/rtty/dial';
   import { setRtty } from '../lib/state/keyboard.svelte';
 
@@ -32,7 +34,7 @@
   });
 
   const hound = $derived(settings.houndBands.includes(band));
-  const dial = $derived(operatingDialHz(band, mode, hound, settings.houndDialHz));
+  const dial = $derived(operatingDialHz(band, mode, hound, settings.houndDialHz, settings.ftDialHz));
 
   // The DXpedition's dial frequency, as typed; it starts at the stored value or the band's FT8 frequency.
   let dialText = $state('');
@@ -60,6 +62,37 @@
       rttyField?.select();
     });
   });
+
+  // FT8 and FT4 outside Hound: the operator's own dial, as typed.
+  const ownDial = $derived((mode === 'FT8' || mode === 'FT4') && !(hound && mode === 'FT8'));
+  const usualHz = $derived(dialHz(band, mode));
+  let ftText = $state('');
+  let ftError = $state<string | null>(null);
+  $effect(() => {
+    if (!ownDial) return;
+    const hz = operatingDialHz(band, mode, false, {}, settings.ftDialHz);
+    ftText = hz === null ? '' : ftDialText(hz);
+    ftError = null;
+  });
+
+  function saveFtDial() {
+    if (mode !== 'FT8' && mode !== 'FT4') return;
+    const m = mode;
+    const next = { ...settings.ftDialHz[m] };
+    if (ftText.trim() === '') delete next[band];
+    else {
+      const r = parseDialMhz(ftText, band);
+      if ('error' in r) {
+        ftError = r.error;
+        return;
+      }
+      if (r.hz === usualHz) delete next[band];
+      else next[band] = r.hz;
+    }
+    ftError = null;
+    ftText = ftDialText(next[band] ?? usualHz ?? 0);
+    if (next[band] !== settings.ftDialHz[m][band]) void updateSettings({ ftDialHz: { ...settings.ftDialHz, [m]: next } });
+  }
 
   function saveRttyDial() {
     const r = parseRttyDial(rttyText, band);
@@ -171,6 +204,32 @@
     </div>
     {#if rttyError}<p class="err" role="alert">{rttyError}</p>{/if}
     <p class="note">Update this after each retune: QSOs log it as their frequency.</p>
+  {:else if ownDial}
+    <div class="setblock">
+      <label class="k" for="ft-dial">Set the radio to</label>
+      <div class="dialrow">
+        <input
+          id="ft-dial"
+          class="dialf mono"
+          type="text"
+          inputmode="decimal"
+          bind:value={ftText}
+          onblur={saveFtDial}
+          onkeydown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+          autocomplete="off"
+          aria-invalid={ftError !== null}
+          data-testid="ft-dial"
+        />
+        <span class="mhz">MHz</span>
+      </div>
+      <p class="m">USB</p>
+    </div>
+    {#if ftError}<p class="err" role="alert">{ftError}</p>{/if}
+    {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
+      <p class="note">Usual {mode} dial on {band}: {ftDialText(usualHz)} MHz. Clear the field to go back to it.</p>
+    {:else}
+      <p class="note">RR73 can’t read the radio’s dial. Saved slots and QSOs record the dial shown here.</p>
+    {/if}
   {:else}
     <div class="setblock">
       <p class="k">Set the radio to</p>

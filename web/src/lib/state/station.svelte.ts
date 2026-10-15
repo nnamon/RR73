@@ -21,7 +21,7 @@ import { NullDecoder } from '../decode/null-client';
 import type { Decode, DecoderClient, DecoderStatus } from '../decode/types';
 import { DecoderBusyError, createDecoder } from '../decode/worker-client';
 import type { WsprDecode } from '../wspr/spots';
-import { dialHz } from '../radio/bands';
+import { operatingDialHz } from '../radio/hound-dial';
 import { SlotAssembler, type AssembledSlot } from '../slots/assembler';
 import { SlotRecorder, slotFiles } from '../slots/recorder';
 import { saveSlot, type SaveResult } from '../slots/share';
@@ -540,7 +540,7 @@ export function saveRecentSlot(startUtcMs: number): Promise<SaveResult> | null {
   const slot = recorder.get(startUtcMs);
   if (!slot) return null;
   const files = slotFiles(slot, {
-    dialHz: dialHz(settings.band, slot.mode) ?? 0,
+    dialHz: operatingDialHz(settings.band, slot.mode, settings.houndBands.includes(settings.band), settings.houndDialHz, settings.ftDialHz) ?? 0,
     input: audio.report?.inputLabel ?? 'Microphone',
     captureRateHz: audio.report?.contextRate ?? 0,
     appVersion: `${__APP_VERSION__} (${__APP_BUILD__})`,

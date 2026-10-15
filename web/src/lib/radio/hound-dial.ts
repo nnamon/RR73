@@ -1,7 +1,8 @@
 /**
- * A DXpedition's dial frequency for Hound mode (docs/design/hound.md). DXpeditions run Fox and
- * Hound on frequencies of their own, so the band sheet takes the dial frequency per band while
- * Hound is on. With Hound off, or with nothing entered, the band's usual FT8 frequency applies.
+ * The FT8 and FT4 dial in use. The band sheet takes a dial of the operator's own per band and
+ * mode, such as a 60m channel or a regional 160m frequency; with none, the band's usual one
+ * applies. A DXpedition's dial for Hound mode (docs/design/hound.md) is kept apart, per band,
+ * and applies while Hound is on.
  */
 
 import type { Mode } from '../clock/slots';
@@ -11,10 +12,26 @@ import { dialHz, type BandId } from './bands';
 /** Dial frequencies entered for Hound mode, Hz, by band. */
 export type HoundDials = Partial<Record<BandId, number>>;
 
-/** The dial frequency in use, Hz: the DXpedition's while Hound is on, else the band's usual one. */
-export function operatingDialHz(band: BandId, mode: Mode, hound: boolean, dials: HoundDials): number | null {
-  if (hound && mode === 'FT8') return dials[band] ?? dialHz(band, 'FT8');
+/** The operator's own FT8 and FT4 dials, Hz, by mode and band. */
+export type FtDials = Record<'FT8' | 'FT4', Partial<Record<BandId, number>>>;
+
+export const NO_FT_DIALS: FtDials = { FT8: {}, FT4: {} };
+
+/**
+ * The dial frequency in use, Hz: the DXpedition's while Hound is on, else the operator's own for
+ * the band and mode, else the band's usual one.
+ */
+export function operatingDialHz(band: BandId, mode: Mode, hound: boolean, dials: HoundDials, own: FtDials = NO_FT_DIALS): number | null {
+  if (dialHz(band, mode) === null) return null;
+  if (hound && mode === 'FT8' && dials[band] !== undefined) return dials[band];
+  if (mode === 'FT8' || mode === 'FT4') return own[mode][band] ?? dialHz(band, mode);
   return dialHz(band, mode);
+}
+
+/** "14.074" or "7.0475": MHz to 3 decimals, or 4 where the dial needs them. */
+export function dialText(hz: number): string {
+  const four = (hz / 1e6).toFixed(4);
+  return four.endsWith('0') ? four.slice(0, -1) : four;
 }
 
 /** True when `hz` lies within the band's edges. */
