@@ -40,6 +40,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-corpus` | Corpus format: slot WAV plus sidecar JSON, reading, writing, and decode matching and scoring. |
 | `crates/rr73-bench` | Command-line bench: synthesise, run, compare. |
 | `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app; `rtty` holds the streaming RTTY receiver and the transmitter. |
+| `crates/rr73-cat` | Rig control: CI-V frames, the IC-705 commands RR73 uses as typed requests and events, and a simulated IC-705 for tests. See `docs/design/cat.md`. |
 | `crates/rr73-qsp` | QSP, the relay: the KiwiSDR client, the clock that stamps each frame with UTC, the HTTP API with `/docs`, and the audio stream over WebSocket. Runs on a server, never in the app. |
 | `web/` | The app. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |

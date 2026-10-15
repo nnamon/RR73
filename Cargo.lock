@@ -750,6 +750,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr73-cat"
+version = "0.21.6"
+dependencies = [
+ "rand",
+ "rand_chacha",
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rr73-chansim"
 version = "0.21.6"
 dependencies = [
