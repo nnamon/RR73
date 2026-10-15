@@ -25,7 +25,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
                         encoder (rr73-wasm) -> scheduled audio out
                                            |
                         headphone contact -> radio mic input (VOX)
-                        or USB audio, PTT over CI-V (desktop Chromium)
+                        or USB audio, PTT over CI-V or Elecraft CAT (desktop Chromium)
 ```
 
 ## Repository layout
@@ -40,8 +40,8 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes; continuous signals with the SNR in 3000 Hz. |
 | `crates/rr73-corpus` | Corpus format: slot WAV plus sidecar JSON, reading, writing, and decode matching and scoring. |
 | `crates/rr73-bench` | Command-line bench: synthesise, run, compare. |
-| `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app; `rtty` holds the streaming RTTY receiver and the transmitter, `cat` the CI-V requests and the parser of the radio's bytes. |
-| `crates/rr73-cat` | Rig control: CI-V frames, the IC-705 commands RR73 uses as typed requests and events, and a simulated IC-705 for tests. See `docs/design/cat.md`. |
+| `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app; `rtty` holds the streaming RTTY receiver and the transmitter, `cat` the CI-V requests and the parser of the radio's bytes, `cat_kx2` the same for the KX2's text commands. |
+| `crates/rr73-cat` | Rig control: CI-V frames and the IC-705 commands RR73 uses, and Elecraft's text commands for the KX2, as typed requests and events; a simulated IC-705 and a simulated KX2 behind a Digirig for tests. See `docs/design/cat.md`. |
 | `crates/rr73-qsp` | QSP, the relay: the KiwiSDR client, the clock that stamps each frame with UTC, the HTTP API with `/docs`, and the audio stream over WebSocket. Runs on a server, never in the app. |
 | `web/` | The app. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |
@@ -149,7 +149,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/wspr` | WSPR's pure parts: the beacon schedule, its messages, spots (distance, sorting, drift) and the rows of Operate's spot list. The runtime that drives them is `lib/state/wspr.svelte.ts`. See `docs/design/wspr.md`. |
 | `lib/spots` | Spots from the POTA API and HamQTH's DX cluster feed: one spot model, the sources, merging, the filters, the feed that polls while Spots is shown, and what the log says about a spot (New park, Worked today). Go and the chase live in `lib/state/spots.svelte.ts`. See `docs/design/spots.md`. |
 | `lib/tx` | Message encoding through `rr73-wasm`, transmit scheduling on the audio clock, Halt. |
-| `lib/cat` | Rig control: one serial port over Web Serial (`serial.ts`: open with DTR and RTS lowered, the read loop, ordered writes, close, and `lost` when the port goes), the CI-V JSON and the main-thread `rr73-wasm` loader (`protocol.ts`), one radio on the link (`radio.ts`: the request queue and its timeouts, polling, transceive, PTT with confirmed PTT off, the dial shift around a keying), and the shift's arithmetic for Keep Tx audio centred (`passband.ts`). The keyer interface the transmit paths use is `lib/tx/keyer.ts`. Connect radio, Test keying and the dial set from the band sheet live in `lib/state/cat.svelte.ts`; the radio's state, the dial in use and the keyer for transmissions in `lib/state/radio.svelte.ts`. See `docs/design/cat.md`. |
+| `lib/cat` | Rig control: one serial port over Web Serial (`serial.ts`: open with DTR and RTS lowered, the read loop, ordered writes, close, and `lost` when the port goes), the CI-V and Elecraft JSON, their codecs and the main-thread `rr73-wasm` loader (`protocol.ts`), what differs between the IC-705 and the KX2 (`radios.ts`), one radio on the link (`radio.ts`: the request queue and its timeouts, polling, transceive, PTT with confirmed PTT off, the dial shift around a keying), and the shift's arithmetic for Keep Tx audio centred (`passband.ts`). The keyer interface the transmit paths use is `lib/tx/keyer.ts`. Connect radio, Test keying and the dial set from the band sheet live in `lib/state/cat.svelte.ts`; the radio's state, the dial in use and the keyer for transmissions in `lib/state/radio.svelte.ts`. See `docs/design/cat.md`. |
 | `lib/keyboard` | The keyboard modes' engine, mode-agnostic (RTTY first, then PSK31, Olivia and the rest): the modem interface, the keyboard worker that holds the modem, the stream worklet and the pump that feeds it 0.3 s ahead, the send queue, macros and their fields, the received text, words and the other-case reading, the QSO strip's draft and its log record, and the session that ties them together (`session.svelte.ts`). The runtime that drives them is `lib/state/keyboard.svelte.ts`. See `docs/design/rtty.md`. |
 | `lib/rtty` | RTTY's modem over `rr73-wasm`'s `RttyReceiver` and `RttyTransmitter`, its settings and their mapping to the crate's configs, and its dial per band. |
 | `lib/practice` | The practice band: simulated stations and scenarios, slot audio fed to capture as an input source, RTTY stations whose transmissions play as they fall due, the Wavelog stand-in and the network guard. See `docs/design/practice-band.md`. |
