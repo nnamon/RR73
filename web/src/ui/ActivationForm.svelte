@@ -2,14 +2,21 @@
   /**
    * References, the callsign used on air, the grid (typed, or from GPS when permitted) and the
    * Wavelog station location for an activation, in the start and edit sheet (ActivationSheet).
+   * POTA and SOTA references come with suggestions from the lists (lib/log/ref-suggest.ts): those
+   * that begin with the text typed, and after a GPS fix the active ones nearby, which also sets the
+   * grid unless one was typed. References added show their names.
    */
+  import { untrack } from 'svelte';
   import Icon from './Icon.svelte';
   import LocateButton from './LocateButton.svelte';
   import { checkRef, checkRefs, refExample } from '../lib/log/activation';
   import { log, wavelogReady, type ActivationInput } from '../lib/log/log.svelte';
   import { isGrid, normaliseCall, normaliseGrid } from '../lib/log/qso';
   import { PROGRAMMES, type Activation, type Programme, type Reference } from '../lib/log/types';
-  import type { LocateResult } from '../lib/location/locate';
+  import { locateGrid, type LocateResult } from '../lib/location/locate';
+  import { kmText, nearbySuggestions, typedSuggestions, NEARBY_KM, type RefSuggestion } from '../lib/log/ref-suggest';
+  import { reference } from '../lib/reference';
+  import { features } from '../lib/state/features.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
   let { initial = null, submitLabel, onsubmit, oncancel }: { initial?: Activation | null; submitLabel: string; onsubmit: (input: ActivationInput) => Promise<void>; oncancel?: () => void } = $props();
@@ -32,6 +39,49 @@
   let gpsNote = $state('');
   let errors = $state<string[]>([]);
   let busy = $state(false);
+
+  const lists = $derived({ parks: reference.parks(features.activations), summits: reference.summits(features.activations) });
+  let typed = $state<RefSuggestion[]>([]);
+  let nearby = $state<RefSuggestion[]>([]);
+  let nearbyNote = $state('');
+  let finding = $state(false);
+  /** Names of the references added, by "POTA SG-0014", from the lists. */
+  let names = $state<Record<string, string>>({});
+  const keyOf = (r: { programme: string; ref: string }) => `${r.programme} ${r.ref}`;
+  const added = (r: { programme: string; ref: string }) => refs.some((x) => keyOf(x) === keyOf(r));
+
+  // Suggestions follow the text typed.
+  $effect(() => {
+    const p = programme;
+    const t = refText;
+    const l = lists;
+    let current = true;
+    const timer = setTimeout(() => {
+      void typedSuggestions(p, t, l).then((s) => {
+        if (current) typed = s;
+      });
+    }, 120);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  });
+
+  // Each reference added shows its name when its list has it.
+  $effect(() => {
+    const l = lists;
+    for (const r of refs) {
+      const key = keyOf(r);
+      if (untrack(() => names[key]) !== undefined) continue;
+      const list = r.programme === 'POTA' ? l.parks : r.programme === 'SOTA' ? l.summits : null;
+      void list?.get(r.ref).then(
+        (x) => {
+          if (x) names = { ...names, [key]: x.name };
+        },
+        () => undefined,
+      );
+    }
+  });
 
   const stations = $derived(wavelogReady(log.wavelog) ? log.wavelog.stations : []);
   const chosen = $derived(stations.find((s) => s.id === station) ?? null);
@@ -60,12 +110,65 @@
     refs = refs.filter((_, j) => j !== i);
   }
 
-  function useGps(r: LocateResult) {
+  /** Adds a suggested reference. */
+  function pick(s: RefSuggestion) {
+    if (added(s)) return;
+    const next = [...refs, { programme: s.programme, ref: s.ref }];
+    const problem = checkRefs(next);
+    if (problem) {
+      refError = problem;
+      return;
+    }
+    refs = next;
+    names = { ...names, [keyOf(s)]: s.name };
+    if (s.km === null) refText = '';
+    refError = '';
+  }
+
+  /** The active parks and summits near a GPS fix. */
+  async function showNearby(at: { lat: number; lon: number }) {
+    const found = await nearbySuggestions(at, lists);
+    nearby = found.refs;
+    nearbyNote = found.refs.length
+      ? found.complete
+        ? ''
+        : 'Part of the park and summit lists needs a connection.'
+      : found.complete
+        ? `No active parks or summits within ${NEARBY_KM} km.`
+        : 'The park and summit lists need a connection.';
+  }
+
+  /** Use GPS beside the grid: the grid, and the parks and summits nearby. */
+  async function useGps(r: LocateResult) {
     gpsError = r.ok ? '' : r.message;
     gpsNote = r.ok ? r.note : '';
     if (!r.ok) return;
     grid = r.grid;
     gridSource = 'gps';
+    await showNearby(r.at);
+  }
+
+  // Find nearby: getCurrentPosition runs inside the tap, where iOS expects the first permission
+  // prompt. It also sets the grid, unless the operator typed one.
+  async function findNearby() {
+    finding = true;
+    try {
+      const r = await locateGrid(6);
+      if (!r.ok) {
+        nearby = [];
+        nearbyNote = r.message;
+        return;
+      }
+      if (!(grid.trim() && gridSource === 'typed')) {
+        grid = r.grid;
+        gridSource = 'gps';
+        gpsError = '';
+        gpsNote = r.note;
+      }
+      await showNearby(r.at);
+    } finally {
+      finding = false;
+    }
   }
 
   async function submit(e: SubmitEvent) {
@@ -117,7 +220,10 @@
       {#each refs as r, i (`${r.programme} ${r.ref}`)}
         <div class="row">
           <span class="prog">{r.programme}</span>
-          <span class="row-main mono ref">{r.ref}</span>
+          <span class="row-main">
+            <span class="mono ref">{r.ref}</span>
+            {#if names[keyOf(r)]}<span class="row-sub name">{names[keyOf(r)]}</span>{/if}
+          </span>
           <button type="button" class="remove" aria-label="Remove {r.programme} {r.ref}" onclick={() => removeRef(i)}><Icon name="xmark" size={18} /></button>
         </div>
       {/each}
@@ -142,8 +248,33 @@
         />
         <button type="button" class="btn compact soft" onclick={() => addRef()}>Add</button>
       </div>
+      {#each typed.filter((x) => !added(x)) as x (keyOf(x))}
+        <button type="button" class="row sug" aria-label="Add {x.programme} {x.ref}, {x.name}" onclick={() => pick(x)}>
+          <span class="prog">{x.programme}</span>
+          <span class="row-main">
+            <span class="mono ref">{x.ref}</span>
+            <span class="row-sub name">{x.name}</span>
+          </span>
+          <Icon name="plus" size={18} class="plus" />
+        </button>
+      {/each}
+      <button type="button" class="row find" disabled={finding} onclick={() => void findNearby()}>
+        <Icon name="locate" size={18} class="find-i" />
+        <span class="row-title">{finding ? 'Finding' : 'Find nearby parks and summits'}</span>
+      </button>
+      {#each nearby.filter((x) => !added(x)) as x (keyOf(x))}
+        <button type="button" class="row sug" aria-label="Add {x.programme} {x.ref}, {x.name}, {kmText(x.km ?? 0)}" onclick={() => pick(x)}>
+          <span class="prog">{x.programme}</span>
+          <span class="row-main">
+            <span class="mono ref">{x.ref}</span>
+            <span class="row-sub name">{x.name}</span>
+          </span>
+          <span class="km">{kmText(x.km ?? 0)}</span>
+          <Icon name="plus" size={18} class="plus" />
+        </button>
+      {/each}
     </div>
-    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else}<p class="section-foot">One activation can hold several parks.</p>{/if}
+    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else if nearbyNote}<p class="section-foot" role="status">{nearbyNote}</p>{:else}<p class="section-foot">One activation can hold several parks.</p>{/if}
   </div>
 
   <div class="block">
@@ -203,6 +334,33 @@
 
   .add {
     gap: var(--rr-space-2);
+  }
+
+  .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .find {
+    gap: var(--rr-space-2);
+  }
+
+  .sug :global(.plus),
+  .find :global(.find-i),
+  .find .row-title {
+    color: var(--rr-accent);
+  }
+
+  .find:disabled .row-title {
+    opacity: 0.4;
+  }
+
+  .km {
+    flex: none;
+    color: var(--rr-label2);
+    font-size: var(--rr-text-sub);
+    font-variant-numeric: tabular-nums;
   }
 
   .picker {

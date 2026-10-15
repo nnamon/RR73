@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Start activation suggests POTA and SOTA references as you type them, with their names.
+- Find nearby parks and summits lists the active ones near the phone, nearest first, and sets the grid.
+- Their park or summit in Add QSO and Edit QSO suggests references as you type them.
+
 ## 0.19.7 · 2026-10-15
 
 - QSP, the relay, comes with each release: binaries for x86-64 and ARM64 Linux, and the image ghcr.io/nnamon/rr73-qsp.

@@ -350,6 +350,76 @@ test('starts an activation from Spots, counts its QSOs and ends it', async ({ pa
   await expect(page.locator('li.lr')).toHaveCount(3);
 });
 
+/** Serves small park and summit lists in place of the build's (tools/refdata formats). */
+async function routeRefs(page: Page) {
+  const source = (entry: string) => ({ title: 't', status: 'ok', url: 'u', publisher: 'p', terms: 't', fetchedAt: null, checkedAt: null, dataDate: null, rawBytes: null, records: 1, entry, files: 2, bytes: 1, gzipBytes: 1 });
+  const files: Record<string, unknown> = {
+    'manifest.json': { format: 1, generatedAt: '2026-10-13T00:00:00Z', sources: { pota: source('pota/index.e2e.json'), sota: source('sota/index.e2e.json') } },
+    'pota/index.e2e.json': { format: 1, programme: 'POTA', separator: '-', count: 3, shards: [{ key: 'SG', file: 'SG.e2e.json', count: 3, bytes: 300, squares: 'OJ11' }] },
+    'pota/SG.e2e.json': {
+      format: 1,
+      programme: 'POTA',
+      key: 'SG',
+      rows: [
+        ['0001', 'Admiralty National Park', 1.4484, 103.779, 1],
+        ['0002', 'Ang Mo Kio Town Garden East National Park', 1.3707, 103.85, 1],
+        ['0099', 'Closed Test Park', 1.351, 103.82, 0],
+      ],
+    },
+    'sota/index.e2e.json': { format: 1, programme: 'SOTA', separator: '/', count: 1, shards: [{ key: '9V', file: '9V.e2e.json', count: 1, bytes: 100, squares: 'OJ11', name: 'Singapore' }] },
+    'sota/9V.e2e.json': { format: 1, programme: 'SOTA', key: '9V', association: 'Singapore', regions: { SG: 'Singapore' }, rows: [['SG-001', 'Bukit Timah Test Hill', 1.354, 103.776, 164, 1, 20100101, 0]] },
+  };
+  await page.route(/\/data\/(manifest\.json|pota\/.*|sota\/.*)$/, (route) => {
+    const path = new URL(route.request().url()).pathname.replace(/^.*\/data\//, '');
+    return files[path] ? route.fulfill({ contentType: 'application/json', body: JSON.stringify(files[path]) }) : route.fulfill({ status: 404 });
+  });
+}
+
+test('suggests parks and summits as a reference is typed and near the phone, with their names', async ({ page, context }) => {
+  await routeRefs(page);
+  await context.grantPermissions(['geolocation']);
+  await context.setGeolocation({ latitude: 1.352, longitude: 103.8198, accuracy: 20 });
+  await start(page, '#/spots', activations());
+  await page.getByRole('button', { name: /^Start activation/ }).click();
+  const form = page.getByRole('dialog', { name: 'Start activation' });
+  const refInput = form.getByRole('textbox', { name: 'Reference' });
+
+  // Typed: the parks that begin with the text, by name; a tap adds one.
+  await refInput.fill('sg-000');
+  await expect(form.getByRole('button', { name: /^Add POTA / })).toHaveCount(2);
+  await form.getByRole('button', { name: 'Add POTA SG-0002, Ang Mo Kio Town Garden East National Park' }).click();
+  await expect(refInput).toHaveValue('');
+  await expect(form.getByRole('button', { name: 'Remove POTA SG-0002' })).toBeVisible();
+  await expect(form.getByText('Ang Mo Kio Town Garden East National Park')).toBeVisible();
+
+  // Nearby: the grid from the fix, and the active parks and summits around, nearest first.
+  await form.getByRole('button', { name: 'Find nearby parks and summits' }).click();
+  await expect(form.getByRole('textbox', { name: 'Grid' })).toHaveValue('OJ11vi');
+  const nearby = form.getByRole('button', { name: /^Add (POTA|SOTA) .* km$/ });
+  await expect(nearby).toHaveCount(2);
+  await expect(nearby.first()).toHaveAccessibleName('Add SOTA 9V/SG-001, Bukit Timah Test Hill, 4.9 km');
+  await expect(nearby.last()).toHaveAccessibleName('Add POTA SG-0001, Admiralty National Park, 12 km');
+  await nearby.first().click();
+  await expect(form.getByText('Bukit Timah Test Hill')).toBeVisible();
+
+  await form.getByRole('textbox', { name: 'Callsign on air' }).fill('9v1ne/p');
+  await form.getByRole('button', { name: 'Start activation' }).click();
+  await expect(page.getByText('POTA SG-0002 · SOTA 9V/SG-001', { exact: true })).toBeVisible();
+});
+
+test('suggests the other station\'s park as it is typed in Add QSO', async ({ page }) => {
+  await routeRefs(page);
+  await start(page, '#/log', activations());
+  await page.getByRole('button', { name: 'Add QSO' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Add QSO' });
+  const theirs = sheet.getByRole('textbox', { name: 'Their park or summit' });
+  await theirs.fill('9v/sg-001, sg-000');
+  await expect(sheet.getByRole('button', { name: /^Use POTA / })).toHaveCount(2);
+  await sheet.getByRole('button', { name: 'Use POTA SG-0001, Admiralty National Park' }).click();
+  await expect(theirs).toHaveValue('9V/SG-001, SG-0001');
+  await expect(sheet.getByRole('button', { name: /^Use / })).toHaveCount(0);
+});
+
 test('a logged QSO joins the running activation from Edit QSO and leaves it again', async ({ page }) => {
   await start(page, '#/log', activations(mockupLog({ running: true })));
   const fields = () =>

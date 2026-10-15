@@ -96,11 +96,12 @@ The API key is stored only in this phone's IndexedDB. The address must be https:
 
 ## Activations
 
-An activation holds one or more references (POTA, SOTA, WWFF, IOTA), the callsign used on air, the grid (from GPS or typed), the Wavelog station location, and start and end times. Counting rules shown during operating: POTA 10 QSOs in one UTC day, SOTA 4 QSOs with different stations, WWFF 44 QSOs accumulated per reference across activations. Reference lists ship with the app (fetched at build time) for offline lookup and the nearest reference from GPS.
+An activation holds one or more references (POTA, SOTA, WWFF, IOTA), the callsign used on air, the grid (from GPS or typed), the Wavelog station location, and start and end times. Counting rules shown during operating: POTA 10 QSOs in one UTC day, SOTA 4 QSOs with different stations, WWFF 44 QSOs accumulated per reference across activations. The POTA and SOTA lists ship with the app (fetched at build time; docs/reference-data.md) and fill in references: see below.
 
 As built:
 
-- References are typed and checked against each programme's format (POTA `VK-0921`, SOTA `VK3/VC-012`, WWFF `VKFF-0921`, IOTA `OC-001`). The reference lists are a later task.
+- References are typed and checked against each programme's format (POTA `VK-0921`, SOTA `VK3/VC-012`, WWFF `VKFF-0921`, IOTA `OC-001`).
+- POTA and SOTA references come with suggestions from the lists (`lib/log/ref-suggest.ts`). As a reference is typed, the form lists those that begin with the text, by name, those that count today first; a tap adds one. Find nearby parks and summits takes one GPS fix, sets the grid unless one was typed, and lists the active parks and summits within 50 km, nearest first, with distances. Use GPS beside the grid lists them too. References added show their names. The position is used for the search and not stored. Edit QSO's Their park or summit suggests references for the one being typed. Suggestions need Activations on, which brings the lists; WWFF and IOTA have none.
 - An activation holds several parks, and one summit, one WWFF reference and one island at most.
 - POTA counts a repeat of the same call, band and mode in the UTC day once, over every activation at the park that day. SOTA counts different callsigns in the UTC day. WWFF counts every activation at the reference, a repeat of the same call, band, mode and UTC day once.
 - Editing an activation restamps its QSOs (references, call on air, grid); QSOs a destination already holds then show as changed.
