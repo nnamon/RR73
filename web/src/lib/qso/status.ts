@@ -74,6 +74,8 @@ export const STATUS = {
   /** The radio's dial is on another band than RR73's: "Radio on 40m". */
   radioBand: (band: string) => `Radio on ${band}`,
   radioOutside: 'Radio outside the bands',
+  /** The KX2 keyed by TX outside DATA A: the transmission goes out in that mode. "Radio in USB · set DATA A". */
+  radioMode: (mode: string) => `Radio in ${mode} · set DATA A`,
   /** The IC-705's USB SEND keys on a line of the port: RR73 refuses to transmit until it is OFF. */
   usbSend: 'Set USB SEND to OFF',
 } as const;

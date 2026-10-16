@@ -5,6 +5,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - Settings › Rig control connects an Elecraft KX2 through a Digirig: RR73 reads and sets its dial and DATA A, keys it once Key the radio with CAT is on, and says to set MIC BTN to OFF, as the Digirig’s PTT reaches its MIC jack.
+- Rig control shows Transmitting when the radio transmits on its own, and on connecting sends PTT off to a radio still transmitting when Key the radio with CAT is on or RR73 may have left it keyed.
+- Halt during a short wait for late answers no longer lets a held-back PTT on go out after its PTT off, and that wait no longer stops rig control for good when its timer fires early.
 
 ## 0.22.3 · 2026-10-16
 

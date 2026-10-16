@@ -10,6 +10,7 @@ import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { chooseRadio, connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setKx2Baud, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
+import { STATUS } from '../qso/status';
 import { dialNow, onRadioNotice, rig, rigGate, rigInDataMode, rigModeText, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
@@ -201,8 +202,10 @@ describe('connecting a KX2', () => {
     expect(chosen.log).toEqual(['open 4800', 'close']);
   });
 
-  it('opens at the baud rate chosen, and a new rate closes the port and opens it again at that rate, lines low first', async () => {
+  it('opens at the baud rate chosen, and a new rate closes the port and opens it again at that rate, lines low first, once MIC BTN read OFF', async () => {
+    chosen.sim.mic_btn = 0;
     await connect();
+    expect(settings.cat.kx2MicBtn).toBe(0);
     const changed = setKx2Baud(38400);
     await run(OPEN_SETTLE_MS + 400);
     await changed;
@@ -212,6 +215,81 @@ describe('connecting a KX2', () => {
     expect(chosen.log.slice(reopen - 1, reopen + 3)).toEqual(['close', 'open 38400', 'lines dtr rts', 'TQ;']);
     expect(rig.status).toBe('connected');
     expect(chosen.ptt).toEqual([]);
+  });
+
+  it('with MIC BTN on PTT, a new baud rate closes the port and leaves opening it to Connect radio', async () => {
+    await connect();
+    expect(settings.cat.kx2MicBtn).toBe(5);
+    const changed = setKx2Baud(9600);
+    await run(OPEN_SETTLE_MS + 400);
+    await changed;
+    expect(chosen.log.at(-1)).toBe('close');
+    expect(chosen.log.filter((l) => l.startsWith('open'))).toEqual(['open 4800']);
+    expect(rig.status).toBe('off');
+  });
+
+  it('opens the port by itself on starting, or when it comes back, only after MIC BTN read OFF', async () => {
+    // Connected once with MIC BTN at PTT UP.DN: the stored read says PTT.
+    await connect();
+    resetCat();
+    chosen.log = [];
+    await initCat();
+    await run(OPEN_SETTLE_MS + 400);
+    expect(chosen.log).toEqual([]);
+    expect(rig.status).toBe('off');
+    // The operator taps Connect radio: allowed, and MIC BTN reads OFF now.
+    chosen.sim.mic_btn = 0;
+    const done = connectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await done;
+    expect(settings.cat.kx2MicBtn).toBe(0);
+    resetCat();
+    chosen.log = [];
+    const opening = initCat();
+    await run(OPEN_SETTLE_MS + 400);
+    await opening;
+    expect(chosen.log[0]).toBe('open 4800');
+    expect(rig.status).toBe('connected');
+  });
+
+  it('shows Transmitting when the radio transmits at connecting with RR73 holding no PTT, and leaves it alone with CAT keying off', async () => {
+    chosen.sim.press_xmit(true);
+    await connect();
+    expect(rig.transmitting).toBe(true);
+    expect(rig.keyed).toBe(false);
+    expect(chosen.ptt).toEqual([]);
+    expect(chosen.sim.transmit).toBe(true);
+    chosen.sim.press_xmit(false);
+  });
+
+  it('with Key the radio with CAT on, sends RX at connecting when the radio transmits, and confirms it', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    chosen.sim.press_xmit(true);
+    await connect();
+    expect(chosen.ptt).toEqual(['RX']);
+    expect(chosen.sim.transmit).toBe(false);
+    expect(rig.unkeyFailed).toBe(false);
+  });
+
+  it('keeps across a reload that RR73 may have left the radio keyed, and the next page sends RX when it still transmits', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const k = txKeyer()!.key(15_000);
+    await run(100);
+    expect(settings.cat.leftKeyed).toBe(true);
+    void k;
+    // The page goes without a word to the radio, as a crash or an update does; CAT keying is turned
+    // off in the new page, and the stored flag alone brings the RX.
+    resetCat();
+    void updateSettings({ cat: { ...settings.cat, keyPtt: false, leftKeyed: true } });
+    chosen.sim.mic_btn = 0;
+    chosen.log = [];
+    const done = connectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await done;
+    expect(chosen.ptt).toEqual(['RX']);
+    expect(chosen.sim.transmit).toBe(false);
+    expect(settings.cat.leftKeyed).toBe(false);
   });
 
   it('choosing the IC-705 disconnects the KX2 and forgets its port', async () => {
@@ -290,6 +368,11 @@ function fakeAudio(base: number, lengthMs: number) {
 }
 
 describe('keying a KX2', () => {
+  // DATA A, as the band sheet sets it.
+  beforeEach(() => {
+    chosen.sim.press_mode('"data"');
+  });
+
   /** An FT8 transmission whose slot starts 2 s from now, `lengthMs` long. */
   async function transmit(lengthMs = 2000) {
     const base = Date.now();
@@ -421,6 +504,32 @@ describe('keying a KX2', () => {
     expect(chosen.sim.transmit).toBe(false);
     expect(rig.unkeyFailed).toBe(false);
     off();
+  });
+
+  it('a transmission keyed outside DATA A says the mode in the status line, and still goes', async () => {
+    chosen.sim.press_mode('"usb"');
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const notices: string[] = [];
+    const off = onRadioNotice((t) => notices.push(t));
+    const { done, played } = await transmit();
+    await run(2200);
+    await done;
+    expect(notices).toEqual([STATUS.radioMode('USB')]);
+    expect(played).toHaveLength(1);
+    expect(chosen.ptt).toEqual(['TX']);
+    off();
+    await run(4000);
+  });
+
+  it('Test keying outside DATA A says the mode the KX2 was in', async () => {
+    chosen.sim.press_mode('"cw"');
+    await connect();
+    const t = testKeying();
+    await run(TEST_KEY_MS + 300);
+    await t;
+    expect(rig.test).toMatchObject({ state: 'done', ok: false });
+    expect(rig.test?.state === 'done' && rig.test.text).toMatch(/^Keyed and released at \d\d:\d\d:\d\d UTC, in CW\. The KX2 was not in DATA A: choose a band to set it\.$/);
   });
 
   it('Test keying keys for 1 s with TX, reads TQ while keyed, and releases with RX, with the switch off', async () => {

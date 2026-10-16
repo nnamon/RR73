@@ -65,10 +65,14 @@ declare global {
   }
 }
 
-/** Installs the fake radio before the app loads. `granted`: the port was allowed before. */
-export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: boolean } = {}) {
+/**
+ * Installs the fake radio before the app loads. `granted`: the port was allowed before. `micBtn`:
+ * MIC BTN as MP gives it, PTT UP.DN (5) by default. `tx`: the radio transmits from the start, as
+ * when a page went while it was keyed.
+ */
+export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: boolean; micBtn?: number; tx?: boolean } = {}) {
   await page.addInitScript(
-    ({ hz, granted }) => {
+    ({ hz, granted, micBtn, tx }) => {
       let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
       let input = '';
       const port = new EventTarget() as EventTarget & Record<string, unknown>;
@@ -77,10 +81,10 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
         hz,
         mode: 2,
         sub: 0,
-        tx: false,
+        tx,
         dtr: false,
         rts: false,
-        micBtn: 5,
+        micBtn,
         voxData: false,
         menu: 255,
         bandwidthHz: 2800,
@@ -241,7 +245,7 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
       };
       Object.defineProperty(navigator, 'serial', { value: serial, configurable: true });
     },
-    { hz: opts.hz ?? 14_074_000, granted: opts.granted ?? false },
+    { hz: opts.hz ?? 14_074_000, granted: opts.granted ?? false, micBtn: opts.micBtn ?? 5, tx: opts.tx ?? false },
   );
 }
 
@@ -252,9 +256,9 @@ export const kx2Log = (page: Page) => page.evaluate(() => window.__kx2.log) as P
 export const kx2Ptt = async (page: Page) => (await kx2Log(page)).filter((w) => w.text === 'TX;TQ;' || w.text === 'RX;TQ;');
 
 /** Settings › Rig control: chooses the KX2, then Connect radio; the fake browser's chooser returns the fake radio. */
-export async function connectKx2(page: Page) {
+export async function connectKx2(page: Page, status = 'Connected') {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
   await page.getByRole('radio', { name: /Elecraft KX2/ }).click();
   await page.getByRole('button', { name: 'Connect radio' }).click();
-  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+  await expect(page.getByTestId('rig-status')).toHaveText(status);
 }

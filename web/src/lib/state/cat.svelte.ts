@@ -31,7 +31,7 @@ import { dialHz, isBand, type BandId } from '../radio/bands';
 import { PTT_TIMEOUT_MS, pause } from '../tx/keyer';
 import { settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
-import { plannedDialHz, provideKeyer, radioName, radioNotice, resetRig, rig, rigConnected, usbSendOn } from './radio.svelte';
+import { plannedDialHz, provideKeyer, radioName, radioNotice, resetRig, rig, rigConnected, rigInDataMode, rigModeText, usbSendOn } from './radio.svelte';
 
 /** Test keying holds PTT on this long, ms. */
 export const TEST_KEY_MS = 1000;
@@ -65,6 +65,8 @@ let started = false;
 let offHalt: (() => void) | null = null;
 /** Bumped by every dial RR73 sets, so an older one waiting for receive gives way. */
 let tuneGen = 0;
+/** The link's mayBeKeyed as last mirrored: its changes are what the stored leftKeyed follows. */
+let lastMayBeKeyed = false;
 /** The menu settings last copied to `rig`: $state proxies cannot be compared with the radio's object. */
 let menuSeen: RadioState['settings'] | null = null;
 
@@ -108,11 +110,26 @@ function mirror(s: RadioState) {
     rig.menu = { ...s.settings };
   }
   rig.keyed = s.keyed;
+  rig.transmitting = s.transmitting;
+  rig.mayBeKeyed = s.mayBeKeyed;
+  // Kept across reloads, set at PTT on and cleared when a read confirms receive: the next
+  // connection sends PTT off if the radio still transmits.
+  if (s.mayBeKeyed !== lastMayBeKeyed) {
+    lastMayBeKeyed = s.mayBeKeyed;
+    setLeftKeyed(s.mayBeKeyed);
+  } else if (!s.mayBeKeyed && s.transmitting === false) setLeftKeyed(false);
+  // The KX2's MIC BTN as last read decides whether RR73 may open its port by itself.
+  const micBtn = s.settings.mic_btn;
+  if (settings.cat.radio === 'kx2' && micBtn !== undefined && micBtn >= 0 && settings.cat.kx2MicBtn !== micBtn) void updateSettings({ cat: { ...settings.cat, kx2MicBtn: micBtn } });
   // PTT off unconfirmed: every mode's status line says so and Tx goes off, as the operator has to
   // unkey the radio; Rig control gives the detail.
   if (s.unkeyFailed && !rig.unkeyFailed) radioNotice(STATUS.pttUnconfirmed, true, true);
   rig.unkeyFailed = s.unkeyFailed;
   follow(s.hz);
+}
+
+function setLeftKeyed(v: boolean) {
+  if (settings.cat.leftKeyed !== v) void updateSettings({ cat: { ...settings.cat, leftKeyed: v } });
 }
 
 function fail(error: 'busy' | 'signals' | 'failed' | 'no-wasm' | 'gone' | 'choose') {
@@ -149,6 +166,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   current = me;
   lastBand = undefined;
   menuSeen = null;
+  lastMayBeKeyed = false;
   radio.onChange((s) => {
     if (current === me) mirror(s);
   });
@@ -170,9 +188,34 @@ async function open(port: SerialPortLike): Promise<boolean> {
   radio.onRestore((restored) => {
     if (current === me && !restored) radioNotice(STATUS.rxDialFailed, true, true);
   });
-  provideKeyer(radio);
-  radio.start({ recover, shifted: recoverShift });
+  // Keyed by TX outside DATA A, the KX2 transmits in the mode it is in: the status line says so.
+  provideKeyer(
+    kx2
+      ? {
+          key: (maxMs, shiftHz) => {
+            if (rigInDataMode() === false) radioNotice(STATUS.radioMode(rigModeText()));
+            return radio.key(maxMs, shiftHz);
+          },
+        }
+      : radio,
+  );
+  // PTT off at once if the radio transmits and RR73 may have left it keyed (this page lost the port,
+  // or an earlier page went while keyed), or keys it by CAT.
+  radio.start({ recover: recover || settings.cat.leftKeyed || settings.cat.keyPtt, shifted: recoverShift });
   return true;
+}
+
+/**
+ * True when RR73 may open the port by itself: always for the IC-705; for the KX2 only after it read
+ * MIC BTN OFF, as every open asserts RTS, which the Digirig's KX cable takes to the MIC jack's PTT.
+ */
+function mayOpenByItself(): boolean {
+  return settings.cat.radio !== 'kx2' || settings.cat.kx2MicBtn === 0;
+}
+
+/** Reads the KX2's MIC BTN again, as when Rig control opens: the operator may have changed it at the radio. */
+export function rereadMicBtn() {
+  if (settings.cat.radio === 'kx2' && rigConnected()) current?.radio.rereadSetting('mic_btn');
 }
 
 /** The port went away: Tx goes off as when audio stops, and the status line says so. */
@@ -214,6 +257,8 @@ async function closeCurrent(): Promise<boolean> {
     halt();
     await c.radio.dialRestored();
   }
+  // The link no longer mirrors: its confirmation, or the lack of one, is kept here.
+  setLeftKeyed(!confirmed);
   c.radio.close();
   await c.link.close();
   return confirmed;
@@ -400,6 +445,9 @@ export async function testKeying(): Promise<void> {
   const keyed = during.ok && during.event.type === 'transmit' ? during.event.on : null;
   if (!confirmed) done(false, UNKEY_TEST);
   else if (keyed === false) done(false, stayedInReceive());
+  // TX keys the KX2 in any mode: in CW TQ1 may mean armed only (Programmer's Reference p. 27).
+  else if (settings.cat.radio === 'kx2' && rigInDataMode() === false)
+    done(false, `Keyed and released at ${utcTime(Date.now())} UTC, in ${rigModeText()}. The KX2 was not in DATA A: choose a band to set it.`);
   else done(true, `Keyed and released at ${utcTime(Date.now())} UTC.`);
 }
 
@@ -423,7 +471,12 @@ export async function setKx2Baud(baud: Kx2Baud): Promise<void> {
   const c = current;
   if (!c || settings.cat.radio !== 'kx2') return;
   recover = !(await closeCurrent());
-  await open(c.port);
+  if (mayOpenByItself()) await open(c.port);
+  else {
+    // Closed at the old rate; Connect radio opens it at the new one.
+    rig.status = 'off';
+    rig.error = null;
+  }
 }
 
 /**
@@ -444,10 +497,10 @@ export async function initCat(): Promise<void> {
     if (c && (settings.cat.keyPtt || c.radio.holdsPtt)) c.radio.unkeyAll();
   });
   api.addEventListener?.('connect', () => {
-    if (settings.cat.connect && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api);
+    if (settings.cat.connect && mayOpenByItself() && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api);
   });
   void deps.wasm();
-  if (settings.cat.connect) await reconnect(api);
+  if (settings.cat.connect && mayOpenByItself()) await reconnect(api);
 }
 
 /** Replaces the browser's Web Serial and the WebAssembly loader; tests only. */
@@ -465,6 +518,7 @@ export function resetCat() {
   lastBand = undefined;
   started = false;
   menuSeen = null;
+  lastMayBeKeyed = false;
   tuneGen++;
   resetRig();
 }

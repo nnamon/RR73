@@ -18,6 +18,9 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await expect(page.getByRole('combobox', { name: 'Baud rate' })).toHaveValue('4800');
   await expect(page.getByRole('switch', { name: /^Keep Tx audio centred/ })).toHaveCount(0);
   await expect(page.getByTestId('rig-help')).toHaveText('Plug in the Digirig by USB, tap Connect radio, then choose the Digirig’s CP210x serial port.');
+  // Before the port first opens: set MIC BTN to OFF. Not yet an error, as nothing was read.
+  await expect(page.getByTestId('rig-micbtn')).toContainText('Set MENU › MIC BTN to OFF on the KX2 before you connect');
+  await expect(page.getByTestId('rig-micbtn')).not.toHaveClass(/err/);
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
   await expect(page.getByTestId('rig-dial')).toHaveText('14.076 MHz USB');
@@ -31,7 +34,13 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await expect(page.getByRole('listitem').filter({ hasText: 'Model' })).toContainText('KX2');
   await expect(page.getByRole('listitem').filter({ hasText: 'MIC BTN' })).toContainText('PTT UP.DN');
   await expect(page.getByRole('listitem').filter({ hasText: 'VOX' })).toContainText('Off');
-  await expect(page.getByTestId('rig-advice').filter({ hasText: 'MIC BTN' })).toContainText('Set MENU › MIC BTN to OFF.');
+  const micAdvice = page.getByTestId('rig-advice').filter({ hasText: 'MIC BTN reads' });
+  await expect(micAdvice).toContainText('Set MENU › MIC BTN to OFF.');
+  await expect(micAdvice).toHaveClass(/err/);
+  // Connected in USB: TX would transmit in USB.
+  await expect(page.getByTestId('rig-mode')).toHaveText('The KX2 is in USB. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Filter' })).toContainText('2.80 kHz');
+  await expect(page.getByRole('listitem').filter({ hasText: 'Split' })).toContainText('Off');
   expect(await page.evaluate(() => window.__kx2.menu)).toBe(255);
 
   await page.evaluate(() => (location.hash = '#/'));
@@ -58,16 +67,49 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await page.evaluate(() => window.__kx2.turnDial(21_076_000));
   await expect(band).toContainText('15m', { timeout: 2000 });
 
-  // The port allowed before opens again by itself when the app opens.
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await expect(page.getByTestId('rig-mode')).toHaveCount(0);
+
+  // MIC BTN read PTT: the port allowed before stays closed when the app opens, and the advice is
+  // an error until Connect radio reads MIC BTN OFF.
+  await page.reload();
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await expect(page.getByTestId('rig-status')).toHaveText('Off');
+  await expect(page.getByTestId('rig-micbtn')).toHaveClass(/err/);
+  expect(await page.evaluate(() => window.__kx2.opened)).toBe(false);
+  await expect(page.getByRole('radio', { name: /Elecraft KX2/ })).toHaveAttribute('aria-checked', 'true');
+});
+
+test('after MIC BTN read OFF, the port allowed before opens again by itself when the app opens', async ({ page }) => {
+  await installFakeKx2(page, { micBtn: 0 });
+  await page.goto('./');
+  await connectKx2(page);
+  await expect(page.getByRole('listitem').filter({ hasText: 'MIC BTN' })).toContainText('OFF');
+  await expect(page.getByTestId('rig-advice').filter({ hasText: 'MIC BTN reads' })).toHaveCount(0);
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
-  await expect(page.getByRole('radio', { name: /Elecraft KX2/ })).toHaveAttribute('aria-checked', 'true');
+  expect(await page.evaluate(() => [window.__kx2.dtr, window.__kx2.rts])).toEqual([false, false]);
   expect(await kx2Ptt(page)).toEqual([]);
 });
 
+test('a KX2 already transmitting at connecting shows Transmitting; with Key the radio with CAT on, RR73 sends RX', async ({ page }) => {
+  await installFakeKx2(page, { tx: true, micBtn: 0 });
+  await page.goto('./');
+  await connectKx2(page, 'Transmitting');
+  await expect(page.getByTestId('rig-help')).toHaveText('The KX2 reports transmitting, and RR73 holds no PTT: VOX, its own PTT or another program keys it.');
+  expect(await kx2Ptt(page)).toEqual([]);
+  // Key the radio with CAT on, and connect again: RX, confirmed.
+  await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
+  await page.getByRole('button', { name: 'Disconnect radio' }).click();
+  await page.getByRole('button', { name: 'Connect radio' }).click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+  expect((await kx2Ptt(page)).map((w) => w.text)).toEqual(['RX;TQ;']);
+  expect(await page.evaluate(() => window.__kx2.transmit)).toBe(false);
+});
+
 test('a new baud rate opens the port again at that rate, with the lines lowered and no TX', async ({ page }) => {
-  await installFakeKx2(page);
+  await installFakeKx2(page, { micBtn: 0 });
   await page.goto('./');
   await connectKx2(page);
   await page.getByRole('combobox', { name: 'Baud rate' }).selectOption('38400');
@@ -80,6 +122,8 @@ test('a new baud rate opens the port again at that rate, with the lines lowered 
 test('Test keying keys a KX2 with TX for 1 s and releases it with RX, with Key the radio with CAT off', async ({ page }) => {
   await installFakeKx2(page);
   await page.goto('./');
+  // DATA A, as the band sheet sets it.
+  await page.evaluate(() => (window.__kx2.mode = 6));
   await connectKx2(page);
   await expect(page.getByRole('switch', { name: /^Key the radio with CAT/ })).not.toBeChecked();
   await page.getByRole('button', { name: 'Test keying' }).click();

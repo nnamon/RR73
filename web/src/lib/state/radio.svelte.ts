@@ -54,6 +54,10 @@ export const rig = $state({
   menu: {} as Partial<Record<SettingId, number>>,
   /** RR73 holds PTT on. */
   keyed: false,
+  /** Transmit or receive, as the radio last reported it; null before the first report. */
+  transmitting: null as boolean | null,
+  /** From PTT on until a read confirmed PTT off: RR73 may hold the radio keyed. */
+  mayBeKeyed: false,
   /** PTT off went out and no read confirmed receive after it: the radio may still transmit. */
   unkeyFailed: false,
   tuning: null as RigTuning | null,
@@ -232,6 +236,6 @@ export function radioNotice(text: string, txOff = false, always = false) {
 
 /** Forgets the radio's state, as after Disconnect radio; tests use it to start again. */
 export function resetRig() {
-  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, sub: null, menu: {}, keyed: false, unkeyFailed: false, tuning: null, test: null });
+  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, sub: null, menu: {}, keyed: false, transmitting: null, mayBeKeyed: false, unkeyFailed: false, tuning: null, test: null });
   keyer = null;
 }
