@@ -21,8 +21,11 @@
 :root {
   color-scheme: light dark;
 
-  /* Type: the iOS text styles at the default Dynamic Type size. */
-  --rr-sans: -apple-system, blinkmacsystemfont, "SF Pro Text", "Helvetica Neue", arial, sans-serif;
+  /*
+   * Type: the iOS text styles at the default Dynamic Type size. Apple's system fonts first, then
+   * Windows 11's and Windows 10's UI fonts for Chrome and Edge on Windows.
+   */
+  --rr-sans: -apple-system, blinkmacsystemfont, "SF Pro Text", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", arial, sans-serif;
   --rr-mono: ui-monospace, "SF Mono", menlo, "Roboto Mono", monospace;
   --rr-text-large-title: 34px;
   --rr-text-title: 22px;
