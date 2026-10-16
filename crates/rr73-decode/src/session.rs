@@ -8,10 +8,12 @@
 //! stage gives exactly what [`crate::decode`] gives for that configuration.
 //!
 //! [`DecodeSession::step`] does one bounded unit of work: set up a stage or a pass, compute
-//! 32 spectrogram frames, transform the pass's audio for the block demodulator, search 8
-//! frames of candidate positions, try 16 candidates (16 sets of soft bits with the block
-//! demodulator, which tries several per candidate), or subtract 2 decodes. A caller that
-//! must stop for a new slot stops between steps; everything already returned stays valid.
+//! 16 spectrogram frames, transform the pass's audio for the block demodulator, search 4
+//! frames of candidate positions, try 4 candidates (4 sets of soft bits, at least one
+//! candidate, with the block demodulator, which tries several per candidate), or subtract 1
+//! decode. A caller that must stop for a new slot stops between steps; everything already
+//! returned stays valid. On an M4 the longest step does about 4 ms of work in a browser
+//! worker (experiment 0009).
 
 use rr73_dsp::{SpectrogramConfig, SpectrogramPlan};
 use rr73_ft8::Mode;
@@ -28,13 +30,13 @@ use crate::validate::{Rejection, Validated};
 use crate::view::{Candidate, SymbolView, frame_range};
 
 /// Spectrogram frames computed per step (even, so frames pair as in one pass).
-const SPECTROGRAM_FRAMES_PER_STEP: usize = 32;
+const SPECTROGRAM_FRAMES_PER_STEP: usize = 16;
 /// Candidate positions searched per step, in spectrogram frames.
-const SEARCH_FRAMES_PER_STEP: i32 = 8;
+const SEARCH_FRAMES_PER_STEP: i32 = 4;
 /// Candidates tried per step.
-const CANDIDATES_PER_STEP: usize = 16;
+const CANDIDATES_PER_STEP: usize = 4;
 /// Decodes subtracted per step.
-const SUBTRACTIONS_PER_STEP: usize = 2;
+const SUBTRACTIONS_PER_STEP: usize = 1;
 
 /// One stage of a session.
 #[derive(Debug)]
