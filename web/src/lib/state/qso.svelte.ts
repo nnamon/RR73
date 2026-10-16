@@ -20,6 +20,7 @@ import type { Decode } from '../decode/types';
 import type { BandId } from '../radio/bands';
 import { PRESET } from '../decode/worker-client';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
+import { wake } from '../clock/wake';
 import { webAudioOut } from '../tx/web-audio';
 import { playClip, silentClipUri } from '../audio/unlock';
 import { clampHz } from '../waterfall/pick';
@@ -135,6 +136,9 @@ const scheduler = new TxScheduler({
   report: onTxReport,
   keyer: txKeyer,
   shift: txShiftHz,
+  // The wait for the pre-roll keeps time while the page is hidden (lib/clock/wake.ts).
+  timer: (fn, ms) => wake.set(fn, ms),
+  clear: (h) => wake.clear(h),
 });
 
 /** Applies one event to the sequencer and carries out its effects. */
@@ -454,7 +458,7 @@ export function startQso() {
     }
     if (on || !txOff || always) qso.notice = { kind: 'refused', text, atMs: Date.now() };
   });
-  setInterval(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
+  wake.every(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
   let lastTouch = 0;
   window.addEventListener(
     'pointerdown',

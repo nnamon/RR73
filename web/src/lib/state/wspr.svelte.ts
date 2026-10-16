@@ -14,6 +14,7 @@ import { playClip, silentClipUri } from '../audio/unlock';
 import { dialHz } from '../radio/bands';
 import { STATUS } from '../qso/status';
 import { TxScheduler, type TxReport } from '../tx/scheduler';
+import { wake } from '../clock/wake';
 import { webAudioOut } from '../tx/web-audio';
 import { beaconMessages } from '../wspr/message';
 import { beaconOnSlot, durationText, minGapSlots, nextStopAfter, nextTxSlot, onceSlotAt, stopsAtMs, TX_OFFSET_S, TX_SECONDS, LEAD_MS, WSPR_SLOT_MS } from '../wspr/schedule';
@@ -113,6 +114,9 @@ const scheduler = new TxScheduler({
   gate: () => (audio.status !== 'running' ? STATUS.audioOff : rigGate()),
   report: onReport,
   keyer: txKeyer,
+  // The wait for the pre-roll keeps time while the page is hidden (lib/clock/wake.ts).
+  timer: (fn, ms) => wake.set(fn, ms),
+  clear: (h) => wake.clear(h),
 });
 
 function notice(text: string, nowMs = Date.now()) {
@@ -396,7 +400,7 @@ export function startWspr() {
       notice(STATUS.beaconOff);
     }
   });
-  setInterval(() => tick(Date.now()), 1000);
+  wake.every(() => tick(Date.now()), 1000);
   $effect.root(() => {
     // A change of mode stops the beacon; a change of band ends a transmission and keeps it on.
     let mode = settings.mode;

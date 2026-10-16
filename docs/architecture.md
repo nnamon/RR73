@@ -141,7 +141,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | Module | Responsibility |
 | --- | --- |
 | `lib/audio` | AudioContext lifecycle, iOS audio session, input sources (the microphone or the practice band), microphone constraints and the applied-settings report, capture worklet (resample to 12 kHz, timestamps), playback scheduling, and the output device in Chromium (`sink.ts`). |
-| `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction. |
+| `lib/clock` | UTC slot arithmetic, mapping between audio-clock time and UTC, DT-based offset correction, and the wake timers that keep transmit timing in a hidden page (`wake.ts`, decision 0010). |
 | `lib/slots` | Slot assembly from the 12 kHz stream, slot recording to WAV. |
 | `lib/waterfall` | Display spectrum and rendering in a worker with OffscreenCanvas; the callsign labels over FT8 and FT4 signals (`calls.ts`), placed on the page from the slot lines the worker reports. |
 | `lib/decode` | Decoder workers wrapping `rr73-wasm`. An FT8 or FT4 slot is decoded with the shipped preset and its decodes go to the list and the sequencer at once; the worker then runs the later stages (`DEEP` in `worker-client.ts`) as a `DecoderSession` in slices of at most 40 ms, answering encoder requests between slices, and adds what they find to the slot in the list and passes it to the sequencer as a later pass of the slot. They stop when done, 2 s after the slot's decoding started, or when the next slot arrives (`docs/decisions/0007-deeper-ft8-stages.md`). |
@@ -169,7 +169,7 @@ The display spectrum and the decoder's spectrogram are separate on purpose: the 
 - Audio is captured at the context rate (48 kHz on iPhone), resampled to exactly 12 kHz in the worklet, and every chunk carries the audio-clock time of its first sample.
 - The slot assembler hands the first 13.5 s of each FT8 slot and the first 6 s of each FT4 slot to an early decoding pass while the slot is still being received; the whole slot follows at its end, and its decodes join the early pass's (experiment 0006).
 - The audio clock is mapped to UTC with `AudioContext.getOutputTimestamp()` and `Date.now()`, or with `currentTime` paired with `performance.now()` where output timestamps are missing or wrong. The capture worklet stamps each block from `currentFrame` and fills or restarts across render quanta it never saw. Input latency is unknown on iOS, so the receive calibration (`lib/clock/calibration.ts`) measures the residual offset from the median DT of strong decodes and moves capture stamps only; transmit scheduling never uses it. The same median measures the phone's clock: from 1 s off (off again below 0.8 s) a Clock badge in the top bar and a status line notice say so, and Settings › Radio and audio › Timing gives the effect on the air and the fix.
-- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X. With rig control keying the radio, PTT goes on 0.5 s before the audio and the audio waits for the radio's OK, so it still starts on time (`docs/design/cat.md`, Transmit).
+- Transmit audio is scheduled on the audio clock for the slot edge plus 0.5 s (FT8, FT4) or 1 s (WSPR), as in WSJT-X. The wait until 0.5 s before it, and the 1 s ticks that hand over transmissions, run on wake timers, which a dedicated worker keeps on time while Chromium throttles a hidden page's timers (`lib/clock/wake.ts`). With rig control keying the radio, PTT goes on 0.5 s before the audio and the audio waits for the radio's OK, so it still starts on time (`docs/design/cat.md`, Transmit).
 - RTTY has no slots: a transmission starts at once and streams. The keyboard worker renders 0.1 s blocks to the stream worklet over a MessageChannel, 0.3 s ahead of the audio thread; the app hands the transmitter at most 0.4 s of text. Capture skips the slot assembler and goes to the keyboard worker, except while on air.
 
 ## Updates
@@ -180,6 +180,7 @@ The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A
 
 - Safari on iOS 26 is the target. No Web Serial, WebUSB, Web Bluetooth, UDP or background execution.
 - Desktop Chrome and Edge add Web Serial, which rig control uses (`docs/design/cat.md`). The rig control settings show only where it exists.
+- Desktop Chrome and Edge keep capture running in a hidden page: RR73 receives, decodes and transmits there with its window minimised, covered or in a background tab. Elsewhere hiding stops capture and Tx, as on iOS (`docs/decisions/0010-hidden-window.md`).
 - GitHub Pages cannot send cross-origin isolation headers, so workers receive copies of slot audio. Shared memory waits for a measured gain.
 - Every network call has an offline path. The log is the source of truth; destinations get copies.
 

@@ -25,6 +25,7 @@ import { settings, updateSettings } from './settings.svelte';
 import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { onAudioChunk, onAudioStatus, onHalt, outputContext } from './station.svelte';
 import { PTT_SETTLE_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
+import { wake } from '../clock/wake';
 
 /** Audio kept for Save 2 min of audio, s at 12 kHz. */
 const KEEP_S = 120;
@@ -336,7 +337,8 @@ export function startKeyboard() {
       session.notice = { text: STATUS.audioStopped, atMs: Date.now() };
     }
   });
-  setInterval(() => {
+  // Repeat CQ's start keeps time while the page is hidden (lib/clock/wake.ts).
+  wake.every(() => {
     if (isKeyboard(settings.mode) || session.tx !== 'off' || session.repeat.on) session.tick();
   }, 1000);
   watchViewport();

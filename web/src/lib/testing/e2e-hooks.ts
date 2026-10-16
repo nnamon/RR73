@@ -10,8 +10,8 @@ import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
 import type { TxNum } from '../qso/messages';
 import { qso } from '../state/qso.svelte';
-import { settings, updateSettings, type Theme } from '../state/settings.svelte';
-import { audioOut, deliverDecodes, deliverEarly, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
+import { settings, updateSettings, type Settings, type Theme } from '../state/settings.svelte';
+import { audio, audioOut, band, deliverDecodes, deliverEarly, deliverWspr, noteHeardBack, onAudioChunk } from '../state/station.svelte';
 import { isFt } from '../clock/slots';
 import type { WsprDecode } from '../wspr/spots';
 import { TX_SECONDS } from '../wspr/schedule';
@@ -66,6 +66,10 @@ export interface E2eHooks {
   suspendAudio(): Promise<void>;
   /** Read Wavelog's log: reads what is new now, as the 5-minute check does, and waits for it. */
   wavelogCheck(): Promise<void>;
+  /** Changes settings as the operator would. */
+  settings(patch: Partial<Settings>): Promise<void>;
+  /** The audio status and the FT8 and FT4 slots in the decode list, newest first, with their decode times, ms. */
+  station(): { audio: string; onAirStartMs: number | null; slots: { startUtcMs: number; decodes: number; ms: number; skipped: boolean; early: boolean }[] };
 }
 
 declare global {
@@ -136,6 +140,12 @@ export function installE2eHooks() {
       await audioOut()?.ctx.suspend();
     },
     wavelogCheck: () => checkWavelogNow(),
+    settings: (patch) => updateSettings(patch),
+    station: () => ({
+      audio: audio.status,
+      onAirStartMs: qso.onAir?.startMs ?? null,
+      slots: band.slots.map((s) => ({ startUtcMs: s.startUtcMs, decodes: s.decodes.length, ms: s.ms, skipped: !!s.skipped, early: !!s.early })),
+    }),
     wsprState: () => ({
       onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
       next: wspr.next?.slotStartMs ?? null,

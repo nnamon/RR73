@@ -3,9 +3,10 @@
  * screens. Capture chunks flow to the slot assembler (then the recorder and the decoder) and to
  * whoever listens for the waterfall.
  *
- * Transmit safety: only Tune plays, and output halts when audio stops, when the page is hidden
- * or closed, and on Halt. With rig control keying the radio (lib/state/radio.svelte.ts), Tune keys
- * it by PTT first, and Halt's hooks send PTT off (lib/state/cat.svelte.ts).
+ * Transmit safety: only Tune plays, and output halts when audio stops, when the page is closed,
+ * when it is hidden where hiding stops capture (iOS), and on Halt. With rig control keying the
+ * radio (lib/state/radio.svelte.ts), Tune keys it by PTT first, and Halt's hooks send PTT off
+ * (lib/state/cat.svelte.ts).
  */
 
 import { CaptureEngine, type Chunk, type InputSource, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
@@ -36,6 +37,7 @@ import { noteLoadFailure } from '../app/update.svelte';
 import { dialNow, radioNotice, rig, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 import { STATUS } from '../qso/status';
+import { capturesHidden } from '../app/platform';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -836,8 +838,11 @@ export function busy(): boolean {
 }
 
 if (typeof document !== 'undefined') {
+  // Desktop Chromium keeps receiving in a hidden page, and the transmit timers keep time there
+  // (lib/clock/wake.ts, docs/decisions/0010-hidden-window.md), so Tx carries on. Elsewhere hiding
+  // stops capture, and output with it.
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'hidden') halt();
+    if (document.visibilityState === 'hidden' && !capturesHidden(navigator)) halt();
   });
   window.addEventListener('pagehide', () => halt());
 }

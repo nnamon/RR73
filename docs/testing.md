@@ -54,6 +54,18 @@ These tests needed retries while they ran in the `chromium` project, for two rea
 
 `e2e/hound.spec.ts` runs Hound with injected decodes: the band sheet's dial frequency (refused outside the band, then set), calling the Fox, the report read from a multi-call message, and the Hound item in •••. CI runs it in light at 375 x 667; the review projects run it in both themes at both sizes and save its 4 screenshots.
 
+## A hidden window
+
+Playwright keeps every page visible and starts Chromium with timer throttling off, so the end-to-end tests cannot hide RR73. `web/e2e/hidden-window/measure.mjs` launches Playwright's Chromium itself, in new headless mode, drives it over the DevTools protocol, and hides RR73 behind a second tab. It records each transmission's start against slot + 0.5 s with the output worklet of `tap.ts`, the start the scheduler gave it, how late a chained 250 ms page timer runs, and the slots decoded while hidden, to `web/test-results`:
+
+```sh
+docker compose run --rm e2e sh web/e2e/hidden-window/run.sh --build --scenario silent    # CQ after 1 and 10 min hidden
+docker compose run --rm e2e sh web/e2e/hidden-window/run.sh --scenario audible           # Tx every 30 s for 11 min hidden
+docker compose run --rm e2e sh web/e2e/hidden-window/run.sh --scenario visible           # the same in front, to compare
+```
+
+`--scale 0.1` runs the minutes at a tenth for a quick check. The measurements and the decision are in `docs/decisions/0010-hidden-window.md`. `e2e/audio.spec.ts` checks the app's rule with a hidden page simulated: desktop Chromium keeps receiving, and with an iPhone's user agent the page stops audio and waits for Resume audio.
+
 ## Audio tests on a loaded host
 
 Tests that need received audio play a WAV as Chromium's fake microphone (`--use-file-for-fake-audio-capture` in `web/playwright.config.ts`). Chromium loops the file from the moment capture starts and feeds it in real time. When the Docker VM runs short of CPU, that feed falls behind: the missing audio comes back as runs of zeros, which the app mostly records as ordinary samples, and the audio after each run sits later than it should. A transmission cut that way decodes badly: slots that lost 0.3 s or more decoded at most 1 of 4 messages.

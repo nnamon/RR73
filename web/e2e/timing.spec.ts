@@ -46,12 +46,7 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   // A stop and a fresh start leave a resume record with the mapping offset before and after. The
   // offset is negative when the audio clock's mapping runs early, as on a loaded host; the app
   // writes the minus as U+2212 (signed() in src/lib/clock/format.ts).
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  await page.evaluate(() => window.__rr73!.suspendAudio());
   await page.getByRole('button', { name: 'Start audio' }).click();
   await expect(page.getByTestId('timing-source')).toHaveText('Output timestamps', { timeout: 15_000 });
   await expect(page.getByTestId('timing')).toContainText(/\d\d:\d\d:\d\d to \d\d:\d\d:\d\d UTC: offset \u2212?\d+ ms before, \u2212?\d+ ms after/);

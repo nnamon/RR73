@@ -233,6 +233,22 @@ describe('CaptureEngine', () => {
     expect((await engine.resume()).status).toBe('running');
   });
 
+  it('keeps capturing while hidden where the browser keeps capture running, and still stops when the browser stops it', async () => {
+    const { engine, ctx, nodes } = setup({ capturesHidden: () => true });
+    await engine.start();
+    setVisibility('hidden');
+    expect(engine.state.status).toBe('running');
+    expect(ctx.suspend).not.toHaveBeenCalled();
+    const got: number[] = [];
+    engine.onChunk((c) => got.push(c.index));
+    ctx.currentTime = 2;
+    for (let i = 0; i < 6; i++) nodes[0].post(chunk(i * 512, 1.5 - (5 - i) * CHUNK_S));
+    expect(got.length).toBeGreaterThan(0);
+    // The browser suspending the context while hidden is a stop as any other.
+    ctx.setState('suspended');
+    expect(engine.state).toMatchObject({ status: 'stopped', reason: 'suspended' });
+  });
+
   it('stops when the input ends and opens it again on resume', async () => {
     const { engine, streams, deps } = setup();
     await engine.start();

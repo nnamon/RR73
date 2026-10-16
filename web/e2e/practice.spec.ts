@@ -176,11 +176,8 @@ test('audio stopping in a QSO whose reports have gone both ways offers Log QSO, 
   await expect(rreport).toBeVisible({ timeout: 150_000 });
   const call = (await rreport.locator('.c-msg').textContent())!.split(' ')[1];
 
-  // RR73 leaves the screen: the audio stops before the QSO is logged.
-  await page.evaluate(() => {
-    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
-    document.dispatchEvent(new Event('visibilitychange'));
-  });
+  // The system takes the audio: it stops before the QSO is logged.
+  await page.evaluate(() => window.__rr73!.suspendAudio());
   const banner = page.getByRole('status').filter({ hasText: 'Audio stopped at' });
   await expect(banner).toBeVisible();
   await banner.getByRole('button', { name: `Log the QSO with ${call}` }).click();

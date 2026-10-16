@@ -5,7 +5,10 @@
  *
  * Interruptions stop capture and wait for a tap: the context leaving "running" (a phone call
  * on iOS shows as "interrupted"), the input track ending or going mute, and the page being
- * hidden. The engine reports the UTC time of the last audio it received.
+ * hidden where the browser stops capture in the background (iOS). Desktop Chromium keeps the
+ * microphone and the context running in a hidden page, so there capture carries on, and only the
+ * browser's own stops end it (lib/app/platform.ts). The engine reports the UTC time of the last
+ * audio it received.
  */
 
 import workletUrl from './capture.worklet.ts?worker&url';
@@ -17,6 +20,7 @@ import { RateMeter, type CaptureReport } from './report';
 import { setAudioSession } from './session';
 import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
 import { applySink, type OutputError, type OutputState, type SinkContext } from './sink';
+import { capturesHidden } from '../app/platform';
 
 export type { InputSource, StartError } from './input';
 export type { OutputState } from './sink';
@@ -57,6 +61,8 @@ export interface EngineDeps {
   perfNow(): number;
   secure(): boolean;
   setSession(): string | null;
+  /** True where capture keeps running while the page is hidden; false or absent, hiding stops it. */
+  capturesHidden?(): boolean;
 }
 
 const loaded = new WeakSet<BaseAudioContext>();
@@ -88,6 +94,7 @@ export function browserDeps(): EngineDeps {
     perfNow: () => performance.now(),
     secure: () => typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
     setSession: () => setAudioSession('play-and-record'),
+    capturesHidden: () => capturesHidden(typeof navigator === 'undefined' ? undefined : navigator),
   };
 }
 
@@ -139,7 +146,7 @@ export class CaptureEngine {
     this.deps = deps;
     this.input = input ?? microphoneInput(deps);
     deps.doc.addEventListener('visibilitychange', () => {
-      if (deps.doc.visibilityState === 'hidden') this.interrupt('hidden');
+      if (deps.doc.visibilityState === 'hidden' && !deps.capturesHidden?.()) this.interrupt('hidden');
     });
   }
 
