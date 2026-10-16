@@ -62,7 +62,7 @@
 
   // What Wavelog's log holds counts for the colours too, with Read Wavelog's log on.
   const ownIndex = $derived(buildLogIndex(log.live, countries));
-  const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex(countries)));
+  const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex()));
   const colourOf = $derived.by(() => {
     const index = logIndex;
     const me = settings.callsign;

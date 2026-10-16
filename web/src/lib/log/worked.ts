@@ -11,7 +11,7 @@
  * `place` answers null, so nothing counts as new.
  *
  * What Wavelog's log holds (wavelog-worked.ts) is indexed by the same rules from its keys
- * (buildKeysIndex) and laid over the phone's log (mergeLogIndex) for decode colours only.
+ * (IndexBuilder, in slices) and laid over the phone's log (mergeLogIndex) for decode colours only.
  */
 
 import { baseCall } from '../decode/marking';
@@ -101,37 +101,71 @@ function placer(countries: DxccIndex | null | undefined): (call: string) => Plac
 }
 
 
-/** Indexes the QSOs that are not deleted; `countries` places them for the DXCC, continent and zone sets. */
-export function buildLogIndex(qsos: readonly IndexedQso[], countries?: DxccIndex | null): LogIndex {
-  const calls = new Set<string>();
-  const grids = new Set<string>();
-  const callsByBand = new Map<string, Set<string>>();
-  const gridsByBand = new Map<string, Set<string>>();
-  const callsByBandMode = new Map<string, Set<string>>();
-  const place = placer(countries);
-  const places = Object.fromEntries(PLACE_KINDS.map((k) => [k, { all: new Set<string>(), byBand: new Map<string, Set<string>>() }])) as Record<PlaceKind, { all: Set<string>; byBand: Map<string, Set<string>> }>;
-  for (const q of qsos) {
+/**
+ * A log index that grows a QSO or a key at a time, so a large one can be built in slices
+ * (slices.ts) and added to in place. `index` is live: what goes in shows in its sets at once.
+ */
+export class IndexBuilder {
+  readonly index: LogIndex;
+  private readonly calls = new Set<string>();
+  private readonly grids = new Set<string>();
+  private readonly callsByBand = new Map<string, Set<string>>();
+  private readonly gridsByBand = new Map<string, Set<string>>();
+  private readonly callsByBandMode = new Map<string, Set<string>>();
+  private readonly places: Record<PlaceKind, { all: Set<string>; byBand: Map<string, Set<string>> }>;
+  private readonly place: (call: string) => Place | null;
+
+  /** `countries` places calls for the DXCC, continent and zone sets. */
+  constructor(countries?: DxccIndex | null) {
+    this.place = placer(countries);
+    this.places = { dxcc: placeSets(), continent: placeSets(), cqZone: placeSets(), ituZone: placeSets() };
+    this.index = { calls: this.calls, grids: this.grids, callsByBand: this.callsByBand, gridsByBand: this.gridsByBand, callsByBandMode: this.callsByBandMode, places: this.places, place: this.place };
+  }
+
+  addQso(q: IndexedQso): void {
     const band = q.band.toLowerCase();
     const call = callKey(q.call);
     if (call) {
-      calls.add(call);
-      add(callsByBand, band, call);
-      add(callsByBandMode, bandModeKey(band, q.submode || q.mode), call);
+      this.calls.add(call);
+      add(this.callsByBand, band, call);
+      add(this.callsByBandMode, bandModeKey(band, q.submode || q.mode), call);
     }
     const grid = gridKey(q.gridsquare);
     if (grid) {
-      grids.add(grid);
-      add(gridsByBand, band, grid);
+      this.grids.add(grid);
+      add(this.gridsByBand, band, grid);
     }
-    const p = call ? place(q.call) : null;
+    const p = call ? this.place(q.call) : null;
     if (p) {
       for (const k of PLACE_KINDS) {
-        places[k].all.add(p[k]);
-        add(places[k].byBand, band, p[k]);
+        this.places[k].all.add(p[k]);
+        add(this.places[k].byBand, band, p[k]);
       }
     }
   }
-  return { calls, grids, callsByBand, gridsByBand, callsByBandMode, places, place };
+
+  /** A call key, "VK3/9V1NE 20m FT8" (workedCallKey). */
+  addCallKey(key: string): void {
+    const [call = '', band = '', mode = ''] = key.split(' ');
+    this.addQso({ call, band, mode, submode: '', gridsquare: '' });
+  }
+
+  /** A grid key, "QF22 20m" (workedGridKey). */
+  addGridKey(key: string): void {
+    const [grid = '', band = ''] = key.split(' ');
+    this.addQso({ call: '', band, mode: '', submode: '', gridsquare: grid });
+  }
+}
+
+function placeSets() {
+  return { all: new Set<string>(), byBand: new Map<string, Set<string>>() };
+}
+
+/** Indexes the QSOs that are not deleted; `countries` places them for the DXCC, continent and zone sets. */
+export function buildLogIndex(qsos: readonly IndexedQso[], countries?: DxccIndex | null): LogIndex {
+  const b = new IndexBuilder(countries);
+  for (const q of qsos) b.addQso(q);
+  return b.index;
 }
 
 /** True when the log has no QSO in `place`'s entity, continent or zone (`kind`), on `band` when given. False for no place. */
@@ -220,29 +254,33 @@ export function workedGridKey(grid: string, band: string): string {
   return g ? `${g} ${band.trim().toLowerCase().replace(/\s+/g, '')}` : '';
 }
 
-/** Indexes worked keys by the same rules as the log's QSOs. */
+/** Indexes worked keys by the same rules as the log's QSOs, in one go; IndexBuilder builds it in slices. */
 export function buildKeysIndex(keys: WorkedKeys, countries?: DxccIndex | null): LogIndex {
-  const rows: IndexedQso[] = [];
-  for (const k of keys.calls) {
-    const [call = '', band = '', mode = ''] = k.split(' ');
-    rows.push({ call, band, mode, submode: '', gridsquare: '' });
-  }
-  for (const k of keys.grids) {
-    const [grid = '', band = ''] = k.split(' ');
-    rows.push({ call: '', band, mode: '', submode: '', gridsquare: grid });
-  }
-  return buildLogIndex(rows, countries);
+  const b = new IndexBuilder(countries);
+  for (const k of keys.calls) b.addCallKey(k);
+  for (const k of keys.grids) b.addGridKey(k);
+  return b.index;
 }
 
-/** The bands and modes `call` (by its base callsign) has in worked keys, as "20m FT8", lowest band first. */
-export function bandModesOf(keys: WorkedKeys, call: string): string[] {
-  const want = callKey(call);
-  if (!want) return [];
-  const out = new Set<string>();
-  for (const k of keys.calls) {
-    const [c = '', band = '', mode = ''] = k.split(' ');
-    if (callKey(c) === want) out.add(`${band} ${mode}`.trim());
-  }
+/** The bands and modes `call` (by its base callsign) was worked on in `index`, as "20m FT8", lowest band first. */
+export function bandModesOf(index: LogIndex, call: string): string[] {
+  const key = callKey(call);
+  if (!key) return [];
+  const out: string[] = [];
+  for (const [bm, set] of index.callsByBandMode) if (set.has(key)) out.push(bm);
   const low = (bm: string) => bandEdges(bm.split(' ')[0])?.[0] ?? Number.MAX_SAFE_INTEGER;
-  return [...out].sort((a, b) => low(a) - low(b) || a.localeCompare(b));
+  return out.sort((a, b) => low(a) - low(b) || a.localeCompare(b));
+}
+
+/**
+ * The station sheet's Worked before: the phone's QSOs (`own`, as "20m FT8 at 09:14"), then the
+ * bands and modes only Wavelog's log holds, marked so. `ownPairs` holds the phone's "20m FT8"
+ * pairs for the station. "Not yet" when neither has any.
+ */
+export function workedBeforeText(own: readonly string[], ownPairs: ReadonlySet<string>, wavelog: readonly string[]): string {
+  const extra = wavelog.filter((p) => !ownPairs.has(p));
+  const parts: string[] = [];
+  if (own.length) parts.push(own.join(', '));
+  if (extra.length) parts.push(`${extra.join(', ')} in Wavelog`);
+  return parts.length ? parts.join(' · ') : 'Not yet';
 }

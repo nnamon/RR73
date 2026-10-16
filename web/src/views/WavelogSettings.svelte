@@ -11,7 +11,8 @@
   import { utcHm } from '../lib/clock/format';
   import { forgetWavelog, log, setWavelog, testWavelog } from '../lib/log/log.svelte';
   import { checkAddress } from '../lib/log/wavelog';
-  import { refreshFromWavelog, setReadWorked, wavelogWorked } from '../lib/log/wavelog-worked.svelte';
+  import { forgetWavelogRead, refreshFromWavelog, setReadWorked, wavelogWorked } from '../lib/log/wavelog-worked.svelte';
+  import { versionNote } from '../lib/log/wavelog-worked';
   import { practice } from '../lib/state/practice.svelte';
 
   let url = $state('');
@@ -32,6 +33,8 @@
   const w = $derived(log.wavelog);
   const test = $derived(w.lastTest);
   const read = $derived(wavelogWorked.status);
+  // What the version says about reading, from the last full read or Test connection.
+  const note = $derived(versionNote(read.version ?? test?.version));
 
   const stations = (n: number) => `${n.toLocaleString('en-GB')} ${n === 1 ? 'station' : 'stations'}`;
   const today = (ms: number) => new Date(ms).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
@@ -75,6 +78,7 @@
   async function remove() {
     removing = false;
     await forgetWavelog();
+    await forgetWavelogRead();
     url = '';
     apiKey = '';
   }
@@ -151,7 +155,8 @@
     </div>
   </div>
 
-  {#if w.url && w.apiKey}
+  <!-- With the switch on and the address or key gone, the section stays, so it can be turned off. -->
+  {#if (w.url && w.apiKey) || w.readWorked}
     <div class="section">
       <h2 class="section-head">Worked before</h2>
       <div class="group">
@@ -162,7 +167,7 @@
           </span>
           <input type="checkbox" role="switch" class="switch" checked={w.readWorked && !practice.on} disabled={practice.on} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />
         </label>
-        {#if w.readWorked && !practice.on}
+        {#if w.readWorked && !practice.on && w.url && w.apiKey}
           <button class="row act" disabled={read.readingAll} onclick={() => void refreshFromWavelog()}>
             <span class="row-main">
               <span class="row-title">{read.readingAll ? 'Reading Wavelog’s log' : 'Refresh from Wavelog'}</span>
@@ -175,6 +180,10 @@
         <p class="section-foot">Turn off the practice band to read Wavelog’s log.</p>
       {:else if w.readWorked && read.error}
         <p class="section-foot bad" role="alert">{read.error}</p>
+      {:else if note}
+        <p class="section-foot" data-testid="wavelog-version-note">{note}</p>
+      {:else if !w.url || !w.apiKey}
+        <p class="section-foot">Type the address and API key above to read Wavelog’s log.</p>
       {:else}
         <p class="section-foot">Dupes, Hunt and Repeat CQ count this phone’s log only.</p>
       {/if}

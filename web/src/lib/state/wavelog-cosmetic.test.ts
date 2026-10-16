@@ -4,26 +4,24 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { defaultHighlights, highlightDecode } from '../decode/highlight';
 import { addQso, loadLog, log } from '../log/log.svelte';
-import { addRows } from '../log/wavelog-worked';
+import { addRows, keySets } from '../log/wavelog-worked';
 import { wavelogIndex, wavelogWorked } from '../log/wavelog-worked.svelte';
-import { buildLogIndex, mergeLogIndex, type WorkedKeys } from '../log/worked';
+import { buildKeysIndex, buildLogIndex, mergeLogIndex, type LogIndex } from '../log/worked';
 import { huntCandidates, type HuntOrder, type QueueOrder } from '../qso/sequencer';
 import { Sim, T0, decode } from '../testing/qso-sim';
 import { sequencerWorked } from './qso.svelte';
 
-/** Wavelog's log: JA1KXM and K1ABC on 20m FT8, worked from another station. */
-function wavelogKeys(): WorkedKeys {
-  const calls = new Set<string>();
-  const grids = new Set<string>();
+/** Wavelog's log: JA1KXM and K1ABC on 20m FT8, worked from another station, indexed as the app holds it. */
+function wavelogKeys(): LogIndex {
+  const k = keySets();
   addRows(
     [
       { CALL: 'JA1KXM', BAND: '20m', MODE: 'FT8', SUBMODE: '', GRIDSQUARE: 'PM95' },
       { CALL: 'K1ABC', BAND: '20m', MODE: 'FT8', SUBMODE: '', GRIDSQUARE: 'FN42' },
     ],
-    calls,
-    grids,
+    k,
   );
-  return { calls, grids };
+  return buildKeysIndex(k);
 }
 
 /** CQs heard in slot 1: K1ABC strongest, then JA1KXM, then VK3QRP, which no log holds. */
@@ -36,7 +34,7 @@ beforeAll(async () => {
 });
 
 afterEach(() => {
-  wavelogWorked.keys = null;
+  wavelogWorked.index = null;
 });
 
 /** Hunt in `order` with Work dupes off, from the worked-before list the app gives the sequencer. */
@@ -60,8 +58,8 @@ function repeatCq(order: QueueOrder) {
 describe('Read Wavelog’s log', () => {
   it('colours a station worked only in Wavelog, so the test below has data that counts', () => {
     const own = buildLogIndex(log.live);
-    wavelogWorked.keys = wavelogKeys();
-    const both = mergeLogIndex(own, wavelogIndex(null));
+    wavelogWorked.index = wavelogKeys();
+    const both = mergeLogIndex(own, wavelogIndex());
     const at = { band: '20m', mode: 'FT8' };
     expect(highlightDecode({ text: 'CQ JA1KXM PM95' }, '9V1NE', own, at, defaultHighlights())).toMatchObject({ worked: false, isNew: true });
     expect(highlightDecode({ text: 'CQ JA1KXM PM95' }, '9V1NE', both, at, defaultHighlights())).toMatchObject({ worked: true, isNew: false, ink: 'worked' });
@@ -69,35 +67,35 @@ describe('Read Wavelog’s log', () => {
 
   it('never reaches the sequencer’s worked-before list', () => {
     const without = sequencerWorked();
-    wavelogWorked.keys = wavelogKeys();
+    wavelogWorked.index = wavelogKeys();
     expect(sequencerWorked()).toEqual(without);
     expect(sequencerWorked().map((w) => w.call)).toEqual(['K1ABC']);
   });
 
   it('changes neither Hunt’s pick nor its dupes, in any order', () => {
     for (const order of ['unworked', 'new', 'strongest', 'newest', 'farthest'] as const) {
-      wavelogWorked.keys = null;
+      wavelogWorked.index = null;
       const own = hunt(order);
-      wavelogWorked.keys = wavelogKeys();
+      wavelogWorked.index = wavelogKeys();
       const both = hunt(order);
       expect(both, order).toEqual(own);
     }
     // Not worked first: JA1KXM, worked only in Wavelog, counts as not worked and is the strongest
     // after K1ABC, which the phone's log holds today and Hunt skips as a dupe.
-    wavelogWorked.keys = wavelogKeys();
+    wavelogWorked.index = wavelogKeys();
     expect(hunt('unworked')).toMatchObject({ partner: 'JA1KXM', candidates: ['JA1KXM', 'VK3QRP'], next: 'JA1KXM 9V1NE OJ11' });
     expect(hunt('new')).toMatchObject({ partner: 'JA1KXM' });
   });
 
   it('changes neither Repeat CQ’s answer, its order nor its dupes', () => {
     for (const order of ['first', 'strongest', 'weakest', 'farthest', 'new'] as const) {
-      wavelogWorked.keys = null;
+      wavelogWorked.index = null;
       const own = repeatCq(order);
-      wavelogWorked.keys = wavelogKeys();
+      wavelogWorked.index = wavelogKeys();
       const both = repeatCq(order);
       expect(both, order).toEqual(own);
     }
-    wavelogWorked.keys = wavelogKeys();
+    wavelogWorked.index = wavelogKeys();
     // New first: JA1KXM, worked only in Wavelog, is new to the sequencer and first heard, so it is
     // answered before VK3QRP. K1ABC, in the phone's log today, waits last as the dupe.
     const r = repeatCq('new');

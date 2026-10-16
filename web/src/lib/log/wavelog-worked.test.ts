@@ -12,7 +12,9 @@ import {
   mapContacts,
   sayRead,
   sourceOf,
+  versionNote,
   type StoredWorked,
+  type WorkedMeta,
   type WorkedStatus,
   type WorkedStore,
 } from './wavelog-worked';
@@ -143,18 +145,60 @@ class FakeWavelog {
   };
 }
 
+/** The store's contract in memory: a read names the records it holds, so a write that fails leaves the last read whole. */
 class MemoryStore implements WorkedStore {
-  data: StoredWorked | null = null;
+  meta: WorkedMeta | null = null;
+  chunks = new Map<string, { calls: string[]; grids: string[] }>();
   keyWrites = 0;
-  async load() {
-    return this.data ? (JSON.parse(JSON.stringify(this.data)) as StoredWorked) : null;
+  /** The next write of this kind throws, as a full disk would. */
+  fail: 'replace' | 'append' | null = null;
+  private gen = 0;
+
+  /** What a load gives: the read and its keys. */
+  get data(): StoredWorked | null {
+    if (!this.meta) return null;
+    const calls: string[] = [];
+    const grids: string[] = [];
+    for (let i = 0; i < this.meta.chunks; i++) {
+      const c = this.chunks.get(`${this.meta.gen}:${i}`);
+      if (!c) return null;
+      calls.push(...c.calls);
+      grids.push(...c.grids);
+    }
+    return { meta: JSON.parse(JSON.stringify(this.meta)) as WorkedMeta, calls, grids };
   }
-  async save(d: StoredWorked, keys: boolean) {
-    if (keys) this.keyWrites++;
-    this.data = { meta: JSON.parse(JSON.stringify(d.meta)), calls: keys ? [...d.calls] : (this.data?.calls ?? []), grids: keys ? [...d.grids] : (this.data?.grids ?? []) };
+  async load() {
+    return this.data;
+  }
+  async replace(meta: WorkedMeta, calls: Iterable<string>, grids: Iterable<string>) {
+    if (this.fail === 'replace') {
+      this.fail = null;
+      throw new Error('QuotaExceededError');
+    }
+    this.keyWrites++;
+    const gen = ++this.gen;
+    this.chunks.set(`${gen}:0`, { calls: [...calls], grids: [...grids] });
+    this.meta = { ...JSON.parse(JSON.stringify(meta)), gen, chunks: 1 } as WorkedMeta;
+    for (const k of [...this.chunks.keys()]) if (!k.startsWith(`${gen}:`)) this.chunks.delete(k);
+    return this.meta;
+  }
+  async append(meta: WorkedMeta, calls: readonly string[], grids: readonly string[]) {
+    if (this.fail === 'append') {
+      this.fail = null;
+      throw new Error('QuotaExceededError');
+    }
+    let next = meta;
+    if (calls.length || grids.length) {
+      this.keyWrites++;
+      this.chunks.set(`${meta.gen}:${meta.chunks}`, { calls: [...calls], grids: [...grids] });
+      next = { ...meta, chunks: meta.chunks + 1 };
+    }
+    this.meta = JSON.parse(JSON.stringify(next)) as WorkedMeta;
+    return next;
   }
   async clear() {
-    this.data = null;
+    this.meta = null;
+    this.chunks.clear();
   }
 }
 
@@ -167,7 +211,11 @@ function harness(opts: { store?: MemoryStore; server?: FakeWavelog; clock?: Fake
     server,
     store,
     keys: null as WorkedKeys | null,
+    /** Keys a check added, and every change of the keys, in order. */
+    added: [] as string[],
+    changes: [] as string[],
     status: WORKED_OFF as WorkedStatus,
+    statuses: [] as WorkedStatus[],
     online: true,
     visible: true,
     sync: null as unknown as WorkedSync,
@@ -183,8 +231,16 @@ function harness(opts: { store?: MemoryStore; server?: FakeWavelog; clock?: Fake
     online: () => h.online,
     visible: () => h.visible,
     store,
-    onKeys: (k) => (h.keys = k),
-    onStatus: (s) => (h.status = s),
+    onKeys: (c) => {
+      h.keys = c.kind === 'none' ? null : c.keys;
+      if (c.kind === 'added') h.added.push(...c.calls, ...c.grids);
+      h.changes.push(c.kind);
+    },
+    onStatus: (s) => {
+      h.status = s;
+      h.statuses.push(s);
+    },
+    yield: () => Promise.resolve(),
   });
   clock.idle = async () => {
     await settle();
@@ -256,22 +312,24 @@ describe('reading Wavelog’s log', () => {
 
   it('reads page after page until Wavelog has no newer QSOs', async () => {
     const h = harness();
-    for (let i = 0; i < 12_001; i++) h.server.add(`W${i}X`, '20m', 'FT8');
+    const n = 2 * PAGE_LIMIT + 1;
+    for (let i = 0; i < n; i++) h.server.add(`W${i}X`, '20m', 'FT8');
     await started(h);
     const last = h.server.rows.at(-1)!.id;
-    expect(fromIds(h)).toEqual([0, h.server.rows[4999].id, h.server.rows[9999].id, last]);
-    expect(h.keys?.calls.size).toBe(12_001);
+    expect(fromIds(h)).toEqual([0, h.server.rows[PAGE_LIMIT - 1].id, h.server.rows[2 * PAGE_LIMIT - 1].id, last]);
+    expect(h.keys?.calls.size).toBe(n);
     expect(h.store.data?.meta.cursors).toEqual([{ stations: ['1'], lastId: last }]);
-    expect(h.status).toMatchObject({ on: true, reading: false, stations: 12_001, checkedAt: T0, fullAt: T0, error: null });
+    expect(h.status).toMatchObject({ on: true, reading: false, stations: n, checkedAt: T0, fullAt: T0, version: '3.2.4', error: null });
+    expect(h.store.data?.calls).toHaveLength(n);
   });
 
   it('reads a numeric string last id', async () => {
     const h = harness();
     h.server.stringIds = true;
-    for (let i = 0; i < 5_001; i++) h.server.add(`W${i}X`);
+    for (let i = 0; i <= PAGE_LIMIT; i++) h.server.add(`W${i}X`);
     await started(h);
-    expect(fromIds(h)).toEqual([0, h.server.rows[4999].id, h.server.rows[5000].id]);
-    expect(h.keys?.calls.size).toBe(5_001);
+    expect(fromIds(h)).toEqual([0, h.server.rows[PAGE_LIMIT - 1].id, h.server.rows[PAGE_LIMIT].id]);
+    expect(h.keys?.calls.size).toBe(PAGE_LIMIT + 1);
   });
 
   it('goes on after a reply with fewer rows than asked for: Wavelog sends equal rows once', async () => {
@@ -317,7 +375,7 @@ describe('reading Wavelog’s log', () => {
 
   it('waits as long as Wavelog asks on 429, then goes on from the last id read', async () => {
     const h = harness();
-    for (let i = 0; i < 6_000; i++) h.server.add(`W${i}X`);
+    for (let i = 0; i < PAGE_LIMIT + 1000; i++) h.server.add(`W${i}X`);
     const fetch = h.server.fetch;
     let n = 0;
     h.server.fetch = async (input, init) => {
@@ -329,14 +387,14 @@ describe('reading Wavelog’s log', () => {
     expect(g.keys).toBeNull();
     expect(g.status.error).toBe(sayRead.rateLimited(90));
     // The second request met the limit; the wrapper answered it, so the server did not log it.
-    const page2 = g.server.rows[4999].id;
+    const page2 = g.server.rows[PAGE_LIMIT - 1].id;
     expect(n).toBe(2);
     expect(fromIds(g)).toEqual([0]);
     await g.clock.advance(89_000);
     expect(n).toBe(2);
     await g.clock.advance(1_000);
     expect(fromIds(g)).toEqual([0, page2, g.server.rows.at(-1)!.id]);
-    expect(g.keys?.calls.size).toBe(6_000);
+    expect(g.keys?.calls.size).toBe(PAGE_LIMIT + 1000);
     expect(g.status.error).toBeNull();
   });
 
@@ -564,5 +622,150 @@ describe('reading Wavelog’s log', () => {
     expect(h.store.data).toBeNull();
     expect(h.keys).toBeNull();
     expect(h.status).toEqual(WORKED_OFF);
+  });
+
+  it('shows a failure to store, keeps the keys in memory, and stores them with the next read', async () => {
+    const h = harness();
+    h.server.add('K1ABC');
+    h.store.fail = 'replace';
+    await started(h);
+    expect(h.calls()).toEqual(['K1ABC 20m FT8']);
+    expect(h.status.error).toBe(sayRead.storage);
+    expect(h.store.data).toBeNull();
+    // The next check finds nothing new and stores the whole read, so the stored cursors never run ahead of the stored keys.
+    await h.clock.advance(CHECK_EVERY_MS);
+    expect(h.store.data?.calls).toEqual(['K1ABC 20m FT8']);
+    expect(h.status.error).toBeNull();
+    // A check's new keys that fail to store go with the next store.
+    h.server.add('ZL2AB');
+    h.store.fail = 'append';
+    await h.clock.advance(CHECK_EVERY_MS);
+    expect(h.calls()).toEqual(['K1ABC 20m FT8', 'ZL2AB 20m FT8']);
+    expect(h.status.error).toBe(sayRead.storage);
+    expect(h.store.data?.calls).toEqual(['K1ABC 20m FT8']);
+    const before = h.store.data!.meta.cursors[0].lastId;
+    expect(before).toBe(h.server.rows[0].id);
+    await h.clock.advance(CHECK_EVERY_MS);
+    expect(h.store.data?.calls.sort()).toEqual(['K1ABC 20m FT8', 'ZL2AB 20m FT8']);
+    expect(h.store.data?.meta.cursors[0].lastId).toBe(h.server.rows[1].id);
+    expect(h.status.error).toBeNull();
+  });
+
+  it('keeps a refused key in view when the phone goes offline and back', async () => {
+    const h = harness();
+    h.server.key = 'another-key';
+    await started(h);
+    expect(h.status.error).toBe(say.keyInvalid);
+    const sent = h.server.requests.length;
+    h.online = false;
+    h.sync.kick();
+    await h.clock.idle();
+    expect(h.status.error).toBe(say.keyInvalid);
+    h.online = true;
+    h.sync.online();
+    await h.clock.idle();
+    expect(h.status.error).toBe(say.keyInvalid);
+    expect(h.server.requests.length).toBe(sent);
+  });
+
+  it('reads afresh after off and on at once: the delete goes first', async () => {
+    const h = harness();
+    h.server.add('K1ABC');
+    await started(h);
+    h.server.rows = [];
+    h.server.add('VK2ESN');
+    void h.sync.forget();
+    await h.sync.use(SRC);
+    await h.clock.idle();
+    expect(h.calls()).toEqual(['VK2ESN 20m FT8']);
+    expect(fromIds(h).slice(-2)).toEqual([0, h.server.rows[0].id]);
+  });
+
+  it('starts a new address or key at once, while a request for the old one still waits', async () => {
+    const h = harness();
+    h.server.add('K1ABC');
+    let release!: () => void;
+    const fetch = h.server.fetch;
+    let held = true;
+    h.server.fetch = async (input, init) => {
+      if (held && input.endsWith('/api/get_contacts_adif')) {
+        held = false;
+        await new Promise<void>((r) => (release = r));
+      }
+      return fetch(input, init);
+    };
+    void h.sync.use(SRC);
+    await settle();
+    expect(h.status).toMatchObject({ reading: true, readingAll: true });
+    h.server.key = 'new-key';
+    await h.sync.use({ url: URL_, apiKey: 'new-key' });
+    await settle();
+    expect(h.calls()).toEqual(['K1ABC 20m FT8']);
+    expect(h.status).toMatchObject({ reading: false, readingAll: false, stations: 1, error: null });
+    release();
+    await h.clock.idle();
+    expect(h.store.data?.meta.source).toBe(sourceOf({ url: URL_, apiKey: 'new-key' }));
+  });
+
+  it('counts a full read’s stations from 0, and Refresh during a wait starts again from id 0', async () => {
+    const h = harness();
+    for (const c of ['K1ABC', 'JA1KXM', 'VK2ESN']) h.server.add(c);
+    await started(h);
+    expect(h.status.stations).toBe(3);
+    h.statuses = [];
+    h.server.queued = [{ status: 429, body: { status: 'failed', retry_after: 90 } }];
+    await h.sync.refresh();
+    expect(h.statuses.filter((s) => s.readingAll).map((s) => s.stations)).toEqual(h.statuses.filter((s) => s.readingAll).map(() => 0));
+    expect(h.status.error).toBe(sayRead.rateLimited(90));
+    const lists = h.server.requests.filter((r) => r.path === '/api/station_info').length;
+    await h.sync.refresh();
+    expect(h.server.requests.filter((r) => r.path === '/api/station_info').length).toBe(lists + 1);
+    expect(fromIds(h).slice(-2)).toEqual([0, h.server.rows[2].id]);
+    expect(h.status).toMatchObject({ stations: 3, error: null });
+  });
+
+  it('waits as long as each 429 asks, without growing the wait', async () => {
+    const h = harness();
+    h.server.add('K1ABC');
+    const limited = { status: 429, body: { status: 'failed', retry_after: 90 } };
+    h.server.queued = [limited, limited, limited];
+    await started(h);
+    for (let i = 0; i < 2; i++) {
+      const n = h.server.contacts().length;
+      await h.clock.advance(89_000);
+      expect(h.server.contacts().length).toBe(n);
+      await h.clock.advance(1_000);
+      expect(h.server.contacts().length).toBe(n + 1);
+    }
+    await h.clock.advance(90_000);
+    expect(h.calls()).toEqual(['K1ABC 20m FT8']);
+  });
+
+  it('hands new keys from a check over as added to the same sets', async () => {
+    const h = harness();
+    h.server.add('K1ABC');
+    await started(h);
+    const sets = h.keys;
+    h.server.add('ZL2AB', '40m', 'FT8', '', 'RE78');
+    await h.sync.check();
+    await h.clock.idle();
+    expect(h.keys).toBe(sets);
+    expect(h.added).toEqual(['ZL2AB 40m FT8', 'RE78 40m']);
+    expect(h.changes).toEqual(['none', 'all', 'added']);
+  });
+});
+
+describe('versionNote', () => {
+  it('says what a Wavelog before 2.5.1 means for reading its log', () => {
+    expect(versionNote('2.3.1')).toBe(sayRead.noJson('2.3.1'));
+    expect(versionNote('2.4')).toBe(sayRead.noJson('2.4'));
+    expect(versionNote('2.4.1')).toBe(sayRead.noCors('2.4.1'));
+    expect(versionNote('2.5')).toBe(sayRead.noCors('2.5'));
+    expect(versionNote(' 2.5.1 ')).toBeNull();
+    expect(versionNote('3.2.4')).toBeNull();
+    expect(versionNote(null)).toBeNull();
+    expect(versionNote('dev')).toBeNull();
+    expect(sayRead.noJson('2.4')).toBe('Wavelog 2.4 has no JSON output, so RR73 cannot read its log. Reading needs Wavelog 2.5.1 or later.');
+    expect(sayRead.noCors('2.4.2')).toBe('This Wavelog is 2.4.2. Reading its log needs Wavelog 2.5.1 or later, or a proxy that adds CORS headers.');
   });
 });

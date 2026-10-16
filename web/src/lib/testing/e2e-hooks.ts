@@ -5,6 +5,7 @@
 // the audio clock mapping, for the timing tests.
 
 import { logQso } from '../log/log.svelte';
+import { checkWavelogNow } from '../log/wavelog-worked.svelte';
 import type { LogQsoRecord } from '../log/types';
 import type { Decode } from '../decode/types';
 import type { TxNum } from '../qso/messages';
@@ -63,6 +64,8 @@ export interface E2eHooks {
   theme(theme: Theme): Promise<void>;
   /** Suspends the running AudioContext, as the system does when it takes the audio away. */
   suspendAudio(): Promise<void>;
+  /** Read Wavelog's log: reads what is new now, as the 5-minute check does, and waits for it. */
+  wavelogCheck(): Promise<void>;
 }
 
 declare global {
@@ -132,6 +135,7 @@ export function installE2eHooks() {
     suspendAudio: async () => {
       await audioOut()?.ctx.suspend();
     },
+    wavelogCheck: () => checkWavelogNow(),
     wsprState: () => ({
       onAir: wspr.onAir && { text: wspr.onAir.text, slotStartMs: wspr.onAir.slotStartMs, startMs: wspr.onAir.startMs },
       next: wspr.next?.slotStartMs ?? null,

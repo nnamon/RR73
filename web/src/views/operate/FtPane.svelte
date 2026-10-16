@@ -203,10 +203,10 @@
   }
 
   // Decode colours: the log's calls, grids, entities and zones are indexed once per change of the
-  // log or the country file, so each row looks its station up in O(1). With Worked before from
-  // Wavelog on, what Wavelog's log holds counts too, for the colours, New and Hide worked only.
+  // log or the country file, so each row looks its station up in O(1). With Read Wavelog's log
+  // on, what Wavelog's log holds counts too, for the colours, New and Hide worked only.
   const ownIndex = $derived(buildLogIndex(log.live, countries));
-  const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex(countries)));
+  const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex()));
   const classify: Classify = $derived.by(() => {
     const index = logIndex;
     const where = { band: settings.band, mode: ftMode };

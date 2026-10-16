@@ -3,17 +3,16 @@ import { buildList, filterCounts, type Classify, type SlotDecodes } from '../dec
 import { defaultHighlights, highlightDecode, type HighlightEntry } from '../decode/highlight';
 import { DxccIndex } from '../reference/dxcc';
 import { bigCtyFixture } from '../reference/testing';
-import { addRows } from './wavelog-worked';
-import { bandModesOf, buildKeysIndex, buildLogIndex, mergeLogIndex, workedCallKey, workedGridKey, type IndexedQso, type LogIndex, type WorkedKeys } from './worked';
+import { addRows, keySets } from './wavelog-worked';
+import { bandModesOf, buildKeysIndex, buildLogIndex, IndexBuilder, mergeLogIndex, workedBeforeText, workedCallKey, workedGridKey, type IndexedQso, type LogIndex, type WorkedKeys } from './worked';
 
 const qso = (call: string, gridsquare: string, band: string, mode = 'FT8', submode = ''): IndexedQso => ({ call, gridsquare, band, mode, submode });
 
 /** Keys from Wavelog's JSON rows, as the read builds them. */
 function keysOf(rows: Record<string, string>[]): WorkedKeys {
-  const calls = new Set<string>();
-  const grids = new Set<string>();
-  addRows(rows, calls, grids);
-  return { calls, grids };
+  const k = keySets();
+  addRows(rows, k);
+  return k;
 }
 
 const ME = '9V1NE';
@@ -41,10 +40,12 @@ describe('worked keys', () => {
   });
 
   it('are built from Wavelog rows, skipping what is not a QSO', () => {
-    const k = keysOf([{ CALL: 'JA1KXM', BAND: '20m', MODE: 'FT8', GRIDSQUARE: 'PM95' }, { call: 'k1abc', band: '40m', mode: 'ft8' } as Record<string, string>]);
-    addRows([null, 7, 'text', { BAND: '20m' }], k.calls as Set<string>, k.grids as Set<string>);
-    expect([...k.calls].sort()).toEqual(['JA1KXM 20m FT8', 'K1ABC 40m FT8']);
+    const k = keySets();
+    addRows([{ CALL: 'JA1KXM', BAND: '20m', MODE: 'FT8', GRIDSQUARE: 'PM95' }, { call: 'k1abc/p', band: '40m', mode: 'ft8' }, null, 7, 'text', { BAND: '20m' }], k);
+    expect([...k.calls].sort()).toEqual(['JA1KXM 20m FT8', 'K1ABC/P 40m FT8']);
     expect([...k.grids]).toEqual(['PM95 20m']);
+    // The stations: by base callsign.
+    expect([...k.bases].sort()).toEqual(['JA1KXM', 'K1ABC']);
   });
 
   it('index by the log’s rules: the base callsign, FT4 from its submode, grids by square', () => {
@@ -68,8 +69,46 @@ describe('worked keys', () => {
       { CALL: 'JA1KXM/P', BAND: '40m', MODE: 'MFSK', SUBMODE: 'FT4' },
       { CALL: 'JA1KXM', BAND: '160m', MODE: 'FT8' },
     ]);
-    expect(bandModesOf(k, 'ja1kxm')).toEqual(['160m FT8', '40m FT4', '20m FT8']);
-    expect(bandModesOf(k, 'K1ABC')).toEqual([]);
+    expect(bandModesOf(buildKeysIndex(k), 'ja1kxm')).toEqual(['160m FT8', '40m FT4', '20m FT8']);
+    expect(bandModesOf(buildKeysIndex(k), 'K1ABC')).toEqual([]);
+  });
+
+  it('grow an index in place to the one built from all of them at once', () => {
+    const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(bigCtyFixture())));
+    const all = keysOf([
+      { CALL: 'JA1KXM', BAND: '20m', MODE: 'FT8', GRIDSQUARE: 'PM95' },
+      { CALL: 'VK3/9V1NE', BAND: '40m', MODE: 'MFSK', SUBMODE: 'FT4', GRIDSQUARE: 'QF22' },
+      { CALL: 'K1ABC', BAND: '6m', MODE: 'FT8', GRIDSQUARE: 'FN42' },
+    ]);
+    const b = new IndexBuilder(cty);
+    const [first, ...rest] = [...all.calls];
+    b.addCallKey(first);
+    const live = b.index;
+    for (const k of rest) b.addCallKey(k);
+    for (const k of all.grids) b.addGridKey(k);
+    const once = buildKeysIndex(all, cty);
+    expect(b.index).toBe(live);
+    const sorted = (s: Iterable<string> | undefined) => [...(s ?? [])].sort();
+    expect(sorted(live.calls)).toEqual(sorted(once.calls));
+    expect(sorted(live.grids)).toEqual(sorted(once.grids));
+    for (const k of ['callsByBand', 'gridsByBand', 'callsByBandMode'] as const) {
+      expect(sorted(live[k].keys())).toEqual(sorted(once[k].keys()));
+      for (const [key, set] of once[k]) expect(sorted(live[k].get(key))).toEqual(sorted(set));
+    }
+    for (const k of ['dxcc', 'continent', 'cqZone', 'ituZone'] as const) expect(sorted(live.places[k].all)).toEqual(sorted(once.places[k].all));
+    expect(sorted(live.places.dxcc.all).length).toBe(3);
+  });
+});
+
+describe('the station sheet’s Worked before', () => {
+  it('lists the phone’s QSOs, then what only Wavelog holds, and Not yet for neither', () => {
+    expect(workedBeforeText([], new Set(), [])).toBe('Not yet');
+    expect(workedBeforeText([], new Set(), ['20m FT8'])).toBe('20m FT8 in Wavelog');
+    expect(workedBeforeText([], new Set(), ['40m FT4', '20m FT8'])).toBe('40m FT4, 20m FT8 in Wavelog');
+    expect(workedBeforeText(['20m FT8 at 09:14'], new Set(['20m FT8']), [])).toBe('20m FT8 at 09:14');
+    // A band and mode the phone has already is not repeated as Wavelog's.
+    expect(workedBeforeText(['20m FT8 at 09:14'], new Set(['20m FT8']), ['40m FT4', '20m FT8'])).toBe('20m FT8 at 09:14 · 40m FT4 in Wavelog');
+    expect(workedBeforeText(['20m FT8 at 09:14', '20m FT8 on 2026-10-12'], new Set(['20m FT8']), ['20m FT8'])).toBe('20m FT8 at 09:14, 20m FT8 on 2026-10-12');
   });
 });
 
