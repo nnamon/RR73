@@ -38,6 +38,7 @@ export const WAVELOG: WavelogConfig = {
   stationId: '1',
   stations: STATIONS.map((s) => ({ id: s.station_id, name: s.station_profile_name, callsign: s.station_callsign, grid: s.station_gridsquare, active: s.station_active === '1' })),
   lastTest: { at: FIXED_TIME - 25 * MIN, ok: true, message: 'Can read and write', rights: 'rw', version: '2.1' },
+  readWorked: false,
 };
 
 const FACTS: Record<string, DestinationFacts> = {
@@ -206,16 +207,70 @@ export async function seed(page: Page, data: Seed) {
   await page.locator('main h1').first().waitFor({ state: 'attached' });
 }
 
+/** A QSO in the mock Wavelog's log, as get_contacts_adif serves it, with its primary key and station location. */
+export interface MockContact {
+  id: number;
+  station: string;
+  CALL: string;
+  BAND: string;
+  MODE: string;
+  SUBMODE: string;
+  GRIDSQUARE: string;
+}
+
 export interface MockWavelog {
   requests: { method: string; path: string; body: Record<string, unknown> | null }[];
   /** The answer to POST /api/qso, from the request body; tests swap it. */
   qso: (body: Record<string, unknown>) => { status: number; body: unknown };
   rights: 'r' | 'rw' | 'invalid';
+  /** The log POST /api/get_contacts_adif reads from. */
+  contacts: MockContact[];
+  /** Adds a QSO to the log at station location `station`. */
+  add(call: string, band?: string, mode?: string, submode?: string, grid?: string, station?: string): MockContact;
+}
+
+/**
+ * Wavelog's answer to POST /api/get_contacts_adif, as Api.php 3.2.4 gives it: the QSOs of the
+ * station locations with an id above fetchfromid, lowest first, up to the limit, rows equal in
+ * every field once per reply, and "No new QSOs available." when there are none.
+ */
+function contactsReply(mock: MockWavelog, body: Record<string, unknown>): { status: number; body: unknown } {
+  if (body.key !== API_KEY || mock.rights === 'invalid') return { status: 401, body: { status: 'failed', reason: 'missing api key' } };
+  const ids = (Array.isArray(body.station_id) ? body.station_id : [body.station_id]).map(String);
+  if (ids.some((id) => !STATIONS.some((s) => s.station_id === id))) return { status: 401, body: { status: 'failed', reason: 'Station ID not accessible for this API key' } };
+  const from = Number(body.fetchfromid);
+  const fields = (body.fields as string[]) ?? ['CALL'];
+  const picked = mock.contacts
+    .filter((c) => ids.includes(c.station) && c.id > from)
+    .sort((a, b) => a.id - b.id)
+    .slice(0, Number(body.limit ?? 20000));
+  if (!picked.length) return { status: 200, body: { status: 'successful', message: 'No new QSOs available.', lastfetchedid: from, exported_qsos: 0, adif: null } };
+  const seen = new Set<string>();
+  const qsos = [];
+  for (const c of picked) {
+    const row = Object.fromEntries(fields.map((f) => [f, (c as unknown as Record<string, string>)[f] ?? '']));
+    const k = fields.map((f) => row[f]).join('|');
+    if (!seen.has(k)) qsos.push(row);
+    seen.add(k);
+  }
+  // PHP sends the primary key from the database as a numeric string.
+  return { status: 200, body: { status: 'successful', message: 'Export successful', lastfetchedid: String(picked.at(-1)!.id), exported_records: qsos.length, qsos } };
 }
 
 /** A mock Wavelog at WAVELOG_URL, answering as Wavelog's Api.php does, with CORS headers. */
 export async function mockWavelog(page: Page): Promise<MockWavelog> {
-  const mock: MockWavelog = { requests: [], qso: () => ({ status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0, messages: [''] } }), rights: 'rw' };
+  let id = 100;
+  const mock: MockWavelog = {
+    requests: [],
+    qso: () => ({ status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0, messages: [''] } }),
+    rights: 'rw',
+    contacts: [],
+    add(call, band = '20m', mode = 'FT8', submode = '', grid = '', station = '1') {
+      const c = { id: id++, station, CALL: call, BAND: band, MODE: mode, SUBMODE: submode, GRIDSQUARE: grid };
+      mock.contacts.push(c);
+      return c;
+    },
+  };
   const cors = { 'access-control-allow-origin': '*' };
   await page.route(`${WAVELOG_URL}/**`, async (route: Route) => {
     const req = route.request();
@@ -233,6 +288,10 @@ export async function mockWavelog(page: Page): Promise<MockWavelog> {
     if (path === '/api/version') return json(200, { status: 'ok', version: '2.1' });
     if (path === '/api/qso') {
       const r = mock.qso(mock.requests.at(-1)?.body ?? {});
+      return json(r.status, r.body);
+    }
+    if (path === '/api/get_contacts_adif' && req.method() === 'POST') {
+      const r = contactsReply(mock, mock.requests.at(-1)?.body ?? {});
       return json(r.status, r.body);
     }
     return route.fulfill({ status: 404, headers: cors, body: 'Not found' });

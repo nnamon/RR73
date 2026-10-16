@@ -357,6 +357,15 @@ export function workedFrom(qsos: readonly Qso[]): Worked[] {
   return out;
 }
 
+/**
+ * The sequencer's worked-before list now: this phone's log, and nothing else. Dupes, Hunt's and
+ * Repeat CQ's orders come from it. What Wavelog's log holds stays out by the owner's rule: it is
+ * for decode colours, the New chip and Hide worked only (docs/design/wavelog-worked.md).
+ */
+export function sequencerWorked(): Worked[] {
+  return workedFrom(log.qsos);
+}
+
 /** QSOs logged by the sequencer in this session, and in the last hour, for the Run line. */
 export function runRate(nowMs: number): { total: number; hour: number } {
   const mine = log.live.filter((q) => q.source === 'sequencer' && q.createdAt >= sessionStart);
@@ -465,7 +474,7 @@ export function startQso() {
       if (!isFt(settings.mode)) untrack(() => haltTx());
     });
     $effect(() => {
-      const worked = workedFrom(log.qsos);
+      const worked = sequencerWorked();
       untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));
     });
     $effect(() => {

@@ -13,6 +13,7 @@ import { initPskReporter, loadPskReporter } from './lib/state/pskreporter.svelte
 import { initHeardYou, loadHeardYou } from './lib/state/heard.svelte';
 import { initWsprnet, loadWsprnet } from './lib/state/wsprnet.svelte';
 import { initCat } from './lib/state/cat.svelte';
+import { initWavelogWorked } from './lib/log/wavelog-worked.svelte';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
@@ -61,7 +62,11 @@ void Promise.race([Promise.all([settingsLoaded, practiceLoaded, relayLoaded, psk
     .then(() => initHeardYou())
     .then(() => initWsprnet())
     .catch(() => undefined)
-    .finally(() => void loadLog());
+    .finally(() => {
+      void loadLog();
+      // Worked before from Wavelog reads once the operator's log has loaded with its switch on.
+      initWavelogWorked();
+    });
 });
 
 // The Playwright screen review drives the app through these; other builds leave them out.

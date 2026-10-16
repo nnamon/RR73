@@ -7,7 +7,7 @@ import type { FetchLike } from './wavelog';
 const T = Date.UTC(2026, 9, 13, 13, 0, 0);
 const ACT: Activation = { id: 'a', refs: [{ programme: 'POTA', ref: 'VK-0921' }], callsign: 'VK3/9V1NE', operator: '9V1NE', grid: 'QF22', gridSource: 'typed', wavelogStationId: '7', startedAt: T, endedAt: null, updatedAt: T };
 const q = createQso({ call: 'VK2ESN', mode: 'FT8', band: '20m', dialHz: 14_074_000, audioHz: 1500, startUtcMs: T, endUtcMs: T, reportSent: -1, reportRcvd: -2 }, { id: 'q1', now: T, activation: ACT, callsign: '9V1NE' });
-const CFG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'k', stationId: '1', stations: [], lastTest: null };
+const CFG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'k', stationId: '1', stations: [], lastTest: null, readWorked: false };
 
 const fake: FetchLike = async (url) => {
   const path = new URL(url).pathname;

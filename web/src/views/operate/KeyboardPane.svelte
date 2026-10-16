@@ -33,7 +33,8 @@
   import { callColour } from '../../lib/keyboard/render';
   import { serialText } from '../../lib/keyboard/macros';
   import { bare, fieldOfReading, otherReading, type FillField } from '../../lib/keyboard/words';
-  import { buildLogIndex } from '../../lib/log/worked';
+  import { buildLogIndex, mergeLogIndex } from '../../lib/log/worked';
+  import { wavelogIndex } from '../../lib/log/wavelog-worked.svelte';
   import { log, openDraft } from '../../lib/log/log.svelte';
   import { reference } from '../../lib/reference';
   import { settings } from '../../lib/state/settings.svelte';
@@ -59,7 +60,9 @@
   if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
   const resolves = $derived(countries ? (call: string) => countries!.lookup(call).found : null);
 
-  const logIndex = $derived(buildLogIndex(log.live, countries));
+  // What Wavelog's log holds counts for the colours too, with Worked before from Wavelog on.
+  const ownIndex = $derived(buildLogIndex(log.live, countries));
+  const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex(countries)));
   const colourOf = $derived.by(() => {
     const index = logIndex;
     const me = settings.callsign;

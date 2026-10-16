@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
    * Settings › Logging › Wavelog: the address and API key, Test connection, the default station
-   * location, sending on or off, and removing Wavelog from this phone.
+   * location, sending on or off, Worked before from Wavelog with Refresh from Wavelog, and
+   * removing Wavelog from this phone.
    */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
@@ -10,6 +11,7 @@
   import { utcHm } from '../lib/clock/format';
   import { forgetWavelog, log, setWavelog, testWavelog } from '../lib/log/log.svelte';
   import { checkAddress } from '../lib/log/wavelog';
+  import { refreshFromWavelog, setReadWorked, wavelogWorked } from '../lib/log/wavelog-worked.svelte';
 
   let url = $state('');
   let apiKey = $state('');
@@ -28,6 +30,17 @@
 
   const w = $derived(log.wavelog);
   const test = $derived(w.lastTest);
+  const read = $derived(wavelogWorked.status);
+
+  const stations = (n: number) => `${n.toLocaleString('en-GB')} ${n === 1 ? 'station' : 'stations'}`;
+  const today = (ms: number) => new Date(ms).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
+  /** What was read and when: "2,431 stations · checked 13:20 UTC". */
+  const readText = $derived.by(() => {
+    if (read.readingAll) return read.stations ? `${stations(read.stations)} so far` : 'Waiting for Wavelog';
+    if (read.checkedAt === null) return 'Not read yet';
+    const at = today(read.checkedAt) ? `${utcHm(read.checkedAt)} UTC` : new Date(read.checkedAt).toISOString().slice(0, 10);
+    return `${stations(read.stations)} · checked ${at}`;
+  });
 
   /** Stores the address in its normal form, or says what is wrong with it. Returns the stored address. */
   async function saveAddress(quiet: boolean): Promise<string | null> {
@@ -137,6 +150,34 @@
     </div>
   </div>
 
+  {#if w.url && w.apiKey}
+    <div class="section">
+      <h2 class="section-head">Worked before</h2>
+      <div class="group">
+        <label class="row">
+          <span class="row-main">
+            <span class="row-title">Worked before from Wavelog</span>
+            <span class="row-sub">Decode colours, New and Hide worked</span>
+          </span>
+          <input type="checkbox" role="switch" class="switch" checked={w.readWorked} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />
+        </label>
+        {#if w.readWorked}
+          <button class="row act" disabled={read.readingAll} onclick={() => void refreshFromWavelog()}>
+            <span class="row-main">
+              <span class="row-title">{read.readingAll ? 'Reading Wavelog’s log' : 'Refresh from Wavelog'}</span>
+              <span class="row-sub" role="status" data-testid="wavelog-read">{readText}</span>
+            </span>
+          </button>
+        {/if}
+      </div>
+      {#if w.readWorked && read.error}
+        <p class="section-foot bad" role="alert">{read.error}</p>
+      {:else}
+        <p class="section-foot">Dupes, Hunt and Repeat CQ count this phone’s log only.</p>
+      {/if}
+    </div>
+  {/if}
+
   {#if w.url || w.apiKey}
     <div class="section center">
       <button class="text-button danger" onclick={() => (removing = true)}>Remove Wavelog…</button>
@@ -145,7 +186,7 @@
 </section>
 
 <Sheet bind:open={removing} title="Remove Wavelog?">
-  <p class="confirm-text">Deletes the address and API key. QSOs stay in the log.</p>
+  <p class="confirm-text">{w.readWorked ? 'Deletes the address, the API key and what RR73 read from Wavelog’s log.' : 'Deletes the address and API key.'} QSOs stay in the log.</p>
   <button class="btn tx full" onclick={() => void remove()}>Remove Wavelog</button>
   <button class="btn full keep" onclick={() => (removing = false)}>Keep Wavelog</button>
 </Sheet>
@@ -182,6 +223,19 @@
 
   .pick {
     cursor: pointer;
+  }
+
+  .act {
+    width: 100%;
+    text-align: left;
+  }
+
+  .act .row-title {
+    color: var(--rr-accent);
+  }
+
+  .act:disabled .row-title {
+    opacity: 0.4;
   }
 
   .pick:has(:focus-visible) {

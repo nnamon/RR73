@@ -268,7 +268,7 @@ describe('Test connection', () => {
 describe('sending to Wavelog', () => {
   afterEach(() => vi.useRealTimers());
 
-  const cfg: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'key1', stationId: '1', stations: [HOME, VK], lastTest: null };
+  const cfg: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'key1', stationId: '1', stations: [HOME, VK], lastTest: null, readWorked: false };
   const q = createQso(
     { call: 'YB0AZK', grid: 'OI33', mode: 'FT8', band: '30m', dialHz: 10_136_000, audioHz: 1200, startUtcMs: T - 60_000, endUtcMs: T, reportSent: -11, reportRcvd: -13, comment: 'Grüße' },
     { id: 'q1', now: T, activation: null, callsign: '9V1NE' },

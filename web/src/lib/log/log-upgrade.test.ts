@@ -28,7 +28,7 @@ const queued: LedgerEntry = {
   duplicate: false,
   parts: [],
 };
-const WAVELOG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'k', stationId: '1', stations: [], lastTest: null };
+const WAVELOG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: 'https://log.example.test', apiKey: 'k', stationId: '1', stations: [], lastTest: null, readWorked: false };
 
 describe('upgrading from 0.5.0', () => {
   it('switches Send automatically off once, keeps the queued QSO as not sent, and a later choice sticks', async () => {

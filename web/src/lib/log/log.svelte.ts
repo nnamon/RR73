@@ -37,7 +37,7 @@ import type {
   WavelogConfig,
 } from './types';
 
-export const DEFAULT_WAVELOG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: '', apiKey: '', stationId: null, stations: [], lastTest: null };
+export const DEFAULT_WAVELOG: WavelogConfig = { id: 'wavelog', kind: 'wavelog', enabled: true, url: '', apiKey: '', stationId: null, stations: [], lastTest: null, readWorked: false };
 const FILE_IDS: FileDestinationId[] = ['adif-file', 'pota-file', 'sota-file', 'wwff-file'];
 /** POTA, SOTA and WWFF files are on by default; the ADIF file per activation is off. */
 export const DEFAULT_FILES: Record<FileDestinationId, FileDestinationConfig> = {
@@ -73,6 +73,8 @@ export interface LogNotice {
 
 class LogState {
   ready = $state(false);
+  /** The practice log is loaded (store.ts), or loading. Changes with the data, so it holds whenever `ready` is true. */
+  practice = $state(false);
   /** Every QSO including tombstones, newest first. */
   qsos = $state.raw<Qso[]>([]);
   ledger = $state.raw<LedgerEntry[]>([]);
@@ -217,9 +219,20 @@ export const outbox = new Outbox({
     if (!q || !dest) return e;
     return reconcile({ entry: e, dest, qso: q, activation: activationOf(q.activationId), sendEdits: log.settings.sendEdits, sendAutomatically: log.settings.sendAutomatically, now: now() }) ?? e;
   },
-  commit: (ledger) => commit({ ledger }),
+  commit: async (ledger) => {
+    await commit({ ledger });
+    if (ledger.some((e) => e.destinationId === 'wavelog' && e.state === 'delivered')) for (const fn of delivered) fn();
+  },
   onStatus: (id, s) => (log.outbox = { ...log.outbox, [id]: s }),
 });
+
+const delivered = new Set<() => void>();
+
+/** Calls `fn` after Wavelog takes a QSO. Returns the function that stops it. */
+export function onDelivered(fn: () => void): () => void {
+  delivered.add(fn);
+  return () => delivered.delete(fn);
+}
 
 let loading: Promise<void> | null = null;
 
@@ -287,6 +300,7 @@ export async function useLog(practice: boolean, again = false): Promise<void> {
   setLogStore(practice);
   byId.clear();
   log.ready = false;
+  log.practice = practice;
   log.qsos = [];
   log.ledger = [];
   log.activations = [];
@@ -576,9 +590,12 @@ export async function testWavelog(cfg: Pick<WavelogConfig, 'url' | 'apiKey' | 's
   return r;
 }
 
-/** Removes the Wavelog address and key from this phone. QSOs keep their delivery history. */
+/**
+ * Removes the Wavelog address and key from this phone, and Worked before from Wavelog with them.
+ * QSOs keep their delivery history.
+ */
 export async function forgetWavelog(): Promise<void> {
-  await setWavelog({ url: '', apiKey: '', stationId: null, stations: [], lastTest: null });
+  await setWavelog({ url: '', apiKey: '', stationId: null, stations: [], lastTest: null, readWorked: false });
 }
 
 /** Switches a file destination on or off. Switching on adds the activation QSOs it takes. */

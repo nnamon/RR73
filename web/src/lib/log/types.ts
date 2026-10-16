@@ -224,6 +224,11 @@ export interface WavelogConfig {
   /** Station locations from the last successful Test connection. */
   stations: WavelogStation[];
   lastTest: WavelogTest | null;
+  /**
+   * Worked before from Wavelog: RR73 reads what Wavelog's log holds for decode colours, the New
+   * chip and Hide worked only (docs/design/wavelog-worked.md). Off by default.
+   */
+  readWorked: boolean;
 }
 
 export interface FileDestinationConfig {

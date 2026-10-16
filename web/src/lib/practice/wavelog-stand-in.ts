@@ -24,6 +24,7 @@ export function standInConfig(callsign: string, grid: string): WavelogConfig {
     stationId: STATION_ID,
     stations: [{ id: STATION_ID, name: 'Practice', callsign, grid, active: true }],
     lastTest: null,
+    readWorked: false,
   };
 }
 

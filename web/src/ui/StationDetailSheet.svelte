@@ -8,6 +8,7 @@
   import { settings } from '../lib/state/settings.svelte';
   import { callStart, callStation, qso, type Selected } from '../lib/state/qso.svelte';
   import { log } from '../lib/log/log.svelte';
+  import { wavelogBandModes } from '../lib/log/wavelog-worked.svelte';
   import { displayMode } from '../lib/log/qso';
   import { signalHistory } from '../lib/decode/signal';
   import { band } from '../lib/state/station.svelte';
@@ -29,6 +30,8 @@
   const path = $derived(grid && settings.grid ? gridPath(settings.grid, grid) : null);
   const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
   const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
+  // With Worked before from Wavelog on: the bands and modes Wavelog's log holds the station on.
+  const inWavelog = $derived(call && open ? wavelogBandModes(call) : []);
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
   const ord = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
@@ -63,6 +66,11 @@
           <span class="row-sub">{worked.length ? worked.map((q) => `${q.band} ${displayMode(q)} ${when(q.start)}`).join(', ') : 'Not yet'}</span>
         </span>
       </li>
+      {#if inWavelog.length}
+        <li class="row">
+          <span class="row-main"><span class="row-title">In Wavelog</span><span class="row-sub">{inWavelog.join(', ')}</span></span>
+        </li>
+      {/if}
     </ul>
     {#if signal.length}<SignalChart points={signal} />{/if}
   {/if}
