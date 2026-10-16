@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * Settings › Practice band: the switch that turns practice on (and starts the band at once),
-   * the crowded band, Play Tx audio, and Clear practice log with Undo. The practice band never keys
-   * the radio by CAT (lib/state/radio.svelte.ts), and the footer says so where rig control exists.
-   * Play Tx audio sends the transmissions to the Tx output, where a radio with VOX on transmits them.
+   * the crowded band, Play Tx audio, and Clear practice log with Undo. Play Tx audio is the switch
+   * that lets practice key a connected radio: by CAT with Key the radio with CAT on, as real
+   * transmissions do (lib/state/radio.svelte.ts), or by VOX on the audio. Off, practice plays no Tx
+   * audio and keys nothing.
    */
   import BackLink from '../ui/BackLink.svelte';
   import { href } from '../lib/app/router.svelte';
@@ -65,13 +66,12 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Play Tx audio</span>
-          <span class="row-sub">Can key a radio by VOX</span>
+          <span class="row-sub">Can key a connected radio</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.playTx} onchange={(e) => void setPlayTx(e.currentTarget.checked)} />
       </label>
     </div>
-    {#if practice.playTx}<p class="section-foot" data-testid="practice-vox">Practice transmissions play through the Tx output. A radio there with VOX on transmits them.</p>{/if}
-    {#if catSupported()}<p class="section-foot" data-testid="practice-cat">The practice band never keys the radio by CAT.</p>{/if}
+    <p class="section-foot" data-testid="practice-keys">With Play Tx audio on, practice transmissions key a connected radio{catSupported() ? ', by CAT or VOX' : ' by VOX'}.</p>
   </div>
 
   <div class="section">

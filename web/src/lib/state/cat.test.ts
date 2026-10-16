@@ -10,7 +10,7 @@ import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, reconnectRadio, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
 import { dialNow, onRadioNotice, rig, rigBadge, rigDialInUse, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
-import { practice } from './practice.svelte';
+import { practice, txLevel } from './practice.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { audio as engineAudio, halt, onHalt } from './station.svelte';
 
@@ -158,6 +158,7 @@ beforeEach(async () => {
 afterEach(() => {
   resetCat();
   practice.on = false;
+  practice.playTx = true;
   vi.useRealTimers();
 });
 
@@ -588,14 +589,18 @@ describe('keying', () => {
       expect(chosen.sim.transmit).toBe(false);
     });
 
-    it('with VOX keying or the practice band, no output is required', async () => {
+    it('with VOX keying, or the practice band keying nothing, no output is required; practice keying by CAT needs it', async () => {
       await connect();
       expect(rigGate()).toBeNull();
       expect(tuneGate()).toBeNull();
       void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
       practice.on = true;
+      practice.playTx = false;
       expect(rigGate()).toBeNull();
       expect(tuneGate()).toBeNull();
+      practice.playTx = true;
+      expect(rigGate()).toBe('No Tx output chosen');
+      expect(tuneGate()).toBe('No Tx output chosen');
     });
   });
 
@@ -662,32 +667,59 @@ describe('keying', () => {
     expect(chosen.sim.transmit).toBe(false);
   });
 
-  it('the practice band never keys the radio by CAT: no PTT for FT8, FT4 or WSPR, and no Test keying, with the switch on', async () => {
+  it('the practice band with Play Tx audio on keys the radio by CAT as a real transmission does, Test keying included', async () => {
     void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
     await connect();
     practice.on = true;
+    practice.playTx = true;
+    expect(txKeyer()).not.toBeNull();
+    // PTT on at the pre-roll, before the audio; PTT off after it.
+    const { done, played, reports } = await transmit();
+    await run(2200);
+    await done;
+    expect(chosen.ptt).toEqual(['01']);
+    expect(played).toHaveLength(1);
+    await run(4000);
+    expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    expect(chosen.ptt).toEqual(['01', '00']);
+    expect(chosen.sim.transmit).toBe(false);
+    const t = testKeying();
+    await run(TEST_KEY_MS + 200);
+    await t;
+    expect(rig.test).toMatchObject({ state: 'done', ok: true });
+    expect(chosen.ptt.slice(2).filter((p) => p === '01')).toEqual(['01']);
+    // With the radio gone, a practice transmission keyed by CAT is refused, as a real one is.
+    chosen.unplug();
+    await run(10);
+    expect(rigGate()).toBe('Radio not connected');
+  });
+
+  it('the practice band with Play Tx audio off plays no Tx audio and keys nothing, Test keying included', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    practice.on = true;
+    practice.playTx = false;
     const n = chosen.log.length;
     expect(txKeyer()).toBeNull();
+    // The runtimes play at txLevel: silent.
+    expect(txLevel(0.8)).toBe(0);
     for (const mode of ['FT8', 'WSPR'] as const) {
-      const { done, played, reports } = await transmit(2000, mode);
+      const { done, reports } = await transmit(2000, mode);
       await run(6000);
       await done;
-      expect(played).toHaveLength(1);
       expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
     }
     // No dial shift either: it needs CAT keying.
     expect(txShiftHz('FT4', 2800)).toBe(0);
     await testKeying();
-    expect(rig.test).toEqual({ state: 'done', ok: false, text: 'Not tested: the practice band is on, and it never keys the radio by CAT. Turn it off in Settings › Practice band first.', atMs: expect.any(Number) });
+    expect(rig.test).toEqual({ state: 'done', ok: false, text: 'Not tested: with the practice band on, the radio keys only with Play Tx audio on. Turn it on in Settings › Practice band.', atMs: expect.any(Number) });
     await run(TEST_KEY_MS + 500);
     expect(chosen.log.slice(n).filter((l) => l.startsWith('FE FE A4 E0 1C 00 0'))).toEqual([]);
     expect(chosen.sim.transmit).toBe(false);
-    // With the radio gone, practice still transmits: it needs no radio.
+    // With the radio gone, practice still transmits: it keys nothing, so it needs no radio.
     chosen.unplug();
     await run(10);
     expect(rigGate()).toBeNull();
-    practice.on = false;
-    expect(rigGate()).toBe('Radio not connected');
   });
 
   it('a lost port turns Tx off, says so, and the next connection sends PTT off if the radio still transmits', async () => {

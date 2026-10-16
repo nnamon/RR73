@@ -264,12 +264,13 @@ export function provideKeyer(k: Keyer | null) {
 }
 
 /**
- * True when transmissions key the radio by CAT once it is connected: Key the radio with CAT is on
- * and the practice band is off. The practice band never keys the radio by CAT, whatever the
- * settings: its transmissions go to simulated stations.
+ * True when transmissions key the radio by CAT once it is connected: Key the radio with CAT is on,
+ * and with the practice band on, its Play Tx audio too, the switch that lets practice key a
+ * connected radio. Then practice transmissions key the radio as real ones do. With Play Tx audio
+ * off, practice plays no Tx audio and keys nothing.
  */
 export function catKeys(): boolean {
-  return settings.cat.keyPtt && !practice.on;
+  return settings.cat.keyPtt && (!practice.on || practice.playTx);
 }
 
 /**
@@ -299,7 +300,7 @@ export function txShiftHz(mode: Mode, hz: number): number {
  * the operator connected is not connected now; PTT off was not confirmed; the radio's USB SEND
  * keys it on a port line; keying by CAT, the Tx audio would not reach the chosen output; or the
  * radio's dial is on another band than RR73's, where QSOs would log the wrong band. The practice
- * band keys nothing by CAT, so it needs no radio connected.
+ * band with Play Tx audio off keys nothing, so it needs no radio connected.
  */
 export function rigGate(): string | null {
   if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;

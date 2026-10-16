@@ -419,14 +419,15 @@ const UNKEY_TEST = 'Keyed. PTT off was not confirmed.';
  * Test keying: stops any transmission, keys the radio for TEST_KEY_MS with no audio, sends PTT off,
  * and says what happened once a read confirms receive, or that it did not. It reads transmit or
  * receive while keyed. Halt, a lost port, a fault and the page going stop it with PTT off. Works
- * with Key the radio with CAT on or off; refused while the practice band is on, which never keys
- * the radio by CAT, while USB SEND keys on a line, or while an earlier PTT off is unconfirmed.
+ * with Key the radio with CAT on or off. With the practice band on it keys only with Play Tx audio
+ * on, the switch that lets practice key a connected radio. Refused while USB SEND keys on a line or
+ * an earlier PTT off is unconfirmed.
  */
 export async function testKeying(): Promise<void> {
   const c = current;
   if (!c || !rigConnected() || rig.test?.state === 'running') return;
-  if (practice.on) {
-    rig.test = { state: 'done', ok: false, text: 'Not tested: the practice band is on, and it never keys the radio by CAT. Turn it off in Settings › Practice band first.', atMs: Date.now() };
+  if (practice.on && !practice.playTx) {
+    rig.test = { state: 'done', ok: false, text: 'Not tested: with the practice band on, the radio keys only with Play Tx audio on. Turn it on in Settings › Practice band.', atMs: Date.now() };
     return;
   }
   if (usbSendOn()) {

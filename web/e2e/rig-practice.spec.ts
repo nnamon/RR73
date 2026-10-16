@@ -1,73 +1,78 @@
 // The practice band with a radio connected and Key the radio with CAT on (docs/design/cat.md,
-// Safety paths): a practice CQ and Tune send no PTT to the fake IC-705 (fake-ic705.ts), and Test
-// keying is off while the practice band is on. Runs in the practice project: the band is made in
-// the page and decoded in real time.
-import { expect, test } from '@playwright/test';
-import { connect, ptt, rigFrames, rigLog, setKeying, installFakeIc705 } from './fake-ic705';
-import { loadWasm } from './wasm';
+// Transmit): with Play Tx audio on, the switch that lets practice key a connected radio, a practice
+// CQ keys the fake IC-705 (fake-ic705.ts) as a real one does, PTT before its audio and off after
+// it; with it off, a practice CQ plays no audio and sends no PTT. The output is recorded in the page
+// (tap.ts). Runs in the practice project: the band is made in the page and decoded in real time.
+import { expect, test, type Page } from '@playwright/test';
+import { chooseOutput, connect, installFakeIc705, rigFrames, rigLog, setKeying } from './fake-ic705';
+import { prepare, waitForTransmissions } from './txhelp';
+
+// Fake media devices: Key the radio with CAT transmits only to a chosen output.
+test.use({
+  permissions: ['microphone'],
+  launchOptions: { args: ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream'] },
+});
 
 test.beforeEach(async ({ page, baseURL }) => {
-  test.skip(!(await loadWasm()), 'The wasm package is not built (src/wasm/pkg).');
   // No test reaches a real server.
   const origin = new URL(baseURL!).origin;
   await page.route((url) => url.origin !== origin, (route) => route.abort());
 });
 
-test('the practice band keys no PTT for a CQ or Tune with Key the radio with CAT on, and Test keying is off', async ({ page }) => {
-  test.setTimeout(120_000);
+/** The fake IC-705 connected, a Tx output chosen, Key the radio with CAT on, and the practice band on with Play Tx audio as given. */
+async function practiceWithRadio(page: Page, playTx: boolean) {
   await installFakeIc705(page);
-  await page.goto('./#/settings');
-  for (const [name, value] of [
-    ['Callsign', '9V1NE'],
-    ['Grid', 'OJ11'],
-  ]) {
-    const field = page.getByRole('textbox', { name });
-    await field.fill(value);
-    await field.press('Enter');
-  }
+  await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
-  await expect(page.getByTestId('rig-practice')).toHaveText('The practice band never keys the radio by CAT.');
-
   await page.evaluate(() => (location.hash = '#/settings/practice'));
-  await expect(page.getByTestId('practice-cat')).toHaveText('The practice band never keys the radio by CAT.');
-  await expect(page.getByTestId('practice-vox')).toHaveText('Practice transmissions play through the Tx output. A radio there with VOX on transmits them.');
+  await expect(page.getByTestId('practice-keys')).toHaveText('With Play Tx audio on, practice transmissions key a connected radio, by CAT or VOX.');
+  const play = page.getByRole('switch', { name: /^Play Tx audio/ });
+  await expect(play).toHaveAccessibleName(/Can key a connected radio/);
+  await play.setChecked(playTx);
   const on = page.getByRole('switch', { name: /^Practice band/ });
   await on.check();
   await expect(on).toBeChecked();
-  // Turning it on stops output first; from here on no PTT frame reaches the radio.
-  await page.waitForTimeout(500);
-  const from = (await rigLog(page)).length;
-
-  await page.evaluate(() => (location.hash = '#/settings/rig'));
-  const test1 = page.getByRole('button', { name: /^Test keying/ });
-  await expect(test1).toBeDisabled();
-  await expect(page.getByTestId('rig-test-practice')).toHaveText('Off with the practice band on');
-
   await page.evaluate(() => (location.hash = '#/'));
   await expect(page.locator('header.top .practice')).toHaveText('Practice');
   await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
+}
+
+/** The PTT frames the fake radio received from index `from` on. */
+async function pttSince(page: Page, from: number) {
+  return rigFrames(await rigLog(page), from).filter((f) => f.body === '1C 00 01' || f.body === '1C 00 00');
+}
+
+test('with Play Tx audio on, a practice CQ keys the radio by CAT: PTT on before its audio and off after it', async ({ page }) => {
+  test.setTimeout(150_000);
+  await practiceWithRadio(page, true);
+  const from = (await rigLog(page)).length;
   const bar = page.getByRole('region', { name: 'Transmit' });
-  await bar.getByRole('button', { name: 'CQ' }).click();
+  await bar.getByRole('button', { name: 'CQ', exact: true }).click();
+  const [tx] = await waitForTransmissions(page, 1, 45_000);
+  await expect.poll(async () => (await pttSince(page, from)).length, { timeout: 2000 }).toBeGreaterThanOrEqual(2);
+  const [on, off] = await pttSince(page, from);
+  expect([on.body, off.body]).toEqual(['1C 00 01', '1C 00 00']);
+  // On the audio clock: PTT on before the first sample, off after the last.
+  expect(on.ctxS!).toBeLessThan(tx.startS);
+  expect(off.ctxS!).toBeGreaterThan(tx.endS);
+  expect(tx.endS - tx.startS).toBeGreaterThan(12);
+  await bar.getByRole('button', { name: 'Halt' }).click();
+  await expect.poll(() => page.evaluate(() => window.__rig.transmit)).toBe(false);
+});
+
+test('with Play Tx audio off, a practice CQ plays no audio and sends no PTT', async ({ page }) => {
+  test.setTimeout(150_000);
+  await practiceWithRadio(page, false);
+  const from = (await rigLog(page)).length;
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await bar.getByRole('button', { name: 'CQ', exact: true }).click();
   await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 40_000 });
-  // Well into the transmission, after the pre-roll where CAT keying would have sent PTT on.
-  await page.waitForTimeout(3000);
-  expect(rigFrames(await rigLog(page), from).filter((f) => f.body.startsWith('1C 00 0'))).toEqual([]);
+  // Past the end of the transmission: 12.6 s of FT8 and the tail.
+  await page.waitForTimeout(14_000);
+  expect(await pttSince(page, from)).toEqual([]);
   expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
-  await page.getByRole('button', { name: /^Halt/ }).first().click();
-
-  // Tune plays through the Tx output with no PTT.
-  await page.evaluate(() => (location.hash = '#/settings/radio'));
-  const before = (await rigLog(page)).length;
-  await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
-  const sheet = page.getByRole('dialog', { name: 'Tuning' });
-  await expect(sheet).toBeVisible();
-  await page.waitForTimeout(1000);
-  expect(rigFrames(await rigLog(page), before).filter((f) => f.body === '1C 00 01')).toEqual([]);
-  expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
-  await sheet.getByRole('button', { name: 'Halt' }).click();
-  await expect(sheet).toBeHidden();
-
-  // Nothing in the whole test keyed the radio.
-  expect((await ptt(page)).filter((f) => f.body === '1C 00 01')).toEqual([]);
+  expect(await page.evaluate(() => window.__tx.length)).toBe(0);
+  await bar.getByRole('button', { name: 'Halt' }).click();
 });

@@ -15,8 +15,7 @@
   import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
-  import { radioName, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
-  import { practice } from '../lib/state/practice.svelte';
+  import { catKeys, radioName, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
 
@@ -264,7 +263,7 @@
    * never transmits with its Tx audio on another device. Why each is refused, and what to do.
    */
   const outputText = $derived.by((): string | null => {
-    if (!settings.cat.keyPtt || practice.on) return null;
+    if (!catKeys()) return null;
     switch (txOutput()) {
       case 'default':
         return `Key the radio with CAT needs the Tx audio on the radio. Choose ${radioAudio} in Settings › Radio and audio › Output. Until then each transmission is refused.`;
@@ -356,12 +355,10 @@
         </span>
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.keyPtt} onchange={(e) => void updateSettings({ cat: { ...settings.cat, keyPtt: e.currentTarget.checked } })} />
       </label>
-      <!-- The practice band never keys the radio by CAT, Test keying included. -->
-      <button class="row act" disabled={!connected || testing || practice.on} onclick={() => void testKeying()}>
+      <button class="row act" disabled={!connected || testing} onclick={() => void testKeying()}>
         <span class="row-main">
           <span class="row-title">{testing ? 'Testing keying' : 'Test keying'}</span>
-          {#if practice.on}<span class="row-sub" data-testid="rig-test-practice">Off with the practice band on</span>
-          {:else if testResult}<span class="row-sub" class:ok={testResult.ok} class:err={!testResult.ok} role="status" data-testid="rig-test">{testResult.text}</span>{/if}
+          {#if testResult}<span class="row-sub" class:ok={testResult.ok} class:err={!testResult.ok} role="status" data-testid="rig-test">{testResult.text}</span>{/if}
         </span>
       </button>
     </div>
@@ -369,7 +366,6 @@
     {#if notDataMode}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataMode}</p>{/if}
     {#if offBand}<p class="section-foot err" role="alert" data-testid="rig-band">{offBand}</p>{/if}
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
-    <p class="section-foot" data-testid="rig-practice">The practice band never keys the radio by CAT.</p>
     {#if kx2}<p class="section-foot" data-testid="rig-risk">{KX2_RISK}</p>{/if}
   </div>
 
