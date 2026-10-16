@@ -200,6 +200,10 @@ enum Command {
         /// Reference key to score against, as for `run`.
         #[arg(long)]
         reference: Option<String>,
+        /// Decode each search, failed and other-text miss again with every other reference entry
+        /// subtracted, and read the block demodulator there.
+        #[arg(long)]
+        oracle: bool,
         /// JSON file for the per-miss records.
         #[arg(long)]
         out: Option<PathBuf>,
@@ -475,6 +479,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             then,
             threads,
             reference,
+            oracle,
             out,
             paths,
         } => {
@@ -485,6 +490,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 paths,
                 threads,
                 reference,
+                oracle,
             })?;
             if let Some(path) = &out {
                 let text = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;

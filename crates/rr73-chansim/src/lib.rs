@@ -9,10 +9,12 @@
 pub mod channel;
 pub mod continuous;
 pub mod messages;
+pub mod passband;
 pub mod scene;
 pub mod wspr;
 
 pub use channel::Watterson;
+pub use passband::Passband;
 pub use scene::{
     NOISE_RMS, Noise, RenderError, Scene, SimSignal, Truth, crowded, noise_only, render, render_loop, single,
 };

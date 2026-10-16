@@ -26,6 +26,7 @@ use std::path::PathBuf;
 
 use rayon::prelude::*;
 use rr73_corpus::{Entry, SlotMode, Tolerance, discover, match_entries, normalise_text, read_slot};
+use rr73_decode::block::{BlockScore, BlockWorkspace};
 use rr73_decode::demod::{Demodulator, MaxLogDemod};
 use rr73_decode::layout::{CODEWORD_BITS, FrameLayout};
 use rr73_decode::ldpc::{LdpcDecoder, LdpcScratch, ParityGraph, SumProduct};
@@ -35,8 +36,8 @@ use rr73_decode::stages::Subtractor;
 use rr73_decode::subtract::{ModelSubtract, SubtractScratch};
 use rr73_decode::view::SymbolView;
 use rr73_decode::{
-    Candidate, CandidateTrace, DecodeContext, DecodeSession, DecoderConfig, Pipeline, SlotAudio, Stage,
-    TraceOutcome,
+    Candidate, CandidateTrace, Decode, DecodeContext, DecodeSession, DecoderConfig, Pipeline, SlotAudio,
+    Stage, TraceOutcome,
 };
 use rr73_dsp::{FftPlans, Spectrogram, SpectrogramConfig, SpectrogramPlan};
 use rr73_ft8::{CallsignHashes, Message, Mode};
@@ -57,6 +58,9 @@ pub struct MissOptions {
     pub threads: Option<usize>,
     /// Reference key, as for `run`.
     pub reference: Option<String>,
+    /// Decode each search, failed and other-text miss again with every other reference entry
+    /// subtracted ([`Miss::oracle`]).
+    pub oracle: bool,
 }
 
 /// Distance in frequency within which a candidate counts as near an entry, in Hz.
@@ -81,6 +85,18 @@ pub struct Genie {
     /// Belief propagation (25 iterations) returns the transmitted codeword there.
     pub bp: bool,
     /// The first stage's LDPC decoder (BP, then OSD in the OSD presets) returns it.
+    pub ldpc: bool,
+}
+
+/// What the block demodulator (`demod.kind=block`) makes of a miss at its reference
+/// position: refined within half a symbol and half a tone spacing, as from a candidate.
+#[derive(Clone, Debug, Default, Serialize)]
+pub struct BlockGenie {
+    /// Sync symbols on their sent tone at the refined position (of 21 in FT8, 16 in FT4).
+    pub sync_matched: usize,
+    /// Hard errors against the transmitted codeword, for each block length of the stage.
+    pub hard_errors: Vec<u32>,
+    /// The stage's LDPC decoder returns the codeword from one of the block sets.
     pub ldpc: bool,
 }
 
@@ -139,6 +155,17 @@ pub struct Miss {
     pub orig_refined: Option<Genie>,
     /// The same on the residual.
     pub resid_refined: Option<Genie>,
+    /// The block demodulator at the reference position on the original audio.
+    pub orig_block: Option<BlockGenie>,
+    /// The same on the residual.
+    pub resid_block: Option<BlockGenie>,
+    /// The same on the original audio with every other reference entry subtracted (with
+    /// `--oracle`).
+    pub oracle_block: Option<BlockGenie>,
+    /// With `--oracle`: whether the stages decode the entry from the original audio with every
+    /// other reference entry subtracted, strongest first. A miss that decodes there was lost
+    /// to its neighbours: ones the run did not decode, or the residue of ones it did.
+    pub oracle: Option<bool>,
 }
 
 /// Counts for one slot.
@@ -209,6 +236,7 @@ pub fn misses(opts: &MissOptions) -> Result<MissReport, String> {
                     mode,
                     expected,
                     &stages,
+                    opts.oracle,
                 ))
             })
             .collect()
@@ -236,6 +264,7 @@ fn analyse_slot(
     mode: Mode,
     expected: &[Entry],
     stages: &[(String, DecoderConfig)],
+    oracle: bool,
 ) -> (SlotCounts, Vec<Miss>) {
     let layout = rr73_decode::pipeline::layout(mode);
     let audio = SlotAudio::new(samples, mode);
@@ -284,6 +313,21 @@ fn analyse_slot(
     let mut refiners = [RefineScratch::default(), RefineScratch::default()];
     refiners[0].prepare(layout, samples, false);
     refiners[1].prepare(layout, &residual, false);
+    // The block demodulator on both audios, and the reference entries as decodes for the oracle.
+    let demod = &stages[0].1.demod;
+    let blocks: Vec<u8> = demod.blocks(mode).to_vec();
+    let mut block_ws = [BlockWorkspace::default(), BlockWorkspace::default()];
+    block_ws[0].prepare(layout, samples, &mut plans);
+    block_ws[1].prepare(layout, &residual, &mut plans);
+    let references: Vec<(usize, Decode)> = if oracle {
+        expected
+            .iter()
+            .enumerate()
+            .filter_map(|(k, e)| reference_decode(e).map(|d| (k, d)))
+            .collect()
+    } else {
+        Vec::new()
+    };
     let decoded_texts: Vec<String> = decodes.iter().map(|d| normalise_text(&d.text)).collect();
     let (dt_lo, dt_hi) = stages
         .iter()
@@ -389,6 +433,54 @@ fn analyse_slot(
         };
         let orig_refined = refined(0, &orig_fine);
         let resid_refined = refined(1, &resid_fine);
+        let block = |ws: &mut BlockWorkspace, plans: &mut FftPlans| {
+            codeword.as_ref().and_then(|cw| {
+                block_genie(
+                    layout,
+                    ws,
+                    plans,
+                    cw,
+                    (freq, dt),
+                    &blocks,
+                    (demod.block_score, demod.llr_variance),
+                    graph,
+                    pipeline.ldpc.as_ref(),
+                )
+            })
+        };
+        let orig_block = block(&mut block_ws[0], &mut plans);
+        let resid_block = block(&mut block_ws[1], &mut plans);
+        let (mut oracle_block, mut oracle_found) = (None, None);
+        if oracle && matches!(class, "search" | "failed" | "other-text") {
+            // Every other reference entry subtracted, strongest first, as a decoder that found
+            // them all would subtract them.
+            let mut others: Vec<Decode> = references
+                .iter()
+                .filter(|(k, _)| *k != j)
+                .map(|(_, d)| d.clone())
+                .collect();
+            others.sort_by(|a, b| b.snr_db.total_cmp(&a.snr_db));
+            let mut audio = samples.to_vec();
+            subtractor.subtract(layout, &mut audio, &others, &mut SubtractScratch::default());
+            let mut ws = BlockWorkspace::default();
+            ws.prepare(layout, &audio, &mut plans);
+            oracle_block = block(&mut ws, &mut plans);
+            let session_stages = stages
+                .iter()
+                .map(|(name, c)| Stage::new(name.clone(), c.clone()))
+                .collect();
+            let mut s = DecodeSession::with_context(
+                &SlotAudio::new(&audio, mode),
+                session_stages,
+                DecodeContext::new(),
+            );
+            s.run_to_end();
+            oracle_found = Some(s.decodes().iter().any(|d| {
+                normalise_text(&d.text) == text
+                    && (f64::from(d.freq_hz) - e.freq_hz).abs() <= 10.0
+                    && (f64::from(d.dt_s) - e.dt_s).abs() <= 0.5
+            }));
+        }
         out.push(Miss {
             path: path.to_string(),
             text: e.text.clone(),
@@ -407,6 +499,10 @@ fn analyse_slot(
             resid_fine,
             orig_refined,
             resid_refined,
+            orig_block,
+            resid_block,
+            oracle_block,
+            oracle: oracle_found,
         });
     }
     (
@@ -701,7 +797,126 @@ pub fn render(report: &MissReport) -> String {
         &[0.0, 2.0, 5.0, 8.0],
         &|m| m.resid_grid.as_ref().map(|g| f64::from(g.score)),
     ));
+    out.push_str(&buckets(
+        "Block demodulator at the reference position, fewest hard errors over the block sets, residual",
+        &[20.0, 30.0, 40.0, 55.0],
+        &|m| {
+            m.resid_block
+                .as_ref()
+                .and_then(|b| b.hard_errors.iter().min().map(|&e| f64::from(e)))
+        },
+    ));
+    // Block demodulator and oracle outcomes by the nearest other reference entry.
+    let ok = |b: &Option<BlockGenie>| b.as_ref().is_some_and(|b| b.ldpc);
+    out.push_str(&format!(
+        "\nBlock demodulator decodes at the reference position, and the oracle\n{:<12} {:>8} {:>6} {:>7} {:>8} {:>8} {:>8}\n",
+        "class", "neighbour", "misses", "b:orig", "b:resid", "b:oracle", "oracle"
+    ));
+    for c in ["search", "other-text", "failed"] {
+        for (label, lo, hi) in [
+            ("<10 Hz", 0.0, 10.0),
+            ("10..25", 10.0, 25.0),
+            ("25..50", 25.0, 50.0),
+            (">=50", 50.0, f64::INFINITY),
+        ] {
+            let ms: Vec<&Miss> = report
+                .misses
+                .iter()
+                .filter(|m| m.class == c)
+                .filter(|m| {
+                    let n = m.neighbour_hz.unwrap_or(f64::INFINITY);
+                    n >= lo && n < hi
+                })
+                .collect();
+            if ms.is_empty() {
+                continue;
+            }
+            let count = |f: &dyn Fn(&Miss) -> bool| ms.iter().filter(|m| f(m)).count();
+            let oracle = if ms.iter().any(|m| m.oracle.is_some()) {
+                count(&|m| m.oracle == Some(true)).to_string()
+            } else {
+                "-".to_string()
+            };
+            out.push_str(&format!(
+                "{:<12} {:>8} {:>6} {:>7} {:>8} {:>8} {:>8}\n",
+                c,
+                label,
+                ms.len(),
+                count(&|m| ok(&m.orig_block)),
+                count(&|m| ok(&m.resid_block)),
+                count(&|m| ok(&m.oracle_block)),
+                oracle
+            ));
+        }
+    }
     out
+}
+
+/// A reference entry as a decode, for subtraction: its message, payload, frequency, DT and
+/// SNR. `None` for text that does not pack.
+fn reference_decode(e: &Entry) -> Option<Decode> {
+    let message = Message::parse(&e.text).ok()?;
+    let payload = rr73_ft8::message::pack(&message, &mut CallsignHashes::new()).ok()?;
+    Some(Decode {
+        text: e.text.clone(),
+        message,
+        payload,
+        freq_hz: e.freq_hz as f32,
+        dt_s: e.dt_s as f32,
+        snr_db: e.snr_db as f32,
+        pass: 0,
+        ldpc_iterations: 0,
+        hard_errors: 0,
+        score: 0.0,
+        osd: false,
+        osd_distance: 0.0,
+        ap: None,
+        block: None,
+    })
+}
+
+/// The block demodulator at a reference position `at` (frequency in Hz, DT in seconds):
+/// refined within half a symbol and half a tone spacing, then soft bits for each of `blocks`
+/// with `score` (score kind and LLR variance), their hard errors against `codeword`, and
+/// whether `ldpc` returns it from one of them. `None` with no block lengths or no band.
+#[allow(clippy::too_many_arguments)]
+fn block_genie(
+    layout: &FrameLayout,
+    ws: &mut BlockWorkspace,
+    plans: &mut FftPlans,
+    codeword: &[u8; CODEWORD_BITS],
+    at: (f32, f32),
+    blocks: &[u8],
+    score: (BlockScore, f32),
+    graph: &ParityGraph,
+    ldpc: &dyn LdpcDecoder,
+) -> Option<BlockGenie> {
+    if blocks.is_empty() {
+        return None;
+    }
+    let refined = ws.amplitudes(layout, plans, at.0, at.1 + layout.start_offset_s, (0.5, 0.5))?;
+    let mut llr = [0.0f32; CODEWORD_BITS];
+    let mut scratch = LdpcScratch::default();
+    let mut cw = [0u8; CODEWORD_BITS];
+    let mut hard_errors = Vec::new();
+    let mut decoded = false;
+    for &n in blocks {
+        ws.llrs(layout, usize::from(n), score.0, score.1, &mut llr);
+        hard_errors.push(
+            llr.iter()
+                .zip(codeword)
+                .filter(|&(&l, &b)| u8::from(l > 0.0) != b)
+                .count() as u32,
+        );
+        if !decoded && ldpc.decode(graph, &llr, &mut scratch, &mut cw).converged && cw == *codeword {
+            decoded = true;
+        }
+    }
+    Some(BlockGenie {
+        sync_matched: refined.sync_matched,
+        hard_errors,
+        ldpc: decoded,
+    })
 }
 
 #[cfg(test)]
@@ -747,7 +962,7 @@ mod tests {
             "subtract-3-osd2".to_string(),
             DecoderConfig::preset("subtract-3-osd2").expect("preset"),
         )];
-        let (counts, misses) = analyse_slot("x.wav", &samples, Mode::Ft8, &expected, &stages);
+        let (counts, misses) = analyse_slot("x.wav", &samples, Mode::Ft8, &expected, &stages, true);
         assert_eq!((counts.expected, counts.matched), (2, 1));
         assert_eq!(misses.len(), 1);
         let m = &misses[0];
@@ -759,5 +974,14 @@ mod tests {
                 .is_some_and(|g| !g.ldpc && g.hard_errors > 40)
         );
         assert!(m.class == "search" || m.class == "failed", "{}", m.class);
+        // With the decoded signal subtracted as an oracle would, there is still nothing to decode,
+        // and the block demodulator finds no codeword there either.
+        assert_eq!(m.oracle, Some(false));
+        assert!(
+            m.orig_block
+                .as_ref()
+                .is_some_and(|b| !b.ldpc && b.hard_errors.len() == 2)
+        );
+        assert!(m.oracle_block.as_ref().is_some_and(|b| !b.ldpc));
     }
 }

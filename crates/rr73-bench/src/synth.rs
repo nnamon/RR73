@@ -6,8 +6,8 @@ use rand::SeedableRng;
 use rand_chacha::ChaCha8Rng;
 use rayon::prelude::*;
 use rr73_chansim::{
-    Noise, Scene, SimSignal, Truth, Watterson, WsprScene, WsprSignal, crowded, messages, noise_only, render,
-    render_wspr, single, wspr_band, wspr_noise_only, wspr_single,
+    Noise, Passband, Scene, SimSignal, Truth, Watterson, WsprScene, WsprSignal, crowded, messages,
+    noise_only, render, render_wspr, single, wspr_band, wspr_noise_only, wspr_single,
 };
 use rr73_corpus::{Entry, SlotMeta, SlotMode, Source, SourceKind, Timing, TimingReference, write_slot};
 use rr73_ft8::Mode;
@@ -26,6 +26,7 @@ pub const SETS: &[&str] = &[
     "late-start",
     "ap-sweep",
     "ft4-sweep",
+    "band-edge",
 ];
 
 /// The operator and the QSO partner of the `ap-sweep` set.
@@ -76,6 +77,8 @@ pub enum JobScene {
     Ft(Scene),
     /// WSPR.
     Wspr(WsprScene),
+    /// FT8 or FT4 through a receiver passband, applied to signals and noise together.
+    Filtered(Scene, Passband),
 }
 
 /// One slot to render: where it goes and what it holds.
@@ -106,6 +109,29 @@ pub fn ft4_sweep_steps() -> impl Iterator<Item = i32> {
 /// Least spacing between base tones in the `ft4-sweep` crowded slots, Hz: FT4's 83 Hz
 /// bandwidth plus a guard.
 pub const FT4_SPACING_HZ: f64 = 100.0;
+
+/// SNR steps of the `band-edge` set, in dB.
+pub fn band_edge_steps() -> impl Iterator<Item = i32> {
+    (-24..=16).step_by(4)
+}
+
+/// Receiver passbands of the `band-edge` set: `sharp` falls 6 dB at 3000 Hz and 70 dB by
+/// 3025 Hz, near the SARTS recordings (100 to 3000 Hz, experiment 0011); `soft` falls 6 dB
+/// at 300 Hz and 2900 Hz over skirts 400 Hz wide, near the gentlest edges of the public
+/// recordings.
+pub const BAND_EDGE_SHARP: Passband = Passband {
+    low_hz: 100.0,
+    high_hz: 3000.0,
+    skirt_hz: 50.0,
+    stop_db: -70.0,
+};
+/// See [`BAND_EDGE_SHARP`].
+pub const BAND_EDGE_SOFT: Passband = Passband {
+    low_hz: 300.0,
+    high_hz: 2900.0,
+    skirt_hz: 400.0,
+    stop_db: -70.0,
+};
 
 /// SNR steps of the `wspr-snr-sweep` set, in dB.
 pub fn wspr_sweep_steps() -> impl Iterator<Item = i32> {
@@ -395,6 +421,40 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
                 });
             }
         }
+        "band-edge" => {
+            // One steady message per slot near a receiver's passband edge, at -24 to +16 dB
+            // in 4 dB steps (the SNR at the antenna: the filter shapes signal and noise alike),
+            // and noise slots through each passband. FT8 at base tones of 2850 to 3050 Hz
+            // through `sharp`, 2700 to 3150 Hz and 150 to 450 Hz through `soft`; FT4 at 2850 to
+            // 3050 Hz through `sharp`.
+            for (sub, mode, passband, (lo, hi)) in [
+                ("ft8-sharp", Mode::Ft8, BAND_EDGE_SHARP, (2850.0, 3050.0)),
+                ("ft8-soft", Mode::Ft8, BAND_EDGE_SOFT, (2700.0, 3150.0)),
+                ("ft8-low", Mode::Ft8, BAND_EDGE_SOFT, (150.0, 450.0)),
+                ("ft4-sharp", Mode::Ft4, BAND_EDGE_SHARP, (2850.0, 3050.0)),
+            ] {
+                let mut i = 0;
+                for snr in band_edge_steps() {
+                    for _ in 0..opts.per_step {
+                        push(sub, i, &mut |r| {
+                            let mut s = single(mode, f64::from(snr), None, r);
+                            s.signals[0].freq_hz = rand::Rng::random_range(r, lo..hi);
+                            JobScene::Filtered(s, passband)
+                        });
+                        i += 1;
+                    }
+                }
+            }
+            for (sub, mode, passband) in [
+                ("noise-sharp", Mode::Ft8, BAND_EDGE_SHARP),
+                ("noise-soft", Mode::Ft8, BAND_EDGE_SOFT),
+                ("ft4-noise-sharp", Mode::Ft4, BAND_EDGE_SHARP),
+            ] {
+                for i in 0..opts.noise_count {
+                    push(sub, i, &mut |_| JobScene::Filtered(noise_only(mode), passband));
+                }
+            }
+        }
         other => return Err(format!("unknown set {other:?}; known sets: {}", SETS.join(", "))),
     }
     Ok(jobs)
@@ -405,8 +465,11 @@ pub fn render_job(job: &Job) -> Result<(Vec<f32>, SlotMeta, String), String> {
     let fail = |e: rr73_chansim::RenderError| format!("{} slot {}: {e}", job.set, job.index);
     let (samples, truth, mode, noise, signals): (Vec<f32>, Vec<Truth>, SlotMode, Noise, serde_json::Value) =
         match &job.scene {
-            JobScene::Ft(scene) => {
-                let (samples, truth) = render(scene, job.seed).map_err(fail)?;
+            JobScene::Ft(scene) | JobScene::Filtered(scene, _) => {
+                let (mut samples, truth) = render(scene, job.seed).map_err(fail)?;
+                if let JobScene::Filtered(_, passband) = &job.scene {
+                    passband.apply(&mut samples, 12_000.0);
+                }
                 let mode = match scene.mode {
                     Mode::Ft8 => SlotMode::Ft8,
                     Mode::Ft4 => SlotMode::Ft4,
@@ -437,6 +500,12 @@ pub fn render_job(job: &Job) -> Result<(Vec<f32>, SlotMeta, String), String> {
             .with("noise", if noise == Noise::Awgn { "awgn" } else { "none" })
             .with("signals", signals.clone()),
     );
+    if let JobScene::Filtered(_, passband) = &job.scene {
+        meta.source.extra.insert(
+            "passband".to_string(),
+            serde_json::to_value(passband).unwrap_or_default(),
+        );
+    }
     if job.set.starts_with("ap-sweep/") {
         // The partner's frequency: its signal in `qso`, anywhere for callers (unknown), a
         // frequency drawn from the seed for noise.
@@ -526,6 +595,11 @@ mod tests {
         assert_eq!(
             jobs_for("late-start", base, &opts).map(|j| j.len()),
             Ok((4 * 12 + 4 * 11) * 8 * 3)
+        );
+        // 4 subsets of signals at 11 SNRs, 3 of noise.
+        assert_eq!(
+            jobs_for("band-edge", base, &opts).map(|j| j.len()),
+            Ok(4 * 11 * 3 + 3 * 7)
         );
         assert!(jobs_for("bogus", base, &opts).is_err());
     }
