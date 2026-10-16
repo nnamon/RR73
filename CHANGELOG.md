@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.22.4 · 2026-10-16
 
 - FT8 decodes transmissions that start up to 4.5 s late, and FT4 up to 1.5 s, such as a reply sent late into the slot. Before, FT8 found none that started more than 2.5 s late, and FT4 none past 1 s.
 
