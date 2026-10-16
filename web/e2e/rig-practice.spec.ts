@@ -44,10 +44,29 @@ async function pttSince(page: Page, from: number) {
   return rigFrames(await rigLog(page), from).filter((f) => f.body === '1C 00 01' || f.body === '1C 00 00');
 }
 
+/**
+ * The index of the fake radio's log once no PTT frame has come for 1.5 s. Turning the practice band
+ * on runs Halt, which sends PTT off while Key the radio with CAT is on, and a loaded machine can
+ * delay its OK past 100 ms, so PTT off may go out again 100 ms apart, 4 times at most.
+ */
+async function settled(page: Page): Promise<number> {
+  await expect
+    .poll(
+      async () => {
+        const log = rigFrames(await rigLog(page));
+        const last = log.filter((f) => f.body.startsWith('1C 00 0')).at(-1);
+        return !last || Date.now() - last.at > 1500;
+      },
+      { timeout: 10_000, intervals: [250] },
+    )
+    .toBe(true);
+  return (await rigLog(page)).length;
+}
+
 test('with Play Tx audio on, a practice CQ keys the radio by CAT: PTT on before its audio and off after it', async ({ page }) => {
   test.setTimeout(150_000);
   await practiceWithRadio(page, true);
-  const from = (await rigLog(page)).length;
+  const from = await settled(page);
   const bar = page.getByRole('region', { name: 'Transmit' });
   await bar.getByRole('button', { name: 'CQ', exact: true }).click();
   const [tx] = await waitForTransmissions(page, 1, 45_000);
@@ -65,7 +84,7 @@ test('with Play Tx audio on, a practice CQ keys the radio by CAT: PTT on before 
 test('with Play Tx audio off, a practice CQ plays no audio and sends no PTT', async ({ page }) => {
   test.setTimeout(150_000);
   await practiceWithRadio(page, false);
-  const from = (await rigLog(page)).length;
+  const from = await settled(page);
   const bar = page.getByRole('region', { name: 'Transmit' });
   await bar.getByRole('button', { name: 'CQ', exact: true }).click();
   await expect(bar.getByRole('button', { name: 'On air' })).toBeVisible({ timeout: 40_000 });
