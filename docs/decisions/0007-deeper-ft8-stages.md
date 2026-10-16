@@ -1,6 +1,6 @@
 # 0007. Deeper FT8 and FT4 stages after the shipped preset
 
-Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages (FT4, 2026-10-15). Amended 2026-10-16: every stage takes soft bits from blocks of symbols through the preset (experiment 0008).
+Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages (FT4, 2026-10-15). Amended 2026-10-16: every stage takes soft bits from blocks of symbols through the preset (experiment 0008). Amended again 2026-10-16: the preset searches DT to 4.5 s in FT8 and 1.5 s in FT4, and stage 3 keeps 2.5 s and 1.0 s (experiment 0010).
 
 ## Context
 
@@ -11,7 +11,7 @@ The shipped preset, `subtract-3-osd2`, decodes an FT8 slot in about 70 ms of the
 - FT8 slots, and FT4 slots from 2026-10-15, run three stages as one `DecoderSession` in the decoder worker:
   1. `subtract-3-osd2`, as shipped.
   2. `subtract-3-osd2` on a grid of 4 frames per symbol and 4 bins per tone spacing (`spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2`).
-  3. `subtract-3-osd2` on 8 frames per symbol and 4 bins per tone spacing, with 400 candidates from a 2 dB sync threshold and OSD over all 91 information bits (`spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2`).
+  3. `subtract-3-osd2` on 8 frames per symbol and 4 bins per tone spacing, with 400 candidates from a 2 dB sync threshold and OSD over all 91 information bits (`spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2`). From 2026-10-16 it searches DT only to 2.5 s in FT8 and 1.0 s in FT4, without the preset's partial-sync threshold (`search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null`), as the preset searches late starts to 4.5 s and 1.5 s (experiment 0010).
 
   Stages 2 and 3 also leave frames that overlap digital silence out of the sync score (`search.skip_silent_frames=true`) and accept OSD decodes from -23 dB (`validate.osd_min_snr_db=-23`, 1 dB above the preset). In FT4 every stage keeps the preset's -19 dB floor (`validate.osd_ft4_min_snr_db`, experiment 0002). The plan is `DEEP` in `web/src/lib/decode/worker-client.ts`; CI gates it against `bench/subtract-3-osd2-deep.json`.
 - Stage 1's decodes go to the list, the sequencer and the receive calibration at once, as before. The decodes of stages 2 and 3 are added to the slot in the list as each stage ends, and reach the sequencer as a later pass of the slot (`pass: 'late'`). The sequencer acts on a later pass as on the final one, on its new decodes only: a reply, the partner answering another station, a caller for the queue, a CQ for Hunt. The answer goes in the slot that follows when it can still start within the late-start limit (`LATE_S` in `web/src/lib/qso/sequencer.ts`: 4 s in FT8, 1.25 s in FT4), else a cycle later; a transmission already on air plays on. What a later pass lacks repeats nothing and counts no retry. The calibration keeps to stage 1 decodes, whose timing it needs.
