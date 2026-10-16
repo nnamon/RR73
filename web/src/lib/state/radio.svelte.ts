@@ -176,10 +176,12 @@ export interface RigBadge {
 
 /**
  * Operate's radio badge while rig control is on: a radio connected or connecting, or the one the
- * operator connected gone; null with rig control off. It shows the connection, amber while the
- * radio is not in the data mode RR73 sets (USB-D, DATA A) or its mode is not read yet, its dial is
- * on another band than RR73's, or it transmits while RR73 holds no PTT, and red while the link is
- * down or PTT off went unconfirmed.
+ * operator connected gone; null with rig control off. Green "Connected" while all is well. Amber
+ * names what is wrong, the most serious first: "Transmitting" while the radio transmits with no
+ * PTT from RR73, the mode it is in ("USB", "AFSK A") outside the data mode RR73 sets (USB-D, DATA
+ * A), "Off band" while its dial is on another band than RR73's, and "Connecting" until its mode is
+ * read. Red while the link is down or PTT off went unconfirmed. The label for screen readers says
+ * the whole.
  */
 export function rigBadge(): RigBadge | null {
   if (!settings.cat.connect && rig.status === 'off') return null;
@@ -188,23 +190,16 @@ export function rigBadge(): RigBadge | null {
   if (rig.unkeyFailed) return { text: 'Transmitting', tone: 'bad', label: `${name} may still transmit: PTT off not confirmed. ${open}` };
   switch (rig.status) {
     case 'connected': {
+      // The most serious condition first; its label names it. RR73's own keying counts until a
+      // read confirms receive, so its end shows nothing.
       const band = rigBand();
       const data = rigInDataMode();
+      if (rig.transmitting === true && !rig.keyed && !rig.mayBeKeyed) return { text: 'Transmitting', tone: 'warn', label: `${name} connected, transmitting with no PTT from RR73. ${open}` };
+      if (data === false) return { text: rigModeText(), tone: 'warn', label: `${name} connected, in ${rigModeText()}. ${open}` };
+      if (rig.hz !== null && band !== settings.band) return { text: 'Off band', tone: 'warn', label: `${name} connected, ${band === null ? 'outside the bands' : `on ${band}`}. ${open}` };
       // Green only once the mode is read: after a spell without answers it is read again within 5 s.
-      // RR73's own keying counts until a read confirms receive, so its end shows no amber.
-      const why =
-        rig.transmitting === true && !rig.keyed && !rig.mayBeKeyed
-          ? 'transmitting with no PTT from RR73'
-          : data === false
-            ? `in ${rigModeText()}`
-            : rig.hz !== null && band !== settings.band
-              ? band === null
-                ? 'outside the bands'
-                : `on ${band}`
-              : data === null
-                ? 'reading its mode'
-                : null;
-      return { text: 'Connected', tone: why ? 'warn' : 'ok', label: `${name} connected${why ? `, ${why}` : ''}. ${open}` };
+      if (data === null) return { text: 'Connecting', tone: 'warn', label: `${name} connected, reading its mode. ${open}` };
+      return { text: 'Connected', tone: 'ok', label: `${name} connected. ${open}` };
     }
     case 'connecting':
     case 'choosing':

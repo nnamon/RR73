@@ -299,11 +299,11 @@ describe('connecting', () => {
 });
 
 describe('Operate’s radio badge', () => {
-  it('shows the connection: amber outside USB-D, off the band or transmitting alone, red when the link is down', async () => {
+  it('shows the connection, names each amber condition, and turns red when the link is down', async () => {
     expect(rigBadge()).toBeNull();
     await connect();
     // Connecting changes nothing on the radio: it is still in USB.
-    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
+    expect(rigBadge()).toEqual({ text: 'USB', tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
     const tuned = setRadioDial(14_074_000);
     await run(500);
     await tuned;
@@ -312,7 +312,7 @@ describe('Operate’s radio badge', () => {
     // The operator turns the dial outside every band: RR73 stays on 20m with the band's own dial.
     chosen.send(chosen.sim.turn_dial(9_000_000));
     await run(10);
-    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, outside the bands. Open Rig control' });
+    expect(rigBadge()).toEqual({ text: 'Off band', tone: 'warn', label: 'IC-705 connected, outside the bands. Open Rig control' });
     expect(rigDialInUse()).toBe(false);
     chosen.send(chosen.sim.turn_dial(14_074_000));
     await run(10);
@@ -320,7 +320,7 @@ describe('Operate’s radio badge', () => {
     // Another program keys the radio: read within 5 s.
     chosen.sim.receive(Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x1c, 0x00, 0x01, 0xfd]));
     await run(5000);
-    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, transmitting with no PTT from RR73. Open Rig control' });
+    expect(rigBadge()).toEqual({ text: 'Transmitting', tone: 'warn', label: 'IC-705 connected, transmitting with no PTT from RR73. Open Rig control' });
     chosen.sim.receive(Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x1c, 0x00, 0x00, 0xfd]));
     await run(5000);
     expect(rigBadge()?.tone).toBe('ok');
@@ -359,6 +359,32 @@ describe('Operate’s radio badge', () => {
     expect([...tones]).toEqual(['ok']);
   });
 
+  it('names the most serious condition: transmitting, then the mode, then off band; the KX2 in its own terms', () => {
+    Object.assign(rig, { status: 'connected', hz: 7_074_000, mode: 'lsb', data: false, transmitting: true, keyed: false, mayBeKeyed: false });
+    expect(rigBadge()).toMatchObject({ text: 'Transmitting', tone: 'warn' });
+    rig.transmitting = false;
+    expect(rigBadge()).toEqual({ text: 'LSB', tone: 'warn', label: 'IC-705 connected, in LSB. Open Rig control' });
+    Object.assign(rig, { mode: 'usb', data: true });
+    expect(rigBadge()).toEqual({ text: 'Off band', tone: 'warn', label: 'IC-705 connected, on 40m. Open Rig control' });
+    rig.hz = 14_074_000;
+    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'ok', label: 'IC-705 connected. Open Rig control' });
+    // RR73's own keying, until a read confirms receive: no amber.
+    Object.assign(rig, { transmitting: true, mayBeKeyed: true });
+    expect(rigBadge()?.tone).toBe('ok');
+    // PTT off unconfirmed: red, whatever else holds.
+    rig.unkeyFailed = true;
+    expect(rigBadge()).toMatchObject({ text: 'Transmitting', tone: 'bad' });
+    Object.assign(rig, { unkeyFailed: false, transmitting: false, mayBeKeyed: false });
+    settings.cat.radio = 'kx2';
+    Object.assign(rig, { mode: 'data', data: null, sub: 'afsk_a' });
+    expect(rigBadge()).toEqual({ text: 'AFSK A', tone: 'warn', label: 'KX2 connected, in AFSK A. Open Rig control' });
+    Object.assign(rig, { mode: 'data-rev', sub: 'data_a' });
+    expect(rigBadge()?.text).toBe('DATA A REV');
+    // DATA with its sub-mode not read yet.
+    Object.assign(rig, { mode: 'data', sub: null });
+    expect(rigBadge()?.text).toBe('Connecting');
+  });
+
   it('stays amber until the mode is read, after connecting to a radio that did not answer at first', async () => {
     chosen.silent = true;
     await initCat();
@@ -370,9 +396,9 @@ describe('Operate’s radio badge', () => {
     expect(rigBadge()?.text).toBe('No reply');
     chosen.silent = false;
     await run(1500);
-    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'warn', label: 'IC-705 connected, reading its mode. Open Rig control' });
+    expect(rigBadge()).toEqual({ text: 'Connecting', tone: 'warn', label: 'IC-705 connected, reading its mode. Open Rig control' });
     await run(5000);
-    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
+    expect(rigBadge()).toEqual({ text: 'USB', tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
   });
 });
 

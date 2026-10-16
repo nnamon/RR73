@@ -177,17 +177,19 @@ While rig control is on (a radio connected or connecting, or the one the operato
 
 | Badge | Tint | When |
 | --- | --- | --- |
-| Connected | Green | The radio answers, in the data mode RR73 sets, on RR73's band, and not transmitting by itself |
-| Connected | Amber | Not in USB-D (IC-705) or DATA A (KX2), or its mode not read yet; its dial on another band or outside every band; or transmitting while RR73 holds no PTT (VOX, its own PTT, another program) |
-| Connecting | Amber | The port is opening, or the chooser is open |
+| Connected | Green | The radio answers, its mode read, in the data mode RR73 sets, on RR73's band, and not transmitting by itself |
+| Transmitting | Amber | The radio transmits while RR73 holds no PTT: VOX, its own PTT, another program |
+| The radio's mode, such as USB, LSB or AFSK A | Amber | Not in USB-D (IC-705) or DATA A (KX2); the KX2's mode in its own terms (DATA A REV, AFSK A, USB) |
+| Off band | Amber | Its dial is on another band than RR73's, or outside every band |
+| Connecting | Amber | The port is opening, the chooser is open, or the mode is not read yet |
 | No reply | Red | 3 requests in a row went unanswered |
 | Port closed | Red | The port went away |
 | Not connected | Red | The port did not open, or a KX2's port waits for Connect radio |
 | Transmitting | Red | PTT off went unconfirmed |
 
-The label for screen readers says why it is amber ("IC-705 connected, in USB. Open Rig control"), and Rig control says what to do. The badge shows only where the browser has Web Serial, so never on the iPhone.
+When more than one amber condition holds, the badge names the most serious: transmitting, then the mode, then off band. RR73's own keying counts until a read confirms receive, so the end of a transmission keyed by CAT shows no amber. The label for screen readers says the whole ("IC-705 connected, in USB. Open Rig control"), and Rig control says what to do. The badge shows only where the browser has Web Serial, so never on the iPhone.
 
-Short of room the band button's chevron and dial give way first, as for the Practice and Clock badges. The band and mode keep their room next; then the badge shows Rig control's plug glyph in its tint in place of the text, in a 44 pt target, and with less room none of it (`fitRadio` in `TopBar.svelte` measures the row on every resize and change). Measured in Chromium (`rig.spec.ts`): the badge whole at 375 x 667 and wider, the glyph alone at 350 pt; with Spots shown and the practice band on, none of it below 700 pt, and whole in compact height and regular width. Rendered with Apple's fonts in WebKit at 375 x 667, the badge shows whole in every state, and none of it with the practice band on. At 350 x 667, 375 x 667, 393 x 852, 852 x 393, 1024 x 768 and 1440 x 900, with and without Spots and the practice band: everything in the bar left to right with no overlap, the band button and the badge 44 pt targets or more whenever the badge shows, the bar's buttons 44 pt, no sideways scroll, and the right edge unchanged by the badge. The last glyph's ink ends 16 pt from the edge in both bars, the clock's in the regular one and the Settings icon's in the compact one, with or without the badge (`layout.spec.ts` checks the compact bar from 350 to 393 pt).
+Short of room the band button's chevron and dial give way first, as for the Practice and Clock badges. The band and mode keep their room next; then the badge shows Rig control's plug glyph in its tint in place of the text, in a 44 pt target, and with less room none of it (`fitRadio` in `TopBar.svelte` measures the row on every resize and change). Measured in Chromium with its test fonts (`rig.spec.ts`): "Connected" whole at 393 x 852 and wider, the glyph alone at 350 and 375 pt; with Spots shown and the practice band on, none of it below 700 pt, and whole in compact height and regular width. The renders with Apple's fonts in WebKit show what fits there. At 350 x 667, 375 x 667, 393 x 852, 852 x 393, 1024 x 768 and 1440 x 900, with and without Spots and the practice band: everything in the bar left to right with no overlap, the band button and the badge 44 pt targets or more whenever the badge shows, the bar's buttons 44 pt, no sideways scroll, and the right edge unchanged by the badge. The last glyph's ink ends 16 pt from the edge in both bars, the clock's in the regular one and the Settings icon's in the compact one, with or without the badge (`layout.spec.ts` checks the compact bar from 350 to 393 pt).
 - While a shifted transmission has the radio on its Tx dial, everything above keeps the receive dial (Passband shift, below).
 
 ## Transmit

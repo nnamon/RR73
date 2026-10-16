@@ -254,13 +254,14 @@ test('Operate’s radio badge shows the connection, turns amber and red, opens R
   await page.evaluate(() => (location.hash = '#/'));
   const badge = page.getByTestId('radio-badge');
   const capsule = badge.locator('.badge');
-  // Connected in USB: amber until the band sheet sets USB-D.
-  await expect(badge).toHaveText('Connected');
+  // Connected in USB: amber, naming the mode, until the band sheet sets USB-D.
+  await expect(badge).toHaveText('USB');
   await expect(capsule).toHaveClass(/\bwarn\b/);
   await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected, in USB. Open Rig control');
   await page.getByRole('button', { name: /^Change band/ }).click();
   await page.getByRole('dialog', { name: 'Change band' }).getByText('20m', { exact: true }).click();
   await expect(capsule).toHaveClass(/\bok\b/, { timeout: 7000 });
+  await expect(badge).toHaveText('Connected');
   await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected. Open Rig control');
   await expect(page.getByTestId('top-dial')).not.toHaveClass(/fallback/);
   for (const [i, [vw, vh]] of SIZES.entries()) {
@@ -290,6 +291,7 @@ test('Operate’s radio badge shows the connection, turns amber and red, opens R
   // The radio transmits with no PTT from RR73 (VOX, its own PTT): amber, read within 5 s.
   await page.evaluate(() => (window.__rig.transmit = true));
   await expect(capsule).toHaveClass(/\bwarn\b/, { timeout: 7000 });
+  await expect(badge).toHaveText('Transmitting');
   await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected, transmitting with no PTT from RR73. Open Rig control');
   await page.evaluate(() => (window.__rig.transmit = false));
   await expect(capsule).toHaveClass(/\bok\b/, { timeout: 7000 });
