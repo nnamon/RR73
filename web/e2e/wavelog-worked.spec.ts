@@ -74,7 +74,7 @@ test('starts off and reads nothing from Wavelog', async ({ page }) => {
   const { mock, strays } = await start(page);
   await toWavelog(page);
   await expect(readSwitch(page)).not.toBeChecked();
-  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this phone’s log only.')).toBeVisible();
+  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this computer’s log only.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Refresh from Wavelog/ })).toHaveCount(0);
   await toOperate(page);
   await decoded(page, [['CQ JA1KXM PM95', -8]]);
@@ -255,7 +255,7 @@ test('says what an older Wavelog means for reading, and keeps the switch', async
   await page.getByRole('button', { name: 'Test connection' }).click();
   await expect(page.getByText('Connected to Wavelog 3.2.4 at', { exact: false })).toBeVisible();
   await expect(page.getByTestId('wavelog-version-note')).toHaveCount(0);
-  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this phone’s log only.')).toBeVisible();
+  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this computer’s log only.')).toBeVisible();
   expect(strays).toEqual([]);
 });
 

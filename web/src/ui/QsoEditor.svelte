@@ -28,6 +28,7 @@
   import { typedSuggestions, type RefSuggestion } from '../lib/log/ref-suggest';
   import Icon from './Icon.svelte';
   import { settings } from '../lib/state/settings.svelte';
+  import { device } from '../lib/app/platform';
 
   let { qsoId, inline = false, onclose }: { qsoId: string | null; inline?: boolean; onclose: () => void } = $props();
 
@@ -148,7 +149,7 @@
   const wavelogOn = $derived(log.facts.some((f) => f.id === 'wavelog' && f.active));
   const wavelog = $derived(original ? (log.index.get(original.id)?.find((e) => e.destinationId === 'wavelog') ?? null) : null);
   const canSend = $derived(!!wavelog && (wavelog.state === 'not-sent' || wavelog.state === 'waiting' || wavelog.state === 'refused'));
-  const sendReason = $derived(!log.online ? 'No connection. Send when the phone is online.' : log.sync.running ? 'Wavelog is busy with other QSOs. Try again when they are sent.' : null);
+  const sendReason = $derived(!log.online ? `No connection. Send when the ${device} is online.` : log.sync.running ? 'Wavelog is busy with other QSOs. Try again when they are sent.' : null);
   const wavelogText = $derived.by(() => {
     if (!wavelog) return '';
     const words = stateWords(wavelog.state);

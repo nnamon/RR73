@@ -38,6 +38,7 @@
   import { settings } from '../../lib/state/settings.svelte';
   import { audio, band, recent, type DecodedSlot } from '../../lib/state/station.svelte';
   import { reference } from '../../lib/reference';
+  import { device } from '../../lib/app/platform';
 
   let { active = true, waterfall }: PaneProps = $props();
 
@@ -307,7 +308,7 @@
   const FAILED = {
     missing: 'This version was built without the decoder.',
     load: 'The decoder module did not load.',
-    worker: 'The decoder could not start on this phone.',
+    worker: `The decoder could not start on this ${device}.`,
     crashed: 'The decoder stopped.',
   } as const;
 </script>

@@ -23,6 +23,7 @@ import type { ExportFile } from './files';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
 import { testConnection, type FetchLike, type TestResult } from './wavelog';
+import { advice } from '../app/advice';
 import type {
   Activation,
   DestinationConfig,
@@ -51,7 +52,7 @@ export const DEFAULT_LOGGING: LoggingSettings = { sendAutomatically: false, send
 
 export const DESTINATION_NAMES: Record<DestinationId, string> = { wavelog: 'Wavelog', 'adif-file': 'ADIF', 'pota-file': 'POTA', 'sota-file': 'SOTA', 'wwff-file': 'WWFF' };
 
-const STORAGE_FAILED = 'This phone refused to store the log. QSOs stay only until RR73 closes: export them as ADIF before closing.';
+const STORAGE_FAILED = `${advice.storageRefuser} refused to store the log. QSOs stay only until RR73 closes: export them as ADIF before closing.`;
 
 /**
  * Wavelog takes QSOs once it has an address, a key and a station location, which a passing Test

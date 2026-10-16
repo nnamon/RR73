@@ -15,6 +15,8 @@
   import { activationDirect, activationFiles, afterLine, reportsText } from '../lib/log/view';
   import type { Activation } from '../lib/log/types';
   import { clock } from '../lib/state/now.svelte';
+  import { device } from '../lib/app/platform';
+  import { advice } from '../lib/app/advice';
 
   let { activation: a }: { activation: Activation } = $props();
 
@@ -66,8 +68,8 @@
     <div class="notice" role="status">
       <Icon name="cloudoff" size={22} class="notice-i" />
       <p>
-        No phone signal{log.offlineSince ? ` since ${utcHm(log.offlineSince)} UTC` : ''}.
-        {qsos.length === 0 ? 'QSOs you log are stored on this phone.' : qsos.length === 1 ? 'The QSO is stored on this phone.' : `All ${qsos.length} QSOs are stored on this phone.`}
+        {advice.offline}{log.offlineSince ? ` since ${utcHm(log.offlineSince)} UTC` : ''}.
+        {qsos.length === 0 ? `QSOs you log are stored on this ${device}.` : qsos.length === 1 ? `The QSO is stored on this ${device}.` : `All ${qsos.length} QSOs are stored on this ${device}.`}
       </p>
     </div>
   {/if}
@@ -110,7 +112,7 @@
 <ActivationSheet bind:open={editing} edit />
 
 <Sheet bind:open={ending} title="End activation?">
-  <p class="confirm-text">The {qsos.length} {qsos.length === 1 ? 'QSO stays' : 'QSOs stay'} on this phone. Files and Wavelog deliveries carry on from the log.</p>
+  <p class="confirm-text">The {qsos.length} {qsos.length === 1 ? 'QSO stays' : 'QSOs stay'} on this {device}. Files and Wavelog deliveries carry on from the log.</p>
   <button class="btn tx wide" onclick={() => void end()}>End activation</button>
   <button class="btn wide keep" onclick={() => (ending = false)}>Keep operating</button>
 </Sheet>

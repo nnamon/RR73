@@ -10,6 +10,7 @@
   import { utcHm } from '../lib/clock/format';
   import { log, sendToWavelog, unsentForWavelog } from '../lib/log/log.svelte';
   import { clock } from '../lib/state/now.svelte';
+  import { device } from '../lib/app/platform';
 
   const id = `send-reason-${Math.random().toString(36).slice(2, 8)}`;
   const w = $derived(log.wavelog);
@@ -25,7 +26,7 @@
     if (!w.url || !w.apiKey) return 'Set up Wavelog in Settings › Logging to send QSOs.';
     if (!w.enabled) return 'Use Wavelog is off in Settings › Logging › Wavelog.';
     if (!w.stationId) return 'Run Test connection in Settings › Logging › Wavelog to choose a station location.';
-    if (!log.online) return 'No connection. Send when the phone is online.';
+    if (!log.online) return `No connection. Send when the ${device} is online.`;
     return null;
   });
   const setup = $derived(!w.url || !w.apiKey || !w.stationId);

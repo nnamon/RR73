@@ -5,6 +5,7 @@
  */
 
 import { isoUtc, signed, utcTime } from './format';
+import { Device } from '../app/platform';
 
 /** One reading the engine takes with each chunk: everything the mapping is built from. */
 export interface ClockReading {
@@ -157,7 +158,7 @@ export function timingReport(s: TimingSnapshot): string {
     `Audio gaps bridged: ${s.gaps}, ${ms(s.gapMs)}`,
     `Input offset: ${signed(s.inputOffsetS, 3)} s`,
     `Median DT: ${s.medianDtS === null ? 'none' : `${signed(s.medianDtS, 3)} s`} from ${s.strongDecodes} decodes at -10 dB or stronger`,
-    `Phone clock by the decodes: ${s.clockS === null ? 'not measured yet' : `${Math.abs(s.clockS).toFixed(3)} s ${s.clockS >= 0 ? 'slow' : 'fast'}`}`,
+    `${Device} clock by the decodes: ${s.clockS === null ? 'not measured yet' : `${Math.abs(s.clockS).toFixed(3)} s ${s.clockS >= 0 ? 'slow' : 'fast'}`}`,
     'Your Tx, heard back:',
     ...(s.heardBack.length ? s.heardBack.map((h) => `  ${utcTime(h.slotStartUtcMs)} ${h.text}: ${h.dtS === null ? 'not heard' : `DT ${signed(h.dtS, 2)} s, SNR ${signed(h.snrDb ?? 0)} dB`}`) : ['  no transmissions']),
     'Stops and resumes (mapping offset before, after):',

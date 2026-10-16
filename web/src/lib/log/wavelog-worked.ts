@@ -32,6 +32,8 @@ import type { Clock } from './outbox';
 import { inSlices, yieldToMain, type Yield } from './slices';
 import { hostOf, parseJson, parseStations, request, say, type FetchLike, type Http } from './wavelog';
 import { callKey, workedCallKey, workedGridKey, type WorkedKeys } from './worked';
+import { device } from '../app/platform';
+import { advice } from '../app/advice';
 
 /** The fields the colours need: the call, band, mode and grid. Places come from the country file by call. */
 export const FIELDS = ['CALL', 'BAND', 'MODE', 'SUBMODE', 'GRIDSQUARE'] as const;
@@ -52,12 +54,12 @@ export const MAX_PAGES = 1000;
 
 /** Plain words for reading Wavelog's log. Failures RR73 retries by itself say so. */
 export const sayRead = {
-  unreachable: (host: string) => `Could not reach Wavelog at ${host}. Check that this phone is online. Reading the log needs Wavelog 2.5.1 or later. RR73 tries again later.`,
-  offline: 'This phone is offline. RR73 reads Wavelog’s log when it is back online.',
+  unreachable: (host: string) => `Could not reach Wavelog at ${host}. Check that this ${device} is online. Reading the log needs Wavelog 2.5.1 or later. RR73 tries again later.`,
+  offline: `This ${device} is offline. RR73 reads Wavelog’s log when it is back online.`,
   rateLimited: (s: number) => `Wavelog asked RR73 to wait ${s} s before reading more. RR73 tries again then.`,
   tooOld: (host: string) => `Wavelog at ${host} refused the request for its log. Reading the log needs Wavelog 2.5.1 or later. Update Wavelog, then tap Refresh from Wavelog.`,
   station: 'Wavelog would not send the QSOs of a station location to this key. Tap Refresh from Wavelog to try again.',
-  storage: 'This phone refused to store what RR73 read from Wavelog. Decode colours use it until RR73 closes.',
+  storage: `${advice.storageRefuser} refused to store what RR73 read from Wavelog. Decode colours use it until RR73 closes.`,
   noJson: (version: string) => `Wavelog ${version} has no JSON output, so RR73 cannot read its log. Reading needs Wavelog 2.5.1 or later.`,
   noCors: (version: string) => `This Wavelog is ${version}. Reading its log needs Wavelog 2.5.1 or later, or a proxy that adds CORS headers.`,
 };

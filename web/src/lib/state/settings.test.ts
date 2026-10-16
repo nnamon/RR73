@@ -73,7 +73,7 @@ describe('settings', () => {
         rxHz: 50,
         txHz: 1180,
         theme: 'dark',
-        checklist: { focus: true, clicks: 'yes' },
+        checklist: { focus: true, clicks: 'yes', power: true, output: 1 },
         features: { activations: true, potaSpots: 'on', lotw: 1 },
       }),
     ).toEqual({
@@ -81,7 +81,7 @@ describe('settings', () => {
       callsign: '9V1NE',
       txHz: 1180,
       theme: 'dark',
-      checklist: { focus: true, clicks: false, volume: false },
+      checklist: { focus: true, clicks: false, volume: false, sounds: false, output: false, power: true },
       features: { ...FEATURES_OFF, activations: true },
     });
     expect(validate(null)).toEqual(DEFAULTS);

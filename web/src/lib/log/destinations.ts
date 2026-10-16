@@ -8,6 +8,7 @@ import { buildPartFile } from './files';
 import type { Receipt } from './ledger';
 import type { Activation, DestinationId, DestinationKind, FileDestinationId, Qso, Transport, WavelogConfig } from './types';
 import { testConnection, wavelogDestination, type FetchLike } from './wavelog';
+import { device } from '../app/platform';
 
 /** Reachable, the key valid, and allowed to write; `message` in plain words. */
 export interface Health {
@@ -50,7 +51,7 @@ export function fileAdapter(id: FileDestinationId, programVersion: string, now: 
     id,
     kind: id,
     transport: 'file',
-    test: async () => ({ ok: true, message: 'Made on this phone' }),
+    test: async () => ({ ok: true, message: `Made on this ${device}` }),
     async makeFile(qsos, scope) {
       const f = buildPartFile(scope.key, qsos, scope.activation, { programVersion, now: now() });
       if (!f) throw new Error(`No QSOs in ${scope.key}`);

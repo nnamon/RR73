@@ -2,6 +2,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync, mount, unmount } from 'svelte';
 import AudioBanner from './AudioBanner.svelte';
+import { adviceFor } from '../lib/app/advice';
 
 let app: ReturnType<typeof mount> | null = null;
 
@@ -35,5 +36,25 @@ describe('AudioBanner', () => {
     unmount(app!);
     app = null;
     expect([...render({ status: 'off', logCall: 'JA1KXM', onlog: () => {} }).querySelectorAll('button')].map((b) => b.textContent?.trim())).toEqual(['Start audio']);
+  });
+
+  it('words a refused microphone, a hidden page and the permission prompt for the platform', () => {
+    const text = (props: Record<string, unknown>) => {
+      const el = render(props);
+      const t = el.querySelector('.s')?.textContent ?? '';
+      unmount(app!);
+      app = null;
+      return t;
+    };
+    const ios = adviceFor('ios');
+    const windows = adviceFor('windows');
+    expect(text({ status: 'failed', error: 'denied', advice: ios })).toBe('RR73 has no microphone access. Allow the microphone for this site in Safari settings, then start audio again.');
+    expect(text({ status: 'failed', error: 'denied', advice: windows })).toBe(
+      'RR73 has no microphone access. Allow the microphone for this site in the browser’s site settings, and turn on Let desktop apps access your microphone in Windows Settings › Privacy & security › Microphone. Then start audio again.',
+    );
+    expect(text({ status: 'failed', error: 'unsupported', advice: windows })).toBe('This browser cannot capture audio. Open RR73 in Chrome or Edge.');
+    expect(text({ status: 'stopped', reason: 'hidden', advice: ios })).toBe('RR73 left the screen, and iOS stops the microphone in the background. Transmit is off.');
+    expect(text({ status: 'starting', advice: ios })).toBe('Allow the microphone if Safari asks.');
+    expect(text({ status: 'starting', advice: windows })).toBe('Allow the microphone if the browser asks.');
   });
 });

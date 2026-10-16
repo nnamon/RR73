@@ -3,6 +3,9 @@
 // DT are known.
 import { expect, test } from '@playwright/test';
 
+// Playwright's Desktop Chrome reports Windows already; the clock advice names Windows Settings there.
+const WINDOWS_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/153.0.0.0 Safari/537.36';
+
 test('Timing shows the clock, the median DT, the input offset and your Tx heard back, and copies a report', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('./#/settings/radio');
@@ -59,45 +62,49 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   expect(report).toMatch(/\nAudio gaps bridged: \d+, \d+\.\d ms\n/);
   expect(report).toMatch(/Input offset: 0\.(080|160|240|320) s/);
   expect(report).toContain('Median DT: −0.800 s from 10 decodes at -10 dB or stronger');
-  expect(report).toContain('Phone clock by the decodes: 0.800 s slow');
+  expect(report).toContain('Computer clock by the decodes: 0.800 s slow');
   expect(report).toContain('13:35:30 CQ N0CALL EM12: DT −0.70 s, SNR 24 dB');
   expect(report).toMatch(/Clock readings \(contextTime s, performanceTime ms, perfNow ms, dateNow ms, currentTime s\):\n {2}\d+\.\d{6} \d+\.\d{3}/);
 });
 
-test('a clock 1 s or more off brings a Clock badge and a notice, and Timing says what to do', async ({ page }) => {
-  await page.goto('./');
-  await page.waitForFunction(() => !!window.__rr73);
-  // 10 strong decodes 1.3 s early: the phone's clock runs 1.3 s slow.
-  await page.evaluate(() => {
-    const slot = Math.floor(Date.now() / 15000) * 15000 - 15000;
-    window.__rr73!.decoded(
-      slot,
-      Array.from({ length: 10 }, (_, i) => ({ text: `CQ K${i}ABC FN42`, freq_hz: 500 + i * 100, dt_s: -1.3 + ((i % 3) - 1) * 0.05, snr_db: -5 })),
+test.describe('on Windows', () => {
+  test.use({ userAgent: WINDOWS_UA });
+
+  test('a clock 1 s or more off brings a Clock badge and a notice, and Timing says to sync it in Windows Settings', async ({ page }) => {
+    await page.goto('./');
+    await page.waitForFunction(() => !!window.__rr73);
+    // 10 strong decodes 1.3 s early: the computer's clock runs 1.3 s slow.
+    await page.evaluate(() => {
+      const slot = Math.floor(Date.now() / 15000) * 15000 - 15000;
+      window.__rr73!.decoded(
+        slot,
+        Array.from({ length: 10 }, (_, i) => ({ text: `CQ K${i}ABC FN42`, freq_hz: 500 + i * 100, dt_s: -1.3 + ((i % 3) - 1) * 0.05, snr_db: -5 })),
+      );
+    });
+    await expect(page.getByRole('region', { name: 'Transmit' }).getByRole('status')).toHaveText('Computer clock 1.3 s slow');
+    const badge = page.getByRole('link', { name: 'Phone clock 1.3 s slow. Open Timing' });
+    await expect(badge).toHaveText('Clock');
+    const box = (await badge.boundingBox())!;
+    expect(box.height).toBeGreaterThanOrEqual(44);
+    expect(box.width).toBeGreaterThanOrEqual(44);
+
+    await badge.click();
+    await expect(page).toHaveURL(/#\/settings\/radio\/timing$/);
+    await expect(page.getByRole('heading', { name: 'Timing' })).toBeInViewport();
+    await expect(page.getByTestId('timing-clock')).toHaveText('1.3 s slow by the decodes');
+    await expect(page.getByTestId('timing-clock-foot')).toHaveText(
+      'The computer’s clock runs 1.3 s slow by the decodes, so other stations hear you 1.3 s late. In Windows Settings › Time & language › Date & time, turn on Set time automatically and select Sync now. It needs a network.',
     );
-  });
-  await expect(page.getByRole('region', { name: 'Transmit' }).getByRole('status')).toHaveText('Phone clock 1.3 s slow');
-  const badge = page.getByRole('link', { name: 'Phone clock 1.3 s slow. Open Timing' });
-  await expect(badge).toHaveText('Clock');
-  const box = (await badge.boundingBox())!;
-  expect(box.height).toBeGreaterThanOrEqual(44);
-  expect(box.width).toBeGreaterThanOrEqual(44);
 
-  await badge.click();
-  await expect(page).toHaveURL(/#\/settings\/radio\/timing$/);
-  await expect(page.getByRole('heading', { name: 'Timing' })).toBeInViewport();
-  await expect(page.getByTestId('timing-clock')).toHaveText('1.3 s slow by the decodes');
-  await expect(page.getByTestId('timing-clock-foot')).toHaveText(
-    'The phone’s clock runs 1.3 s slow by the decodes, so other stations hear you 1.3 s late. Turn on Set Automatically in the phone’s Settings › General › Date & Time. It needs a network.',
-  );
-
-  // Decodes on time again: the warning goes once the clock reads under 0.8 s off.
-  await page.evaluate(() => {
-    const slot = Math.floor(Date.now() / 15000) * 15000;
-    window.__rr73!.decoded(slot, Array.from({ length: 30 }, (_, i) => ({ text: `CQ K${i}XYZ FN42`, freq_hz: 400 + i * 50, dt_s: 0.1, snr_db: -5 })));
+    // Decodes on time again: the warning goes once the clock reads under 0.8 s off.
+    await page.evaluate(() => {
+      const slot = Math.floor(Date.now() / 15000) * 15000;
+      window.__rr73!.decoded(slot, Array.from({ length: 30 }, (_, i) => ({ text: `CQ K${i}XYZ FN42`, freq_hz: 400 + i * 50, dt_s: 0.1, snr_db: -5 })));
+    });
+    await expect(page.getByTestId('timing-clock')).toHaveText(/^0\.\d s (slow|fast) by the decodes$|^On time by the decodes$/);
+    await expect(page.getByTestId('timing-clock-foot')).toHaveCount(0);
+    await page.goBack();
+    await expect(page.getByRole('region', { name: 'Transmit' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /^Phone clock/ })).toHaveCount(0);
   });
-  await expect(page.getByTestId('timing-clock')).toHaveText(/^0\.\d s (slow|fast) by the decodes$|^On time by the decodes$/);
-  await expect(page.getByTestId('timing-clock-foot')).toHaveCount(0);
-  await page.goBack();
-  await expect(page.getByRole('region', { name: 'Transmit' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /^Phone clock/ })).toHaveCount(0);
 });

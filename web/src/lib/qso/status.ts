@@ -5,6 +5,8 @@
  * this file to 6 words of copy and no closing full stop (tools/lint-copy, status rule).
  */
 
+import { Device } from '../app/platform';
+
 export const STATUS = {
   noReply: (call: string) => `No reply from ${call}`,
   noReplyNotLogged: (call: string) => `No reply from ${call} · not logged`,
@@ -22,8 +24,8 @@ export const STATUS = {
   noClear: 'Not enough audio yet',
   decodesCleared: 'Decodes cleared',
   practice: (scenario: string) => `Practice · ${scenario}`,
-  /** The clock warning came on: "Phone clock 1.2 s slow". */
-  clock: (off: string) => `Phone clock ${off}`,
+  /** The clock warning came on: "Phone clock 1.2 s slow", "Computer clock 1.2 s slow" off iOS and Android. */
+  clock: (off: string) => `${Device} clock ${off}`,
   webSdrBusy: 'Web SDR busy',
   webSdrRefused: 'Web SDR refused the connection',
   webSdrClosed: 'Web SDR closed',

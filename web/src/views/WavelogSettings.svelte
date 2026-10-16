@@ -14,6 +14,7 @@
   import { forgetWavelogRead, refreshFromWavelog, setReadWorked, wavelogWorked } from '../lib/log/wavelog-worked.svelte';
   import { versionNote } from '../lib/log/wavelog-worked';
   import { practice } from '../lib/state/practice.svelte';
+  import { device } from '../lib/app/platform';
 
   let url = $state('');
   let apiKey = $state('');
@@ -185,7 +186,7 @@
       {:else if !w.url || !w.apiKey}
         <p class="section-foot">Type the address and API key above to read Wavelog’s log.</p>
       {:else}
-        <p class="section-foot">Dupes, Hunt and Repeat CQ count this phone’s log only.</p>
+        <p class="section-foot">Dupes, Hunt and Repeat CQ count this {device}’s log only.</p>
       {/if}
     </div>
   {/if}

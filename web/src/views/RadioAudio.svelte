@@ -15,7 +15,10 @@
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindInput, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
-  import { txKeyer } from '../lib/state/radio.svelte';
+  import { rigConnected, txKeyer } from '../lib/state/radio.svelte';
+  import { alcAdvice } from '../lib/radio/alc';
+  import { advice } from '../lib/app/advice';
+  import { Device, device } from '../lib/app/platform';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let outputs = $state<MediaDeviceInfo[]>([]);
@@ -78,9 +81,7 @@
   const processingText = $derived(
     r ? `Echo cancellation ${onOff(r.echoCancellation)}, noise suppression ${onOff(r.noiseSuppression)}, auto gain ${onOff(r.autoGainControl)}` : 'Unknown until audio starts',
   );
-  const screenText = $derived(
-    audio.wake === 'refused' || audio.wake === 'unsupported' ? 'Follows Auto-Lock. Set it to Never.' : 'Stays on while audio runs',
-  );
+  const screenText = $derived(audio.wake === 'refused' || audio.wake === 'unsupported' ? advice.screen : 'Stays on while audio runs');
 
   const CONTRASTS: { id: Contrast; label: string }[] = [
     { id: 'low', label: 'Low' },
@@ -96,11 +97,7 @@
       .join(', ')})`;
   };
 
-  const checks: { key: keyof Checklist; title: string; sub?: string }[] = [
-    { key: 'focus', title: 'Focus mode on', sub: 'Stops iOS sounds keying the radio' },
-    { key: 'clicks', title: 'Keyboard clicks off' },
-    { key: 'volume', title: 'Phone volume at maximum' },
-  ];
+  const checks = advice.checklist;
 
   const keyingText = $derived.by(() => {
     const k = tx.keying;
@@ -158,7 +155,7 @@
     if (off === null) return null;
     const by = clockText(off);
     const air = `${Math.abs(off).toFixed(1)} s ${off > 0 ? 'late' : 'early'}`;
-    return `The phone’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input reads the same.' : ''} Turn on Set Automatically in the phone’s Settings › General › Date & Time. It needs a network.`;
+    return `The ${device}’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input reads the same.' : ''} ${advice.clockFix}`;
   });
   const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
   const sourceText = $derived(
@@ -341,7 +338,7 @@
     </div>
     {#if outputFoot}<p class="section-foot" data-testid="output-foot">{outputFoot}</p>{/if}
     {#if tx.tuneRefused}<p class="section-foot err" role="alert" data-testid="tune-refused">Tune did not start: {tx.tuneRefused}.</p>{/if}
-    <p class="section-foot">Set the level for 4 to 5 ALC bars during Tune, no more.</p>
+    <p class="section-foot">{alcAdvice(rigConnected() ? settings.cat.radio : null)}</p>
   </div>
 
   <div class="section">
@@ -378,7 +375,7 @@
         <span class="row-value" data-testid="decoder-status">{decoderText}</span>
       </div>
       <div class="row">
-        <span class="row-main"><span class="row-title">Phone clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
+        <span class="row-main"><span class="row-title">{Device} clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
       </div>
       <div class="row">
         <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
@@ -418,7 +415,7 @@
       {#if copyState === 'copied'}<span class="copied" role="status">Copied</span>{/if}
     </div>
     {#if copyState === 'failed'}
-      <p class="section-foot">The phone refused to copy. Select the report below and copy it.</p>
+      <p class="section-foot">{advice.copyRefused}</p>
       <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
     {/if}
     <p class="section-foot">Your Tx, heard back shows the timing of the transmit audio.</p>

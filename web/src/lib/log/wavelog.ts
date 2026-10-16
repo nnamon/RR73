@@ -27,6 +27,8 @@ import type { SendingDestination } from './outbox';
 import { qsoToRecord } from './qso-adif';
 import { writeRecord } from './adif';
 import type { Qso, WavelogConfig, WavelogStation, WavelogTest } from './types';
+import { device } from '../app/platform';
+import { advice } from '../app/advice';
 
 export const SEND_TIMEOUT_MS = 20_000;
 export const TEST_TIMEOUT_MS = 15_000;
@@ -65,7 +67,7 @@ export function checkAddress(input: string): AddressCheck {
   } catch {
     return { ok: false, message: `${typed} is not a web address. Type it as https://log.example.com.` };
   }
-  if (u.protocol === 'http:') return { ok: false, message: 'Use the https address of your Wavelog. Safari does not let RR73 use plain http.' };
+  if (u.protocol === 'http:') return { ok: false, message: `Use the https address of your Wavelog. ${advice.httpRefuser} does not let RR73 use plain http.` };
   if (u.protocol !== 'https:' || !u.hostname.includes('.')) return { ok: false, message: `${typed} is not a web address. Type it as https://log.example.com.` };
   const path = u.pathname.replace(/\/api(\/.*)?$/i, '').replace(/\/+$/, '');
   return { ok: true, url: `${u.origin}${path}`, host: u.host };
@@ -85,7 +87,7 @@ const LATER = ' RR73 tries again later.';
 // Plain-words messages, shared by Test connection and the outbox. `retrying` adds what the
 // outbox does next.
 export const say = {
-  unreachable: (host: string, retrying = true) => `Could not reach Wavelog at ${host}. Check the address and that this phone is online.${retrying ? LATER : ''}`,
+  unreachable: (host: string, retrying = true) => `Could not reach Wavelog at ${host}. Check the address and that this ${device} is online.${retrying ? LATER : ''}`,
   timeout: (host: string, s: number, retrying = true) => `Wavelog at ${host} did not answer within ${s} s.${retrying ? LATER : ''}`,
   serverError: (host: string, status: number, retrying = true) => `Wavelog at ${host} had a server error (HTTP ${status}).${retrying ? LATER : ' Try again later.'}`,
   unreadable: (host: string, retrying = true) => `Wavelog at ${host} sent an unreadable reply.${retrying ? LATER : ' Try again later.'}`,

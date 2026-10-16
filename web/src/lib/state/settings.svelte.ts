@@ -21,11 +21,21 @@ import { KX2_BAUDS, KX2_DEFAULT_BAUD, type Kx2Baud } from '../cat/serial';
 /** Sun: light with the most contrast, for direct sunlight (tokens.css). */
 export type Theme = 'system' | 'light' | 'dark' | 'sun';
 
-/** The VOX checklist items the operator ticks; RR73 cannot read these phone settings. */
+/**
+ * The checklist items the operator ticks before transmitting; RR73 cannot read these system
+ * settings. iOS shows focus, clicks and volume, other systems sounds, output and power
+ * (lib/app/advice.ts).
+ */
 export interface Checklist {
   focus: boolean;
   clicks: boolean;
   volume: boolean;
+  /** System sounds off. */
+  sounds: boolean;
+  /** The radio is not the system's default output. */
+  output: boolean;
+  /** Sleep set to Never. */
+  power: boolean;
 }
 
 /**
@@ -183,7 +193,7 @@ export const DEFAULTS: Settings = {
   outputDeviceLabel: '',
   outputLevel: 0.5,
   startTone: true,
-  checklist: { focus: false, clicks: false, volume: false },
+  checklist: { focus: false, clicks: false, volume: false, sounds: false, output: false, power: false },
   rxHz: 1500,
   txHz: 1500,
   holdTx: true,
@@ -346,7 +356,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;
   if (typeof r.startTone === 'boolean') s.startTone = r.startTone;
   const c = r.checklist as Partial<Checklist> | undefined;
-  if (c && typeof c === 'object') for (const k of ['focus', 'clicks', 'volume'] as const) if (typeof c[k] === 'boolean') s.checklist[k] = c[k];
+  if (c && typeof c === 'object') for (const k of ['focus', 'clicks', 'volume', 'sounds', 'output', 'power'] as const) if (typeof c[k] === 'boolean') s.checklist[k] = c[k];
   if (typeof r.grid === 'string' && /^[A-R]{2}\d{2}([A-X]{2})?$/i.test(r.grid.trim())) s.grid = normaliseGrid(r.grid);
   if (r.ack === 'RR73' || r.ack === 'RRR') s.ack = r.ack;
   if (typeof r.workDupes === 'boolean') s.workDupes = r.workDupes;

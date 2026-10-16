@@ -5,6 +5,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - In Chrome and Edge on a computer, RR73 keeps receiving, decoding and transmitting while its window is minimised, covered or in a background tab, with no tap to resume. On the iPhone audio stops when RR73 leaves the screen, as before.
+- On Windows the advice names Chrome, Edge and Windows Settings: allowing the microphone and location, keeping the screen on, and syncing the clock in Settings › Time & language › Date & time. Before you transmit asks there for system sounds off, the radio not the default output and sleep set to Never. Off iOS and Android, RR73 says computer where it said phone.
+- The level advice under Tune follows the connected radio: within the ALC zone on an IC-705, 4 to 5 ALC bars on a KX2, and both without a radio.
 
 ## 0.24.0 · 2026-10-16
 

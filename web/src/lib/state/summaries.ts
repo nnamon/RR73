@@ -5,6 +5,7 @@
 import { log } from '../log/log.svelte';
 import { features } from './features.svelte';
 import { audio } from './station.svelte';
+import { device } from '../app/platform';
 
 /** "48 kHz, mono", or Audio off. */
 export function radioSummary(): string {
@@ -14,10 +15,10 @@ export function radioSummary(): string {
   return `${(r.contextRate / 1000).toFixed(r.contextRate % 1000 ? 1 : 0)} kHz, ${ch}`;
 }
 
-/** The destinations on: "Wavelog", "Wavelog and POTA file", "3 destinations", or Only on this phone. */
+/** The destinations on: "Wavelog", "Wavelog and POTA file", "3 destinations", or Only on this phone (this computer off iOS and Android). */
 export function loggingSummary(): string {
   // Activation files count only while Activations is on.
   const on = log.facts.filter((f) => f.active && (features.activations || f.transport !== 'file')).map((f) => f.name);
-  if (!on.length) return 'Only on this phone';
+  if (!on.length) return `Only on this ${device}`;
   return on.length > 2 ? `${on.length} destinations` : on.join(' and ');
 }

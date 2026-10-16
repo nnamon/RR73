@@ -4,6 +4,7 @@ import { MINUS, utcHm } from '../clock/format';
 import type { FilterContext, SpotFilter } from './filter';
 import type { FailingSource, SpotFeedView } from './feed.svelte';
 import type { Spot, SpotClass } from './types';
+import { device } from '../app/platform';
 
 const DOT = ' · ';
 
@@ -99,7 +100,7 @@ export function emptyText(view: SpotFeedView, filter: SpotFilter, ctx: FilterCon
   const chosen = view.classes.filter((c) => filter.classes.includes(c));
   if (!chosen.length) return `Choose ${orList(view.classes)} to see spots.`;
   if (view.updatedAt === null) {
-    if (!view.online) return 'Spots appear here when the phone is back online.';
+    if (!view.online) return `Spots appear here when the ${device} is back online.`;
     if (view.failing.length) return `Spots appear here when ${orList(view.failing.map((f) => f.name))} answers.`;
     return 'Fetching spots.';
   }
@@ -126,7 +127,7 @@ function failureText(f: FailingSource): string {
 export function statusText(view: SpotFeedView): string {
   if (!view.sources.length) return '';
   const at = view.updatedAt === null ? null : `${utcHm(view.updatedAt)} UTC`;
-  if (!view.online) return at ? `Offline. The list is from ${at} and refreshes when the phone is back online.` : '';
+  if (!view.online) return at ? `Offline. The list is from ${at} and refreshes when the ${device} is back online.` : '';
   if (view.failing.length) {
     const parts = view.failing.map(failureText);
     if (at) parts.push(`Showing spots from ${at}.`);

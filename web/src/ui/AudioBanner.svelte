@@ -7,6 +7,7 @@
   import Icon from './Icon.svelte';
   import { utcTime } from '../lib/clock/format';
   import type { AudioStatus, StartError, StopReason } from '../lib/audio/engine';
+  import { advice as platformAdvice, type Advice } from '../lib/app/advice';
 
   let {
     status,
@@ -17,6 +18,7 @@
     onresume,
     logCall = null,
     onlog,
+    advice = platformAdvice,
   }: {
     status: AudioStatus;
     reason: StopReason | null;
@@ -27,25 +29,27 @@
     /** The station of a QSO that can be logged as it stands; null for none. */
     logCall?: string | null;
     onlog?: () => void;
+    /** The platform's words; this page's by default. */
+    advice?: Advice;
   } = $props();
 
-  const STOPPED: Record<StopReason, string> = {
+  const STOPPED: Record<StopReason, string> = $derived({
     interrupted: 'A call or another app took over the audio.',
     suspended: 'The browser paused the audio.',
     'input-ended': 'The audio input was disconnected.',
     'input-muted': 'The system muted the audio input.',
-    hidden: 'RR73 left the screen, and iOS stops the microphone in the background.',
-  };
+    hidden: advice.hidden,
+  });
 
-  const FAILED: Record<StartError, string> = {
+  const FAILED: Record<StartError, string> = $derived({
     insecure: 'The microphone needs a secure page. Open RR73 from its https address.',
-    unsupported: 'This browser cannot capture audio. Open RR73 in Safari.',
-    denied: 'RR73 has no microphone access. Allow the microphone for this site in Safari settings, then start audio again.',
+    unsupported: advice.unsupported,
+    denied: advice.denied,
     'no-device': 'No audio input was found. Connect the radio cable, then start audio again.',
     busy: 'Another app is using the microphone. Close it, then start audio again.',
     worklet: 'The audio processor did not load. Reload RR73, then start audio again.',
     unknown: 'Audio did not start. Start audio again.',
-  };
+  });
 </script>
 
 {#if status === 'off'}
@@ -60,7 +64,7 @@
     <div class="text">
       {#if status === 'starting'}
         <p class="t">Starting audio</p>
-        <p class="s">Allow the microphone if Safari asks.</p>
+        <p class="s">{advice.allowPrompt}</p>
       {:else if status === 'stopped'}
         <p class="t">Audio stopped at {stoppedAtUtcMs === null ? 'an unknown time' : utcTime(stoppedAtUtcMs)}</p>
         <p class="s">{reason ? STOPPED[reason] : 'The audio stopped.'} Transmit is off.</p>

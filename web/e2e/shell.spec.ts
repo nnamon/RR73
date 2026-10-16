@@ -86,13 +86,14 @@ test('Use GPS gives the 4-character square from a coarse fix and says why', asyn
   await expect.poll(() => storedSettings(page)).toMatchObject({ value: { grid: 'OJ11' } });
 });
 
+// Playwright's Desktop Chrome reports Windows.
 test('Use GPS without location permission says what to do and keeps the grid', async ({ page }) => {
   await page.goto('./#/settings');
   const field = page.getByRole('textbox', { name: 'Grid' });
   await field.fill('OJ11');
   await field.press('Enter');
   await page.getByRole('button', { name: 'Use GPS' }).click();
-  await expect(page.getByRole('alert')).toHaveText('Location is off for RR73. Allow it in iOS Settings › Privacy, or type the grid.');
+  await expect(page.getByRole('alert')).toHaveText('Location is off for RR73. Allow it for this site in the browser’s site settings and in Windows Settings › Privacy & security › Location, or type the grid.');
   await expect(field).toHaveValue('OJ11');
 });
 

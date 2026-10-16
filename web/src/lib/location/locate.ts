@@ -9,6 +9,8 @@
  */
 
 import { gridFromLatLon } from '../log/activation';
+import { device } from '../app/platform';
+import { advice } from '../app/advice';
 
 /** Worst accuracy, m, for which a 6- or 8-character grid is given. */
 export const FINE_ACCURACY_M = 1000;
@@ -59,10 +61,10 @@ export function locateGrid(
           ok: false,
           message:
             err.code === PERMISSION_DENIED
-              ? 'Location is off for RR73. Allow it in iOS Settings › Privacy, or type the grid.'
+              ? advice.locationOff
               : err.code === TIMEOUT
                 ? 'No position within 20 s. Type the grid, or try again in the open.'
-                : 'The phone could not find its position. Type the grid.',
+                : `The ${device} could not find its position. Type the grid.`,
         }),
       { enableHighAccuracy: true, timeout: LOCATE_TIMEOUT_MS, maximumAge: LOCATE_MAX_AGE_MS },
     );

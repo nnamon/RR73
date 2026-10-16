@@ -12,6 +12,7 @@
 
 import { utcDayKey } from './activation';
 import type { Activation, DestinationId, FileDestinationId, LedgerEntry, Qso, Refusal, Transport } from './types';
+import { device } from '../app/platform';
 
 /** New QSOs wait this long before the outbox sends them, so Undo on the logged notice needs no remote delete. */
 export const UNDO_MS = 10_000;
@@ -96,7 +97,7 @@ const editedNote = (d: DestinationFacts) =>
 const deletedNote = (d: DestinationFacts) =>
   d.transport === 'file'
     ? `Deleted after the ${d.name} file was submitted. Remove it from the ${d.name} log, then mark it handled.`
-    : `Deleted on this phone after ${d.name} received it. Delete it in ${d.name} too, then mark it handled.`;
+    : `Deleted on this ${device} after ${d.name} received it. Delete it in ${d.name} too, then mark it handled.`;
 
 function waiting(e: LedgerEntry, now: number): LedgerEntry {
   return { ...e, state: 'waiting', attempts: 0, nextAttemptAt: now, lastError: null, refusal: null };

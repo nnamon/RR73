@@ -2,6 +2,7 @@
 // base, such as https://relay.example.org/qsp; requests carry the access key when one is set.
 
 import type { PskSpot } from '../pskreporter/spots';
+import { device } from '../app/platform';
 
 export interface QspAbout {
   name: string;
@@ -178,7 +179,7 @@ export function qspErrorText(e: unknown): string {
   if (!(e instanceof QspError)) return 'RR73 could not read the relay’s response.';
   switch (e.kind) {
     case 'network':
-      return 'The relay is unreachable. Check the address and that this phone is online.';
+      return `The relay is unreachable. Check the address and that this ${device} is online.`;
     case 'timeout':
       return 'The relay did not answer within 10 s.';
     case 'unauthorised':
