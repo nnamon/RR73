@@ -337,6 +337,27 @@ describe('Operate’s radio badge', () => {
     expect(rigBadge()).toBeNull();
   });
 
+  it('stays green through a transmission RR73 keys by CAT, its end included', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const tuned = setRadioDial(14_074_000);
+    await run(500);
+    await tuned;
+    expect(rigBadge()?.tone).toBe('ok');
+    const base = Date.now();
+    const audio = fakeAudio(base, 2000);
+    const sched = new TxScheduler({ audio: () => audio.audio, encoder: { synthesize: async () => new Float32Array(24000) }, gate: () => rigGate(), report: () => undefined, keyer: txKeyer });
+    const done = sched.schedule({ text: 'CQ 9V1NE OJ11', mode: 'FT8', slotStartMs: base + 2000, startOffsetS: 0.5, f0Hz: 1500, level: 0.5 });
+    const tones = new Set<string>();
+    for (let i = 0; i < 700; i++) {
+      await run(10);
+      tones.add(rigBadge()!.tone);
+    }
+    await done;
+    expect(chosen.ptt).toEqual(['01', '00']);
+    expect([...tones]).toEqual(['ok']);
+  });
+
   it('stays amber until the mode is read, after connecting to a radio that did not answer at first', async () => {
     chosen.silent = true;
     await initCat();

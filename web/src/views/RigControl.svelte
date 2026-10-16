@@ -33,8 +33,11 @@
   // Once on opening: the operator may have changed MIC BTN at the radio since the last read.
   onMount(() => rereadMicBtn());
 
-  /** The radio transmits and RR73 holds no PTT: VOX, its own PTT or another program keys it. */
-  const transmittingAlone = $derived(rigConnected() && rig.transmitting === true && !rig.keyed);
+  /**
+   * The radio transmits and RR73 holds no PTT: VOX, its own PTT or another program keys it. RR73's
+   * own keying counts until a read confirms receive.
+   */
+  const transmittingAlone = $derived(rigConnected() && rig.transmitting === true && !rig.keyed && !rig.mayBeKeyed);
 
   const badge = $derived.by((): { text: string; tone: 'ok' | 'wait' | 'idle' | 'bad' } => {
     if (rig.unkeyFailed) return { text: 'PTT off not confirmed', tone: 'bad' };

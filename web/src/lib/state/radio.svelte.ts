@@ -191,8 +191,9 @@ export function rigBadge(): RigBadge | null {
       const band = rigBand();
       const data = rigInDataMode();
       // Green only once the mode is read: after a spell without answers it is read again within 5 s.
+      // RR73's own keying counts until a read confirms receive, so its end shows no amber.
       const why =
-        rig.transmitting === true && !rig.keyed
+        rig.transmitting === true && !rig.keyed && !rig.mayBeKeyed
           ? 'transmitting with no PTT from RR73'
           : data === false
             ? `in ${rigModeText()}`
