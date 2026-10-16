@@ -21,8 +21,12 @@ export type CatFilter = 1 | 2 | 3;
 /** The menu settings RR73 reads: the IC-705's (CI-V guide pp. 6 and 8) and the KX2's MIC BTN (Programmer's Reference p. 19). */
 export type MenuItemId = 'time_out_timer' | 'data_off_mod' | 'data_mod' | 'usb_send' | 'civ_transceive' | 'civ_usb_echo_back' | 'mic_btn';
 
-/** What RR73 reads on connecting and shows under Radio settings: the menu settings, and the KX2's product number (`OM`) and VOX (`VX`, 1 on). */
-export type SettingId = MenuItemId | 'product' | 'vox';
+/**
+ * What RR73 reads and shows under Radio settings: the menu settings, and the KX2's product number
+ * (`OM`), VOX (`VX`, 1 on), K2 command mode (`K2`), split, XIT and its offset (`IF`), receive
+ * filter bandwidth in Hz (`BW`) and the menu entry shown (`MN`, 255 with none).
+ */
+export type SettingId = MenuItemId | 'product' | 'vox' | 'k2' | 'split' | 'xit' | 'xit_hz' | 'bandwidth' | 'menu_entry';
 
 export type CatRequest =
   | { type: 'read_frequency' }
@@ -38,7 +42,11 @@ export type CatRequest =
   | { type: 'read_setting'; item: MenuItemId }
   | { type: 'read_options' }
   | { type: 'read_vox' }
-  | { type: 'read_menu_entry' };
+  | { type: 'read_menu_entry' }
+  | { type: 'leave_menu' }
+  | { type: 'read_info' }
+  | { type: 'read_bandwidth' }
+  | { type: 'read_k2_mode' };
 
 export type CatEvent =
   | { type: 'ok' }
@@ -56,7 +64,9 @@ export type CatEvent =
   | { type: 'vfo_frequency'; vfo: string; hz: number }
   | { type: 'vfo_mode'; vfo: string; mode: CatMode; data: boolean | null; filter: CatFilter | null }
   | { type: 'data_sub_mode'; sub: DataSub }
-  | { type: 'info'; hz: number; mode: CatMode | null; transmit: boolean }
+  | { type: 'info'; hz: number; mode: CatMode | null; transmit: boolean; rit: boolean; xit: boolean; offset_hz: number; split: boolean }
+  | { type: 'bandwidth'; hz: number }
+  | { type: 'k2_mode'; mode: number }
   | { type: 'options'; product: number | null; modules: string }
   | { type: 'vox'; on: boolean }
   | { type: 'menu_entry'; entry: number }

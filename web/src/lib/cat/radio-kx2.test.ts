@@ -22,6 +22,11 @@ interface Kx2Sim {
   set_product(n: number): void;
   press_xmit(on: boolean): void;
   set_lines(dtr: boolean, rts: boolean): void;
+  set_rev_data_a(on: boolean): void;
+  set_k2_mode(n: number): void;
+  set_bandwidth(hz: number): void;
+  set_split(on: boolean): void;
+  set_xit(on: boolean, offsetHz: number): void;
   readonly transmit: boolean;
   readonly frequency: number;
   readonly mode: string;
@@ -89,6 +94,10 @@ class Kx2Port implements CatTransport {
   slowKey = 0;
   /** TX is answered ?; and the radio stays in receive. */
   busyTx = false;
+  /** TX is answered ?; but the radio takes it and keys: the real answer comes after the ?;. */
+  busyTxKeys = false;
+  /** The menu read loses its MN255, as when the link breaks in the middle of it. */
+  menuExitLost = false;
   /** The radio ignores RX and keeps transmitting. */
   ignoreRx = false;
   /** Drops the answer to this many TX or RX requests; the radio still acts on them. */
@@ -112,6 +121,8 @@ class Kx2Port implements CatTransport {
     const before = this.sim.frequency;
     let reply: string;
     if (t === 'TX;TQ;' && this.busyTx) reply = '?;' + text(this.sim.receive(bytes('TQ;')));
+    else if (t === 'TX;TQ;' && this.busyTxKeys) reply = '?;' + text(this.sim.receive(b));
+    else if (t === 'MN082;MP;MN255;' && this.menuExitLost) reply = text(this.sim.receive(bytes('MN082;MP;')));
     else if (t === 'RX;TQ;' && this.ignoreRx) reply = 'TQ1;';
     else reply = this.replace.get(t) ?? text(this.sim.receive(b));
     if (t === 'TX;TQ;' && this.slowKey > 0) {
@@ -172,13 +183,66 @@ async function started() {
 }
 
 describe('CatRadio with a KX2', () => {
-  it('reads the radio on connecting, transmit first, then MIC BTN once OM names a KX2 and no menu is open; no TX or RX', async () => {
+  it('reads the radio on connecting, transmit first, then MIC BTN once OM names a KX2 and no menu is open, then checks the menu is left; no TX or RX', async () => {
     const { port, radio } = await started();
-    expect(radio.state).toMatchObject({ status: 'connected', hz: 14_074_000, mode: 'usb', sub: 'data_a', transmitting: false, keyed: false });
-    // OM 01: a KX2. MIC BTN at its default, PTT UP.DN (Owner's Manual p. 48). VOX off in USB.
-    expect(radio.state.settings).toEqual({ product: 1, mic_btn: 5, vox: 0 });
-    expect(port.written.map((w) => w.text)).toEqual(['TQ;', 'FA;', 'MD;', 'DT;', 'VX;', 'OM;', 'MN;', 'MN082;MP;MN255;']);
+    // In USB, DT is not read: it is valid only in DATA (Programmer's Reference p. 11).
+    expect(radio.state).toMatchObject({ status: 'connected', hz: 14_074_000, mode: 'usb', sub: null, transmitting: false, keyed: false });
+    // OM 01: a KX2. K2 mode 0. MIC BTN at its default, PTT UP.DN (Owner's Manual p. 48). VOX off in
+    // USB. IF: no split, no XIT. BW: 2.80 kHz. No menu entry open.
+    expect(radio.state.settings).toEqual({ product: 1, k2: 0, mic_btn: 5, vox: 0, split: 0, xit: 0, xit_hz: 0, bandwidth: 2800, menu_entry: 255 });
+    expect(port.written.map((w) => w.text)).toEqual(['TQ;', 'FA;', 'MD;', 'VX;', 'IF;', 'BW;', 'OM;', 'K2;', 'MN;', 'MN082;MP;MN255;', 'MN;']);
     expect(port.ptt).toEqual([]);
+  });
+
+  it('reads DT only while MD reads DATA', async () => {
+    const { timers, sim, port } = await started();
+    expect(port.sent('DT;')).toHaveLength(0);
+    sim.press_mode('"data"');
+    await timers.advance(5 * POLL_MS);
+    expect(port.sent('DT;')).toHaveLength(1);
+  });
+
+  it('reads split, XIT, the filter and the K2 mode, and their changes every 5 s', async () => {
+    const { timers, sim, radio } = setup();
+    sim.set_k2_mode(1);
+    radio.start();
+    await timers.advance(600);
+    expect(radio.state.settings).toMatchObject({ k2: 1, split: 0, xit: 0, bandwidth: 2800 });
+    sim.set_split(true);
+    sim.set_xit(true, -150);
+    sim.set_bandwidth(400);
+    await timers.advance(5 * POLL_MS);
+    expect(radio.state.settings).toMatchObject({ split: 1, xit: 1, xit_hz: -150, bandwidth: 400 });
+  });
+
+  it('sends MN255 again when a menu read did not leave the menu', async () => {
+    const { timers, sim, port, radio } = setup();
+    port.menuExitLost = true;
+    radio.start();
+    await timers.advance(600);
+    expect(radio.state.settings.mic_btn).toBe(5);
+    expect(port.sent('MN255;MN;')).toHaveLength(1);
+    expect(sim.menu).toBe(255);
+    expect(radio.state.settings.menu_entry).toBe(255);
+  });
+
+  it('says MIC BTN could not be read when the radio refuses the read, and reads it again on request', async () => {
+    const { timers, sim, port, radio } = setup();
+    port.replace.set('MN082;MP;MN255;', '?;');
+    radio.start();
+    await timers.advance(600 + DRAIN_MS);
+    expect(radio.state.settings.mic_btn).toBe(-1);
+    // Not read again by itself; a refused read stays refused for the connection.
+    await timers.advance(10 * POLL_MS);
+    expect(port.sent('MN082')).toHaveLength(1);
+    // A radio that answers: read again on request.
+    const { timers: t2, sim: s2, port: p2, radio: r2 } = await started();
+    s2.mic_btn = 0;
+    r2.rereadSetting('mic_btn');
+    await t2.advance(200);
+    expect(r2.state.settings.mic_btn).toBe(0);
+    expect(p2.sent('MN082')).toHaveLength(2);
+    void sim;
   });
 
   it('polls VFO A every 1 s and the mode, sub-mode and VOX every 5 s', async () => {
@@ -221,13 +285,18 @@ describe('CatRadio with a KX2', () => {
     expect(port.sent('MN082')).toHaveLength(1);
   });
 
-  it('never reads a menu entry on a radio that is not a KX2: the numbers are the KX2’s', async () => {
+  it('reads MIC BTN on a KX2 or a KX3, where MP gives its bits, and on no other radio', async () => {
     const { timers, sim, port, radio } = setup();
-    sim.set_product(2);
+    sim.set_product(3);
     radio.start();
     await timers.advance(600 + 10 * POLL_MS);
-    expect(radio.state.settings.product).toBe(2);
+    expect(radio.state.settings.product).toBe(3);
     expect(port.sent('MN')).toHaveLength(0);
+    const kx3 = setup();
+    kx3.sim.set_product(2);
+    kx3.radio.start();
+    await kx3.timers.advance(600);
+    expect(kx3.radio.state.settings.mic_btn).toBe(5);
   });
 
   it('keys with TX, confirmed by TQ1, beside a request in flight, and reads only TQ while keyed', async () => {
@@ -284,15 +353,32 @@ describe('CatRadio with a KX2', () => {
     expect(radio.holdsPtt).toBe(false);
   });
 
-  it('PTT on answered ?; fails at once, drains, and RX goes out and is confirmed', async () => {
+  it('PTT on answered ?; reads TQ once the drain ends, and fails when the radio stays in receive; RX goes out and is confirmed', async () => {
     const { timers, port, radio } = await started();
     port.busyTx = true;
     const k = radio.key(15_000);
-    await timers.advance(30);
+    await timers.advance(PTT_TIMEOUT_MS + 20);
     expect(await k.result).toBe('ng');
-    expect(port.ptt).toEqual(['TX', 'RX']);
+    // The TQ read after the drain, then RX.
+    const after = port.written.slice(port.written.findIndex((w) => w.text === 'TX;TQ;')).map((w) => w.text);
+    expect(after.slice(0, 3)).toEqual(['TX;TQ;', 'TQ;', 'RX;TQ;']);
     await timers.advance(DRAIN_MS + UNKEY_TRIES * UNKEY_ACK_MS + REPLY_MS);
     expect(await radio.unkeyed()).toBe(true);
+  });
+
+  it('PTT on answered ?; and then keyed: the TQ read after the drain takes TQ1 within the PTT window', async () => {
+    const { timers, sim, port, radio } = await started();
+    port.busyTxKeys = true;
+    const t0 = timers.t;
+    const k = radio.key(15_000);
+    await timers.advance(PTT_TIMEOUT_MS);
+    expect(await k.result).toBe('ok');
+    expect(sim.transmit).toBe(true);
+    const tq = port.written.filter((w) => w.text === 'TQ;' && w.at > t0);
+    expect(tq).toHaveLength(1);
+    expect(tq[0].at - t0).toBeGreaterThanOrEqual(DRAIN_MS);
+    expect(port.ptt).toEqual(['TX']);
+    k.release();
   });
 
   it('PTT on unanswered: timeout, RX at once, confirmed after the drain', async () => {
@@ -382,18 +468,41 @@ describe('CatRadio with a KX2', () => {
     expect(radio.state.hz).toBe(14_074_000);
   });
 
-  it('sends TX and RX ahead of the requests waiting in the queue', async () => {
+  it('sends TX ahead of the requests waiting in the queue, and holds them, the menu read included, until RX is confirmed', async () => {
     const { timers, port, radio } = await started();
     port.delayMs = 40;
-    const reads = [radio.request({ type: 'read_frequency' }), radio.request({ type: 'read_mode' }), radio.request({ type: 'read_vox' })];
+    const reads = [radio.request({ type: 'read_frequency' }), radio.request({ type: 'read_setting', item: 'mic_btn' }), radio.request({ type: 'read_vox' })];
     await timers.advance(5);
     const n = port.written.length;
     const k = radio.key(15_000);
     await timers.advance(1);
     expect(port.written.slice(n - 1).map((w) => w.text)).toEqual(['FA;', 'TX;TQ;']);
-    await timers.advance(200);
+    await timers.advance(100);
     expect(await k.result).toBe('ok');
+    // Keyed for 3 s: only TQ goes out (Programmer's Reference p. 3).
+    await timers.advance(3 * POLL_MS);
+    const keyed = port.written.slice(n + 1).map((w) => w.text);
+    expect(keyed.length).toBeGreaterThan(0);
+    expect(keyed.every((t) => t === 'TQ;')).toBe(true);
+    k.release();
+    await timers.advance(300);
+    const after = port.written.slice(n + 1 + keyed.length).map((w) => w.text);
+    // RX first: its TQ0 confirms receive, and the held reads go after it.
+    expect(after[0]).toBe('RX;TQ;');
+    expect(after).toContain('MN082;MP;MN255;');
     for (const r of reads) expect(await r).toMatchObject({ ok: true });
+  });
+
+  it('never counts the answers a drain drops as silence: no "No reply" during a good unkey', async () => {
+    const { timers, radio, port } = await started();
+    const seen = new Set<string>();
+    radio.onChange((s) => seen.add(s.status));
+    port.dropPtt = 1;
+    const k = radio.key(15_000);
+    await timers.advance(PTT_TIMEOUT_MS + DRAIN_MS + UNKEY_TRIES * UNKEY_ACK_MS + REPLY_MS + 200);
+    expect(await k.result).toBe('timeout');
+    expect(await radio.unkeyed()).toBe(true);
+    expect(seen.has('silent')).toBe(false);
   });
 
   it('refuses dial and mode sets while keyed and while the radio says transmit, at the wire too', async () => {
@@ -415,16 +524,41 @@ describe('CatRadio with a KX2', () => {
     expect(sim.sets_while_transmitting).toBe(0);
   });
 
-  it('tunes to a dial in DATA A: FA, then MD6, then DT0, each read back, waiting out a band change', async () => {
+  it('tunes to a dial in DATA A: FA, then MD6, DT0 and MD6 again, each read back, waiting out a band change', async () => {
     const { timers, sim, port, radio } = await started();
-    port.bandChangeMs = 500;
+    port.bandChangeMs = 1500;
     const done = radio.tune(7_074_000);
-    await timers.advance(KX2_BAND_CHANGE_MS + 200);
+    await timers.advance(KX2_BAND_CHANGE_MS + 600);
     expect(await done).toMatchObject({ ok: true });
-    expect(port.written.filter((w) => /^(FA0|MD\d|DT\d)/.test(w.text)).map((w) => w.text)).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;']);
+    expect(port.written.filter((w) => /^(FA0|MD\d|DT\d)/.test(w.text)).map((w) => w.text)).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;', 'MD6;MD;']);
     expect([sim.frequency, sim.mode, sim.sub]).toEqual([7_074_000, '"data"', '"data_a"']);
     await timers.advance(200);
     expect(radio.state).toMatchObject({ hz: 7_074_000, mode: 'data', sub: 'data_a' });
+  });
+
+  it('drains after a frequency set: the answers the KX2 sends by itself are never taken for the next request', async () => {
+    const { timers, port, radio } = await started();
+    const done = radio.tune(7_074_000);
+    await timers.advance(KX2_BAND_CHANGE_MS);
+    expect(await done).toMatchObject({ ok: true });
+    // The band change's IF, FA and FB came with the read-back; MD6 went out after the drain.
+    const fa = port.written.find((w) => w.text.startsWith('FA0'))!;
+    const md = port.written.find((w) => w.text === 'MD6;MD;')!;
+    expect(md.at - fa.at).toBeGreaterThanOrEqual(DRAIN_MS);
+  });
+
+  it('leaves DATA A on its normal sideband when DT0 brings it reversed', async () => {
+    const { timers, sim, radio } = await started();
+    // DATA A's pair reversed (Owner's Manual p. 43, ALT MD), the radio in AFSK A.
+    sim.press_mode('"data"');
+    sim.press_sub('"afsk_a"');
+    sim.set_rev_data_a(true);
+    const done = radio.tune(14_074_000);
+    await timers.advance(KX2_BAND_CHANGE_MS);
+    expect(await done).toMatchObject({ ok: true });
+    expect([sim.mode, sim.sub]).toEqual(['"data"', '"data_a"']);
+    await timers.advance(300);
+    expect(radio.state).toMatchObject({ mode: 'data', sub: 'data_a' });
   });
 
   it('reports a dial the radio does not take as refused, and stops there', async () => {

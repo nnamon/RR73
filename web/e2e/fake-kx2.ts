@@ -33,6 +33,13 @@ export interface FakeKx2 {
   voxData: boolean;
   /** The menu entry shown, 255 with none. */
   menu: number;
+  /** The receive filter's bandwidth, Hz. */
+  bandwidthHz: number;
+  /** Split on. */
+  split: boolean;
+  /** XIT on, at xitHz. */
+  xit: boolean;
+  xitHz: number;
   /** True while the radio transmits: on TX, or on the Digirig's PTT through the MIC jack. */
   readonly transmit: boolean;
   /** RTS asserted while MIC BTN reads PTT: the Digirig keys the radio. */
@@ -76,6 +83,10 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
         micBtn: 5,
         voxData: false,
         menu: 255,
+        bandwidthHz: 2800,
+        split: false,
+        xit: false,
+        xitHz: 0,
         get lineKeyed() {
           return rig.rts && (rig.micBtn & 1) === 1;
         },
@@ -148,6 +159,15 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
             if (!data) return `MN${pad(rig.menu, 3)};`;
             rig.menu = Number(data);
             return '';
+          case 'IF': {
+            // IF[f]*****+yyyyrx*00tmvspbd1* (p. 14).
+            const sign = rig.xitHz < 0 ? '-' : '+';
+            return `IF${pad(rig.hz, 11)}     ${sign}${pad(Math.abs(rig.xitHz), 4)}0${rig.xit ? 1 : 0} 00${rig.transmit ? 1 : 0}${rig.mode}00${rig.split ? 1 : 0}001 ;`;
+          }
+          case 'BW':
+            return data ? '' : `BW${pad(rig.bandwidthHz / 10, 4)};`;
+          case 'K2':
+            return data ? '' : 'K20;';
           case 'MP':
             return rig.menu === 82 && !data ? `MP${pad(rig.micBtn & 5, 3)};` : '?;';
           default:

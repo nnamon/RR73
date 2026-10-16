@@ -165,7 +165,7 @@ describe('connecting a KX2', () => {
     expect(rig.status).toBe('connected');
     expect(rig.hz).toBe(14_074_000);
     expect(rigModeText()).toBe('USB');
-    expect(rig.menu).toEqual({ product: 1, mic_btn: 5, vox: 0 });
+    expect(rig.menu).toMatchObject({ product: 1, mic_btn: 5, vox: 0, k2: 0, split: 0, xit: 0, bandwidth: 2800 });
     expect(chosen.ptt).toEqual([]);
     expect(chosen.sets).toEqual([]);
     expect(settings.cat).toMatchObject({ radio: 'kx2', connect: true, keyPtt: false });
@@ -256,7 +256,7 @@ describe('the KX2’s dial', () => {
     await run(1500);
     await set;
     expect(rig.tuning).toEqual({ hz: 7_074_000, state: 'set' });
-    expect(chosen.sets).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;']);
+    expect(chosen.sets).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;', 'MD6;MD;']);
     expect([chosen.sim.frequency, chosen.sim.mode, chosen.sim.sub]).toEqual([7_074_000, '"data"', '"data_a"']);
     await run(1000);
     expect(rigModeText()).toBe('DATA A');
