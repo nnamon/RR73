@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.3 · 2026-10-16
 
 - With Key the radio with CAT on, a transmission or Tune whose audio would not reach the output chosen in Settings › Radio and audio is refused, and Rig control and Radio and audio say what to choose. Before, the radio keyed with its Tx audio on the system default, or on nothing.
 - An output the browser refused is applied again once audio starts and when a device is plugged in or out.
