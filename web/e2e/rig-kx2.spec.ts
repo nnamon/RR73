@@ -93,6 +93,16 @@ test('after MIC BTN read OFF, the port allowed before opens again by itself when
   expect(await kx2Ptt(page)).toEqual([]);
 });
 
+test('a KX2 left in its MIC BTN menu entry is not read, and Rig control says to tap DISP', async ({ page }) => {
+  await installFakeKx2(page);
+  await page.goto('./');
+  await page.evaluate(() => (window.__kx2.menu = 82));
+  await connectKx2(page);
+  await expect(page.getByTestId('rig-advice').filter({ hasText: 'Tap DISP' })).toHaveText('The KX2 shows its MIC BTN menu entry, as a read cut off by a lost port leaves it. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.');
+  expect((await kx2Log(page)).map((w) => w.text)).not.toContain('MN082;MP;MN255;');
+  expect(await page.evaluate(() => window.__kx2.menu)).toBe(82);
+});
+
 test('a KX2 already transmitting at connecting shows Transmitting; with Key the radio with CAT on, RR73 sends RX', async ({ page }) => {
   await installFakeKx2(page, { tx: true, micBtn: 0 });
   await page.goto('./');
@@ -112,6 +122,8 @@ test('a new baud rate opens the port again at that rate, with the lines lowered 
   await installFakeKx2(page, { micBtn: 0 });
   await page.goto('./');
   await connectKx2(page);
+  // RR73 opens the port again by itself only once it has read MIC BTN OFF.
+  await expect(page.getByRole('listitem').filter({ hasText: 'MIC BTN' })).toContainText('OFF');
   await page.getByRole('combobox', { name: 'Baud rate' }).selectOption('38400');
   await expect.poll(() => page.evaluate(() => window.__kx2.baud)).toBe(38400);
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
