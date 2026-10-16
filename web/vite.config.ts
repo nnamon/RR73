@@ -52,7 +52,7 @@ export default defineConfig({
       manifest: {
         name: 'RR73',
         short_name: 'RR73',
-        description: 'FT8 and FT4 through the headset jack.',
+        description: 'FT8, FT4, WSPR and RTTY on an iPhone through a headset-jack or USB interface, or on a computer with rig control.',
         // Literal colours: the manifest cannot read CSS. They match --rr-bg in light.
         theme_color: '#F2F2F7',
         background_color: '#F2F2F7',
