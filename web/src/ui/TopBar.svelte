@@ -226,6 +226,7 @@
     flex: none;
     align-items: center;
     height: var(--rr-tap);
+
     /* 5 pt on the right: the Settings glyph's ink ends 16 pt from the edge, as on every bar. */
     padding: 0 calc(var(--rr-space-1) + var(--rr-space-px) + var(--rr-safe-right)) 0 calc(var(--rr-space-1) + var(--rr-safe-left));
     background: var(--rr-dock);
