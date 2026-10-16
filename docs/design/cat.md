@@ -297,7 +297,7 @@ Measured in Chromium 153 (headless on Linux, with fake devices):
 - A context created with a `sinkId` naming a missing device starts and then suspends, with its `sinkId` back to the default. RR73 never passes `sinkId` to the constructor: it calls `setSinkId` after creating the context.
 - `setSinkId` with a missing device rejects with `NotFoundError` and leaves the output where it was. RR73 then plays to the system default, the Output row says the chosen output is not connected, and RR73 tries again when a device is plugged in.
 - Fake devices list 3 outputs, so the end-to-end test runs in Chromium.
-- Playwright's Chromium gives devices new IDs on every page load, as a private window does. RR73 saves the output's and the input's names with their IDs and finds them again by name when the ID is gone (`matchDevice` in `lib/audio/sink.ts`), unless 2 devices share the name. An input under a new ID is found before Start audio opens it, or when opening it by ID fails. Unverified: whether Windows gives a USB audio device a new ID on another USB port.
+- Playwright's Chromium gives devices new IDs on every page load, as a private window does. RR73 saves the output's and the input's names with their IDs and finds them again by name when the ID is gone (`matchDevice` in `lib/audio/sink.ts`), unless 2 devices share the name. An input under a new ID is found before Start audio opens it, or when Start audio or Resume audio fails to open it by ID. Unverified: whether Windows gives a USB audio device a new ID on another USB port.
 
 Changing the output halts Tune and any transmission, so no transmission moves between devices.
 

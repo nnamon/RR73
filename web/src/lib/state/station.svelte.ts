@@ -9,7 +9,7 @@
  * (lib/state/cat.svelte.ts).
  */
 
-import { CaptureEngine, type Chunk, type InputSource, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
+import { CaptureEngine, type Chunk, type EngineState, type InputSource, type StartError, type StopReason, type AudioStatus } from '../audio/engine';
 import { START_TONE, playClip, silentClipUri, startToneSamples, wavDataUri } from '../audio/unlock';
 import { FLOOR_DB } from '../audio/level';
 import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
@@ -632,13 +632,7 @@ function checkKeyingAt(toneStartMs: number) {
 export function startAudio() {
   const toneAt = playStartClip();
   decoder.load();
-  const started = getEngine()
-    .start(settings.inputDeviceId)
-    .then(async (st) => {
-      if (st.status !== 'failed' || st.error !== 'no-device') return st;
-      const id = await refindInput();
-      return id === null ? st : getEngine().start(id);
-    });
+  const started = getEngine().start(settings.inputDeviceId).then(orRefound);
   // The practice band has no radio to key.
   if (toneAt !== null && !practice.on) checkKeyingAt(toneAt);
   return started;
@@ -657,10 +651,20 @@ export function setInputSource(src: InputSource | null) {
   if (engine) engine.mapper.inputOffsetS = inputOffsetS();
 }
 
-/** Resumes audio after an interruption. Call from a tap. */
+/**
+ * Resumes audio after an interruption. Call from a tap. An input that ended and came back under a
+ * new ID, as after its USB cable moved to another port, is found by its name and started.
+ */
 export function resumeAudio() {
   playClip(silentClipUri());
-  return getEngine().resume();
+  return getEngine().resume().then(orRefound);
+}
+
+/** A start that found no input under the saved ID tries again with the ID the input's name has now. */
+async function orRefound(st: EngineState): Promise<EngineState> {
+  if (st.status !== 'failed' || st.error !== 'no-device') return st;
+  const id = await refindInput();
+  return id === null ? st : getEngine().start(id);
 }
 
 /** Switches the input device. Call from a change event. Another input has its own latency, so the receive calibration starts over. */
