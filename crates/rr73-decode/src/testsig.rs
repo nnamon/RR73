@@ -122,3 +122,17 @@ pub fn data_bits(layout: &FrameLayout, tones: &[u8]) -> Vec<u8> {
     }
     bits
 }
+
+/// `audio` through a receiver passband from 100 Hz to `edge_hz` (the -6 dB points), with
+/// raised-cosine skirts `skirt_hz` wide and 70 dB down beyond them.
+pub fn passband(audio: &[f32], edge_hz: f64, skirt_hz: f64) -> Vec<f32> {
+    let mut out = audio.to_vec();
+    rr73_chansim::Passband {
+        low_hz: 100.0,
+        high_hz: edge_hz,
+        skirt_hz,
+        stop_db: -70.0,
+    }
+    .apply(&mut out, 12_000.0);
+    out
+}

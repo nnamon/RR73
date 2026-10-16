@@ -56,6 +56,19 @@ pub struct DecoderConfig {
     /// results written before it existed.
     #[serde(default)]
     pub ap: ApParams,
+    /// SNR estimate. Absent from results written before it existed.
+    #[serde(default)]
+    pub snr: SnrParams,
+}
+
+/// SNR estimate parameters (`crate::snr`).
+#[derive(Clone, Debug, Default, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SnrParams {
+    /// Measure each pass's noise floor across the band (`crate::passband`) and follow it at a
+    /// receiver's passband edge. Off, the noise counts as flat around each signal.
+    #[serde(default)]
+    pub passband: bool,
 }
 
 /// A priori decoding: when it applies and what it accepts (`crate::ap`).
@@ -449,6 +462,7 @@ impl DecoderConfig {
             },
             passes: 1,
             ap: ApParams::default(),
+            snr: SnrParams::default(),
         }
     }
 

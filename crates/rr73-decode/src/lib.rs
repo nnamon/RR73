@@ -25,6 +25,7 @@ pub mod demod;
 pub mod layout;
 pub mod ldpc;
 pub mod osd;
+pub mod passband;
 pub mod pipeline;
 pub mod refine;
 pub mod report;

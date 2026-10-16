@@ -533,6 +533,15 @@ impl DecodeSession {
         if let Some((plan, _)) = ws.plan.as_mut() {
             plan.compute_frames(&self.audio, from..to, &mut ws.spec);
         }
+        if to >= g.frames {
+            // The pass's noise floor, for SNR estimates at a passband edge.
+            let config = &self.stages[self.stage].config;
+            if config.snr.passband {
+                ws.floor.compute(&ws.spec, &ws.live, config.spectrogram.time_osr);
+            } else {
+                ws.floor.clear();
+            }
+        }
         self.timings.spectrogram_s += sw.elapsed_s();
         self.phase = if to < g.frames {
             Phase::Spectrogram(to)
@@ -831,7 +840,9 @@ impl DecodeSession {
                 continue;
             }
             let tones = rr73_ft8::tones::from_payload(self.layout.mode, &valid.payload);
-            let snr_db = g.snr.estimate(&view, &cand, &tones, &ws.live, &mut ws.noise);
+            let snr_db = g
+                .snr
+                .estimate(&view, &cand, &tones, &ws.live, ws.floor.db(), &mut ws.noise);
             // An OSD codeword claiming an SNR below what decoding reaches is noise; an AP decode
             // has its own floor.
             if (found_by.is_none() && outcome.osd && snr_db < config.validate.osd_floor_db(self.layout.mode))
