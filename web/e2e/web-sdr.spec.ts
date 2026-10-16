@@ -1,10 +1,12 @@
 // Web SDR receive end to end in Chromium, with no microphone. Settings › Relay and Settings › Web
 // SDR are set up against a stand-in QSP relay (page.route and page.routeWebSocket). The relay
 // streams e2e/fixtures/ft8-loop.wav in QSP's frames (docs/design/qsp.md), each stamped with the UTC
-// of its first sample. The loop restarts on every slot boundary, so each slot holds one copy of
-// each message at the fixture's DT. The app plays each frame 1.5 s after its UTC and subtracts
-// that delay from capture's timestamps, so the decodes show the fixture's DT. No request reaches
-// a real server.
+// of its first sample. The loop restarts on every slot boundary, so each slot holds the fixture's 4
+// copies of each message at their DT, 3.75 s and 90 Hz apart. The decoder searches to DT 4.5 s,
+// which reaches the first two, and lists each message once per slot, from whichever copy it
+// decodes; the frequency tells which. The app plays each frame 1.5 s after its UTC and subtracts
+// that delay from capture's timestamps, so the decodes show that copy's DT. No request reaches a
+// real server.
 import { expect, test, type Page, type WebSocketRoute } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { loadWasm } from './wasm';
@@ -23,8 +25,14 @@ interface Truth {
   freq_hz: number;
   dt_s: number;
 }
-/** The copy of each message that starts in the first 0.2 s of the loop: one per slot. */
-const COPIES = (JSON.parse(readFileSync(new URL('./fixtures/ft8-loop.json', import.meta.url), 'utf8')) as { truth: Truth[] }).truth.filter((t) => t.dt_s < 1);
+const TRUTH = (JSON.parse(readFileSync(new URL('./fixtures/ft8-loop.json', import.meta.url), 'utf8')) as { truth: Truth[] }).truth;
+/** The shipped preset's FT8 search range: DT up to 4.5 s (crates/rr73-decode/src/config.rs). */
+const SEARCHED_DT_S = 4.5;
+/** Each message with the copies a slot holds within the search: at DT 0 to 0.2 s and 3.75 s later. */
+const MESSAGES = [...new Set(TRUTH.map((t) => t.text))].map((text) => ({
+  text,
+  copies: TRUTH.filter((t) => t.text === text && t.dt_s <= SEARCHED_DT_S),
+}));
 
 /** ft8-loop.wav's samples: 12 kHz mono 16-bit, 15 s. */
 function loopSamples(): Int16Array {
@@ -161,15 +169,17 @@ test('receives from a web SDR through a relay, at the time the relay gives each 
   await expect(page.locator('header.top .sdr')).toHaveText('Web SDR');
   await expect(page.getByRole('timer', { name: /Receiving$/ })).toBeVisible({ timeout: 10_000 });
   const labels: string[] = [];
-  for (const c of COPIES) {
-    const row = rows(page).filter({ has: page.locator('.c-msg', { hasText: c.text }) }).first();
+  for (const message of MESSAGES) {
+    const row = rows(page).filter({ has: page.locator('.c-msg', { hasText: message.text }) }).first();
     await expect(row).toBeVisible({ timeout: 50_000 });
     const label = (await row.getAttribute('aria-label')) ?? '';
     labels.push(label);
     const m = /DT (−?[\d.]+) s, (\d+) Hz/.exec(label);
     expect(m, label).not.toBeNull();
-    expect(Math.abs(Number(m![1].replace('−', '-')) - c.dt_s), label).toBeLessThanOrEqual(0.2);
-    expect(Math.abs(Number(m![2]) - c.freq_hz), label).toBeLessThanOrEqual(3);
+    // Copies lie 90 Hz apart, so the frequency names the copy; its DT must then match.
+    const c = message.copies.find((t) => Math.abs(Number(m![2]) - t.freq_hz) <= 3);
+    expect(c, label).toBeDefined();
+    expect(Math.abs(Number(m![1].replace('−', '-')) - c!.dt_s), label).toBeLessThanOrEqual(0.2);
   }
 
   test.info().annotations.push({ type: 'decodes', description: JSON.stringify(labels) });
