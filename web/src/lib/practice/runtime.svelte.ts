@@ -18,7 +18,7 @@ import { countPracticeQsos, restorePracticeRecords, takePracticeRecords, type Pr
 import { practice, updatePractice } from '../state/practice.svelte';
 import { endQso, qso, showNotice } from '../state/qso.svelte';
 import { settings } from '../state/settings.svelte';
-import { codec, setInputSource, startAudio } from '../state/station.svelte';
+import { codec, halt, setInputSource, startAudio } from '../state/station.svelte';
 import { webSdrInput } from '../state/relay.svelte';
 import { STATUS } from '../qso/status';
 import { scenarioOf, type ScenarioId } from './scenarios';
@@ -115,9 +115,13 @@ export function initPractice(): Promise<void> {
   return practice.on ? apply(true) : Promise.resolve();
 }
 
-/** Turns practice on or off. Call from the tap: turning it on starts the band at once. */
+/**
+ * Turns practice on or off. Call from the tap: turning it on starts the band at once. Output stops
+ * first, PTT with it, so nothing keyed for the radio carries on into practice or back.
+ */
 export function setPracticeOn(on: boolean): Promise<void> {
   if (on === practice.on) return Promise.resolve();
+  halt();
   // A QSO in progress belongs to the band it started on.
   endQso();
   void updatePractice({ on });

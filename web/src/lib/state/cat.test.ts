@@ -10,6 +10,7 @@ import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
 import { dialNow, onRadioNotice, rig, rigGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
+import { practice } from './practice.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
 
@@ -156,6 +157,7 @@ beforeEach(async () => {
 
 afterEach(() => {
   resetCat();
+  practice.on = false;
   vi.useRealTimers();
 });
 
@@ -500,6 +502,34 @@ describe('keying', () => {
     expect(chosen.ptt.at(-1)).toBe('00');
     await run(100);
     expect(chosen.sim.transmit).toBe(false);
+  });
+
+  it('the practice band never keys the radio by CAT: no PTT for FT8, FT4 or WSPR, and no Test keying, with the switch on', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    practice.on = true;
+    const n = chosen.log.length;
+    expect(txKeyer()).toBeNull();
+    for (const mode of ['FT8', 'WSPR'] as const) {
+      const { done, played, reports } = await transmit(2000, mode);
+      await run(6000);
+      await done;
+      expect(played).toHaveLength(1);
+      expect(reports.map((r) => r.type)).toEqual(['started', 'ended']);
+    }
+    // No dial shift either: it needs CAT keying.
+    expect(txShiftHz('FT4', 2800)).toBe(0);
+    await testKeying();
+    expect(rig.test).toEqual({ state: 'done', ok: false, text: 'Not tested: the practice band is on, and it never keys the radio by CAT. Turn it off in Settings › Practice band first.', atMs: expect.any(Number) });
+    await run(TEST_KEY_MS + 500);
+    expect(chosen.log.slice(n).filter((l) => l.startsWith('FE FE A4 E0 1C 00 0'))).toEqual([]);
+    expect(chosen.sim.transmit).toBe(false);
+    // With the radio gone, practice still transmits: it needs no radio.
+    chosen.unplug();
+    await run(10);
+    expect(rigGate()).toBeNull();
+    practice.on = false;
+    expect(rigGate()).toBe('Radio not connected');
   });
 
   it('a lost port turns Tx off, says so, and the next connection sends PTT off if the radio still transmits', async () => {

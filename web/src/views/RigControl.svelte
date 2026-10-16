@@ -16,6 +16,7 @@
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { chooseRadio, connectRadio, disconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
   import { radioName, rig, rigConnected, rigInDataMode, rigModeText, usbSendOn } from '../lib/state/radio.svelte';
+  import { practice } from '../lib/state/practice.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
 
   const connected = $derived(rigConnected());
@@ -273,15 +274,18 @@
         </span>
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.keyPtt} onchange={(e) => void updateSettings({ cat: { ...settings.cat, keyPtt: e.currentTarget.checked } })} />
       </label>
-      <button class="row act" disabled={!connected || testing} onclick={() => void testKeying()}>
+      <!-- The practice band never keys the radio by CAT, Test keying included. -->
+      <button class="row act" disabled={!connected || testing || practice.on} onclick={() => void testKeying()}>
         <span class="row-main">
           <span class="row-title">{testing ? 'Testing keying' : 'Test keying'}</span>
-          {#if testResult}<span class="row-sub" class:ok={testResult.ok} class:err={!testResult.ok} role="status" data-testid="rig-test">{testResult.text}</span>{/if}
+          {#if practice.on}<span class="row-sub" data-testid="rig-test-practice">Off with the practice band on</span>
+          {:else if testResult}<span class="row-sub" class:ok={testResult.ok} class:err={!testResult.ok} role="status" data-testid="rig-test">{testResult.text}</span>{/if}
         </span>
       </button>
     </div>
     {#if notDataA}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataA}</p>{/if}
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
+    <p class="section-foot" data-testid="rig-practice">The practice band never keys the radio by CAT.</p>
     {#if kx2}<p class="section-foot" data-testid="rig-risk">{KX2_RISK}</p>{/if}
   </div>
 

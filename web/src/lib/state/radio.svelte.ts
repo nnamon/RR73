@@ -15,6 +15,7 @@ import { rttyDialHz } from '../rtty/dial';
 import { txDialShiftHz } from '../cat/passband';
 import type { Mode } from '../clock/slots';
 import type { Keyer } from '../tx/keyer';
+import { practice } from './practice.svelte';
 import { settings } from './settings.svelte';
 
 /**
@@ -169,11 +170,20 @@ export function provideKeyer(k: Keyer | null) {
 }
 
 /**
- * The keyer for transmissions: the radio's PTT while one is connected and Key the radio with CAT
- * is on; null otherwise, and the radio keys by VOX.
+ * True when transmissions key the radio by CAT once it is connected: Key the radio with CAT is on
+ * and the practice band is off. The practice band never keys the radio by CAT, whatever the
+ * settings: its transmissions go to simulated stations.
+ */
+export function catKeys(): boolean {
+  return settings.cat.keyPtt && !practice.on;
+}
+
+/**
+ * The keyer for transmissions: the radio's PTT while one is connected and catKeys holds; null
+ * otherwise, and the radio keys by VOX on the audio alone.
  */
 export function txKeyer(): Keyer | null {
-  return settings.cat.keyPtt && rigConnected() ? keyer : null;
+  return catKeys() && rigConnected() ? keyer : null;
 }
 
 /**
@@ -194,10 +204,10 @@ export function txShiftHz(mode: Mode, hz: number): number {
  * Why a transmission cannot go because of the radio, or null: keying by CAT is on and the radio
  * the operator connected is not connected now; PTT off was not confirmed; the radio's USB SEND
  * keys it on a port line; or the radio's dial is on another band than RR73's, where QSOs would log
- * the wrong band.
+ * the wrong band. The practice band keys nothing by CAT, so it needs no radio connected.
  */
 export function rigGate(): string | null {
-  if (settings.cat.keyPtt && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
+  if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
   if (usbSendOn()) return STATUS.usbSend;
@@ -209,7 +219,7 @@ export function rigGate(): string | null {
 
 /** Why Tune cannot go because of the radio, or null: as rigGate, but on any band. */
 export function tuneGate(): string | null {
-  if (settings.cat.keyPtt && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
+  if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
   return usbSendOn() ? STATUS.usbSend : null;

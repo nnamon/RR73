@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The practice band never keys the radio by CAT, whatever Key the radio with CAT says, and Test keying waits until it is off. Before, a practice transmission keyed a connected radio. Settings › Practice band says that a radio on the Tx output with VOX on transmits practice audio.
+
 ## 0.24.2 · 2026-10-16
 
 - FT8 and FT4 decode stations with tones up to 3200 Hz, beyond the 3000 Hz limit before, such as a strong station at the edge of the radio’s passband.
