@@ -26,9 +26,8 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   // The radio's MIC BTN read RTS as PTT from open() until the lines went low: once, and no TX or RX.
   expect(await page.evaluate(() => window.__kx2.lineKeyedAt.length)).toBe(1);
   expect(await kx2Ptt(page)).toEqual([]);
-  const writes = (await kx2Log(page)).map((w) => w.text);
-  expect(writes[0]).toBe('TQ;');
-  expect(writes).toContain('MN082;MP;MN255;');
+  await expect.poll(async () => (await kx2Log(page)).map((w) => w.text)).toContain('MN082;MP;MN255;');
+  expect((await kx2Log(page))[0].text).toBe('TQ;');
   await expect(page.getByRole('listitem').filter({ hasText: 'Model' })).toContainText('KX2');
   await expect(page.getByRole('listitem').filter({ hasText: 'MIC BTN' })).toContainText('PTT UP.DN');
   await expect(page.getByRole('listitem').filter({ hasText: 'VOX' })).toContainText('Off');
@@ -47,7 +46,7 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await sheet.getByText('40m', { exact: true }).click();
   await expect.poll(() => page.evaluate(() => [window.__kx2.hz, window.__kx2.mode, window.__kx2.sub])).toEqual([7_074_000, 6, 0]);
   const sets = (await kx2Log(page)).slice(before).map((w) => w.text).filter((t) => /^(FA\d|MD\d|DT\d)/.test(t));
-  expect(sets).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;']);
+  expect(sets).toEqual(['FA00007074000;FA;', 'MD6;MD;', 'DT0;DT;', 'MD6;MD;']);
   await expect(band).toContainText('40m');
   await expect(band).toContainText('7.074');
   await band.click();

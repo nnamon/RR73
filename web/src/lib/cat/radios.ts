@@ -20,6 +20,10 @@ export interface SettingRead {
   when?(s: RadioState): boolean;
   /** Read first, and the setting only when it says yes: the KX2's menu must not be in use. Not a refusal when it says no. */
   guard?: { request: CatRequest; ok(e: CatEvent): boolean };
+  /** The value the setting takes when the radio refuses the read, so the screen can say so; without it a refused setting stays unread. */
+  refused?: number;
+  /** After the read, whatever its answer: `check` must say `ok`, or `fix` goes out. The KX2's menu read must leave the menu. */
+  after?: { check: CatRequest; ok(e: CatEvent): boolean; fix: CatRequest };
 }
 
 export interface RadioTraits {
@@ -32,9 +36,18 @@ export interface RadioTraits {
   dataMode: readonly CatRequest[];
   /** The reads of the mode, on connecting and every 5 s after the frequency. */
   modeReads: readonly CatRequest[];
+  /** Read after the mode, and only when it reads DATA or DATA-REV: the KX2's data sub-mode (Programmer's Reference p. 11). */
+  subRead?: CatRequest;
   settings: readonly SettingRead[];
   /** Requests whose answer takes longer than the link's REPLY_MS, ms. */
   slow: Partial<Record<CatRequest['type'], number>>;
+  /** Requests after whose answer the link drains: answers the radio sends by itself may follow. */
+  drainAfter?: readonly CatRequest['type'][];
+  /**
+   * From PTT on until a read confirms PTT off, only reads of transmit or receive go out, besides
+   * PTT itself: the Programmer's Reference advises against polling during transmit (p. 3).
+   */
+  quietWhileKeyed?: boolean;
   /**
    * PTT on is confirmed by the read that follows it, and a read that says receive is read again
    * until PTT_TIMEOUT_MS: the KX2's TX has no answer of its own (Programmer's Reference p. 28).
@@ -61,13 +74,15 @@ export const IC705: RadioTraits = {
 
 /** The KX2's answer to OM that names it (Programmer's Reference p. 21). */
 export const KX2_PRODUCT = 1;
+/** The KX3's (p. 21). MP gives MIC BTN's bits on the KX3 and the KX2 (p. 20). */
+export const KX3_PRODUCT = 2;
 
 /**
  * A band change takes about 0.5 s, and the KX2 handles no command until it is done (Programmer's
- * Reference p. 11, p. 3): the read-back of a frequency set waits this long, ms. Unverified on a
- * device.
+ * Reference p. 11, p. 3); at 4800 baud the answers it sends by itself after it (p. 11, note 7) take
+ * about 0.2 s more. The read-back of a frequency set waits this long, ms. Unverified on a device.
  */
-export const KX2_BAND_CHANGE_MS = 1000;
+export const KX2_BAND_CHANGE_MS = 2000;
 
 /** The Elecraft KX2 over its ACC jack, through a Digirig (docs/design/cat.md, Elecraft KX2). */
 export const KX2: RadioTraits = {
@@ -75,25 +90,38 @@ export const KX2: RadioTraits = {
   name: 'KX2',
   dataModeName: 'DATA A',
   // The frequency first, then the mode, so the mode applies on the new band (p. 5, note 2).
+  // MD6 again after DT0: DATA's normal or reverse sideband is held per pair of sub-modes (p. 16,
+  // note 2), so DT0 may bring DATA A on the reverse sideband, and MD6 then sets DATA A's pair to
+  // normal (Owner's Manual p. 43).
   dataMode: [
     { type: 'set_mode', mode: 'data' },
     { type: 'set_data_sub_mode', sub: 'data_a' },
+    { type: 'set_mode', mode: 'data' },
   ],
-  // DT is valid only in DATA (p. 11): the app reads it only there. VX is VOX in the present mode.
-  modeReads: [{ type: 'read_mode' }, { type: 'read_data_sub_mode' }, { type: 'read_vox' }],
+  // VX is VOX in the present mode; IF carries split and XIT (p. 14); BW the receive filter (p. 8).
+  modeReads: [{ type: 'read_mode' }, { type: 'read_vox' }, { type: 'read_info' }, { type: 'read_bandwidth' }],
+  // DT is valid only in DATA (p. 11).
+  subRead: { type: 'read_data_sub_mode' },
   settings: [
     { id: 'product', request: { type: 'read_options' }, value: (e) => (e.type === 'options' ? (e.product ?? 0) : null) },
+    // K21 and K23, left by another program, make MD report DATA as LSB or USB (p. 4; p. 16, note 2).
+    { id: 'k2', request: { type: 'read_k2_mode' }, value: (e) => (e.type === 'k2_mode' ? e.mode : null) },
     {
       id: 'mic_btn',
       request: { type: 'read_setting', item: 'mic_btn' },
       value: (e) => (e.type === 'menu_value' ? e.value : null),
-      when: (s) => s.settings.product === KX2_PRODUCT,
-      // Reading a menu setting opens its entry on the radio's screen and leaves the menu after
-      // (p. 17). Not while the operator has a menu entry open.
+      // MP gives MIC BTN's bits on the KX3 and the KX2 (p. 20); the K3 cannot read it with MP.
+      when: (s) => s.settings.product === KX2_PRODUCT || s.settings.product === KX3_PRODUCT,
+      // Reading a menu setting opens its entry on the radio and leaves the menu after (p. 17). Not
+      // while the operator has a menu entry open, and the menu must be left after.
       guard: { request: { type: 'read_menu_entry' }, ok: (e) => e.type === 'menu_entry' && e.entry === 255 },
+      refused: -1,
+      after: { check: { type: 'read_menu_entry' }, ok: (e) => e.type === 'menu_entry' && e.entry === 255, fix: { type: 'leave_menu' } },
     },
   ],
   slow: { set_frequency: KX2_BAND_CHANGE_MS },
+  drainAfter: ['set_frequency'],
+  quietWhileKeyed: true,
   readsPtt: true,
 };
 
