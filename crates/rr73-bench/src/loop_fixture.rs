@@ -412,8 +412,10 @@ mod tests {
             .iter()
             .map(|p| decodable_dt(&DecoderConfig::preset(p).expect("preset")))
             .collect();
+        // A search past DT 2.5 s (the shipped preset) widens the window; the check below uses
+        // the narrowest, the baseline's.
         for &(lo, hi) in &windows {
-            assert!((lo - -1.62).abs() < 1e-6 && (hi - 2.5).abs() < 1e-6, "{lo} {hi}");
+            assert!((lo - -1.62).abs() < 1e-6 && hi >= 2.5 - 1e-6, "{lo} {hi}");
         }
         let (lo, hi) = windows[0];
         let scene = scene();
