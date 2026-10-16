@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.22.3 · 2026-10-16
 
 - Decoding FT8 and FT4 takes about half the time it did, with the same decodes. In Safari's engine on an M4, 95% of recorded slots finish all three decoding stages within 0.5 s, against 1.2 s before.
 
