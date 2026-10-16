@@ -497,13 +497,25 @@ impl DecoderConfig {
         self
     }
 
+    /// A search to DT 4.5 s in FT8 and 1.5 s in FT4, past the 4 s and 1.25 s by which the
+    /// sequencer may start a reply late (`LATE_S`), with a 6 dB sync threshold for positions
+    /// whose Costas arrays do not all lie inside the slot (experiment 0010).
+    fn with_late_starts(mut self) -> Self {
+        self.search.ft8_dt_max_s = 4.5;
+        self.search.ft4_dt_max_s = 1.5;
+        self.search.partial_min_score_db = Some(6.0);
+        self
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
             "baseline" => Ok(Self::baseline()),
             "subtract-3" => Ok(Self::subtract_3()),
             "subtract-3-osd1" => Ok(Self::subtract_3_osd(1, 91)),
-            "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40).with_block_soft_bits()),
+            "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40)
+                .with_block_soft_bits()
+                .with_late_starts()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }
