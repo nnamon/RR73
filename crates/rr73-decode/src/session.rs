@@ -709,6 +709,12 @@ impl DecodeSession {
                 .search
                 .search(&view, from..=to, &mut chunk);
         }
+        // With weak candidates in one mode only, the search took the lower floor of the two.
+        let config = &self.stages[self.stage].config;
+        if config.search.ft8_weak_score_db.is_some() || config.search.ft4_weak_score_db.is_some() {
+            let floor = config.score_floor_db(self.layout.mode);
+            chunk.retain(|c| c.score >= floor);
+        }
         let max = self.stages[self.stage].config.search.max_candidates;
         let list = &mut self.ctx.ws.candidates;
         list.extend_from_slice(&chunk);
@@ -840,7 +846,7 @@ impl DecodeSession {
                     .block
                     .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach);
                 let matched = at.map(|r| r.sync_matched);
-                let ready = matched.is_some_and(|m| m >= config.demod.min_sync_at(mode, cand.score));
+                let ready = matched.is_some_and(|m| m >= config.block_min_sync(mode, cand.score));
                 if ready {
                     block_at = at;
                 }

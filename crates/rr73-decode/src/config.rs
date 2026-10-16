@@ -99,9 +99,9 @@ impl Default for PairParams {
         Self {
             enabled: false,
             ft8_min_sync: 12,
-            ft4_min_sync: 10,
+            ft4_min_sync: 12,
             ft8_target_min_sync: 7,
-            ft4_target_min_sync: 8,
+            ft4_target_min_sync: 10,
             max_retries: 16,
             max_interferers: 2,
             block: 3,
@@ -237,6 +237,14 @@ pub struct SearchParams {
     /// `min_score_db`.
     #[serde(default)]
     pub partial_min_score_db: Option<f32>,
+    /// A lower threshold for FT8 candidates, in dB: those scoring from it up to `min_score_db`
+    /// join the list as weak candidates, which need `demod.ft8_weak_min_sync` sync symbols on
+    /// their sent tone for the block sets (experiment 0012). `None` keeps `min_score_db`.
+    #[serde(default)]
+    pub ft8_weak_score_db: Option<f32>,
+    /// The same for FT4, with `demod.ft4_weak_min_sync`.
+    #[serde(default)]
+    pub ft4_weak_score_db: Option<f32>,
 }
 
 /// Refinement implementations.
@@ -330,13 +338,8 @@ pub struct DemodParams {
     /// With `block`: the same for FT4 (of 16).
     #[serde(default)]
     pub ft4_extra_min_sync: u8,
-    /// With `block`: candidates whose search score lies below this, in dB, need
-    /// `ft8_weak_min_sync` or `ft4_weak_min_sync` sync symbols on their sent tone for the block
-    /// sets, so a lower search threshold adds few attempts on noise (experiment 0012). `None`
-    /// gates every candidate alike.
-    #[serde(default)]
-    pub weak_score_db: Option<f32>,
-    /// With `block`: the fewest FT8 sync symbols (of 21) for a candidate below `weak_score_db`.
+    /// With `block`: the fewest FT8 sync symbols (of 21) for a weak candidate, one that scored
+    /// below `search.min_score_db` and joined through `search.ft8_weak_score_db`.
     #[serde(default)]
     pub ft8_weak_min_sync: u8,
     /// With `block`: the same for FT4 (of 16).
@@ -388,17 +391,12 @@ impl DemodParams {
         })
     }
 
-    /// The fewest sync symbols a candidate of `mode` with search score `score_db` needs for the
-    /// block sets: [`DemodParams::min_sync`], or the weak candidates' gate below `weak_score_db`.
-    pub fn min_sync_at(&self, mode: Mode, score_db: f32) -> usize {
-        let base = self.min_sync(mode);
-        match self.weak_score_db {
-            Some(below) if score_db < below => base.max(usize::from(match mode {
-                Mode::Ft8 => self.ft8_weak_min_sync,
-                Mode::Ft4 => self.ft4_weak_min_sync,
-            })),
-            _ => base,
-        }
+    /// The fewest sync symbols a weak candidate of `mode` needs for the block sets.
+    pub fn weak_min_sync(&self, mode: Mode) -> usize {
+        usize::from(match mode {
+            Mode::Ft8 => self.ft8_weak_min_sync,
+            Mode::Ft4 => self.ft4_weak_min_sync,
+        })
     }
 
     /// `true` when the spectrogram's single-symbol LLRs are tried.
@@ -517,6 +515,28 @@ pub struct SubtractParams {
 }
 
 impl DecoderConfig {
+    /// The lowest search score a candidate of `mode` may have, in dB: `search.min_score_db`, or
+    /// the weak candidates' lower threshold.
+    pub fn score_floor_db(&self, mode: Mode) -> f32 {
+        let weak = match mode {
+            Mode::Ft8 => self.search.ft8_weak_score_db,
+            Mode::Ft4 => self.search.ft4_weak_score_db,
+        };
+        weak.map_or(self.search.min_score_db, |w| w.min(self.search.min_score_db))
+    }
+
+    /// The fewest sync symbols on their sent tone a candidate of `mode` with search score
+    /// `score_db` needs for the block sets: `demod.ft8_min_sync` or `demod.ft4_min_sync`, or for
+    /// a weak candidate (below `search.min_score_db`) the stricter of that and its own gate.
+    pub fn block_min_sync(&self, mode: Mode, score_db: f32) -> usize {
+        let base = self.demod.min_sync(mode);
+        if score_db < self.search.min_score_db {
+            base.max(self.demod.weak_min_sync(mode))
+        } else {
+            base
+        }
+    }
+
     /// The `baseline` preset: the ft8_lib method. 2x time and 2x frequency oversampled
     /// waterfall (Hann window over 2 symbols, 200 to 3000 Hz), Costas sync score, the 140
     /// best candidates scoring at least 5 dB, max-log LLRs from dB magnitudes scaled to
@@ -542,6 +562,8 @@ impl DecoderConfig {
                 ft4_dt_max_s: 1.0,
                 skip_silent_frames: false,
                 partial_min_score_db: None,
+                ft8_weak_score_db: None,
+                ft4_weak_score_db: None,
             },
             refine: RefineParams {
                 kind: RefineKind::None,
@@ -562,7 +584,6 @@ impl DecoderConfig {
                 ft4_extra_sets: Vec::new(),
                 ft8_extra_min_sync: 0,
                 ft4_extra_min_sync: 0,
-                weak_score_db: None,
                 ft8_weak_min_sync: 0,
                 ft4_weak_min_sync: 0,
             },
@@ -752,10 +773,12 @@ impl DecoderConfig {
         }
         if self.demod.ft8_weak_min_sync > 21
             || self.demod.ft4_weak_min_sync > 16
-            || self.demod.weak_score_db.is_some_and(|v| !v.is_finite())
+            || [self.search.ft8_weak_score_db, self.search.ft4_weak_score_db]
+                .iter()
+                .any(|v| v.is_some_and(|v| !v.is_finite()))
         {
             return bad(
-                "demod.ft8_weak_min_sync must be at most 21, demod.ft4_weak_min_sync at most 16 and demod.weak_score_db finite",
+                "demod.ft8_weak_min_sync must be at most 21, demod.ft4_weak_min_sync at most 16 and the weak score thresholds finite",
             );
         }
         if self.ldpc.max_iterations > 10_000
@@ -881,29 +904,39 @@ mod tests {
         // The research reference keeps the ft8_lib method.
         let b = DecoderConfig::baseline();
         assert!(!b.snr.passband && b.spectrogram.freq_max_hz == 3000.0);
+        assert!(!b.pairs.enabled && b.score_floor_db(Mode::Ft8) == 5.0);
     }
 
     #[test]
     fn weak_candidates_take_their_own_gate_and_pairs_parse() {
         let base = DecoderConfig::baseline();
-        assert_eq!(base.demod.min_sync_at(Mode::Ft8, 4.5), 0);
+        assert_eq!(base.score_floor_db(Mode::Ft8), 5.0);
         let c = base
             .with_overrides(&[
                 "demod.kind=block",
                 "demod.ft8_min_sync=5",
-                "demod.weak_score_db=5",
+                "search.ft8_weak_score_db=4",
+                "search.ft4_weak_score_db=3.5",
                 "demod.ft8_weak_min_sync=8",
                 "demod.ft4_weak_min_sync=9",
             ])
             .expect("weak gate");
-        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 4.5), 8);
-        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 5.0), 5);
-        assert_eq!(c.demod.min_sync_at(Mode::Ft4, 4.9), 9);
+        assert_eq!(
+            (c.score_floor_db(Mode::Ft8), c.score_floor_db(Mode::Ft4)),
+            (4.0, 3.5)
+        );
+        assert_eq!(c.block_min_sync(Mode::Ft8, 4.5), 8);
+        assert_eq!(c.block_min_sync(Mode::Ft8, 5.0), 5);
+        assert_eq!(c.block_min_sync(Mode::Ft4, 4.9), 9);
+        // A stage with a lower threshold of its own, as stage 3, has no weak candidates.
+        let c = c.with_overrides(&["search.min_score_db=2"]).expect("stage 3");
+        assert_eq!(c.score_floor_db(Mode::Ft8), 2.0);
+        assert_eq!(c.block_min_sync(Mode::Ft8, 2.5), 5);
         // The weak gate never loosens the gate every candidate takes.
         let c = c
-            .with_overrides(&["demod.ft8_weak_min_sync=3"])
+            .with_overrides(&["search.min_score_db=5", "demod.ft8_weak_min_sync=3"])
             .expect("weak gate");
-        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 4.5), 5);
+        assert_eq!(c.block_min_sync(Mode::Ft8, 4.5), 5);
         let p = base
             .with_overrides(&[
                 "pairs.enabled=true",
@@ -912,8 +945,9 @@ mod tests {
             ])
             .expect("pairs");
         assert!(p.pairs.enabled);
-        assert_eq!(p.pairs.min_sync(Mode::Ft4), (11, 8));
+        assert_eq!(p.pairs.min_sync(Mode::Ft4), (11, 10));
         for bad in [
+            "search.ft8_weak_score_db=NaN",
             "demod.ft8_weak_min_sync=22",
             "demod.ft4_weak_min_sync=17",
             "pairs.ft8_min_sync=22",
@@ -1064,13 +1098,15 @@ mod tests {
             "ft4_extra_sets",
             "ft8_extra_min_sync",
             "ft4_extra_min_sync",
-            "weak_score_db",
             "ft8_weak_min_sync",
             "ft4_weak_min_sync",
         ] {
             demod.remove(key);
         }
         old.as_object_mut().expect("config").remove("pairs");
+        let search = old["search"].as_object_mut().expect("search");
+        search.remove("ft8_weak_score_db");
+        search.remove("ft4_weak_score_db");
         let back: DecoderConfig = serde_json::from_value(old).expect("old config");
         assert_eq!(back, base);
         for bad in ["spectrogram.window_symbols=0", "spectrogram.window_symbols=3"] {

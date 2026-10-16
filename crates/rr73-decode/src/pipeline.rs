@@ -186,15 +186,19 @@ impl std::fmt::Debug for Pipeline {
 impl Pipeline {
     /// Builds the stages a configuration names.
     pub fn from_config(config: &DecoderConfig) -> Self {
+        // The lower of the two modes' floors; the session drops what lies below its own mode's.
+        let floor = config
+            .score_floor_db(rr73_ft8::Mode::Ft8)
+            .min(config.score_floor_db(rr73_ft8::Mode::Ft4));
         let search: Box<dyn CandidateSearch> = match config.search.kind {
             SearchKind::Costas => match config.search.partial_min_score_db {
                 None => Box::new(CostasSearch {
                     max_candidates: config.search.max_candidates,
-                    min_score_db: config.search.min_score_db,
+                    min_score_db: floor,
                 }),
                 Some(partial) => Box::new(CostasPartialSearch {
                     max_candidates: config.search.max_candidates,
-                    min_score_db: config.search.min_score_db,
+                    min_score_db: floor,
                     partial_min_score_db: partial,
                 }),
             },
