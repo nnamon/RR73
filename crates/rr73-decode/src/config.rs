@@ -557,6 +557,25 @@ impl DecoderConfig {
         self
     }
 
+    /// The SNR estimate follows the receiver's passband edge, and the search covers tones to
+    /// 3200 Hz, past the 3000 Hz edge of the recordings and the skirt beyond it (experiment
+    /// 0011).
+    fn with_passband_edge(mut self) -> Self {
+        self.snr.passband = true;
+        self.spectrogram.freq_max_hz = 3200.0;
+        self
+    }
+
+    /// One more set of soft bits, 3 FT8 or 4 FT4 symbols scored normalised, for candidates with
+    /// at least 9 sync symbols on their sent tone (experiment 0011).
+    fn with_normalised_set(mut self) -> Self {
+        self.demod.ft8_extra_sets = vec![(3, crate::block::BlockScore::Normalised)];
+        self.demod.ft4_extra_sets = vec![(4, crate::block::BlockScore::Normalised)];
+        self.demod.ft8_extra_min_sync = 9;
+        self.demod.ft4_extra_min_sync = 9;
+        self
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
@@ -565,7 +584,9 @@ impl DecoderConfig {
             "subtract-3-osd1" => Ok(Self::subtract_3_osd(1, 91)),
             "subtract-3-osd2" => Ok(Self::subtract_3_osd(2, 40)
                 .with_block_soft_bits()
-                .with_late_starts()),
+                .with_late_starts()
+                .with_passband_edge()
+                .with_normalised_set()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }
@@ -720,6 +741,31 @@ mod tests {
         for name in PRESETS {
             DecoderConfig::preset(name).expect(name);
         }
+    }
+
+    #[test]
+    fn the_preset_follows_the_passband_edge_and_tries_a_normalised_set() {
+        let c = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+        assert!(c.snr.passband);
+        assert_eq!(c.spectrogram.freq_max_hz, 3200.0);
+        assert_eq!(
+            c.demod.extra_sets(Mode::Ft8),
+            &[(3, crate::block::BlockScore::Normalised)]
+        );
+        assert_eq!(
+            c.demod.extra_sets(Mode::Ft4),
+            &[(4, crate::block::BlockScore::Normalised)]
+        );
+        assert_eq!(
+            (
+                c.demod.extra_min_sync(Mode::Ft8),
+                c.demod.extra_min_sync(Mode::Ft4)
+            ),
+            (9, 9)
+        );
+        // The research reference keeps the ft8_lib method.
+        let b = DecoderConfig::baseline();
+        assert!(!b.snr.passband && b.spectrogram.freq_max_hz == 3000.0);
     }
 
     #[test]

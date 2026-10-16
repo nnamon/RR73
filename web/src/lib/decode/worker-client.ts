@@ -61,14 +61,17 @@ export const PRESET = 'subtract-3-osd2';
  * (crates/rr73-decode/src/ap.rs). The second keeps the DT range of ft8_lib, to 2.5 s in FT8
  * and 1.0 s in FT4: the preset searches late starts to 4.5 s and 1.5 s, and over that range
  * the second stage's fine grid would cost 17 % more time
- * (docs/experiments/0010-search-refine-subtract.md). CI gates them against
+ * (docs/experiments/0010-search-refine-subtract.md). It also keeps its tones below 3000 Hz,
+ * where the preset searches to 3200 Hz: past a receiver's passband edge its 400 places fill
+ * with noise and push weak signals off the list (docs/experiments/0011-band-edge-and-crowding.md).
+ * CI gates them against
  * bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has the
  * measurements and the budget.
  */
 export const DEEP: DeepStages = {
   plan: [
     'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ap.my_anywhere=false',
-    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null',
+    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null spectrogram.freq_max_hz=3000',
   ].join('; '),
   budgetMs: 2000,
 };

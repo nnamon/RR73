@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT8 and FT4 decode stations with tones up to 3200 Hz, beyond the 3000 Hz limit before, such as a strong station at the edge of the radio’s passband.
+- The SNR of a station near the edge of the radio’s passband reads within about 2 dB of its true value. Before, it read up to 5 dB high there.
+- The first decoding stage finds 93% of the reference decodes in 350 slots recorded on 40m, up from 92%, and all 3 stages 95%, up from 94%. A further set of soft bits gives every symbol the same weight, so a symbol that a neighbour or a fading peak dominates cannot outvote the rest.
+- A first-stage decode that names a callsign only by its hash shows the callsign when another decode of the stage carries it in full.
+
 ## 0.24.1 · 2026-10-16
 
 - In Chrome and Edge on a computer, RR73 keeps receiving, decoding and transmitting while its window is minimised, covered or in a background tab, with no tap to resume. On the iPhone audio stops when RR73 leaves the screen, as before.
