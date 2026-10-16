@@ -210,7 +210,11 @@ fn auto_info_reports_the_operators_changes() {
         [Event::Info {
             hz: 14_076_000,
             mode: Some(Mode::Usb),
-            transmit: false
+            transmit: false,
+            rit: false,
+            xit: false,
+            offset_hz: 0,
+            split: false,
         }]
     );
     radio.auto_info = 2;
@@ -269,4 +273,84 @@ fn commands_in_lower_case_and_unknown_commands() {
         Parser::new().push(&radio.receive("é;FAé;".as_bytes())),
         [Event::Busy, Event::Busy]
     );
+}
+
+#[test]
+fn data_reverse_is_held_per_pair_of_sub_modes() {
+    let mut radio = SimKx2::new();
+    radio.band_reports = false;
+    // DATA A's pair reversed, the radio in AFSK A.
+    radio.rev_data_a = true;
+    radio.sub = DataSubMode::AfskA;
+    let md6 = Request::SetMode { mode: Mode::Data };
+    assert!(md6.accepted_by(&answer(&mut radio, &md6)));
+    // DT0 brings DATA A's pair, still reversed: MD reads 9.
+    let dt0 = Request::SetDataSubMode {
+        sub: DataSubMode::DataA,
+    };
+    assert!(dt0.accepted_by(&answer(&mut radio, &dt0)));
+    assert_eq!(
+        answer(&mut radio, &Request::ReadMode),
+        Event::Mode {
+            mode: Mode::DataRev,
+            transceive: false
+        }
+    );
+    // MD6 again sets DATA A's pair to normal.
+    assert!(md6.accepted_by(&answer(&mut radio, &md6)));
+    assert!(!radio.rev_data_a);
+}
+
+#[test]
+fn k2_modes_1_and_3_report_data_as_lsb_and_usb() {
+    let mut radio = SimKx2::new();
+    radio.receive(b"K21;");
+    assert_eq!(
+        answer(&mut radio, &Request::ReadK2Mode),
+        Event::K2Mode { mode: 1 }
+    );
+    let md6 = Request::SetMode { mode: Mode::Data };
+    let e = answer(&mut radio, &md6);
+    assert_eq!(
+        e,
+        Event::Mode {
+            mode: Mode::Lsb,
+            transceive: false
+        }
+    );
+    assert!(!md6.accepted_by(&e));
+}
+
+#[test]
+fn if_carries_split_xit_and_the_offset_and_bw_the_filter() {
+    let mut radio = SimKx2::new();
+    radio.split = true;
+    radio.xit = true;
+    radio.offset_hz = -250;
+    radio.receive(b"MD6;");
+    assert_eq!(
+        answer(&mut radio, &Request::ReadInfo),
+        Event::Info {
+            hz: 14_074_000,
+            mode: Some(Mode::Data),
+            transmit: false,
+            rit: false,
+            xit: true,
+            offset_hz: -250,
+            split: true,
+        }
+    );
+    radio.bandwidth_hz = 400;
+    assert_eq!(
+        answer(&mut radio, &Request::ReadBandwidth),
+        Event::Bandwidth { hz: 400 }
+    );
+}
+
+#[test]
+fn leaving_the_menu_reads_255() {
+    let mut radio = SimKx2::new();
+    radio.open_menu(82);
+    assert!(Request::LeaveMenu.accepted_by(&answer(&mut radio, &Request::LeaveMenu)));
+    assert_eq!(radio.menu, 255);
 }

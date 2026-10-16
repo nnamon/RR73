@@ -74,7 +74,11 @@ fn page_14_general_information() {
         [Event::Info {
             hz: 14_074_000,
             mode: Some(Mode::Data),
-            transmit: false
+            transmit: false,
+            rit: false,
+            xit: false,
+            offset_hz: 0,
+            split: false,
         }]
     );
     // Transmitting in USB, RIT on at -0120 Hz.
@@ -83,9 +87,48 @@ fn page_14_general_information() {
         [Event::Info {
             hz: 7_074_000,
             mode: Some(Mode::Usb),
-            transmit: true
+            transmit: true,
+            rit: true,
+            xit: false,
+            offset_hz: -120,
+            split: false,
         }]
     );
+    // XIT on at +0150 Hz, split on: x after r, p the fifth character after the mode digit's run.
+    assert_eq!(
+        events("IF00014074000     +015001 0006001001 ;"),
+        [Event::Info {
+            hz: 14_074_000,
+            mode: Some(Mode::Data),
+            transmit: false,
+            rit: false,
+            xit: true,
+            offset_hz: 150,
+            split: true,
+        }]
+    );
+    assert_eq!(text(Request::ReadInfo), "IF;");
+}
+
+#[test]
+fn page_8_filter_bandwidth_and_page_14_k2_mode() {
+    // BWxxxx: the bandwidth in 10 Hz units.
+    assert_eq!(text(Request::ReadBandwidth), "BW;");
+    assert_eq!(events("BW0280;"), [Event::Bandwidth { hz: 2800 }]);
+    // K2n: 0 to 3. In 1 and 3, MD and IF report DATA as LSB or USB (p. 4; p. 16, note 2).
+    assert_eq!(text(Request::ReadK2Mode), "K2;");
+    assert_eq!(events("K23;"), [Event::K2Mode { mode: 3 }]);
+    assert!(matches!(events("K24;")[0], Event::Malformed { .. }));
+}
+
+#[test]
+fn page_17_leaving_the_menu() {
+    // "To exit the menu, send MN255."
+    let leave = Request::LeaveMenu;
+    assert_eq!(text(leave.clone()), "MN255;MN;");
+    assert!(leave.accepted_by(&Event::MenuEntry { entry: 255 }));
+    assert!(leave.answered_by(&Event::MenuEntry { entry: 82 }));
+    assert!(!leave.accepted_by(&Event::MenuEntry { entry: 82 }));
 }
 
 #[test]

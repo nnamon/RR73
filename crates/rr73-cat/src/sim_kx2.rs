@@ -24,6 +24,12 @@
 //!   names the ring PTT/UP/DN (p. 8) and does not give its active level.
 //! - `MP` reads and sets only MIC BTN, and answers `?;` outside it.
 //! - With auto-info on it reports at once: `IF` in mode 1, `FA` or `MD` in mode 2 (p. 4).
+//! - DATA's normal or reverse sideband is held per pair of sub-modes, DATA A with PSK D and AFSK A
+//!   with FSK D (p. 16, note 2): `MD6` and `MD9` set it for the pair of the present sub-mode, and
+//!   `DT` to a sub-mode of the other pair brings that pair's setting.
+//! - In K2 command modes 1 and 3 it reports DATA as LSB (1) and DATA-REV as USB (2) in `MD` and
+//!   `IF`, its reading of p. 16, note 2, which numbers DATA-REV 7 there.
+//! - `BW` reads and sets one bandwidth for every mode, 2.80 kHz at first.
 
 use crate::elecraft::{DataSubMode, MENU_NONE, MIC_BTN_PTT, MIC_BTN_UP_DN, MenuItem, Mode, TERMINATOR};
 
@@ -59,7 +65,9 @@ pub struct SimKx2 {
     pub hz: u64,
     /// VFO B, Hz.
     pub vfo_b: u64,
-    /// The mode.
+    /// The mode. DATA and DATA-REV are both held as [`Mode::Data`], with the sideband in
+    /// [`SimKx2::rev_data_a`] and [`SimKx2::rev_afsk_a`]; [`SimKx2::reported_mode`] gives what `MD`
+    /// reads.
     pub mode: Mode,
     /// The data sub-mode last used.
     pub sub: DataSubMode,
@@ -88,6 +96,22 @@ pub struct SimKx2 {
     pub band_reports: bool,
     /// The product number `OM` gives: 1 for the KX2 (p. 21).
     pub product: u8,
+    /// DATA A and PSK D on the reverse sideband (p. 16, note 2; Owner's Manual p. 43).
+    pub rev_data_a: bool,
+    /// AFSK A and FSK D on the reverse sideband.
+    pub rev_afsk_a: bool,
+    /// The K2 command mode, 0 to 3 (p. 4).
+    pub k2_mode: u8,
+    /// The receive filter's bandwidth, Hz, in steps of 10 Hz.
+    pub bandwidth_hz: u32,
+    /// Split on (p. 14).
+    pub split: bool,
+    /// RIT on.
+    pub rit: bool,
+    /// XIT on.
+    pub xit: bool,
+    /// The RIT and XIT offset, Hz.
+    pub offset_hz: i32,
     /// Every command received, oldest first, as text without its semicolon.
     pub received: Vec<String>,
     /// `FA`, `MD` and `DT` sets that arrived while transmitting, oldest first.
@@ -122,6 +146,14 @@ impl SimKx2 {
             auto_info: 0,
             band_reports: true,
             product: 1,
+            rev_data_a: false,
+            rev_afsk_a: false,
+            k2_mode: 0,
+            bandwidth_hz: 2800,
+            split: false,
+            rit: false,
+            xit: false,
+            offset_hz: 0,
             received: Vec::new(),
             sets_while_transmitting: Vec::new(),
             input: Vec::new(),
@@ -155,10 +187,42 @@ impl SimKx2 {
         }
     }
 
+    /// True when the present sub-mode's pair is on the reverse sideband.
+    fn rev(&self) -> bool {
+        match self.sub {
+            DataSubMode::DataA | DataSubMode::PskD => self.rev_data_a,
+            DataSubMode::AfskA | DataSubMode::FskD => self.rev_afsk_a,
+        }
+    }
+
+    /// The mode as `MD` and `IF` report it: DATA-REV when the present pair is reversed, and DATA as
+    /// LSB or USB in K2 command modes 1 and 3.
+    pub fn reported_mode(&self) -> Mode {
+        let m = match self.mode {
+            Mode::Data | Mode::DataRev if self.rev() => Mode::DataRev,
+            Mode::Data | Mode::DataRev => Mode::Data,
+            m => m,
+        };
+        match (m, self.k2_mode) {
+            (Mode::Data, 1 | 3) => Mode::Lsb,
+            (Mode::DataRev, 1 | 3) => Mode::Usb,
+            (m, _) => m,
+        }
+    }
+
     /// The `IF` answer for the present state (p. 14).
     pub fn info(&self) -> String {
         let t = u8::from(self.transmitting());
-        format!("IF{:011}     +000000 00{t}{}000001 ;", self.hz, self.mode.code())
+        let sign = if self.offset_hz < 0 { '-' } else { '+' };
+        format!(
+            "IF{:011}     {sign}{:04}{}{} 00{t}{}00{}001 ;",
+            self.hz,
+            self.offset_hz.unsigned_abs().min(9999),
+            u8::from(self.rit),
+            u8::from(self.xit),
+            self.reported_mode().code(),
+            u8::from(self.split),
+        )
     }
 
     fn frequency_report(&self) -> String {
@@ -172,7 +236,7 @@ impl SimKx2 {
     fn mode_report(&self) -> String {
         match self.auto_info {
             1 => self.info(),
-            2 | 3 => format!("MD{};", self.mode.code()),
+            2 | 3 => format!("MD{};", self.reported_mode().code()),
             _ => String::new(),
         }
     }
@@ -188,7 +252,7 @@ impl SimKx2 {
 
     /// The operator picks a mode. Returns what auto-info sends, if anything.
     pub fn press_mode(&mut self, mode: Mode) -> Vec<u8> {
-        self.mode = mode;
+        self.set_mode(mode);
         self.mode_report().into_bytes()
     }
 
@@ -239,11 +303,11 @@ impl SimKx2 {
         match (name, data) {
             ("FA", "") => format!("FA{:011};", self.hz),
             ("FA", d) => self.set_frequency(d),
-            ("MD", "") => format!("MD{};", self.mode.code()),
+            ("MD", "") => format!("MD{};", self.reported_mode().code()),
             ("MD", d) => match d.parse::<u8>().ok().and_then(Mode::from_code) {
                 Some(Mode::Fm) | None => Self::busy(),
                 Some(mode) => {
-                    self.mode = mode;
+                    self.set_mode(mode);
                     self.mode_report()
                 }
             },
@@ -287,6 +351,23 @@ impl SimKx2 {
                 }
                 _ => Self::busy(),
             },
+            ("K2", "") => format!("K2{};", self.k2_mode),
+            ("K2", d) => match d.parse::<u8>() {
+                Ok(n) if n <= 3 && d.len() == 1 => {
+                    self.k2_mode = n;
+                    String::new()
+                }
+                _ => Self::busy(),
+            },
+            ("BW", "") => format!("BW{:04};", self.bandwidth_hz / 10),
+            ("BW", d) => match d.parse::<u32>() {
+                Ok(v) if d.len() == 4 => {
+                    self.bandwidth_hz = v * 10;
+                    String::new()
+                }
+                _ => Self::busy(),
+            },
+            ("IF", "") => self.info(),
             ("AI", "") => format!("AI{};", self.auto_info),
             ("AI", d) => match d.parse::<u8>() {
                 Ok(n) if n <= 3 && d.len() == 1 => {
@@ -296,6 +377,21 @@ impl SimKx2 {
                 _ => Self::busy(),
             },
             _ => Self::busy(),
+        }
+    }
+
+    /// Sets the mode; DATA and DATA-REV set the present pair's sideband.
+    fn set_mode(&mut self, mode: Mode) {
+        match mode {
+            Mode::Data | Mode::DataRev => {
+                let rev = mode == Mode::DataRev;
+                match self.sub {
+                    DataSubMode::DataA | DataSubMode::PskD => self.rev_data_a = rev,
+                    DataSubMode::AfskA | DataSubMode::FskD => self.rev_afsk_a = rev,
+                }
+                self.mode = Mode::Data;
+            }
+            m => self.mode = m,
         }
     }
 

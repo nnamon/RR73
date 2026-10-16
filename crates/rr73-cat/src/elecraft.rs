@@ -19,6 +19,10 @@
 //! | Read VOX in the present mode | `VX;` | `VX0;` off, `VX1;` on | p. 28 |
 //! | Read the menu entry shown | `MN;` | `MN` and 3 digits, `MN255;` with no menu | p. 17 |
 //! | Read a menu setting | `MN082;MP;MN255;` | `MP` and 3 digits | pp. 17, 19, 20 |
+//! | Leave the menu | `MN255;MN;` | `MN255;` | p. 17 |
+//! | Read general information | `IF;` | `IF`, 35 characters | p. 14 |
+//! | Read the filter bandwidth | `BW;` | `BW` and 4 digits, 10 Hz units | p. 8 |
+//! | Read the K2 command mode | `K2;` | `K2` and a digit, 0 to 3 | pp. 4, 14 |
 //!
 //! The radio answers `?;` to a command it cannot handle in its present state, such as some
 //! commands while it transmits (p. 3): [`Event::Busy`]. With auto-info on (`AI1`, or the AUTOINF
@@ -233,6 +237,14 @@ pub enum Request {
         /// The item.
         item: MenuItem,
     },
+    /// Leave the menu and read that it is left: `MN255;MN;`.
+    LeaveMenu,
+    /// Read general information: `IF;`. VFO A, RIT and XIT, transmit, the mode and split.
+    ReadInfo,
+    /// Read the receive filter's bandwidth: `BW;`.
+    ReadBandwidth,
+    /// Read the K2 command mode: `K2;`. In 1 and 3, `MD` and `IF` report DATA as LSB or USB.
+    ReadK2Mode,
 }
 
 /// Why a request cannot be written.
@@ -254,8 +266,11 @@ impl Request {
             Request::ReadTransmit | Request::SetTransmit { .. } => "TQ",
             Request::ReadOptions => "OM",
             Request::ReadVox => "VX",
-            Request::ReadMenuEntry => "MN",
+            Request::ReadMenuEntry | Request::LeaveMenu => "MN",
             Request::ReadSetting { .. } => "MP",
+            Request::ReadInfo => "IF",
+            Request::ReadBandwidth => "BW",
+            Request::ReadK2Mode => "K2",
         }
     }
 
@@ -267,6 +282,7 @@ impl Request {
                 | Request::SetMode { .. }
                 | Request::SetDataSubMode { .. }
                 | Request::SetTransmit { .. }
+                | Request::LeaveMenu
         )
     }
 
@@ -291,6 +307,10 @@ impl Request {
             Request::ReadVox => "VX;".to_string(),
             Request::ReadMenuEntry => "MN;".to_string(),
             Request::ReadSetting { item } => format!("MN{:03};MP;MN{MENU_NONE};", item.entry()),
+            Request::LeaveMenu => format!("MN{MENU_NONE};MN;"),
+            Request::ReadInfo => "IF;".to_string(),
+            Request::ReadBandwidth => "BW;".to_string(),
+            Request::ReadK2Mode => "K2;".to_string(),
         })
     }
 
@@ -310,8 +330,11 @@ impl Request {
             (Request::ReadTransmit | Request::SetTransmit { .. }, Event::Transmit { .. }) => true,
             (Request::ReadOptions, Event::Options { .. }) => true,
             (Request::ReadVox, Event::Vox { .. }) => true,
-            (Request::ReadMenuEntry, Event::MenuEntry { .. }) => true,
+            (Request::ReadMenuEntry | Request::LeaveMenu, Event::MenuEntry { .. }) => true,
             (Request::ReadSetting { .. }, Event::MenuValue { .. }) => true,
+            (Request::ReadInfo, Event::Info { .. }) => true,
+            (Request::ReadBandwidth, Event::Bandwidth { .. }) => true,
+            (Request::ReadK2Mode, Event::K2Mode { .. }) => true,
             (r, Event::Malformed { command, .. }) => r.answer_command() == command,
             _ => false,
         }
@@ -331,6 +354,7 @@ impl Request {
             (Request::SetMode { mode }, Event::Mode { mode: got, .. }) => got == mode,
             (Request::SetDataSubMode { sub }, Event::DataSubMode { sub: got }) => got == sub,
             (Request::SetTransmit { on }, Event::Transmit { on: got }) => got == on,
+            (Request::LeaveMenu, Event::MenuEntry { entry }) => *entry == MENU_NONE,
             _ => true,
         }
     }
@@ -379,8 +403,8 @@ pub enum Event {
         /// True while transmitting.
         on: bool,
     },
-    /// General information the radio sends by itself with auto-info on: `IF` (p. 14). RR73 never
-    /// asks for it.
+    /// General information: `IF` (p. 14), as an answer to `IF;` or sent by the radio itself with
+    /// auto-info on.
     Info {
         /// VFO A without any RIT or XIT offset, Hz.
         hz: u64,
@@ -388,6 +412,14 @@ pub enum Event {
         mode: Option<Mode>,
         /// The transmit flag.
         transmit: bool,
+        /// RIT on.
+        rit: bool,
+        /// XIT on: the radio transmits `offset_hz` from VFO A.
+        xit: bool,
+        /// The RIT and XIT offset, Hz, -9999 to 9999.
+        offset_hz: i32,
+        /// Split on: the radio transmits on VFO B.
+        split: bool,
     },
     /// The option modules and the product: `OM` (p. 21).
     Options {
@@ -411,6 +443,17 @@ pub enum Event {
     MenuValue {
         /// Value.
         value: u16,
+    },
+    /// The receive filter's bandwidth: `BW` (p. 8).
+    Bandwidth {
+        /// Bandwidth, Hz, in steps of 10 Hz.
+        hz: u32,
+    },
+    /// The K2 command mode: `K2` (p. 14). 1 and 3 make `MD` and `IF` report DATA as LSB or USB
+    /// (p. 4; p. 16, note 2).
+    K2Mode {
+        /// 0 to 3.
+        mode: u8,
     },
     /// `?;`: the radio could not handle a command in its present state (p. 3).
     Busy,
@@ -480,18 +523,27 @@ fn three_digits(command: &str, data: &str) -> Result<u16, Event> {
     }
 }
 
-/// `IF` (p. 14): 11 frequency digits, 5 spaces, the RIT/XIT sign and 4 digits, RIT, XIT, a space,
-/// `00`, then the transmit flag and the mode digit at characters 27 and 28 of the data.
+/// `IF` (p. 14): the 11 frequency digits, 5 spaces, the RIT/XIT sign and 4 digits, RIT, XIT, a
+/// space, `00`, then the transmit flag, the mode, the receive VFO, scan and split at characters 27
+/// to 31 of the data.
 fn info(data: &str) -> Event {
     let bad = |fault| Event::Malformed {
         command: "IF".to_string(),
         fault,
     };
     let b = data.as_bytes();
-    if b.len() < 28 {
+    if b.len() < 31 {
         return bad(Fault::Length);
     }
     let Some(hz) = data.get(..11).and_then(digits) else {
+        return bad(Fault::Digits);
+    };
+    let sign = match b[16] {
+        b'+' | b' ' => 1,
+        b'-' => -1,
+        _ => return bad(Fault::Code),
+    };
+    let Some(offset) = data.get(17..21).and_then(digits) else {
         return bad(Fault::Digits);
     };
     let transmit = match b[26] {
@@ -504,7 +556,15 @@ fn info(data: &str) -> Event {
     } else {
         None
     };
-    Event::Info { hz, mode, transmit }
+    Event::Info {
+        hz,
+        mode,
+        transmit,
+        rit: b[21] == b'1',
+        xit: b[22] == b'1',
+        offset_hz: sign * offset as i32,
+        split: b[30] == b'1',
+    }
 }
 
 /// `OM` (p. 21): a space, then the module letters and dashes, the last two characters the product
@@ -596,6 +656,27 @@ pub fn parse_answer(text: &str) -> Event {
         three_digits("MN", data).map(|entry| Event::MenuEntry { entry })
     } else if known("MP") {
         three_digits("MP", data).map(|value| Event::MenuValue { value })
+    } else if known("BW") {
+        match (data.len(), digits(data)) {
+            (4, Some(v)) => Ok(Event::Bandwidth { hz: v as u32 * 10 }),
+            (4, None) => Err(Fault::Digits),
+            _ => Err(Fault::Length),
+        }
+        .map_err(|fault| Event::Malformed {
+            command: "BW".to_string(),
+            fault,
+        })
+    } else if known("K2") {
+        digit("K2", data).and_then(|mode| {
+            if mode <= 3 {
+                Ok(Event::K2Mode { mode })
+            } else {
+                Err(Event::Malformed {
+                    command: "K2".to_string(),
+                    fault: Fault::Code,
+                })
+            }
+        })
     } else {
         Ok(Event::Unknown {
             command: command_of(text).to_string(),
@@ -808,7 +889,12 @@ mod tests {
             hz: 14_074_000,
             mode: Some(Mode::Data),
             transmit: false,
+            rit: false,
+            xit: false,
+            offset_hz: 0,
+            split: false,
         };
+        assert!(Request::ReadInfo.answered_by(&info));
         assert!(!Request::ReadFrequency.answered_by(&info));
     }
 

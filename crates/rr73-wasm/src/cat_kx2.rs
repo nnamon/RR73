@@ -220,10 +220,37 @@ impl CatKx2SimForTests {
         u32::try_from(self.sim.hz).unwrap_or(u32::MAX)
     }
 
-    /// The mode as JSON, as `"data"`.
+    /// The mode as `MD` reports it, as JSON: `"data"`, or `"data-rev"` with the present pair
+    /// reversed.
     #[wasm_bindgen(getter)]
     pub fn mode(&self) -> String {
-        serde_json::to_string(&self.sim.mode).unwrap_or_default()
+        serde_json::to_string(&self.sim.reported_mode()).unwrap_or_default()
+    }
+
+    /// Puts DATA A and PSK D on the reverse sideband, or back.
+    pub fn set_rev_data_a(&mut self, on: bool) {
+        self.sim.rev_data_a = on;
+    }
+
+    /// Sets the K2 command mode, 0 to 3, as another program may leave it.
+    pub fn set_k2_mode(&mut self, n: u8) {
+        self.sim.k2_mode = n.min(3);
+    }
+
+    /// Sets the receive filter's bandwidth, Hz.
+    pub fn set_bandwidth(&mut self, hz: u32) {
+        self.sim.bandwidth_hz = hz - hz % 10;
+    }
+
+    /// Turns split on or off.
+    pub fn set_split(&mut self, on: bool) {
+        self.sim.split = on;
+    }
+
+    /// Turns XIT on or off at `offset_hz`.
+    pub fn set_xit(&mut self, on: bool, offset_hz: i32) {
+        self.sim.xit = on;
+        self.sim.offset_hz = offset_hz.clamp(-9999, 9999);
     }
 
     /// The data sub-mode as JSON, as `"data_a"`.
