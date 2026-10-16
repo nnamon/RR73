@@ -100,6 +100,30 @@ pub enum BlockScore {
     /// Its logarithm: a strong interferer moves an LLR by the log of its level over the
     /// signal's, as the spectrogram's dB magnitudes do.
     Log,
+    /// The power, the magnitude squared: a strong symbol weighs more.
+    Power,
+    /// The magnitudes' difference over the larger of the two, in -1 to 1: each symbol weighs
+    /// the same whatever its level, so a symbol a strong interferer or a fading peak dominates
+    /// cannot outvote the others.
+    Normalised,
+}
+
+impl BlockScore {
+    /// A bit's soft value from the largest block power among the tone sequences with the bit
+    /// set (`one`) and with it clear (`zero`).
+    fn bit(self, one: f32, zero: f32) -> f32 {
+        match self {
+            Self::Amplitude => one.sqrt() - zero.sqrt(),
+            // Half the log of the power ratio, with a floor for empty tones.
+            Self::Log => 0.5 * ((one + 1e-30).ln() - (zero + 1e-30).ln()),
+            Self::Power => one - zero,
+            Self::Normalised => {
+                let (a, b) = (one.sqrt(), zero.sqrt());
+                let top = a.max(b);
+                if top > 0.0 { (a - b) / top } else { 0.0 }
+            }
+        }
+    }
 }
 
 /// Where the refinement put a candidate.
@@ -566,11 +590,7 @@ impl BlockWorkspace {
                         zero = zero.max(b);
                     }
                 }
-                llr[base + i] = match score {
-                    BlockScore::Amplitude => one.sqrt() - zero.sqrt(),
-                    // Half the log of the power ratio, with a floor for empty tones.
-                    BlockScore::Log => 0.5 * ((one + 1e-30).ln() - (zero + 1e-30).ln()),
-                };
+                llr[base + i] = score.bit(one, zero);
             }
             skip[base..base + bps].fill(false);
         }
@@ -866,6 +886,83 @@ mod tests {
         }
     }
 
+    /// Every score gives the sent bits of a strong signal; the normalised score's bits lie
+    /// within -1 to 1 before scaling, so after it every bit has about the same magnitude.
+    #[test]
+    fn every_score_gives_the_sent_bits_of_a_strong_signal() {
+        let l = layout(Mode::Ft8);
+        let text = "CQ K1ABC FN42";
+        let tones = tones_for(Mode::Ft8, text);
+        let audio = slot(Mode::Ft8, text, 1500.0, 0.1, Some(0.0), 6);
+        let mut ws = BlockWorkspace::default();
+        let mut plans = FftPlans::new();
+        ws.prepare(l, &audio, &mut plans);
+        ws.amplitudes(l, &mut plans, 1500.0, l.start_offset_s + 0.1, (0.5, 0.5))
+            .expect("amplitudes");
+        for score in [BlockScore::Power, BlockScore::Normalised] {
+            for block in [1, 3] {
+                let mut llr = [0.0f32; CODEWORD_BITS];
+                ws.llrs(l, block, score, 24.0, &mut llr);
+                assert_eq!(hard_errors(l, &tones, &llr), 0, "{score:?} block {block}");
+            }
+        }
+        let mut llr = [0.0f32; CODEWORD_BITS];
+        ws.llrs(l, 1, BlockScore::Normalised, 24.0, &mut llr);
+        let data = &llr[..l.data.len() * l.bits_per_symbol];
+        let (lo, hi) = data.iter().fold((f32::INFINITY, 0.0f32), |(lo, hi), x| {
+            (lo.min(x.abs()), hi.max(x.abs()))
+        });
+        assert!(hi < 1.5 * lo, "magnitudes {lo} to {hi}");
+    }
+
+    /// A strong tone over a few symbols gives amplitude scores confident wrong bits there; the
+    /// normalised score bounds each symbol's say, so the wrong bits carry less of the total.
+    #[test]
+    fn normalised_scores_bound_a_burst_of_interference() {
+        let l = layout(Mode::Ft8);
+        let text = "W9XYZ K1ABC -15";
+        let tones = tones_for(Mode::Ft8, text);
+        let mut audio = slot(Mode::Ft8, text, 1200.0, 0.0, Some(-5.0), 7);
+        // A tone 20 dB above the signal on tone 5's frequency across data symbols 10 to 20.
+        let sps = l.samples_per_symbol;
+        let start = (l.start_offset_s * 12_000.0) as usize;
+        let hz = 1200.0 + 5.0 * f64::from(l.tone_spacing_hz);
+        for (i, x) in audio
+            .iter_mut()
+            .enumerate()
+            .take(start + 21 * sps)
+            .skip(start + 10 * sps)
+        {
+            *x += (10.0 * (std::f64::consts::TAU * hz * i as f64 / 12_000.0).sin()) as f32;
+        }
+        let mut ws = BlockWorkspace::default();
+        let mut plans = FftPlans::new();
+        ws.prepare(l, &audio, &mut plans);
+        ws.amplitudes(l, &mut plans, 1200.0, l.start_offset_s, (0.5, 0.5))
+            .expect("amplitudes");
+        let bits = crate::testsig::data_bits(l, &tones);
+        let mut wrong_share = |score: BlockScore| {
+            let mut llr = [0.0f32; CODEWORD_BITS];
+            ws.llrs(l, 1, score, 24.0, &mut llr);
+            let (mut wrong, mut total) = (0.0f32, 0.0f32);
+            for (&b, &x) in bits.iter().zip(&llr) {
+                total += x.abs();
+                if u8::from(x > 0.0) != b {
+                    wrong += x.abs();
+                }
+            }
+            wrong / total
+        };
+        let (amplitude, normalised) = (
+            wrong_share(BlockScore::Amplitude),
+            wrong_share(BlockScore::Normalised),
+        );
+        assert!(
+            normalised < 0.5 * amplitude,
+            "share of |LLR| on wrong bits: amplitude {amplitude:.3}, normalised {normalised:.3}"
+        );
+    }
+
     /// Near the decoding threshold, longer blocks make fewer hard errors than single
     /// symbols: summed over 8 slots, at -19 dB in FT8 and -15 dB in FT4.
     #[test]
@@ -1070,11 +1167,7 @@ mod tests {
                             zero = zero.max(b);
                         }
                     }
-                    llr[base + i] = match score {
-                        BlockScore::Amplitude => one.sqrt() - zero.sqrt(),
-                        // Half the log of the power ratio, with a floor for empty tones.
-                        BlockScore::Log => 0.5 * ((one + 1e-30).ln() - (zero + 1e-30).ln()),
-                    };
+                    llr[base + i] = score.bit(one, zero);
                 }
                 skip[base..base + bps].fill(false);
             }

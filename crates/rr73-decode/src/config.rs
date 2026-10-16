@@ -252,6 +252,20 @@ pub struct DemodParams {
     /// With `block`: the same for FT4 (of 16 sync symbols).
     #[serde(default)]
     pub ft4_min_sync: u8,
+    /// With `block`: more sets of soft bits tried on FT8 candidates after `ft8_blocks`, each a
+    /// block length (1 to 4 symbols) and a score, such as `[[3,"normalised"]]`.
+    #[serde(default)]
+    pub ft8_extra_sets: Vec<(u8, crate::block::BlockScore)>,
+    /// With `block`: the same for FT4, after `ft4_blocks`.
+    #[serde(default)]
+    pub ft4_extra_sets: Vec<(u8, crate::block::BlockScore)>,
+    /// With `block`: the fewest FT8 sync symbols on their sent tone (of 21) for a candidate to get
+    /// the extra sets; below it only `ft8_blocks` are tried.
+    #[serde(default)]
+    pub ft8_extra_min_sync: u8,
+    /// With `block`: the same for FT4 (of 16).
+    #[serde(default)]
+    pub ft4_extra_min_sync: u8,
 }
 
 fn default_ft8_blocks() -> Vec<u8> {
@@ -270,6 +284,24 @@ impl DemodParams {
             (DemodKind::Block, Mode::Ft8) => &self.ft8_blocks,
             (DemodKind::Block, Mode::Ft4) => &self.ft4_blocks,
         }
+    }
+
+    /// The sets of soft bits tried on candidates of `mode` after the block lengths of
+    /// [`DemodParams::blocks`] (empty unless `kind` is `block`).
+    pub fn extra_sets(&self, mode: Mode) -> &[(u8, crate::block::BlockScore)] {
+        match (self.kind, mode) {
+            (DemodKind::MaxLog, _) => &[],
+            (DemodKind::Block, Mode::Ft8) => &self.ft8_extra_sets,
+            (DemodKind::Block, Mode::Ft4) => &self.ft4_extra_sets,
+        }
+    }
+
+    /// The fewest sync symbols a candidate of `mode` needs for the extra sets.
+    pub fn extra_min_sync(&self, mode: Mode) -> usize {
+        usize::from(match mode {
+            Mode::Ft8 => self.ft8_extra_min_sync,
+            Mode::Ft4 => self.ft4_extra_min_sync,
+        })
     }
 
     /// The fewest sync symbols a candidate of `mode` needs for the block sets.
@@ -437,6 +469,10 @@ impl DecoderConfig {
                 block_score: crate::block::BlockScore::Amplitude,
                 ft8_min_sync: 0,
                 ft4_min_sync: 0,
+                ft8_extra_sets: Vec::new(),
+                ft4_extra_sets: Vec::new(),
+                ft8_extra_min_sync: 0,
+                ft4_extra_min_sync: 0,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,
@@ -571,6 +607,16 @@ impl DecoderConfig {
         if !(self.demod.llr_variance > 0.0 && self.demod.llr_variance.is_finite()) {
             return bad("llr_variance must be positive");
         }
+        let extra = [&self.demod.ft8_extra_sets, &self.demod.ft4_extra_sets];
+        if extra.iter().any(|s| {
+            s.len() > 8
+                || s.iter()
+                    .any(|&(n, _)| n == 0 || usize::from(n) > crate::block::MAX_BLOCK)
+        }) {
+            return bad(
+                "demod.ft8_extra_sets and demod.ft4_extra_sets must list at most 8 sets of 1 to 4 symbols",
+            );
+        }
         let blocks = [&self.demod.ft8_blocks, &self.demod.ft4_blocks];
         if blocks.iter().any(|b| {
             b.len() > 8
@@ -580,6 +626,11 @@ impl DecoderConfig {
         }) {
             return bad(
                 "demod.ft8_blocks and demod.ft4_blocks must list 1 to 8 block lengths of 1 to 4 symbols",
+            );
+        }
+        if self.demod.ft8_extra_min_sync > 21 || self.demod.ft4_extra_min_sync > 16 {
+            return bad(
+                "demod.ft8_extra_min_sync must be at most 21 and demod.ft4_extra_min_sync at most 16",
             );
         }
         if self.demod.ft8_min_sync > 21 || self.demod.ft4_min_sync > 16 {
@@ -757,6 +808,38 @@ mod tests {
                 "{bad}"
             );
         }
+        let extra = base
+            .with_overrides(&[
+                "demod.kind=block",
+                r#"demod.ft8_extra_sets=[[1,"normalised"],[3,"power"]]"#,
+                "demod.ft8_extra_min_sync=9",
+            ])
+            .expect("extra sets");
+        assert_eq!(
+            extra.demod.extra_sets(Mode::Ft8),
+            &[
+                (1, crate::block::BlockScore::Normalised),
+                (3, crate::block::BlockScore::Power)
+            ]
+        );
+        assert!(extra.demod.extra_sets(Mode::Ft4).is_empty());
+        assert_eq!(extra.demod.extra_min_sync(Mode::Ft8), 9);
+        assert!(base.demod.extra_sets(Mode::Ft8).is_empty());
+        for bad in [
+            r#"demod.ft8_extra_sets=[[0,"normalised"]]"#,
+            r#"demod.ft4_extra_sets=[[5,"amplitude"]]"#,
+            r#"demod.ft8_extra_sets=[[1,"loud"]]"#,
+            "demod.ft8_extra_min_sync=22",
+            "demod.ft4_extra_min_sync=17",
+        ] {
+            assert!(
+                matches!(
+                    base.with_overrides(&["demod.kind=block", bad]),
+                    Err(ConfigError::Invalid(_))
+                ),
+                "{bad}"
+            );
+        }
         // Results written before the block demodulator existed still parse.
         let mut old = serde_json::to_value(&base).expect("json");
         let demod = old["demod"].as_object_mut().expect("demod");
@@ -768,6 +851,10 @@ mod tests {
             "block_score",
             "ft8_min_sync",
             "ft4_min_sync",
+            "ft8_extra_sets",
+            "ft4_extra_sets",
+            "ft8_extra_min_sync",
+            "ft4_extra_min_sync",
         ] {
             demod.remove(key);
         }

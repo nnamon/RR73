@@ -97,8 +97,8 @@ fn ap_context(meta: &SlotMeta, plan: &Plan<'_>) -> Option<ApContext> {
 /// The decoder a preset names.
 #[derive(Clone, Debug)]
 pub enum Decoder {
-    /// FT8 and FT4.
-    Ft(DecoderConfig),
+    /// FT8 and FT4 (boxed: the configuration is several times the size of WSPR's).
+    Ft(Box<DecoderConfig>),
     /// WSPR.
     Wspr(WsprConfig),
 }
@@ -114,7 +114,7 @@ impl Decoder {
         } else {
             DecoderConfig::preset(preset)
                 .and_then(|c| c.with_overrides(overrides))
-                .map(Decoder::Ft)
+                .map(|c| Decoder::Ft(Box::new(c)))
                 .map_err(|e| e.to_string())
         }
     }
@@ -144,7 +144,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let mut stages = Vec::new();
     match &decoder {
         Decoder::Ft(config) => {
-            stages.push((opts.preset.clone(), config.clone()));
+            stages.push((opts.preset.clone(), (**config).clone()));
             for spec in &opts.then {
                 stages.push(stage_spec(spec)?);
             }
@@ -689,7 +689,7 @@ mod tests {
 
     #[test]
     fn config_floats_stay_short() {
-        let v = Decoder::Ft(DecoderConfig::baseline())
+        let v = Decoder::Ft(Box::new(DecoderConfig::baseline()))
             .config_json()
             .expect("json");
         assert_eq!(v["search"]["ft8_dt_min_s"].to_string(), "-2.3");

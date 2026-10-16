@@ -628,8 +628,9 @@ impl DecodeSession {
         let pipeline = &stage.pipeline;
         let sp = &config.spectrogram;
         let blocks = config.demod.blocks(self.layout.mode);
+        let extra = config.demod.extra_sets(self.layout.mode);
         let spectrogram_llrs = config.demod.uses_spectrogram();
-        let sets = usize::from(spectrogram_llrs) + blocks.len();
+        let sets = usize::from(spectrogram_llrs) + blocks.len() + extra.len();
         let min_sync = config.demod.min_sync(self.layout.mode);
         let to = (from + (CANDIDATES_PER_STEP / sets.max(1)).max(1)).min(total);
         let DecodeContext {
@@ -724,10 +725,19 @@ impl DecodeSession {
                 // Search one grid step either way.
                 let reach = (1.0 / sp.time_osr as f32, 1.0 / sp.freq_osr as f32);
                 // Candidates whose sync symbols mostly lose to other tones get no block sets.
-                let ready = ws
+                let matched = ws
                     .block
                     .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach)
-                    .is_some_and(|r| r.sync_matched >= min_sync);
+                    .map(|r| r.sync_matched);
+                let ready = matched.is_some_and(|m| m >= min_sync);
+                // The extra sets only for candidates whose sync stands well above chance.
+                let tried = if !ready {
+                    0
+                } else if matched.is_some_and(|m| m >= config.demod.extra_min_sync(self.layout.mode)) {
+                    blocks.len() + extra.len()
+                } else {
+                    blocks.len()
+                };
                 timings.refine_s += sw.elapsed_s();
                 if !ready && !spectrogram_llrs {
                     // No soft bits, so nothing for a priori decoding either.
@@ -743,24 +753,19 @@ impl DecodeSession {
                     }
                     continue;
                 }
-                for (k, &n) in blocks
+                let block_sets = blocks
                     .iter()
-                    .enumerate()
-                    .take(if ready { blocks.len() } else { 0 })
-                {
+                    .map(|&n| (n, config.demod.block_score))
+                    .chain(extra.iter().copied());
+                for (k, (n, score)) in block_sets.enumerate().take(tried) {
                     let llr = if k == 0 && !spectrogram_llrs {
                         &mut ws.llr
                     } else {
                         &mut ws.llr_alt
                     };
                     let sw = Stopwatch::start();
-                    ws.block.llrs(
-                        self.layout,
-                        usize::from(n),
-                        config.demod.block_score,
-                        config.demod.llr_variance,
-                        llr,
-                    );
+                    ws.block
+                        .llrs(self.layout, usize::from(n), score, config.demod.llr_variance, llr);
                     timings.demod_s += sw.elapsed_s();
                     let ldpc: &dyn LdpcDecoder = if config.demod.bp_only_blocks.contains(&n) {
                         &pipeline.bp_only
