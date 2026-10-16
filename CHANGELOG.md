@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Logging › Wavelog › Read Wavelog’s log counts the QSOs in your Wavelog log for decode colours, New and Hide worked, so a station worked from another radio or location shows as worked. It is off by default and needs Wavelog 2.5.1 or later. Dupes, Hunt and Repeat CQ still count this phone’s log only.
+
 ## 0.23.1 · 2026-10-16
 
 - FT8 decodes transmissions that start up to 4.5 s late, and FT4 up to 1.5 s, such as a reply sent late into the slot. Before, FT8 found none that started more than 2.5 s late, and FT4 none past 1 s.

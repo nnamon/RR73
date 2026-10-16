@@ -39,6 +39,7 @@ Every upload and optional feature is off until turned on in Settings.
 
 - The log is stored on the phone and works offline.
 - QSOs go to Wavelog on request or automatically. A refused QSO shows the reason and a Fix button.
+- Read Wavelog's log counts the QSOs in Wavelog, logged from any station, for decode colours, New and Hide worked. Dupes, Hunt and Repeat CQ count the phone's log only.
 - ADIF export and import, and a backup of the whole log to one file.
 - POTA, SOTA, WWFF and IOTA activations, with progress toward each programme's goal and the time left in the UTC day.
 - Park and summit suggestions by name, or from the phone's GPS position.

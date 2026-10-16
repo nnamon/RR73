@@ -81,6 +81,7 @@ From Wavelog's `Api.php`, `Logbook_model.php` and `Adif_parser.php` (read at Wav
 - Each QSO goes in its own request: Wavelog counts errors for the whole batch, so a refusal could not be tied to one QSO otherwise.
 - Requests carry the JSON as `text/plain`, a CORS simple request with no preflight: one round trip per QSO on a weak link. Wavelog reads the body whatever its type.
 - Errors map to plain words: "Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog."; "The station location no longer exists in Wavelog. Choose another in Settings."; the call on air or grid against the station location, a band missing from Wavelog, rate limits, server errors, timeouts and network failures each have their own message (`lib/log/wavelog.ts`).
+- Read Wavelog's log, off by default, reads the QSOs Wavelog holds (`POST /api/get_contacts_adif`) for decode colours, the New chip and Hide worked only. They stay out of the log, the ledger, dupes and Hunt (docs/design/wavelog-worked.md).
 
 The API key is stored only in this phone's IndexedDB. The address must be https: Safari blocks plain http from RR73's https page.
 
@@ -114,7 +115,7 @@ A full ADIF export and a JSON backup with RR73 fields and the ledger, through th
 As built (`lib/log/backup.ts`, Settings › Logging › Backup):
 
 - Export ADIF in the Log writes `APP_RR73_ID` on each record, so a later import knows the QSO.
-- Back up the log shares one JSON file, "RR73 backup 9V1NE 20261015.json": every QSO with the tombstones, every activation and the ledger, with the format name, its version and the app's version. Destination settings stay out, so the Wavelog API key never leaves the phone in a file.
+- Back up the log shares one JSON file, "RR73 backup 9V1NE 20261015.json": every QSO with the tombstones, every activation and the ledger, with the format name, its version and the app's version. Destination settings stay out, so the Wavelog API key never leaves the phone in a file, and so does what Read Wavelog's log read.
 - Import a log takes a backup or ADIF from any logger. From a backup, QSOs and activations the log does not hold come back with their ledger, so QSOs Wavelog holds stay delivered; a QSO whose activation is in neither keeps out of activations. A backup from a newer format version is refused with the version that wrote it.
 - From ADIF, a QSO the log holds already is skipped: the same RR73 id, or the same call (by base callsign), band and mode within 2 minutes, in the log or earlier in the file. The rest come in with source `import`, outside any activation.
 - Imported QSOs get no ledger entries and the ledger gives them none later, edited or not: they come from another log, which sends its own. Send to Wavelog leaves them out.
@@ -126,6 +127,8 @@ Rejected: sending imported QSOs to Wavelog like new ones. An operator importing 
 ## Storage
 
 The rr73 IndexedDB database is at version 2: `qsos` (indexed by start time, call, band and activation), `ledger` (keyed by QSO and destination), `destinations` and `activations`, beside version 1's `kv` store, which the upgrade keeps. A QSO and its ledger entries are written in one transaction. The log is held in memory as well; if the phone refuses storage, the Log says so and asks for an ADIF export before closing.
+
+What Read Wavelog's log reads is kept in a database of its own, `rr73-wavelog-worked`, which turning it off deletes (docs/design/wavelog-worked.md).
 
 An upgrade waits until every other connection closes. Copies from 0.5.0 on close theirs when a newer version asks (`versionchange`), and the current app then reloads into the new version at the next safe moment; 0.4.x never closed. While an older copy holds the database, the app reads its settings without the upgrade (`peekKv`), opens, says "Close other copies of RR73 to finish updating" and finishes the upgrade by itself when that copy closes. The Log and changes to settings wait for it; nothing is deleted or rewritten meanwhile.
 

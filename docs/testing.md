@@ -15,7 +15,7 @@ An end-to-end test covers what the unit tests cannot reach: the browser's audio,
 | Project | Browser | Runs |
 | --- | --- | --- |
 | `mic`, `decode` | Chromium, a WAV as the microphone | Receive audio, a real decode, the start chime, Timing |
-| `chromium` | Chromium | Screens, the log, colours, the bar, Tune, updates and accessibility (axe, light, dark and Sun), the output and input choices, and rig control with a fake IC-705 and a fake KX2 |
+| `chromium` | Chromium | Screens, the log, colours, Read Wavelog's log with a mock Wavelog, the bar, Tune, updates and accessibility (axe, light, dark and Sun), the output and input choices, and rig control with a fake IC-705 and a fake KX2 |
 | `webkit` | WebKit | Updating beside an older copy of RR73 |
 | `webkit-375x667`, `webkit-393x852` | WebKit, iPhone viewports | Layout in the light theme. Theme changes colours only (`tokens.css`), so geometry is checked once. Tests tagged `@ci-375` run at 375 x 667; those that depend on the screen size are also tagged `@ci-393` |
 | `webkit-1180x820`, `webkit-852x393`, `chromium-1440x900` | WebKit on an iPad and a phone on its side, Chromium on a desktop | Large screens (`large.spec.ts`) in the light theme: one geometry test per size class, regular width on an iPad on its side and upright (`@ci-regular`) and compact height (`@ci-compact-height`), and the keyboard shortcuts (`@ci-keys`) |

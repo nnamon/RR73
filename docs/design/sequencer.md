@@ -56,7 +56,7 @@ Repeat CQ and Hunt skip dupes while Work dupes is off, the default. The switch i
 
 - An activation is identified by its id: the `activationId` the log stores on each QSO, set when the QSO is logged or moved, and the running activation's id, which `configure` carries as `activationId`. It is null with no activation running or with Activations off, as the log then attaches none. Editing an activation's references keeps its id and its dupes. A new activation gets a new id, also at the same park.
 - Rejected: the set of references as the identity. The log links QSOs to activations by id, the references can change while an activation runs, and two activations with overlapping sets (2 parks, then one of them) have no clear answer.
-- Dupes, Hunt's Not worked and New call orders, and Repeat CQ's New order come from the phone's log only. By the owner's rule, any data from Wavelog, such as a future copy of what it holds as worked, stays cosmetic (decode colours, the New chip, Hide worked) unless a clearly labelled switch says otherwise.
+- Dupes, Hunt's Not worked and New call orders, and Repeat CQ's New order come from the phone's log only (`sequencerWorked()` in `state/qso.svelte.ts`). By the owner's rule, what Read Wavelog's log reads from Wavelog stays cosmetic: decode colours, the New chip and Hide worked. No switch lets it reach the sequencer (docs/design/wavelog-worked.md); `state/wavelog-cosmetic.test.ts` holds Hunt's and Repeat CQ's choices and dupes the same with and without it.
 - Up to 0.21.8 a dupe was any QSO on the band and mode in the UTC day, whatever the activation, and Hunt skipped dupes with Work dupes on as well.
 
 ## Timing
