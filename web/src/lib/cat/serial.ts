@@ -13,7 +13,8 @@
  * MIC jack, which MIC BTN reads as PTT by default: that keys the KX2. So a link lowers both lines
  * first thing after open() resolves, before any write, and closes the port if it cannot
  * (docs/design/cat.md, Port settings). Web Serial cannot close the few milliseconds between the
- * two.
+ * two. A link made with `keepOpenWithoutLines` stays open instead and reports `linesLow` false: the
+ * IC-705's, whose USB SEND OFF leaves the lines out of keying, and which RR73 reads next.
  *
  * TypeScript's DOM types have no Web Serial, so the parts used are declared here.
  */
@@ -158,6 +159,9 @@ const RECOVERABLE = new Set(['BreakError', 'BufferOverrunError', 'FramingError',
 export class SerialLink {
   readonly port: SerialPortLike;
   private readonly options: SerialOptionsLike;
+  private readonly keepOpenWithoutLines: boolean;
+  private readonly steps: { signals?(): void };
+  private linesLowValue = false;
   private stateValue: LinkState = 'closed';
   private reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
   private writer: WritableStreamDefaultWriter<Uint8Array> | null = null;
@@ -167,13 +171,24 @@ export class SerialLink {
   private readonly endListeners = new Set<(end: LinkEnd) => void>();
   private readonly onDisconnect = () => this.lose();
 
-  constructor(port: SerialPortLike, options: SerialOptionsLike = CIV_PORT) {
+  /**
+   * `steps.signals` runs just before DTR and RTS are lowered, for the connection log. With
+   * `keepOpenWithoutLines`, a port whose lines cannot be lowered stays open.
+   */
+  constructor(port: SerialPortLike, options: SerialOptionsLike = CIV_PORT, opts: { keepOpenWithoutLines?: boolean; steps?: { signals?(): void } } = {}) {
     this.port = port;
     this.options = options;
+    this.keepOpenWithoutLines = opts.keepOpenWithoutLines ?? false;
+    this.steps = opts.steps ?? {};
   }
 
   get state(): LinkState {
     return this.stateValue;
+  }
+
+  /** DTR and RTS were lowered at the last open. False before it, and when the driver refused them. */
+  get linesLow(): boolean {
+    return this.linesLowValue;
   }
 
   /** Listens to the bytes the port delivers, chunk by chunk as they arrive. */
@@ -194,6 +209,7 @@ export class SerialLink {
     if (this.stateValue === 'open') return null;
     if (this.stateValue !== 'closed') return 'failed';
     this.stateValue = 'opening';
+    this.linesLowValue = false;
     try {
       await this.port.open(this.options);
     } catch (e) {
@@ -201,9 +217,12 @@ export class SerialLink {
       return errorName(e) === 'NetworkError' ? 'busy' : 'failed';
     }
     // Before anything else: Chromium raised DTR and RTS while opening.
+    this.steps.signals?.();
     try {
       await this.port.setSignals(LINES_LOW);
+      this.linesLowValue = true;
     } catch {
+      if (this.keepOpenWithoutLines) return this.ready();
       try {
         await this.port.close();
       } catch {
@@ -212,6 +231,11 @@ export class SerialLink {
       this.stateValue = 'closed';
       return 'signals';
     }
+    return this.ready();
+  }
+
+  /** The port is open: reading starts, and writes go out. */
+  private ready(): null {
     this.port.addEventListener('disconnect', this.onDisconnect);
     this.writer = this.port.writable?.getWriter() ?? null;
     this.stateValue = 'open';

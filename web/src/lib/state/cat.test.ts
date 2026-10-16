@@ -342,12 +342,47 @@ describe('connecting', () => {
     expect(settings.cat.leftKeyed).toBe(false);
   });
 
-  it('closes the port when the lines cannot be lowered', async () => {
+  const refuseLines = () => {
     chosen.setSignals = async () => Promise.reject(new DOMException('Failed to set control signals.', 'NetworkError'));
+  };
+  const USB_SEND_READ = 'FE FE A4 E0 1A 05 01 25 FD';
+
+  it('keeps the port open when the driver refuses to lower the lines and USB SEND reads OFF, reading USB SEND first', async () => {
+    refuseLines();
+    await connect();
+    expect(chosen.log.slice(0, 2)).toEqual(['open', USB_SEND_READ]);
+    expect(rig.status).toBe('connected');
+    expect(rig.linesHigh).toBe(true);
+    expect(rig.menu.usb_send).toBe(0);
+    expect(chosen.log).not.toContain('close');
+    expect(chosen.ptt).toEqual([]);
+    // Lines lowered on the next connection: no note.
+    await disconnectRadio();
+    chosen.setSignals = SimSerialPort.prototype.setSignals;
+    await connect();
+    expect(rig.linesHigh).toBe(false);
+  });
+
+  it('closes the port when the lines cannot be lowered and USB SEND is on a line', async () => {
+    refuseLines();
+    chosen.sim.set_setting('"usb_send"', 1);
     await connect();
     expect(rig.status).toBe('failed');
     expect(rig.error).toBe('signals');
-    expect(chosen.log).toEqual(['open', 'close']);
+    expect(rig.linesHigh).toBe(false);
+    expect(chosen.log).toEqual(['open', USB_SEND_READ, 'close']);
+  });
+
+  it('closes the port when the lines cannot be lowered and USB SEND goes unread', async () => {
+    refuseLines();
+    chosen.silent = true;
+    await initCat();
+    const done = connectRadio();
+    await run(OPEN_SETTLE_MS + 3000);
+    await done;
+    expect(rig.status).toBe('failed');
+    expect(rig.error).toBe('signals');
+    expect(chosen.log).toEqual(['open', USB_SEND_READ, USB_SEND_READ, USB_SEND_READ, 'close']);
   });
 
   it('disconnects: forgets the port, and transmissions key by VOX again', async () => {

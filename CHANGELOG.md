@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.24.4 · 2026-10-16
 
+- When the IC-705’s USB driver does not let RR73 set DTR and RTS low, rig control still connects if USB SEND reads OFF, and Rig control notes it. With USB SEND on a line, or unread, the port closes and Rig control says to set it to OFF. Before, the port always closed.
 - After a connection to the radio that never completed, such as one during which Chrome closed, RR73 no longer opens the port by itself when the app opens or the radio is plugged in. Connect radio and Reconnect radio still open it.
 - Settings › Rig control has a Baud rate for the IC-705: 4800 to 115200, 115200 by default. A new rate opens the port again at that rate.
 

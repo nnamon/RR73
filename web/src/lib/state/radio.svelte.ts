@@ -61,6 +61,8 @@ export const rig = $state({
   mayBeKeyed: false,
   /** PTT off went out and no read confirmed receive after it: the radio may still transmit. */
   unkeyFailed: false,
+  /** The driver refused to lower DTR and RTS on the IC-705's port, and USB SEND read OFF: the port stayed open. */
+  linesHigh: false,
   tuning: null as RigTuning | null,
   test: null as RigTest | null,
 });
@@ -339,6 +341,6 @@ export function radioNotice(text: string, txOff = false, always = false) {
 
 /** Forgets the radio's state, as after Disconnect radio; tests use it to start again. */
 export function resetRig() {
-  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, sub: null, menu: {}, keyed: false, transmitting: null, mayBeKeyed: false, unkeyFailed: false, tuning: null, test: null });
+  Object.assign(rig, { status: 'off', error: null, noiseOnly: false, hz: null, mode: null, filter: null, data: null, sub: null, menu: {}, keyed: false, transmitting: null, mayBeKeyed: false, unkeyFailed: false, linesHigh: false, tuning: null, test: null });
   keyer = null;
 }

@@ -88,7 +88,7 @@
           case 'signals':
             return kx2
               ? { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. RTS keys the Digirig’s PTT. Set MENU › MIC BTN on the KX2 to OFF, then tap Reconnect radio.', bad: true }
-              : { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
+              : { text: 'The port’s DTR and RTS lines could not be set low, and USB SEND did not read OFF, so the port was closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
           case 'no-wasm':
             return { text: 'Rig control did not load. Reload the app.', bad: true };
           case 'gone':
@@ -352,6 +352,7 @@
       {/if}
     </div>
     {#if connectionText}<p class="section-foot" class:err={connectionText.bad} role={connectionText.bad ? 'alert' : undefined} data-testid="rig-help">{connectionText.text}</p>{/if}
+    {#if connected && rig.linesHigh}<p class="section-foot" data-testid="rig-lines">DTR and RTS could not be lowered. With USB SEND OFF, the radio ignores them.</p>{/if}
     {#if micBtnFirst}<p class="section-foot" class:err={micBtnFirst.bad} role={micBtnFirst.bad ? 'alert' : undefined} data-testid="rig-micbtn">{micBtnFirst.text}</p>{/if}
   </div>
 

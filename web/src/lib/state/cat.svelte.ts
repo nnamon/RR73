@@ -22,7 +22,7 @@
  * connection when the port went first; a radio that does not take it back turns Tx off.
  */
 
-import { CatRadio, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
+import { CatRadio, LOST_LIMIT, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
 import { SerialLink, choosePort, civPort, grantedPorts, kx2Port, serialApi, type Ic705Baud, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
 import { beginAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, type ConnectVia } from '../cat/connect-log';
 import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
@@ -150,6 +150,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   rig.status = 'connecting';
   rig.error = null;
   rig.noiseOnly = false;
+  rig.linesHigh = false;
   const before = releasing;
   releasing = null;
   if (before) await before;
@@ -160,7 +161,9 @@ async function open(port: SerialPortLike): Promise<boolean> {
   }
   const kx2 = settings.cat.radio === 'kx2';
   const options = kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud);
-  const link = new SerialLink(port, options);
+  // The IC-705's port stays open when the driver refuses to lower the lines, until USB SEND is read
+  // below. The KX2's closes: the Digirig keys it by RTS.
+  const link = new SerialLink(port, options, { keepOpenWithoutLines: !kx2 });
   logStep({ step: 'open', options });
   const err = await link.open();
   if (err) {
@@ -182,6 +185,21 @@ async function open(port: SerialPortLike): Promise<boolean> {
   lastBand = undefined;
   menuSeen = null;
   lastMayBeKeyed = false;
+  // DTR and RTS stay as Chromium left them, which may be asserted. USB SEND OFF leaves them out of
+  // keying (Advanced Manual p. 9-2); on a line, or unread, the port closes. Nothing else goes out
+  // first, and the radio's state reaches the app only after, so the attempt connects only then.
+  if (!link.linesLow) {
+    const off = await usbSendReadsOff(radio);
+    if (current !== me) return false;
+    if (!off) {
+      current = null;
+      radio.close();
+      await link.close();
+      fail('signals');
+      return false;
+    }
+    rig.linesHigh = true;
+  }
   radio.onChange((s) => {
     if (current === me) mirror(s);
   });
@@ -218,6 +236,16 @@ async function open(port: SerialPortLike): Promise<boolean> {
   // or an earlier page went while keyed), or keys it by CAT.
   radio.start({ recover: recover || settings.cat.leftKeyed || settings.cat.keyPtt, shifted: recoverShift });
   return true;
+}
+
+/** Reads USB SEND, again while it goes unanswered, LOST_LIMIT times at most: true once it reads OFF. */
+async function usbSendReadsOff(radio: CatRadio): Promise<boolean> {
+  for (let i = 0; i < LOST_LIMIT; i++) {
+    const r = await radio.request({ type: 'read_setting', item: 'usb_send' });
+    if (r.ok) return r.event.type === 'setting' && r.event.value === 0;
+    if (r.why !== 'timeout') return false;
+  }
+  return false;
 }
 
 /**

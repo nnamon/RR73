@@ -214,6 +214,22 @@ describe('SerialLink', () => {
     await expect(link.write(Uint8Array.from([1]))).rejects.toBeInstanceOf(LinkClosedError);
   });
 
+  it('with keepOpenWithoutLines, stays open when the lines cannot be lowered and says so', async () => {
+    const port = new FakePort();
+    port.signalsError = new DOMException('Failed to set control signals.', 'NetworkError');
+    let before = 0;
+    const link = new SerialLink(port, CIV_PORT, { keepOpenWithoutLines: true, steps: { signals: () => before++ } });
+    expect(await link.open()).toBeNull();
+    expect(before).toBe(1);
+    expect(link.state).toBe('open');
+    expect(link.linesLow).toBe(false);
+    expect(port.closes).toBe(0);
+    await link.write(Uint8Array.from([1]));
+    const ok = new SerialLink(new FakePort(), CIV_PORT, { keepOpenWithoutLines: true });
+    expect(await ok.open()).toBeNull();
+    expect(ok.linesLow).toBe(true);
+  });
+
   it('says why a port did not open', async () => {
     const busy = new FakePort();
     busy.openError = new DOMException('Failed to open serial port.', 'NetworkError');
