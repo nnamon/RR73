@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { addDecodes, band, clearDecodes, deliverDecodes, deliverEarly, markTransmitted, mergeDecodes, noteHeardBack, onSlotDecoded, recent, timingSnapshot, tx } from './station.svelte';
+import { addDecodes, band, clearDecodes, deliverDecodes, deliverEarly, markTransmitted, mergeDecodes, noteHeardBack, onSlotDecoded, recent, runningOutput, timingSnapshot, tx } from './station.svelte';
+import { AudioClockMapper } from '../clock/mapping';
 
 const d = (text: string, freq_hz = 1000) => ({ text, freq_hz, dt_s: 0.1, snr_db: -12 });
 
@@ -133,5 +134,18 @@ describe('Clear decodes', () => {
       [String(start), 'final', 'CQ K1ABC FN42'],
       [String(start), 'late', '9V1NE VK2LAW -12'],
     ]);
+  });
+});
+
+describe('the transmit output', () => {
+  it('is the running context and its mapper before the mapper has its first observation', () => {
+    // A CQ tapped right after Start audio: the scheduler times its wait by the page's clock and
+    // needs the mapping only at the pre-roll. Refused here, the CQ went out a cycle later.
+    const ctx = {} as AudioContext;
+    const mapper = new AudioClockMapper();
+    expect(mapper.ready).toBe(false);
+    expect(runningOutput(ctx, mapper, 'running')).toEqual({ ctx, mapper });
+    expect(runningOutput(ctx, mapper, 'off')).toBeNull();
+    expect(runningOutput(null, mapper, 'running')).toBeNull();
   });
 });

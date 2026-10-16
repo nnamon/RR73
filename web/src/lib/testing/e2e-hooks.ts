@@ -87,7 +87,7 @@ export function installE2eHooks() {
     },
     clockErrorMs: () => {
       const out = audioOut();
-      return out ? out.mapper.toUtcMs(out.ctx.currentTime) - Date.now() : null;
+      return out?.mapper.ready ? out.mapper.toUtcMs(out.ctx.currentTime) - Date.now() : null;
     },
     rxLagMs: () => rxLag,
     transmitted: () => qso.sent.map((s) => s.text),

@@ -546,11 +546,19 @@ export function onHalt(fn: () => void): () => void {
   return () => haltHooks.delete(fn);
 }
 
-/** The running audio context and its clock mapping, for the transmit scheduler. */
+/**
+ * The running audio context and its clock mapper, for the transmit schedulers; null while audio is
+ * not running. For a moment after audio starts the mapper has no observation yet: the schedulers
+ * time their wait by the page's clock then and need the mapping only at the pre-roll
+ * (lib/tx/scheduler.ts), so a CQ tapped at once still goes out in its slot.
+ */
 export function audioOut(): { ctx: AudioContext; mapper: AudioClockMapper } | null {
-  const ctx = engine?.context;
-  if (!engine || !ctx || audio.status !== 'running' || !engine.mapper.ready) return null;
-  return { ctx, mapper: engine.mapper };
+  return runningOutput(engine?.context ?? null, engine?.mapper ?? null, audio.status);
+}
+
+/** audioOut's rule apart from the engine: the context and mapper while audio runs, mapped or not. */
+export function runningOutput(ctx: AudioContext | null, mapper: AudioClockMapper | null, status: AudioStatus): { ctx: AudioContext; mapper: AudioClockMapper } | null {
+  return ctx && mapper && status === 'running' ? { ctx, mapper } : null;
 }
 
 /** The running audio context, for output that needs no clock mapping (a keyboard mode's stream). */
