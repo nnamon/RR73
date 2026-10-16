@@ -6,9 +6,10 @@
  * lib/state/radio.svelte.ts for the rest of the app.
  *
  * Connecting lowers the port's DTR and RTS lines (lib/cat/serial.ts), waits OPEN_SETTLE_MS and
- * drops what arrived meanwhile, then reads the radio. It sends no PTT and changes no setting. The
- * one exception: when this page lost the port while RR73 may have held PTT on, the next connection
- * sends PTT off if the radio reports transmitting. RR73 opens only the port the operator chose:
+ * drops what arrived meanwhile, then reads the radio. It sends no PTT and changes no setting, with
+ * one exception: a radio that reports transmitting gets PTT off when RR73 may have left it keyed
+ * (this page lost the port, or the stored leftKeyed flag says an earlier page went while keyed) or
+ * Key the radio with CAT is on. A KX2's port opens by itself only after MIC BTN last read OFF. RR73 opens only the port the operator chose:
  * Connect radio takes back the browser's permission for every other port, and on opening the app
  * RR73 opens the allowed port only when exactly one of the chosen kind is there.
  *
