@@ -464,6 +464,21 @@ describe('CatRadio', () => {
     expect(radio.state.unkeyFailed).toBe(false);
   });
 
+  it('sends what waited for a drain when its timer fires a moment before the clock reaches the drain’s end', async () => {
+    const { timers, port, radio } = setup();
+    // Browser timers may fire a fraction of a millisecond early against performance.now().
+    const set = timers.set.bind(timers);
+    timers.set = (fn, ms) => set(fn, Math.max(0, ms - 0.5));
+    port.silent = true;
+    void radio.request({ type: 'read_frequency' });
+    await timers.advance(REPLY_MS);
+    port.silent = false;
+    const next = radio.request({ type: 'read_mode' });
+    await timers.advance(DRAIN_MS + 100);
+    expect(port.sent('04')).toHaveLength(1);
+    expect(await next).toMatchObject({ ok: true });
+  });
+
   it('never takes a late OK for the answer to a later request', async () => {
     const { timers, port, radio } = setup();
     // A dial set answered after its timeout, then PTT on that the radio never answers.

@@ -680,6 +680,9 @@ export class CatRadio implements Keyer {
     if (this.drainTimer !== null) this.timers.clear(this.drainTimer);
     this.drainTimer = this.timers.set(() => {
       this.drainTimer = null;
+      // The timer ends the drain, even when it fires a moment before the clock reaches its end:
+      // otherwise pump() would still find a drain, and nothing would call it again.
+      this.drainUntil = Math.min(this.drainUntil, this.timers.now());
       for (const go of this.afterDrain.splice(0)) go();
       this.pump();
     }, this.drainUntil - this.timers.now());
