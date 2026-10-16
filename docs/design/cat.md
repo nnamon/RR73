@@ -58,7 +58,7 @@ On the Windows tablet, before stage 1:
 4. Set the radio to low power into a dummy load or a matched antenna.
 5. Tap Test keying. The radio transmits for 1 s with no audio, and the screen says "Keyed and released at 13:14:30 UTC." Any other answer names what went wrong.
 6. In Settings › Radio and audio, set Input and Output to the IC-705's USB audio, tap Start audio, and check that no line under Output says the output is not connected or refused. With Key the radio with CAT on, every transmission and Tune is refused until the Output is the chosen device and plays there (Transmit, below).
-7. Only then turn on Key the radio with CAT, check that Rig control shows no advice about the Tx output, and call CQ. Halt (or Esc) sends PTT off at once.
+7. Only then turn on Key the radio with CAT, check that Rig control shows no advice about the Tx output and that the practice band is off (it never keys the radio by CAT), and call CQ. Halt (or Esc) sends PTT off at once. Should the port close with the cable still in, Rig control's Reconnect radio opens it again without the chooser.
 
 ## Web Serial
 
