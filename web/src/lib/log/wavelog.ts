@@ -123,7 +123,8 @@ export function plainReason(messages: unknown): string {
     .trim();
 }
 
-function parseJson(text: string): Record<string, unknown> | null {
+/** A JSON object from Wavelog's reply, or null. */
+export function parseJson(text: string): Record<string, unknown> | null {
   // Some PHP setups print notices before the JSON; read from the first brace.
   const at = text.indexOf('{');
   if (at < 0) return null;
