@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.1 · 2026-10-16
 
 - In Chrome and Edge on a computer, RR73 keeps receiving, decoding and transmitting while its window is minimised, covered or in a background tab, with no tap to resume. On the iPhone audio stops when RR73 leaves the screen, as before.
 - On Windows the advice names Chrome, Edge and Windows Settings: allowing the microphone and location, keeping the screen on, and syncing the clock in Settings › Time & language › Date & time. Before you transmit asks there for system sounds off, the radio not the default output and sleep set to Never. Off iOS and Android, RR73 says computer where it said phone.
