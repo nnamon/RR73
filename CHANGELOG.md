@@ -4,6 +4,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- With Key the radio with CAT on, a transmission or Tune whose audio would not reach the output chosen in Settings › Radio and audio is refused, and Rig control says what to choose. Before, the radio keyed with its Tx audio on the system default, or on nothing.
+- An output the browser refused is applied again once audio starts and when a device is plugged in or out.
 - The practice band never keys the radio by CAT, whatever Key the radio with CAT says, and Test keying waits until it is off. Before, a practice transmission keyed a connected radio. Settings › Practice band says that a radio on the Tx output with VOX on transmits practice audio.
 
 ## 0.24.2 · 2026-10-16

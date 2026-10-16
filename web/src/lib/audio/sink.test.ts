@@ -39,6 +39,9 @@ describe('output choice', () => {
     expect(outputChange('codec-1', true, withCodec, 'missing')).toBe('back');
     expect(outputChange('codec-1', true, withCodec, null)).toBeNull();
     expect(outputChange('codec-1', false, without, 'missing')).toBeNull();
+    // Refused by the browser, as before the microphone was allowed: any change tries it again.
+    expect(outputChange('codec-1', true, withCodec, 'failed')).toBe('back');
+    expect(outputChange('codec-1', true, without, 'failed')).toBe('gone');
     // The system default has nothing to lose.
     expect(outputChange(null, true, without, null)).toBeNull();
     // Without microphone permission the list has no IDs and tells nothing.

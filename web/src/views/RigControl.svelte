@@ -15,9 +15,10 @@
   import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { chooseRadio, connectRadio, disconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
-  import { radioName, rig, rigConnected, rigInDataMode, rigModeText, usbSendOn } from '../lib/state/radio.svelte';
+  import { radioName, rig, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
+  import { audio } from '../lib/state/station.svelte';
 
   const connected = $derived(rigConnected());
   /** A link is open or opening: the button disconnects. */
@@ -203,6 +204,29 @@
     return out;
   });
 
+  /** The radio's audio device, for Settings › Radio and audio › Output. */
+  const radioAudio = $derived(kx2 ? 'the Digirig’s sound card' : 'the IC-705’s USB audio');
+
+  /**
+   * Keying by CAT, a transmission goes only to the output chosen in Radio and audio, so the radio
+   * never transmits with its Tx audio on another device. Why each is refused, and what to do.
+   */
+  const outputText = $derived.by((): string | null => {
+    if (!settings.cat.keyPtt || practice.on) return null;
+    switch (txOutput()) {
+      case 'default':
+        return `Key the radio with CAT needs the Tx audio on the radio. Choose ${radioAudio} in Settings › Radio and audio › Output. Until then each transmission is refused.`;
+      case 'missing':
+        return `The Tx output chosen in Settings › Radio and audio is not connected, so each transmission is refused. Connect it, or choose ${radioAudio} there.`;
+      case 'refused':
+        return audio.status === 'running'
+          ? 'The browser refused the Tx output chosen in Settings › Radio and audio, so each transmission is refused. Choose it there again.'
+          : 'The browser refused the Tx output chosen in Settings › Radio and audio, so each transmission is refused. Tap Start audio to allow it.';
+      default:
+        return null;
+    }
+  });
+
   const shiftText = $derived(!settings.cat.keyPtt ? 'Needs Key the radio with CAT' : settings.cat.shiftDial ? 'Signal stays on your Tx frequency' : 'Off: the dial stays put');
 
   const testing = $derived(rig.test?.state === 'running');
@@ -283,6 +307,7 @@
         </span>
       </button>
     </div>
+    {#if outputText}<p class="section-foot err" role="alert" data-testid="rig-output">{outputText}</p>{/if}
     {#if notDataA}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataA}</p>{/if}
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
     <p class="section-foot" data-testid="rig-practice">The practice band never keys the radio by CAT.</p>

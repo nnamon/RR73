@@ -15,7 +15,7 @@
 // measurement when it fell behind, as decode.spec does; on GitHub Actions it fails. With that check
 // the tests need no retries.
 import { expect, test, type Page } from '@playwright/test';
-import { connect, installFakeIc705, ptt, rigFrames, rigLog, setKeying } from './fake-ic705';
+import { chooseOutput, connect, installFakeIc705, ptt, rigFrames, rigLog, setKeying } from './fake-ic705';
 import { prepare, waitForTransmissions } from './txhelp';
 import { decodeCaptured, installTap, SLOT_MS } from './tap';
 import { loadWasm } from './wasm';
@@ -76,8 +76,15 @@ test('a CQ keys no PTT with Key the radio with CAT off; on, PTT goes on before t
   expect(await ptt(page)).toEqual([]);
 
   // On: a CQ tapped in the slot before keys the radio at the pre-roll, 0.5 s before its audio,
-  // which still starts at slot + 0.5 s, and unkeys after the audio ends.
+  // which still starts at slot + 0.5 s, and unkeys after the audio ends. Keying by CAT needs the
+  // Tx output chosen: with System default Rig control says so, and transmissions are refused.
   await setKeying(page, true);
+  await expect(page.getByTestId('rig-output')).toHaveText('Key the radio with CAT needs the Tx audio on the radio. Choose the IC-705’s USB audio in Settings › Radio and audio › Output. Until then each transmission is refused.');
+  // A new output halts, and Halt sends PTT off while CAT keys the radio: chosen with the switch off.
+  await setKeying(page, false);
+  await chooseOutput(page);
+  await setKeying(page, true);
+  await expect(page.getByTestId('rig-output')).toHaveCount(0);
   await page.evaluate(() => (location.hash = '#/'));
   await waitForOddSlot(page);
   await dock.getByRole('button', { name: 'CQ', exact: true }).click();
@@ -122,6 +129,7 @@ test('a lost port during a transmission stops the audio and turns Tx off', async
   await installFakeIc705(page);
   const dock = await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
   await startAudio(page);
   await waitForOddSlot(page);
@@ -169,6 +177,7 @@ test('Tune keys no PTT with Key the radio with CAT off; on, it keys the radio be
   await waitForTransmissions(page, 1, 5000);
   expect(await ptt(page)).toEqual([]);
   // On: PTT, the radio's OK, the tone 0.1 s later; PTT off the output latency and 0.1 s after it.
+  await chooseOutput(page);
   await setKeying(page, true);
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await page.getByRole('button', { name: /^Tune for 10 s/ }).click();
@@ -203,6 +212,7 @@ test('an RTTY transmission keys the radio before the stream and releases it when
   await installFakeIc705(page);
   await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
   await page.evaluate(() => (location.hash = '#/'));
   await page.getByRole('button', { name: /^Change band/ }).click();
@@ -242,6 +252,7 @@ test('audio stopping during a transmission sends PTT off at once and turns Tx of
   await installFakeIc705(page);
   const dock = await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
   await startAudio(page);
   await waitForOddSlot(page);
@@ -296,6 +307,7 @@ test('with Keep Tx audio centred, a CQ at 2800 Hz sets the dial 1000 Hz up, keys
   await installFakeIc705(page);
   const dock = await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
   await setShift(page);
   // The fake radio also reports each dial set by transceive: RR73 must keep showing the receive dial.
@@ -365,6 +377,7 @@ test('with Keep Tx audio centred, Tune at a Tx frequency of 2800 Hz plays 1800 H
   await installFakeIc705(page);
   await prepare(page);
   await connect(page);
+  await chooseOutput(page);
   await setKeying(page, true);
   await setShift(page);
   await setTxHz(page, 2800);

@@ -1,7 +1,8 @@
 // Settings › Radio and audio › Output in Chromium, whose fake devices list 3 outputs: the choice
 // lists them, is saved, Tune, the start chime and capture's context play to it, capture keeps
-// running when it changes, and a missing device shows as not connected (docs/design/cat.md, Audio).
-// The Input choice is found again by its name, as the output is.
+// running when it changes, a missing device shows as not connected, and a refused one is tried
+// again once audio starts and on a device change (docs/design/cat.md, Audio). The Input choice is
+// found again by its name, as the output is.
 import { expect, test, type Page } from '@playwright/test';
 
 // Fake devices for this file: the chromium project runs without them.
@@ -141,6 +142,44 @@ test('an output the browser cannot find or refuses says so, and audio plays on',
   await outputSelect(page).selectOption({ label: 'System default' });
   await expect(page.getByTestId('output-foot')).toHaveCount(0);
   expect(await contextSink(page)).toBe('');
+});
+
+test('an output refused before the microphone is allowed is applied once audio starts, and again on a device change', async ({ page }) => {
+  await instrument(page);
+  await page.goto('./#/settings/radio');
+  await outputSelect(page).selectOption({ label: 'Fake Audio Output 1' });
+  const id1 = await outputId(page, 'Fake Audio Output 1');
+  // The browser refuses the device until getUserMedia has resolved, as before microphone permission.
+  await page.evaluate((id) => {
+    const rec = (window as unknown as { __rec: Recorded }).__rec;
+    rec.refused.add(id);
+    const md = navigator.mediaDevices;
+    const gum = md.getUserMedia.bind(md);
+    md.getUserMedia = async (c) => {
+      const stream = await gum(c);
+      rec.refused.delete(id);
+      return stream;
+    };
+  }, id1);
+  // Start audio makes the context, which switches to the output before it asks for the microphone.
+  await page.getByRole('button', { name: 'Start audio' }).click();
+  await expect(page.getByRole('meter', { name: 'Input level' })).toHaveAttribute('aria-valuetext', /^−\d+ dBFS$/, { timeout: 15_000 });
+  await expect.poll(() => contextSink(page)).toBe(id1);
+  await expect(page.getByTestId('output-foot')).toHaveCount(0);
+
+  // Refused while audio runs: the next device change tries it again.
+  await outputSelect(page).selectOption({ label: 'Fake Audio Output 2' });
+  const id2 = await outputId(page, 'Fake Audio Output 2');
+  await expect.poll(() => contextSink(page)).toBe(id2);
+  await page.evaluate((id) => (window as unknown as { __rec: Recorded }).__rec.refused.add(id), id1);
+  await outputSelect(page).selectOption({ label: 'Fake Audio Output 1' });
+  await expect(page.getByTestId('output-foot')).toHaveText('The browser refused the chosen output, so transmit audio plays through the system default.');
+  await page.evaluate((id) => {
+    (window as unknown as { __rec: Recorded }).__rec.refused.delete(id);
+    navigator.mediaDevices.dispatchEvent(new Event('devicechange'));
+  }, id1);
+  await expect.poll(() => contextSink(page)).toBe(id1);
+  await expect(page.getByTestId('output-foot')).toHaveCount(0);
 });
 
 test('the chosen input is found again by its name when the browser gives it a new ID', async ({ page }) => {

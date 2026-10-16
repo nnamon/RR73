@@ -119,6 +119,12 @@ export const session = new KeyboardSession({
         keying.release();
         return STATUS.pttTaken;
       }
+      // The output may have changed during the wait: the stream goes only to the chosen one.
+      const late = rigGate();
+      if (late) {
+        keying.release();
+        return late;
+      }
     }
     try {
       const stream = await client.startTx(

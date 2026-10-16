@@ -52,15 +52,17 @@ export function outputChoices(devices: readonly MediaDeviceInfo[]): MediaDeviceI
 
 /**
  * What a device change means for the chosen output: `gone` when it left the browser's list,
- * `back` when it is listed again after leaving or after a switch found it missing, null otherwise.
- * A list without device IDs (no microphone permission yet) tells nothing, so it gives null.
+ * `back` when it is listed again after leaving, or after a switch found it missing or the browser
+ * refused it, null otherwise. A refused switch is tried again on every change while the device is
+ * listed: the refusal may have come before the microphone was allowed. A list without device IDs
+ * (no microphone permission yet) tells nothing, so it gives null.
  */
 export function outputChange(chosen: string | null, wasListed: boolean, devices: readonly MediaDeviceInfo[], error: OutputError | null): 'gone' | 'back' | null {
   const outputs = outputChoices(devices);
   if (chosen === null || outputs.length === 0) return null;
   const listed = outputs.some((d) => d.deviceId === chosen);
   if (wasListed && !listed) return 'gone';
-  if (listed && (!wasListed || error === 'missing')) return 'back';
+  if (listed && (!wasListed || error === 'missing' || error === 'failed')) return 'back';
   return null;
 }
 

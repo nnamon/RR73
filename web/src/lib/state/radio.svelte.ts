@@ -164,6 +164,44 @@ export function dialNow(fallback: number | null): number | null {
 
 let keyer: Keyer | null = null;
 
+/**
+ * Where transmit audio goes, as the audio engine reports it: `ok` on the output chosen in Settings ›
+ * Radio and audio, `default` with none chosen (System default), `missing` when the chosen device is
+ * not connected, `refused` when the browser refused it, `switching` while the output moves to it.
+ * Always `ok` where the browser cannot choose an output.
+ */
+export type TxOutput = 'ok' | 'default' | 'missing' | 'refused' | 'switching';
+
+let txOutputOf: () => TxOutput = () => 'ok';
+
+/** The audio engine (lib/state/station.svelte.ts) tells where transmit audio goes. */
+export function provideTxOutput(fn: () => TxOutput) {
+  txOutputOf = fn;
+}
+
+/** Where transmit audio goes now. */
+export function txOutput(): TxOutput {
+  return txOutputOf();
+}
+
+const OUTPUT_NOTICE: Record<Exclude<TxOutput, 'ok'>, string> = {
+  default: STATUS.txOutputDefault,
+  missing: STATUS.txOutputMissing,
+  refused: STATUS.txOutputRefused,
+  switching: STATUS.txOutputSwitching,
+};
+
+/**
+ * Keying by CAT, a transmission whose audio would not reach the output chosen in Settings › Radio
+ * and audio is refused: the radio would transmit with its Tx audio on another device, or none.
+ * Null without CAT keying, where VOX keys only on audio that reaches the radio.
+ */
+function outputGate(): string | null {
+  if (!txKeyer()) return null;
+  const o = txOutput();
+  return o === 'ok' ? null : OUTPUT_NOTICE[o];
+}
+
 /** Rig control hands over the radio's PTT while a link is open, and null when it closes. */
 export function provideKeyer(k: Keyer | null) {
   keyer = k;
@@ -203,14 +241,17 @@ export function txShiftHz(mode: Mode, hz: number): number {
 /**
  * Why a transmission cannot go because of the radio, or null: keying by CAT is on and the radio
  * the operator connected is not connected now; PTT off was not confirmed; the radio's USB SEND
- * keys it on a port line; or the radio's dial is on another band than RR73's, where QSOs would log
- * the wrong band. The practice band keys nothing by CAT, so it needs no radio connected.
+ * keys it on a port line; keying by CAT, the Tx audio would not reach the chosen output; or the
+ * radio's dial is on another band than RR73's, where QSOs would log the wrong band. The practice
+ * band keys nothing by CAT, so it needs no radio connected.
  */
 export function rigGate(): string | null {
   if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
   if (usbSendOn()) return STATUS.usbSend;
+  const output = outputGate();
+  if (output) return output;
   if (rig.hz === null) return null;
   const b = rigBand();
   if (b === null) return STATUS.radioOutside;
@@ -222,7 +263,7 @@ export function tuneGate(): string | null {
   if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
-  return usbSendOn() ? STATUS.usbSend : null;
+  return usbSendOn() ? STATUS.usbSend : outputGate();
 }
 
 type NoticeListener = (text: string, txOff: boolean, always: boolean) => void;

@@ -8,11 +8,11 @@ import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
-import { dialNow, onRadioNotice, rig, rigGate, txKeyer, txShiftHz } from './radio.svelte';
+import { dialNow, onRadioNotice, rig, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { practice } from './practice.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
-import { halt, onHalt } from './station.svelte';
+import { audio as engineAudio, halt, onHalt } from './station.svelte';
 
 interface Sim {
   receive(bytes: Uint8Array): Uint8Array;
@@ -439,6 +439,86 @@ describe('keying', () => {
     expect(on.reports.map((r) => r.type)).toEqual(['started', 'ended']);
     expect(chosen.ptt).toEqual(['01', '00']);
     expect(chosen.sim.transmit).toBe(false);
+  });
+
+  describe('the Tx output', () => {
+    beforeEach(() => {
+      // A browser that can choose the output, as Chromium can.
+      vi.stubGlobal('AudioContext', class {
+        setSinkId() {
+          return Promise.resolve();
+        }
+      });
+    });
+    afterEach(async () => {
+      vi.unstubAllGlobals();
+      engineAudio.output = { sinkId: null, error: null };
+      await updateSettings({ outputDeviceId: null });
+    });
+
+    it('keying by CAT, refuses a transmission and Tune whose audio would not reach the chosen output, with no PTT', async () => {
+      void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+      await connect();
+      // System default: the radio would key with its Tx audio on whatever the computer plays to.
+      expect(rigGate()).toBe('No Tx output chosen');
+      expect(tuneGate()).toBe('No Tx output chosen');
+      const { done, played, reports } = await transmit();
+      await run(3000);
+      await done;
+      expect(played).toEqual([]);
+      expect(reports).toMatchObject([{ type: 'refused', reason: 'No Tx output chosen' }]);
+      expect(chosen.ptt).toEqual([]);
+      await updateSettings({ outputDeviceId: 'radio-out' });
+      engineAudio.output = { sinkId: 'radio-out', error: 'missing' };
+      expect(rigGate()).toBe('Tx output not connected');
+      engineAudio.output = { sinkId: 'radio-out', error: 'failed' };
+      expect(rigGate()).toBe('Browser refused the Tx output');
+      expect(tuneGate()).toBe('Browser refused the Tx output');
+      engineAudio.output = { sinkId: 'radio-out', error: 'unsupported' };
+      expect(rigGate()).toBe('Browser refused the Tx output');
+      engineAudio.output = { sinkId: 'speakers', error: null };
+      expect(rigGate()).toBe('Tx output switching');
+      // On the chosen output: keyed as before.
+      engineAudio.output = { sinkId: 'radio-out', error: null };
+      expect(rigGate()).toBeNull();
+      const ok = await transmit();
+      await run(2200);
+      await ok.done;
+      expect(ok.played).toHaveLength(1);
+      expect(chosen.ptt).toEqual(['01']);
+      await run(4000);
+      expect(chosen.ptt).toEqual(['01', '00']);
+    });
+
+    it('a refusal after PTT on, before the audio, releases PTT and plays nothing', async () => {
+      void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+      await updateSettings({ outputDeviceId: 'radio-out' });
+      engineAudio.output = { sinkId: 'radio-out', error: null };
+      await connect();
+      const { done, played, reports } = await transmit();
+      // PTT on at the pre-roll, 2 s in; the browser refuses the output before the radio's OK, 10 ms
+      // later, and the audio that would follow it.
+      await run(2003);
+      expect(chosen.ptt).toEqual(['01']);
+      engineAudio.output = { sinkId: 'radio-out', error: 'failed' };
+      await run(300);
+      await done;
+      expect(played).toEqual([]);
+      expect(reports).toMatchObject([{ type: 'refused', reason: 'Browser refused the Tx output' }]);
+      await run(200);
+      expect(chosen.ptt).toEqual(['01', '00']);
+      expect(chosen.sim.transmit).toBe(false);
+    });
+
+    it('with VOX keying or the practice band, no output is required', async () => {
+      await connect();
+      expect(rigGate()).toBeNull();
+      expect(tuneGate()).toBeNull();
+      void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+      practice.on = true;
+      expect(rigGate()).toBeNull();
+      expect(tuneGate()).toBeNull();
+    });
   });
 
   it('PTT off unconfirmed after a transmission: Tx goes off, the status line says to unkey the radio, and Tx is refused', async () => {

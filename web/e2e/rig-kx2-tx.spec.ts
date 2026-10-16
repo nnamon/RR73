@@ -9,6 +9,7 @@
 // TX to RX and skips with the measurement when it fell behind, as rig-tx.spec does, and fails on
 // GitHub Actions.
 import { expect, test, type Page } from '@playwright/test';
+import { chooseOutput } from './fake-ic705';
 import { connectKx2, installFakeKx2, kx2Ptt, type Kx2Write } from './fake-kx2';
 import { prepare, waitForTransmissions } from './txhelp';
 import { SLOT_MS } from './tap';
@@ -69,8 +70,17 @@ test('a CQ sends no TX with Key the radio with CAT off; on, TX goes before the a
   // On: a CQ tapped in the slot before sends TX at the pre-roll, 0.5 s before its audio, which
   // still starts at slot + 0.5 s once TQ1 confirms it, and RX after the audio ends.
   await page.evaluate(() => (location.hash = '#/settings/rig'));
-  await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
-  await expect(page.getByRole('switch', { name: /^Key the radio with CAT/ })).toBeChecked();
+  const keying = page.getByRole('switch', { name: /^Key the radio with CAT/ });
+  await keying.click();
+  await expect(keying).toBeChecked();
+  await expect(page.getByTestId('rig-output')).toHaveText('Key the radio with CAT needs the Tx audio on the radio. Choose the Digirig’s sound card in Settings › Radio and audio › Output. Until then each transmission is refused.');
+  // A new output halts, and Halt sends RX while CAT keys the radio: chosen with the switch off.
+  await keying.click();
+  await chooseOutput(page);
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await keying.click();
+  await expect(keying).toBeChecked();
+  await expect(page.getByTestId('rig-output')).toHaveCount(0);
   await page.evaluate(() => (location.hash = '#/'));
   await waitForOddSlot(page);
   await dock.getByRole('button', { name: 'CQ', exact: true }).click();

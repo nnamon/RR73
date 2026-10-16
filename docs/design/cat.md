@@ -39,7 +39,7 @@ The CI-V guide prints the frame layout and the data formats but no complete exam
 
 ## First session
 
-The owner's first session brings rig control up in stages. Each stage needs the one before, and Key the radio with CAT stays off until stage 6.
+The owner's first session brings rig control up in stages. Each stage needs the one before, and Key the radio with CAT stays off until stage 7.
 
 On the Windows tablet, before stage 1:
 
@@ -57,7 +57,8 @@ On the Windows tablet, before stage 1:
 3. Change band from RR73's band sheet and check that the radio follows in USB-D. Turn the radio's dial into another band and check that RR73 follows within about 1 s.
 4. Set the radio to low power into a dummy load or a matched antenna.
 5. Tap Test keying. The radio transmits for 1 s with no audio, and the screen says "Keyed and released at 13:14:30 UTC." Any other answer names what went wrong.
-6. Only then turn on Key the radio with CAT, and call CQ. Halt (or Esc) sends PTT off at once.
+6. In Settings › Radio and audio, set Input and Output to the IC-705's USB audio, tap Start audio, and check that no line under Output says the output is not connected or refused. With Key the radio with CAT on, every transmission and Tune is refused until the Output is the chosen device and plays there (Transmit, below).
+7. Only then turn on Key the radio with CAT, check that Rig control shows no advice about the Tx output, and call CQ. Halt (or Esc) sends PTT off at once.
 
 ## Web Serial
 
@@ -156,6 +157,8 @@ RR73 sets USB, FIL1 with `06 01 01`, then data mode on with FIL1 with `1A 06 01 
 
 With Key the radio with CAT off, transmissions play their audio as without rig control, and the radio keys by VOX. With it on, every transmission keys the radio with `1C 00 01` first.
 
+Keying by CAT, a transmission goes only to the output chosen in Settings › Radio and audio › Output. FT8, FT4, WSPR and RTTY transmissions and Tune are refused while no output is chosen (System default: "No Tx output chosen"), while the chosen device is not connected or has left the browser's list ("Tx output not connected"), while the browser refuses it ("Browser refused the Tx output"), and while the output is still moving to it ("Tx output switching"). Otherwise the radio would transmit with its Tx audio on whatever the computer plays to, or nothing. The check runs before PTT on and again after the radio's OK, before the audio starts (`rigGate` and `tuneGate` in `lib/state/radio.svelte.ts`, `TxOutput` from `lib/state/station.svelte.ts`). Rig control says which, with the device to choose. VOX keying needs no such check: VOX keys only on audio that reaches the radio. Where the browser cannot choose an output (Firefox), no transmission is refused for it.
+
 The practice band never keys the radio by CAT, whatever Key the radio with CAT says (`catKeys` in `lib/state/radio.svelte.ts`): its FT8, FT4, WSPR and RTTY transmissions and Tune play their audio with no PTT, no dial shift, and no refusal for a radio that is not connected. Test keying is refused while it is on, and turning it on or off runs Halt first, so a keying started for the radio ends before practice starts. With Play Tx audio on, the practice band's transmissions play through the Tx output, and a radio on that output with VOX on transmits them: Settings › Practice band says so, and RR73 adds no lock there. Rig control and Settings › Practice band state the CAT rule.
 
 1. The transmit scheduler (FT8, FT4 and WSPR, `lib/tx/scheduler.ts`) keys the radio at its pre-roll, 500 ms before the audio: the slot edge in FT8 and FT4, slot + 0.5 s in WSPR.
@@ -206,6 +209,8 @@ The radio must never stay keyed by RR73. Each path below has a test.
 | --- | --- | --- |
 | The port opens | DTR and RTS low before any write; the port closes again if they cannot be lowered; 100 ms wait, input dropped | `serial.test.ts`, `cat.test.ts` (the simulator keyed by DTR at open), `rig.spec.ts` (lines low after Connect radio) |
 | USB SEND on a line (`0125` reads 1 to 4) | Lines kept low; Tx, Tune and Test keying refused ("Set USB SEND to OFF"); Rig control gives the menu path | `cat.test.ts` |
+| Keying by CAT with the Tx output on System default, or the chosen device missing, refused or still switching | Tx and Tune refused before PTT on; checked again after the OK, and a refusal then sends PTT off with no audio; Rig control names the device to choose | `cat.test.ts`, `rig-tx.spec.ts`, `rig-kx2-tx.spec.ts` (the advice with System default) |
+| The browser refuses the chosen output (`setSinkId` rejects other than `NotFoundError`), as before microphone permission | Tried again once audio runs and on every device change while the device is listed | `sink.test.ts`, `output.spec.ts` |
 | The practice band on, with Key the radio with CAT on | No PTT for any transmission or Tune, no dial shift; Test keying refused; turning the practice band on or off runs Halt first. Halt still sends PTT off, which keys nothing | `cat.test.ts`, `rig-practice.spec.ts` (a practice CQ and Tune send no PTT frame to the fake IC-705) |
 | Halt, and Esc | Stops all output; PTT off at once while Key the radio with CAT is on or RR73 may hold PTT | `scheduler.test.ts`, `cat.test.ts`, `rig.spec.ts` (Halt during a CQ: PTT off within 50 ms; during Tune) |
 | End of a transmission, Tune or Test keying | PTT off the output latency and 100 ms after the audio ends, confirmed by a read | `scheduler.test.ts`, `cat.test.ts`, `rig.spec.ts` (CQ, RTTY, Tune, Test keying) |
@@ -311,6 +316,7 @@ Measured in Chromium 153 (headless on Linux, with fake devices):
 - `setSinkId` on a running context fires `suspended` and then `running` within 5 ms. The capture engine ignores state changes during the switch, resumes the context if the switch leaves it suspended, and starts the clock mapping over, because each device has its own output latency.
 - A context created with a `sinkId` naming a missing device starts and then suspends, with its `sinkId` back to the default. RR73 never passes `sinkId` to the constructor: it calls `setSinkId` after creating the context.
 - `setSinkId` with a missing device rejects with `NotFoundError` and leaves the output where it was. RR73 then plays to the system default, the Output row says the chosen output is not connected, and RR73 tries again when a device is plugged in.
+- Any other rejection counts as refused. The engine switches a new context to the chosen output as the context starts, which for Start audio is before the browser asks for the microphone. A browser that refuses a device until then would leave the output on the system default for good, so RR73 applies a refused or missing output again once audio runs, and on every device change while the device is listed. Unverified: whether Chromium on Windows refuses `setSinkId` before microphone permission; the retry covers it either way.
 - Fake devices list 3 outputs, so the end-to-end test runs in Chromium.
 - Playwright's Chromium gives devices new IDs on every page load, as a private window does. RR73 saves the output's and the input's names with their IDs and finds them again by name when the ID is gone (`matchDevice` in `lib/audio/sink.ts`), unless 2 devices share the name. An input under a new ID is found before Start audio opens it, or when Start audio or Resume audio fails to open it by ID. Unverified: whether Windows gives a USB audio device a new ID on another USB port.
 
@@ -331,7 +337,7 @@ Changing the output halts Tune and any transmission, so no transmission moves be
 - `web/e2e/rig-practice.spec.ts` (Playwright `practice`): the fake IC-705 connected with Key the radio with CAT on, the practice band turned on, a practice CQ on air and Tune send no PTT frame, and Test keying is off.
 - `web/e2e/rig-tx.spec.ts` (Playwright `tx-cq`, after the rest of the suite): the output recorded (`e2e/tap.ts`) and PTT timed against it on the audio clock: a CQ with the switch off (no PTT) and on (PTT before and after the audio, at slot + 0.5 s), Halt, Tune with the switch off and on, RTTY, audio stopping and a lost port. With Keep Tx audio centred: a CQ at 2800 Hz sends the Tx dial, PTT on, the audio at 1800 Hz (decoded) on time, PTT off and the receive dial, with the fake radio reporting each dial set by transceive and Operate showing the receive dial throughout, then Halt; and Tune at 2800 Hz plays 1800 Hz on the dial 1000 Hz up. It skips, and fails on GitHub Actions, when the audio clock falls behind real time (docs/testing.md).
 - `e2e/layout.spec.ts` in WebKit checks that Settings has no Rig control without Web Serial.
-- The output and input choices: unit tests of the engine and the settings, and `e2e/output.spec.ts` in the chromium project with fake devices.
+- The output and input choices: unit tests of the engine and the settings, and `e2e/output.spec.ts` in the chromium project with fake devices, including an output refused until the microphone is allowed and one refused while audio runs, tried again on a device change. `rig-tx.spec.ts` and `rig-kx2-tx.spec.ts` choose a fake output before keying by CAT, and check Rig control's advice with System default.
 
 The simulator's behaviour where the guide is silent is its own choice and is listed in `crates/rr73-cat/src/sim.rs`.
 

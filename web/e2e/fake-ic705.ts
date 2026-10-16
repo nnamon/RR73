@@ -220,6 +220,18 @@ export async function connect(page: Page) {
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
 }
 
+/**
+ * Settings › Radio and audio › Output to one of Chromium's fake outputs (the projects with fake
+ * media devices list 2). Keying by CAT, a transmission goes only to a chosen output.
+ */
+export async function chooseOutput(page: Page, label = 'Fake Audio Output 1') {
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  const select = page.getByRole('combobox', { name: /^Output/ });
+  await expect(select.locator('option', { hasText: label })).toHaveCount(1);
+  await select.selectOption({ label });
+  await expect(select.locator('option:checked')).toHaveText(label);
+}
+
 /** Turns Key the radio with CAT on or off in Settings › Rig control. */
 export async function setKeying(page: Page, on: boolean) {
   await page.evaluate(() => (location.hash = '#/settings/rig'));

@@ -34,7 +34,7 @@ import { DISPLAY_RATE } from '../waterfall/spectrum';
 import { settings, updateSettings } from './settings.svelte';
 import { practice, txLevel } from './practice.svelte';
 import { noteLoadFailure } from '../app/update.svelte';
-import { dialNow, radioNotice, rig, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
+import { dialNow, provideTxOutput, radioNotice, rig, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 import { STATUS } from '../qso/status';
 import { capturesHidden } from '../app/platform';
@@ -267,9 +267,10 @@ function getEngine(): CaptureEngine {
       audio.peakDb = FLOOR_DB;
     }
     wake?.set(s.status === 'running' || tx.tuning);
-    // Device names are readable once the microphone is allowed.
+    // Device names are readable once the microphone is allowed, and an output the browser refused
+    // before then may be allowed now.
     if (changed && s.status === 'running') {
-      void refindOutput();
+      void refindOutput().then(retryOutput);
       void refindInput();
     }
   });
@@ -707,7 +708,7 @@ export async function outputDevices(): Promise<MediaDeviceInfo[]> {
 export function useOutput(deviceId: string | null): Promise<OutputState> {
   halt();
   // Picked from the list, so it is there.
-  outputListed = true;
+  outputSeen.listed = true;
   return getEngine().useOutput(deviceId);
 }
 
@@ -723,9 +724,24 @@ export async function refindOutput(): Promise<void> {
   await updateSettings({ outputDeviceId: id });
   if (engine && engine.output.sinkId !== id) {
     halt();
-    outputListed = true;
+    outputSeen.listed = true;
     await engine.useOutput(id);
   }
+}
+
+/**
+ * Applies the chosen output again after the browser refused it or could not find it, as when the
+ * context switched to it before the microphone was allowed. Only Tune plays before audio runs, and
+ * it stops before the output moves.
+ */
+async function retryOutput(): Promise<void> {
+  const e = engine;
+  if (!e || !outputChoiceSupported()) return;
+  const { sinkId, error } = e.output;
+  if (sinkId === null || (error !== 'failed' && error !== 'missing')) return;
+  if (tx.tuning) halt();
+  outputSeen.listed = true;
+  await e.useOutput(sinkId);
 }
 
 /** Saves a recent slot through the share sheet, or returns download links. Call from a tap. */
@@ -806,6 +822,15 @@ export function startTune(hz: number = settings.txHz) {
       refuseTune(STATUS.pttTaken);
       return;
     }
+    // The context made at the tap switches to the chosen output as it starts: a refusal since then
+    // leaves the tone with nowhere to go but another device.
+    const late = tuneGate();
+    if (late) {
+      k.release();
+      tx.tuning = false;
+      refuseTune(late);
+      return;
+    }
     playTune(ctx, hz, k, hz - shiftHz);
   });
 }
@@ -866,8 +891,21 @@ if (typeof document !== 'undefined') {
 }
 
 // The chosen output going (a radio switched off) halts any transmission, so none carries on
-// through another device; its return switches back to it.
-let outputListed = true;
+// through another device; its return, or any device change after the browser refused it, switches
+// back to it. State, so the Tx output for CAT keying follows it.
+const outputSeen = $state({ listed: true });
+
+// Keying by CAT, a transmission goes only to the chosen output (lib/state/radio.svelte.ts).
+provideTxOutput(() => {
+  if (!outputChoiceSupported()) return 'ok';
+  const chosen = settings.outputDeviceId;
+  if (chosen === null) return 'default';
+  const { sinkId, error } = audio.output;
+  if (error === 'missing' || !outputSeen.listed) return 'missing';
+  if (error !== null) return 'refused';
+  return sinkId === chosen ? 'ok' : 'switching';
+});
+
 if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
   const md = navigator.mediaDevices;
   md.addEventListener('devicechange', async () => {
@@ -875,9 +913,9 @@ if (typeof navigator !== 'undefined' && navigator.mediaDevices) {
     await refindOutput();
     const { sinkId, error } = engine.output;
     const devices = await md.enumerateDevices().catch(() => []);
-    const change = outputChange(sinkId, outputListed, devices, error);
+    const change = outputChange(sinkId, outputSeen.listed, devices, error);
     if (change === null) return;
-    outputListed = change === 'back';
+    outputSeen.listed = change === 'back';
     halt();
     if (change === 'back') void engine.useOutput(sinkId);
   });
