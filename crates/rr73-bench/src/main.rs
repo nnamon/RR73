@@ -108,6 +108,11 @@ enum Command {
         /// With --ap-dx: the other station's audio frequency, in Hz.
         #[arg(long, value_name = "HZ", requires = "ap_dx")]
         ap_dx_hz: Option<f32>,
+        /// Carry the callsigns learnt in a slot to the next slot of the same directory, in
+        /// name order (time order for recordings), as the app does; else each slot starts with
+        /// none.
+        #[arg(long)]
+        carry_callsigns: bool,
         /// Corpus files or directories.
         #[arg(required_unless_present = "synth")]
         paths: Vec<PathBuf>,
@@ -204,6 +209,10 @@ enum Command {
         /// subtracted, and read the block demodulator there.
         #[arg(long)]
         oracle: bool,
+        /// Carry learnt callsigns from slot to slot in each directory, in time order, as
+        /// `run --carry-callsigns` does.
+        #[arg(long)]
+        carry_callsigns: bool,
         /// JSON file for the per-miss records.
         #[arg(long)]
         out: Option<PathBuf>,
@@ -355,6 +364,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             ap_my,
             ap_dx,
             ap_dx_hz,
+            carry_callsigns,
             paths,
         } => {
             let opts = run::RunOptions {
@@ -379,6 +389,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                     dx_call: ap_dx,
                     dx_hz: ap_dx_hz,
                 }),
+                carry_callsigns,
             };
             let (results, path) = run::run(&opts)?;
             print!("{}", run::summary_table(&results));
@@ -480,6 +491,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             threads,
             reference,
             oracle,
+            carry_callsigns,
             out,
             paths,
         } => {
@@ -491,6 +503,7 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
                 threads,
                 reference,
                 oracle,
+                carry_callsigns,
             })?;
             if let Some(path) = &out {
                 let text = serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?;

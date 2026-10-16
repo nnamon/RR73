@@ -27,6 +27,7 @@ pub const SETS: &[&str] = &[
     "ap-sweep",
     "ft4-sweep",
     "band-edge",
+    "overlap",
 ];
 
 /// The operator and the QSO partner of the `ap-sweep` set.
@@ -132,6 +133,12 @@ pub const BAND_EDGE_SOFT: Passband = Passband {
     skirt_hz: 400.0,
     stop_db: -70.0,
 };
+
+/// SNR steps of the stronger signal of each pair in the `overlap` set, in dB: FT8, then FT4.
+pub fn overlap_steps(mode: Mode) -> impl Iterator<Item = i32> {
+    let from = if mode == Mode::Ft8 { -16 } else { -12 };
+    (from..=from + 20).step_by(4)
+}
 
 /// SNR steps of the `wspr-snr-sweep` set, in dB.
 pub fn wspr_sweep_steps() -> impl Iterator<Item = i32> {
@@ -452,6 +459,40 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
             ] {
                 for i in 0..opts.noise_count {
                     push(sub, i, &mut |_| JobScene::Filtered(noise_only(mode), passband));
+                }
+            }
+        }
+        "overlap" => {
+            // Two random messages per slot sharing spectrum, as on a busy band: base tones 0 to
+            // 50 Hz apart in FT8 (0 to 80 Hz in FT4, whose signals are wider), starts 0 to 1 s
+            // apart (0 to 0.5 s in FT4), either one first. The stronger at each step of
+            // `overlap_steps`, the weaker 0 to 10 dB below it; steady in AWGN, and with
+            // moderate fading in FT8.
+            for (sub, mode, fading, df_max, dt_max) in [
+                ("ft8", Mode::Ft8, None, 50.0, 1.0),
+                ("ft8-fading", Mode::Ft8, Some(Watterson::MODERATE), 50.0, 1.0),
+                ("ft4", Mode::Ft4, None, 80.0, 0.5),
+            ] {
+                let mut i = 0;
+                for snr in overlap_steps(mode) {
+                    for _ in 0..opts.per_step {
+                        push(sub, i, &mut |r| {
+                            use rand::Rng;
+                            let mut s = single(mode, f64::from(snr), fading, r);
+                            let (f, dt) = (s.signals[0].freq_hz, s.signals[0].dt_s);
+                            let df =
+                                r.random_range(0.0..df_max) * if r.random_bool(0.5) { 1.0 } else { -1.0 };
+                            let ddt =
+                                r.random_range(0.0..dt_max) * if r.random_bool(0.5) { 1.0 } else { -1.0 };
+                            let weaker = f64::from(snr) - r.random_range(0.0..10.0);
+                            let mut b =
+                                SimSignal::new(messages::message(r), (f + df).max(200.0), dt + ddt, weaker);
+                            b.fading = fading;
+                            s.signals.push(b);
+                            JobScene::Ft(s)
+                        });
+                        i += 1;
+                    }
                 }
             }
         }

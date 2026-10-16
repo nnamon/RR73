@@ -5,6 +5,11 @@
 //! entry match at most once. When several pairs qualify, the closest pairs are taken first
 //! (frequency and DT differences, each relative to its tolerance, summed), ties broken by
 //! index, so the result does not depend on hash order or thread timing.
+//!
+//! A hashed callsign that an entry shows unresolved (`<...>`) matches any callsign a decode
+//! shows in its place (`<K1ABC>`): the message is the same, and the decoder knew the callsign
+//! from an earlier decode, as `rr73-bench run --carry-callsigns` lets it. An entry that shows the
+//! callsign needs it in the decode.
 
 use serde::{Deserialize, Serialize};
 
@@ -35,6 +40,27 @@ pub fn normalise_text(text: &str) -> String {
         .map(str::to_uppercase)
         .collect::<Vec<_>>()
         .join(" ")
+}
+
+/// `true` when normalised decode text `decode` carries the message of normalised entry text
+/// `entry`: equal, or equal but for callsigns the entry shows unresolved (`<...>`) and the
+/// decode shows resolved (`<K1ABC>`).
+pub fn same_message(decode: &str, entry: &str) -> bool {
+    if decode == entry {
+        return true;
+    }
+    if !entry.contains("<...>") {
+        return false;
+    }
+    let (mut d, mut e) = (decode.split(' '), entry.split(' '));
+    loop {
+        match (d.next(), e.next()) {
+            (None, None) => return true,
+            (Some(a), Some(b)) if a == b => {}
+            (Some(a), Some("<...>")) if a.len() > 2 && a.starts_with('<') && a.ends_with('>') => {}
+            _ => return false,
+        }
+    }
 }
 
 /// The outcome of scoring one slot.
@@ -72,7 +98,7 @@ pub fn match_entries(decodes: &[Entry], expected: &[Entry], tol: Tolerance) -> S
     let mut pairs: Vec<(f64, usize, usize)> = Vec::new();
     for (i, d) in decodes.iter().enumerate() {
         for (j, e) in expected.iter().enumerate() {
-            if dec_text[i] != exp_text[j] {
+            if !same_message(&dec_text[i], &exp_text[j]) {
                 continue;
             }
             let df = (d.freq_hz - e.freq_hz).abs();
@@ -160,6 +186,24 @@ mod tests {
         assert_eq!(s.matched, 2);
         assert_eq!(s.unique, 1);
         assert_eq!(s.entry_match, vec![Some(1), Some(0)]);
+    }
+
+    #[test]
+    fn an_unresolved_hash_in_the_entry_matches_a_resolved_one() {
+        let expected = [
+            e("<...> W9XYZ -12", 1000.0, 0.0),
+            e("<K1ABC> W9XYZ R-05", 1500.0, 0.0),
+        ];
+        let decodes = [
+            e("<K1ABC> W9XYZ -12", 1000.0, 0.0),
+            e("<...> W9XYZ R-05", 1500.0, 0.0),
+        ];
+        let s = match_entries(&decodes, &expected, Tolerance::default());
+        // The decode knows more than the first entry; the second entry knows more than the decode.
+        assert_eq!(s.entry_match, vec![Some(0), None]);
+        assert!(same_message("<...> W9XYZ -12", "<...> W9XYZ -12"));
+        assert!(!same_message("<K1ABC> W9XYZ", "<...> W9XYZ -12"));
+        assert!(!same_message("K1ABC W9XYZ -12", "<...> W9XYZ -12"));
     }
 
     #[test]

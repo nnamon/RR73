@@ -277,6 +277,7 @@ mod tests {
             audio_fill: None,
             silent_s: Vec::new(),
             then: Vec::new(),
+            carry_callsigns: false,
             environment: Environment {
                 os: String::new(),
                 arch: String::new(),

@@ -39,6 +39,10 @@ pub struct Results {
     /// Later stages (`--then`), each a preset name followed by `key=value` overrides.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub then: Vec<String>,
+    /// `true` when callsigns learnt in a slot carried to the next slot of its directory, in time
+    /// order, as in the app (`--carry-callsigns`); else every slot started with none.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub carry_callsigns: bool,
     /// Machine and build.
     pub environment: Environment,
     /// Wall time of the whole run (reading, decoding, scoring), in seconds.

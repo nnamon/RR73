@@ -128,7 +128,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 ### rr73-corpus
 
 - Reads and writes slots as described in `docs/corpus.md`.
-- `match_entries(decodes, expected) -> SlotScore`, where `SlotMeta::expected` picks the truth for synthetic slots or a named reference for recorded ones. Matching is by message text, then frequency within 10 Hz and DT within 0.5 s.
+- `match_entries(decodes, expected) -> SlotScore`, where `SlotMeta::expected` picks the truth for synthetic slots or a named reference for recorded ones. Matching is by message text, then frequency within 10 Hz and DT within 0.5 s; a hashed callsign an entry shows as `<...>` matches any callsign a decode shows there.
 
 ### rr73-bench
 

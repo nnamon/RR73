@@ -214,6 +214,7 @@ pub fn import(opts: &ImportOptions) -> Result<Results, String> {
         audio_fill: None,
         silent_s: Vec::new(),
         then: Vec::new(),
+        carry_callsigns: false,
         environment: util::environment(0),
         wall_s: 0.0,
         slim: false,

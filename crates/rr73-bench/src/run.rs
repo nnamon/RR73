@@ -50,6 +50,10 @@ pub struct RunOptions {
     /// A QSO context for a priori decoding of every slot, in place of the one a slot's
     /// metadata gives (`ap` in its source, as the `ap-sweep` set writes).
     pub ap: Option<ApContext>,
+    /// Carry the callsigns learnt in a slot to the next slot of the same directory, decoding
+    /// each directory's slots in name order (time order for recordings) as the app decodes slot
+    /// after slot. Directories still run in parallel.
+    pub carry_callsigns: bool,
 }
 
 /// The rest of a slot cut short by `--audio-s`.
@@ -75,6 +79,8 @@ struct Plan<'a> {
     fill: AudioFill,
     silent_s: Vec<(f64, f64)>,
     ap: Option<ApContext>,
+    /// Keep the callsign hashes from slot to slot (`--carry-callsigns`).
+    carry: bool,
 }
 
 /// The QSO context for a slot: the run's, else the slot's own (`ap` in its source:
@@ -162,6 +168,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         fill: opts.audio_fill,
         silent_s: opts.silent_s.clone(),
         ap: opts.ap.clone(),
+        carry: opts.carry_callsigns,
     };
     let files = if opts.paths.is_empty() {
         Vec::new()
@@ -187,10 +194,32 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
     let start = Instant::now();
     let reference = opts.reference.as_deref();
     let mut slots: Vec<SlotResult> = pool.install(|| {
-        let mut read: Vec<SlotResult> = files
-            .par_iter()
-            .map_init(Contexts::default, |ctx, f| process_file(f, &plan, ctx, reference))
-            .collect();
+        let mut read: Vec<SlotResult> = if plan.carry {
+            // One context per directory, its slots in name order.
+            let mut groups: Vec<Vec<&SlotFiles>> = Vec::new();
+            let mut sorted: Vec<&SlotFiles> = files.iter().collect();
+            sorted.sort_by(|a, b| a.wav.cmp(&b.wav));
+            for f in sorted {
+                match groups.last_mut() {
+                    Some(g) if g[0].wav.parent() == f.wav.parent() => g.push(f),
+                    _ => groups.push(vec![f]),
+                }
+            }
+            groups
+                .par_iter()
+                .flat_map_iter(|g| {
+                    let mut ctx = Contexts::default();
+                    g.iter()
+                        .map(|f| process_file(f, &plan, &mut ctx, reference))
+                        .collect::<Vec<_>>()
+                })
+                .collect()
+        } else {
+            files
+                .par_iter()
+                .map_init(Contexts::default, |ctx, f| process_file(f, &plan, ctx, reference))
+                .collect()
+        };
         let rendered: Vec<SlotResult> = jobs
             .par_iter()
             .map_init(Contexts::default, |ctx, j| process_job(j, &plan, ctx))
@@ -214,6 +243,7 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         audio_fill: opts.audio_s.map(|_| opts.audio_fill),
         silent_s: opts.silent_s.iter().map(|&(a, b)| [a, b]).collect(),
         then: opts.then.clone(),
+        carry_callsigns: opts.carry_callsigns,
         environment: util::environment(threads),
         wall_s,
         slim: false,
@@ -224,6 +254,9 @@ pub fn run(opts: &RunOptions) -> Result<(Results, PathBuf), String> {
         let mut key = opts.overrides.clone();
         key.extend(opts.then.iter().map(|t| format!("then {t}")));
         key.extend(opts.silent_s.iter().map(|(a, b)| format!("silent {a}:{b}")));
+        if opts.carry_callsigns {
+            key.push("carry-callsigns".into());
+        }
         default_path(&git_sha, &opts.preset, &key)
     });
     results::save(&results, &out)?;
@@ -350,8 +383,10 @@ fn run_decoder(
                 Mode::Ft4
             };
             // Each slot starts from an empty hash table so results do not depend on thread
-            // order.
-            ctx.ft.hashes = CallsignHashes::new();
+            // order, unless the run carries callsigns from slot to slot in time order.
+            if !plan.carry {
+                ctx.ft.hashes = CallsignHashes::new();
+            }
             ctx.ft.ap = ap_context(meta, plan);
             let mut cut = samples.to_vec();
             for &(a, b) in &plan.silent_s {
@@ -671,6 +706,7 @@ mod tests {
             fill: AudioFill::Absent,
             silent_s: Vec::new(),
             ap: None,
+            carry: false,
         };
         let r = process_job(job, &plan, &mut Contexts::default());
         assert_eq!((r.expected, r.matched, r.unique), (1, 1, 0), "{:?}", r.decodes);

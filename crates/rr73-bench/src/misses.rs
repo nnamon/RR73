@@ -61,6 +61,9 @@ pub struct MissOptions {
     /// Decode each search, failed and other-text miss again with every other reference entry
     /// subtracted ([`Miss::oracle`]).
     pub oracle: bool,
+    /// Carry learnt callsigns from slot to slot in each directory, in name order, as
+    /// `run --carry-callsigns` does.
+    pub carry_callsigns: bool,
 }
 
 /// Distance in frequency within which a candidate counts as near an entry, in Hz.
@@ -226,28 +229,43 @@ pub fn misses(opts: &MissOptions) -> Result<MissReport, String> {
         .build()
         .map_err(|e| e.to_string())?;
     let reference = opts.reference.as_deref();
+    let analyse = |f: &rr73_corpus::SlotFiles, ctx: &mut DecodeContext| -> Option<(SlotCounts, Vec<Miss>)> {
+        let slot = read_slot(f).ok()?;
+        let mode = match slot.meta.mode {
+            SlotMode::Ft8 => Mode::Ft8,
+            SlotMode::Ft4 => Mode::Ft4,
+            _ => return None,
+        };
+        let expected = slot.meta.expected(reference);
+        if expected.is_empty() || slot.meta.truth.is_some() {
+            return None;
+        }
+        Some(analyse_slot(
+            &f.wav.display().to_string(),
+            &slot.samples,
+            mode,
+            expected,
+            &stages,
+            opts.oracle,
+            ctx,
+        ))
+    };
+    // One context per directory and its slots in name order with --carry-callsigns, as `run`.
+    let mut groups: Vec<Vec<&rr73_corpus::SlotFiles>> = Vec::new();
+    let mut sorted: Vec<&rr73_corpus::SlotFiles> = files.iter().collect();
+    sorted.sort_by(|a, b| a.wav.cmp(&b.wav));
+    for f in sorted {
+        match groups.last_mut() {
+            Some(g) if opts.carry_callsigns && g[0].wav.parent() == f.wav.parent() => g.push(f),
+            _ => groups.push(vec![f]),
+        }
+    }
     let per_slot: Vec<Option<(SlotCounts, Vec<Miss>)>> = pool.install(|| {
-        files
+        groups
             .par_iter()
-            .map(|f| {
-                let slot = read_slot(f).ok()?;
-                let mode = match slot.meta.mode {
-                    SlotMode::Ft8 => Mode::Ft8,
-                    SlotMode::Ft4 => Mode::Ft4,
-                    _ => return None,
-                };
-                let expected = slot.meta.expected(reference);
-                if expected.is_empty() || slot.meta.truth.is_some() {
-                    return None;
-                }
-                Some(analyse_slot(
-                    &f.wav.display().to_string(),
-                    &slot.samples,
-                    mode,
-                    expected,
-                    &stages,
-                    opts.oracle,
-                ))
+            .flat_map_iter(|g| {
+                let mut ctx = DecodeContext::new();
+                g.iter().map(|f| analyse(f, &mut ctx)).collect::<Vec<_>>()
             })
             .collect()
     });
@@ -275,6 +293,7 @@ fn analyse_slot(
     expected: &[Entry],
     stages: &[(String, DecoderConfig)],
     oracle: bool,
+    ctx: &mut DecodeContext,
 ) -> (SlotCounts, Vec<Miss>) {
     let layout = rr73_decode::pipeline::layout(mode);
     let audio = SlotAudio::new(samples, mode);
@@ -282,11 +301,12 @@ fn analyse_slot(
         .iter()
         .map(|(name, c)| Stage::new(name.clone(), c.clone()))
         .collect();
-    let mut session = DecodeSession::with_context(&audio, session_stages, DecodeContext::new());
+    let mut session = DecodeSession::with_context(&audio, session_stages, std::mem::take(ctx));
     session.set_trace(true);
     session.run_to_end();
     let decodes = session.decodes().to_vec();
     let trace: Vec<CandidateTrace> = session.trace().to_vec();
+    *ctx = session.into_context();
 
     let entries: Vec<Entry> = decodes
         .iter()
@@ -1044,7 +1064,8 @@ mod tests {
             "subtract-3-osd2".to_string(),
             DecoderConfig::preset("subtract-3-osd2").expect("preset"),
         )];
-        let (counts, misses) = analyse_slot("x.wav", &samples, Mode::Ft8, &expected, &stages, true);
+        let mut ctx = DecodeContext::new();
+        let (counts, misses) = analyse_slot("x.wav", &samples, Mode::Ft8, &expected, &stages, true, &mut ctx);
         assert_eq!((counts.expected, counts.matched), (2, 1));
         assert_eq!(misses.len(), 1);
         let m = &misses[0];
