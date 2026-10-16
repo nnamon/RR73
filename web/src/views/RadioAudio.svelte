@@ -8,14 +8,13 @@
   import { signed, utcHm, utcTime } from '../lib/clock/format';
   import { timingReport, type TimingSnapshot } from '../lib/clock/timing';
   import { clockText } from '../lib/clock/calibration';
-  import { dialHz } from '../lib/radio/bands';
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
   import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindInput, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
-  import { rigConnected, txKeyer } from '../lib/state/radio.svelte';
+  import { plannedDialHz, rig, rigConnected, txKeyer } from '../lib/state/radio.svelte';
   import { alcAdvice } from '../lib/radio/alc';
   import { advice } from '../lib/app/advice';
   import { Device, device } from '../lib/app/platform';
@@ -203,6 +202,10 @@
     void updateSettings({ inputDeviceId: id, inputDeviceLabel: label });
     void useInput(id);
   }
+
+  // Tune goes out on the radio's dial whatever RR73's band: the dial rig control reads, else the
+  // band's dial as the band sheet sets it.
+  const tuneDialHz = $derived(rigConnected() && rig.hz !== null ? rig.hz : plannedDialHz(settings.band, settings.mode));
 
   // With rig control keying the radio, the chime keys nothing: the radio's OK to PTT replaces the keying check.
   const catKeys = $derived(txKeyer() !== null);
@@ -437,7 +440,7 @@
   </div>
 </section>
 
-<TuneSheet bind:open={tuneOpen} dialHz={dialHz(settings.band, settings.mode)} />
+<TuneSheet bind:open={tuneOpen} dialHz={tuneDialHz} />
 
 <style>
   .sub {

@@ -2,6 +2,7 @@
 // counts down, and Halt stops the tone at once. Web Audio is instrumented in the page to record what reaches the
 // destination.
 import { expect, test, type Page } from '@playwright/test';
+import { connect, installFakeIc705 } from './fake-ic705';
 
 declare global {
   interface Window {
@@ -129,6 +130,29 @@ test('Tune transmits at the Tx frequency set on the waterfall', async ({ page })
   const sheet = page.getByRole('dialog', { name: 'Tuning' });
   await expect(sheet).toContainText(`${hz} Hz on 14.074 MHz`);
   expect(await log(page)).toContain(`start ${hz} Hz`);
+  await sheet.getByRole('button', { name: 'Halt' }).click();
+  await expect(sheet).toBeHidden();
+});
+
+test('Tune names the dial the radio reports while rig control reads one, on any band', async ({ page }) => {
+  await installFakeIc705(page, { hz: 14_076_000 });
+  await page.goto('./');
+  await connect(page);
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  const tune = page.getByRole('button', { name: /^Tune for 10 s/ });
+  const sheet = page.getByRole('dialog', { name: 'Tuning' });
+  await tune.click();
+  await expect(sheet).toContainText('1500 Hz on 14.076 MHz');
+  await sheet.getByRole('button', { name: 'Halt' }).click();
+  await expect(sheet).toBeHidden();
+
+  // 4m is outside RR73's bands: the band stays 20m, and Tune goes out on the radio's dial.
+  await page.evaluate(() => window.__rig.turnDial(70_100_000));
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await expect(page.getByTestId('rig-dial')).toContainText('70.100');
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await tune.click();
+  await expect(sheet).toContainText('1500 Hz on 70.100 MHz');
   await sheet.getByRole('button', { name: 'Halt' }).click();
   await expect(sheet).toBeHidden();
 });

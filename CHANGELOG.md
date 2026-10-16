@@ -9,6 +9,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The level advice under Tune follows the connected radio: within the ALC zone on an IC-705, 4 to 5 ALC bars on a KX2, and both without a radio.
 - Settings › Radio and audio › Timing shows how long the decoder takes per slot, the last slot and the 95th percentile of recent ones, and counts the slots it could not decode because it was still busy. The timing report carries both.
 - Resume audio finds the radio's audio input after its USB cable moved to another port, in the same tap. It took a second tap, on Start audio.
+- Tune's sheet names the radio's dial while rig control reads one, on any band. It named the band's usual dial.
 
 ## 0.24.0 · 2026-10-16
 

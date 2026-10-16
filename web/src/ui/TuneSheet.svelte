@@ -10,18 +10,23 @@
   import { halt, tx } from '../lib/state/station.svelte';
   import { settings } from '../lib/state/settings.svelte';
 
+  /** `dialHz`: the radio's dial while rig control reads one, else the band's dial in RR73. */
   let { open = $bindable(false), dialHz }: { open: boolean; dialHz: number | null } = $props();
 
   let started = $state(false);
-  // The frequency of the tone playing, fixed at the start.
+  // The frequency of the tone playing and the dial under it, fixed at the start: with Keep Tx audio
+  // centred the radio's dial moves for the tone, and the RF stays where these two put it.
   let playingHz = $state(0);
+  let playingDialHz = $state<number | null>(null);
   const left = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
-  const where = $derived(dialHz === null ? 'the dial frequency' : mhz(dialHz));
+  const shownDialHz = $derived(started ? playingDialHz : dialHz);
+  const where = $derived(shownDialHz === null ? 'the dial frequency' : mhz(shownDialHz));
 
   // The sheet closes when the tone ends.
   $effect(() => {
     if (open && !started && tx.tuning) {
       playingHz = settings.txHz;
+      playingDialHz = dialHz;
       started = true;
     } else if (started && !tx.tuning) {
       started = false;
