@@ -182,6 +182,25 @@ pub struct BlockWorkspace {
     erased: Vec<bool>,
     others: Vec<Complex32>,
     next: Vec<Complex32>,
+    /// The GFSK frequency pulse at [`SAMPLES_PER_SYMBOL`] samples per symbol over three
+    /// symbols, for the mode in `pulse_for`, in tone spacings.
+    pulse: Vec<f64>,
+    pulse_for: Option<Mode>,
+    /// An interferer's model and its products with the baseband.
+    model: Vec<Complex32>,
+    products: Vec<Complex64>,
+}
+
+/// A signal to remove from a candidate's baseband before refinement: a neighbour whose tones
+/// are known or guessed (experiment 0012).
+#[derive(Clone, Copy, Debug)]
+pub struct Interferer<'a> {
+    /// Channel tones, one per symbol of the layout.
+    pub tones: &'a [u8],
+    /// Frequency of tone 0, in Hz.
+    pub freq_hz: f64,
+    /// Start of symbol 0, in seconds from the slot start.
+    pub start_s: f64,
 }
 
 impl std::fmt::Debug for BlockWorkspace {
@@ -327,6 +346,20 @@ impl BlockWorkspace {
         start_s: f32,
         reach: (f32, f32),
     ) -> Option<Refined> {
+        self.amplitudes_without(layout, plans, freq_hz, start_s, reach, &[])
+    }
+
+    /// As [`BlockWorkspace::amplitudes`], with each of `interferers` removed from the
+    /// candidate's baseband before refinement (experiment 0012). With none, the same values.
+    pub fn amplitudes_without(
+        &mut self,
+        layout: &FrameLayout,
+        plans: &mut FftPlans,
+        freq_hz: f32,
+        start_s: f32,
+        reach: (f32, f32),
+        interferers: &[Interferer<'_>],
+    ) -> Option<Refined> {
         let (mode, g) = self.prepared?;
         if mode != layout.mode || !freq_hz.is_finite() || !start_s.is_finite() {
             return None;
@@ -355,6 +388,9 @@ impl BlockWorkspace {
         }
         let inv = plans.inverse(len);
         fft::process(inv.as_ref(), &mut self.baseband, &mut self.fft_scratch);
+        for it in interferers {
+            self.remove_interferer(layout, g, k0 as f64 * df, it);
+        }
 
         // Start and frequency: the coherent power of each sync group, summed over groups.
         let rate = g.rate_hz();
@@ -509,6 +545,83 @@ impl BlockWorkspace {
             start_s: (first as f64 + late) / rate,
             sync_matched,
         })
+    }
+
+    /// Removes `it` from the baseband, whose 0 Hz lies at `zero_hz` in the audio: rebuilds its
+    /// GFSK waveform at the baseband rate (the codec's Gaussian pulse, first and last tones
+    /// extended), estimates its complex amplitude as the mean over one symbol of the baseband
+    /// times the conjugate model, as the slot subtraction does at 12 kHz, and subtracts the
+    /// product. Samples outside the baseband are left out of the mean.
+    fn remove_interferer(&mut self, layout: &FrameLayout, g: Geometry, zero_hz: f64, it: &Interferer<'_>) {
+        let count = layout.symbols;
+        if it.tones.len() != count || count == 0 || !it.freq_hz.is_finite() || !it.start_s.is_finite() {
+            return;
+        }
+        let n = SAMPLES_PER_SYMBOL;
+        if self.pulse_for != Some(layout.mode) {
+            let bt = f64::from(layout.mode.params().gfsk_bt);
+            let k = std::f64::consts::PI * (2.0 / std::f64::consts::LN_2).sqrt();
+            self.pulse.clear();
+            self.pulse.extend((0..3 * n).map(|i| {
+                let t = i as f64 / n as f64 - 1.5;
+                (crate::subtract::erf(k * bt * (t + 0.5)) - crate::subtract::erf(k * bt * (t - 0.5))) / 2.0
+            }));
+            self.pulse_for = Some(layout.mode);
+        }
+        let rate = g.rate_hz();
+        let first = (it.start_s * rate).round() as isize;
+        let carrier = std::f64::consts::TAU * (it.freq_hz - zero_hz) / rate;
+        let step = std::f64::consts::TAU / n as f64;
+        let tone = |i: isize| f64::from(it.tones[i.clamp(0, count as isize - 1) as usize]);
+        self.model.clear();
+        let mut psi = 0.0f64;
+        for s in 0..count as isize {
+            let near = [tone(s - 1), tone(s), tone(s + 1)];
+            for r in 0..n {
+                let dev =
+                    near[0] * self.pulse[2 * n + r] + near[1] * self.pulse[n + r] + near[2] * self.pulse[r];
+                let (sin, cos) = (psi as f32).sin_cos();
+                self.model.push(Complex32::new(cos, sin));
+                psi = (psi + carrier + step * dev).rem_euclid(std::f64::consts::TAU);
+            }
+        }
+        let len = self.baseband.len() as isize;
+        let inside = |m: usize| {
+            let i = first + m as isize;
+            (0..len).contains(&i).then_some(i as usize)
+        };
+        self.products.clear();
+        for (m, c) in self.model.iter().enumerate() {
+            let x = inside(m).map_or(Complex32::new(0.0, 0.0), |i| self.baseband[i]);
+            let p = x * c.conj();
+            self.products
+                .push(Complex64::new(f64::from(p.re), f64::from(p.im)));
+        }
+        let total = self.model.len();
+        let half = n / 2;
+        let (mut lo, mut hi, mut held) = (0usize, 0usize, 0usize);
+        let mut sum = Complex64::new(0.0, 0.0);
+        for m in 0..total {
+            while hi < (m + half + 1).min(total) {
+                if inside(hi).is_some() {
+                    sum += self.products[hi];
+                    held += 1;
+                }
+                hi += 1;
+            }
+            while lo < m.saturating_sub(half) {
+                if inside(lo).is_some() {
+                    sum -= self.products[lo];
+                    held -= 1;
+                }
+                lo += 1;
+            }
+            if let (Some(i), true) = (inside(m), held > 0) {
+                let a = sum / held as f64;
+                let a = Complex32::new(a.re as f32, a.im as f32);
+                self.baseband[i] -= a * self.model[m];
+            }
+        }
     }
 
     /// Complex amplitude of each tone in each channel symbol, from the last call to
@@ -859,6 +972,93 @@ mod tests {
             .zip(llr.iter())
             .filter(|&(&b, &x)| u8::from(x > 0.0) != b)
             .count()
+    }
+
+    /// Energy at the sent tones in the candidate's last correlations.
+    fn sent_energy(ws: &BlockWorkspace, tones: &[u8]) -> f32 {
+        ws.amps()
+            .iter()
+            .zip(tones)
+            .map(|(a, &t)| a[usize::from(t)].norm_sqr())
+            .sum()
+    }
+
+    /// A signal removed from its own baseband by its tones leaves under 1 % of its energy at
+    /// the sent tones (measured: FT8 0.19 %, FT4 0.02 %), and removing nothing gives the values
+    /// of `amplitudes`.
+    #[test]
+    fn a_signal_removed_by_its_tones_leaves_little() {
+        for (mode, text, freq, dt) in [
+            (Mode::Ft8, "CQ K1ABC FN42", 1234.56f32, 0.37),
+            (Mode::Ft4, "W9XYZ K1ABC R-12", 987.6, -0.21),
+        ] {
+            let l = layout(mode);
+            let tones = tones_for(mode, text);
+            let audio = slot(mode, text, freq, dt, None, 0);
+            let mut ws = BlockWorkspace::default();
+            let mut plans = FftPlans::new();
+            ws.prepare(l, &audio, &mut plans);
+            let start = l.start_offset_s + dt as f32;
+            let r = ws
+                .amplitudes(l, &mut plans, freq, start, (0.5, 0.5))
+                .expect("amplitudes");
+            let before = sent_energy(&ws, &tones);
+            let amps = ws.amps().to_vec();
+            let none = ws
+                .amplitudes_without(l, &mut plans, freq, start, (0.5, 0.5), &[])
+                .expect("amplitudes");
+            assert_eq!(none, r);
+            assert_eq!(ws.amps(), &amps[..]);
+            let itself = Interferer {
+                tones: &tones,
+                freq_hz: r.freq_hz,
+                start_s: r.start_s,
+            };
+            ws.amplitudes_without(l, &mut plans, freq, start, (0.5, 0.5), &[itself]);
+            let after = sent_energy(&ws, &tones);
+            assert!(after < 0.01 * before, "{mode:?}: {after} of {before}");
+        }
+    }
+
+    /// A stronger neighbour two tone spacings up and 0.3 s later (0.12 s in FT4) spoils a
+    /// candidate's soft bits; with the neighbour's tones removed from the candidate's baseband
+    /// they carry the sent bits again but for a few that LDPC corrects (measured: FT8 83 to 0 hard
+    /// errors, FT4 46 to 6).
+    #[test]
+    fn removing_a_neighbour_by_its_tones_restores_the_soft_bits() {
+        for (mode, late) in [(Mode::Ft8, 0.3), (Mode::Ft4, 0.12)] {
+            let l = layout(mode);
+            let (a, b) = ("CQ K1ABC FN42", "W9XYZ VK3QRP R-07");
+            let (ta, tb) = (tones_for(mode, a), tones_for(mode, b));
+            let fa = 1500.0f32;
+            let fb = fa + 2.0 * l.tone_spacing_hz;
+            let mut audio = slot(mode, a, fa, 0.1, Some(-6.0), 8);
+            // The neighbour 6 dB above the candidate.
+            let wave = rr73_ft8::synth::gfsk(mode, &tb, fb, 12_000, 2.0);
+            let at = ((f64::from(l.start_offset_s) + 0.1 + late) * 12_000.0).round() as usize;
+            for (x, w) in audio.iter_mut().skip(at).zip(&wave) {
+                *x += w;
+            }
+            let mut ws = BlockWorkspace::default();
+            let mut plans = FftPlans::new();
+            ws.prepare(l, &audio, &mut plans);
+            let start = l.start_offset_s + 0.1;
+            let mut llr = [0.0f32; CODEWORD_BITS];
+            ws.amplitudes(l, &mut plans, fa, start, (0.5, 0.5))
+                .expect("amplitudes");
+            ws.llrs(l, 1, BlockScore::Amplitude, 24.0, &mut llr);
+            let spoilt = hard_errors(l, &ta, &llr);
+            let neighbour = Interferer {
+                tones: &tb,
+                freq_hz: f64::from(fb),
+                start_s: f64::from(start) + late,
+            };
+            ws.amplitudes_without(l, &mut plans, fa, start, (0.5, 0.5), &[neighbour])
+                .expect("amplitudes");
+            ws.llrs(l, 1, BlockScore::Amplitude, 24.0, &mut llr);
+            let cleared = hard_errors(l, &ta, &llr);
+            assert!(spoilt >= 30 && cleared <= 8, "{mode:?}: {spoilt} to {cleared}");
+        }
     }
 
     #[test]

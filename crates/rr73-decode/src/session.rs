@@ -19,11 +19,12 @@ use rr73_dsp::{SpectrogramConfig, SpectrogramPlan};
 use rr73_ft8::Mode;
 
 use crate::ap::{self, ApKind, Hypothesis};
+use crate::block::Interferer;
 use crate::clock::Stopwatch;
 use crate::config::{DecoderConfig, DemodKind, SubtractKind};
 use crate::layout::FrameLayout;
 use crate::ldpc::{LdpcDecoder, LdpcOutcome, LdpcScratch, ParityGraph};
-use crate::pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, layout};
+use crate::pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, Workspace, layout};
 use crate::refine::Refined;
 use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
 use crate::snr::SnrScale;
@@ -125,6 +126,87 @@ pub enum TraceOutcome {
     Repeat,
 }
 
+/// Most channel symbols of a layout (FT4).
+const MAX_SYMBOLS: usize = 105;
+
+/// A candidate of the pass that got block soft bits (experiment 0012): one that failed, kept for
+/// a retry with its neighbours removed and as a neighbour of other retries, or one that
+/// decoded, kept to be removed from its neighbours' retries.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Tried {
+    /// The search position, from which a retry refines again.
+    cand: Candidate,
+    /// Tone 0 at the refined position, in Hz.
+    freq_hz: f64,
+    /// Start of symbol 0 at the refined position, in seconds from the slot start.
+    start_s: f64,
+    /// Sync symbols on their sent tone there.
+    sync: usize,
+    /// Channel tones: the hard decisions of its soft bits, or the message's when `known` is set.
+    tones: [u8; MAX_SYMBOLS],
+    /// Sync strong enough to serve as a hypothesis.
+    hypothesis: bool,
+    /// Decoded, in the pass or by a retry: `tones` are the message's.
+    known: bool,
+    /// Decoded by a retry, here or as the signal of another record.
+    done: bool,
+    /// Times queued for a retry.
+    queued: u8,
+}
+
+impl Tried {
+    /// `true` when `other` is the same signal: within a quarter tone spacing and a quarter
+    /// symbol.
+    fn same_signal(&self, other: &Tried, layout: &FrameLayout) -> bool {
+        (self.freq_hz - other.freq_hz).abs() < 0.25 * f64::from(layout.tone_spacing_hz)
+            && (self.start_s - other.start_s).abs() < 0.25 * f64::from(layout.symbol_s())
+    }
+
+    /// `true` when the two signals share spectrum: their base tones lie closer than the
+    /// signal's bandwidth.
+    fn overlaps(&self, other: &Tried, layout: &FrameLayout) -> bool {
+        (self.freq_hz - other.freq_hz).abs() < (layout.tones as f32 * layout.tone_spacing_hz) as f64
+    }
+
+    /// The signal as an interferer to remove from a neighbour's baseband.
+    fn interferer(&self, layout: &FrameLayout) -> Interferer<'_> {
+        Interferer {
+            tones: &self.tones[..layout.symbols.min(MAX_SYMBOLS)],
+            freq_hz: self.freq_hz,
+            start_s: self.start_s,
+        }
+    }
+}
+
+/// Most decoded neighbours removed for one retry.
+const MAX_KNOWN: usize = 4;
+
+/// Most neighbours removed for one retry: decoded ones and up to four hypotheses.
+const MAX_INTERFERERS: usize = MAX_KNOWN + 4;
+
+/// Channel tones from the hard decisions of `llr` (positive for bit 1): sync symbols at
+/// their known tones, ramp symbols at tone 0, data symbols Gray-mapped.
+fn hard_tones(layout: &FrameLayout, llr: &[f32; crate::layout::CODEWORD_BITS], out: &mut [u8; MAX_SYMBOLS]) {
+    out.fill(0);
+    for g in &layout.sync {
+        for (k, &t) in g.tones.iter().enumerate() {
+            if let Some(o) = out.get_mut(g.start + k) {
+                *o = t;
+            }
+        }
+    }
+    let bps = layout.bits_per_symbol;
+    for (k, &sym) in layout.data.iter().enumerate() {
+        let bits = &llr[(k * bps).min(llr.len())..((k + 1) * bps).min(llr.len())];
+        let v = bits
+            .iter()
+            .fold(0usize, |acc, &l| (acc << 1) | usize::from(l > 0.0));
+        if let (Some(o), Some(&t)) = (out.get_mut(sym), layout.gray.get(v)) {
+            *o = t;
+        }
+    }
+}
+
 /// What one step did.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StepOutcome {
@@ -152,6 +234,9 @@ enum Phase {
     Search(i32),
     /// Try candidates from this index onward.
     Candidates(usize),
+    /// Retry the pass's failed candidates under their neighbours from this one onward
+    /// (experiment 0012).
+    Pairs(usize),
     /// Subtract this pass's decodes from this index onward.
     Subtract(usize),
     /// Every stage has run.
@@ -305,6 +390,7 @@ impl DecodeSession {
             Phase::Baseband => "baseband",
             Phase::Search(_) => "search",
             Phase::Candidates(_) => "candidates",
+            Phase::Pairs(_) => "pairs",
             Phase::Subtract(_) => "subtract",
             Phase::Done => "done",
         }
@@ -399,6 +485,7 @@ impl DecodeSession {
             Phase::Baseband => self.baseband(),
             Phase::Search(from) => self.search(from),
             Phase::Candidates(from) => self.candidates(from, &mut out.decodes),
+            Phase::Pairs(k) => self.pairs(k, &mut out.decodes),
             Phase::Subtract(from) => self.subtract(from),
             Phase::Done => {}
         }
@@ -539,6 +626,7 @@ impl DecodeSession {
             plan.begin(g.frames, &mut ws.spec);
         }
         ws.candidates.clear();
+        ws.tried.clear();
         self.phase = Phase::Spectrogram(0);
     }
 
@@ -652,7 +740,7 @@ impl DecodeSession {
         let extra = config.demod.extra_sets(self.layout.mode);
         let spectrogram_llrs = config.demod.uses_spectrogram();
         let sets = usize::from(spectrogram_llrs) + blocks.len() + extra.len();
-        let min_sync = config.demod.min_sync(self.layout.mode);
+        let pairs_on = pairs_enabled(config);
         let to = (from + (CANDIDATES_PER_STEP / sets.max(1)).max(1)).min(total);
         let DecodeContext {
             hashes,
@@ -708,6 +796,8 @@ impl DecodeSession {
             let mut outcome = LdpcOutcome::default();
             let mut valid = None;
             let mut by_block = None;
+            // Where the block demodulator put the candidate, when it gave soft bits.
+            let mut block_at = None;
             if spectrogram_llrs {
                 let sw = Stopwatch::start();
                 if refined == Refined::Levels {
@@ -746,11 +836,14 @@ impl DecodeSession {
                 // Search one grid step either way.
                 let reach = (1.0 / sp.time_osr as f32, 1.0 / sp.freq_osr as f32);
                 // Candidates whose sync symbols mostly lose to other tones get no block sets.
-                let matched = ws
+                let at = ws
                     .block
-                    .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach)
-                    .map(|r| r.sync_matched);
-                let ready = matched.is_some_and(|m| m >= min_sync);
+                    .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach);
+                let matched = at.map(|r| r.sync_matched);
+                let ready = matched.is_some_and(|m| m >= config.demod.min_sync_at(mode, cand.score));
+                if ready {
+                    block_at = at;
+                }
                 // The extra sets only for candidates whose sync stands well above chance.
                 let tried = if !ready {
                     0
@@ -856,6 +949,32 @@ impl DecodeSession {
                 } else {
                     TraceOutcome::NoCodeword
                 });
+                // Kept for retries under an overlapping signal at the end of the pass.
+                if let Some(at) = block_at.filter(|_| pairs_on) {
+                    let (hyp_sync, target_sync) = config.pairs.min_sync(mode);
+                    if at.sync_matched >= hyp_sync.min(target_sync) {
+                        let mut failed = Tried {
+                            cand,
+                            freq_hz: at.freq_hz,
+                            start_s: at.start_s,
+                            sync: at.sync_matched,
+                            tones: [0; MAX_SYMBOLS],
+                            hypothesis: at.sync_matched >= hyp_sync,
+                            known: false,
+                            done: false,
+                            queued: 0,
+                        };
+                        ws.block.llrs(
+                            self.layout,
+                            usize::from(config.pairs.block),
+                            crate::block::BlockScore::Amplitude,
+                            config.demod.llr_variance,
+                            &mut ws.llr_alt,
+                        );
+                        hard_tones(self.layout, &ws.llr_alt, &mut failed.tones);
+                        ws.tried.push(failed);
+                    }
+                }
                 continue;
             };
             let sw = Stopwatch::start();
@@ -882,6 +1001,24 @@ impl DecodeSession {
             ws.seen.push(valid.payload);
             hashes.learn(&valid.message);
             stats.ap_decodes += u32::from(found_by.is_some());
+            // A decode's refined place and tones, so the pass's retries can remove it from its
+            // neighbours.
+            if let Some(at) = block_at.filter(|_| pairs_on && found_by.is_none()) {
+                let mut known = Tried {
+                    cand,
+                    freq_hz: at.freq_hz,
+                    start_s: at.start_s,
+                    sync: at.sync_matched,
+                    tones: [0; MAX_SYMBOLS],
+                    hypothesis: false,
+                    known: true,
+                    done: true,
+                    queued: 0,
+                };
+                let n = tones.len().min(MAX_SYMBOLS);
+                known.tones[..n].copy_from_slice(&tones[..n]);
+                ws.tried.push(known);
+            }
             let decode = Decode {
                 text: valid.text,
                 message: valid.message,
@@ -908,14 +1045,351 @@ impl DecodeSession {
             self.phase = Phase::Candidates(to);
             return;
         }
-        // A pass that found nothing new leaves the residual as it was: the stage ends. So
-        // does the last pass, whose decodes the next stage subtracts first.
-        let passes = config.passes.max(1);
+        if pairs_on {
+            self.plan_pairs();
+            self.phase = Phase::Pairs(0);
+        } else {
+            self.end_pass();
+        }
+    }
+
+    /// After the pass's candidates and retries: a pass that found nothing new leaves the
+    /// residual as it was, so the stage ends. So does the last pass, whose decodes the next
+    /// stage subtracts first.
+    fn end_pass(&mut self) {
+        let passes = self.stages[self.stage].config.passes.max(1);
         if self.pass >= passes || self.decodes.len() == self.pass_start {
             self.finish_stage();
         } else {
             self.phase = Phase::Subtract(self.pass_start);
         }
+    }
+
+    /// Queues the pass's failed candidates for retries under their neighbours: one per
+    /// signal, strongest sync first, at most `pairs.max_retries`.
+    fn plan_pairs(&mut self) {
+        let config = &self.stages[self.stage].config;
+        let layout = self.layout;
+        let (_, target_sync) = config.pairs.min_sync(layout.mode);
+        // Decoded neighbours alone call for a retry only in the stage's last pass: a later pass
+        // would see them subtracted.
+        let last = self.pass >= config.passes.max(1);
+        let ws = &mut self.ctx.ws;
+        ws.pair_order.clear();
+        ws.pair_order
+            .extend((0..ws.tried.len()).filter(|&i| !ws.tried[i].done && ws.tried[i].sync >= target_sync));
+        let failed = &ws.tried;
+        ws.pair_order.sort_by(|&a, &b| {
+            failed[b]
+                .sync
+                .cmp(&failed[a].sync)
+                .then(failed[b].cand.score.total_cmp(&failed[a].cand.score))
+        });
+        let mut kept = 0;
+        for k in 0..ws.pair_order.len() {
+            let i = ws.pair_order[k];
+            let repeat = ws.pair_order[..kept]
+                .iter()
+                .any(|&j| ws.tried[j].same_signal(&ws.tried[i], layout));
+            // A candidate with no neighbour to remove is not worth a retry.
+            let alone = !ws.tried.iter().any(|f| {
+                (f.hypothesis || (f.known && last))
+                    && f.overlaps(&ws.tried[i], layout)
+                    && !f.same_signal(&ws.tried[i], layout)
+            });
+            // A failed place of a signal the pass decoded elsewhere.
+            let decoded = ws
+                .tried
+                .iter()
+                .any(|f| f.known && f.same_signal(&ws.tried[i], layout));
+            if !repeat && !alone && !decoded && kept < config.pairs.max_retries {
+                ws.pair_order[kept] = i;
+                ws.tried[i].queued = 1;
+                kept += 1;
+            }
+        }
+        ws.pair_order.truncate(kept);
+    }
+
+    /// Retries queued candidate `k` with its neighbours removed from its baseband (one
+    /// retry per step), then ends the pass.
+    fn pairs(&mut self, k: usize, found: &mut Vec<Decode>) {
+        let Some(&j) = self.ctx.ws.pair_order.get(k) else {
+            self.end_pass();
+            return;
+        };
+        self.phase = Phase::Pairs(k + 1);
+        let layout = self.layout;
+        let config = &self.stages[self.stage].config;
+        let most = usize::from(config.pairs.max_interferers).min(MAX_INTERFERERS - MAX_KNOWN);
+        let (max_retries, target_sync) = (config.pairs.max_retries, config.pairs.min_sync(layout.mode).1);
+        let ws = &mut self.ctx.ws;
+        let target = ws.tried[j];
+        if target.done {
+            return;
+        }
+        // The neighbours to remove: decoded ones first, then hypotheses, each by sync.
+        let mut with = [0usize; MAX_INTERFERERS];
+        let mut n = 0;
+        for (known, room) in [(true, MAX_KNOWN), (false, most)] {
+            let until = (n + room).min(MAX_INTERFERERS);
+            while n < until {
+                let failed = &ws.tried;
+                let next = (0..failed.len())
+                    .filter(|&i| {
+                        let f = &failed[i];
+                        let usable = if known {
+                            f.known
+                        } else {
+                            f.hypothesis && !f.done && !f.known
+                        };
+                        usable
+                            && f.overlaps(&target, layout)
+                            && !f.same_signal(&target, layout)
+                            && !with[..n].iter().any(|&w| failed[w].same_signal(f, layout))
+                    })
+                    .max_by(|&a, &b| failed[a].sync.cmp(&failed[b].sync).then(b.cmp(&a)));
+                let Some(i) = next else {
+                    break;
+                };
+                with[n] = i;
+                n += 1;
+            }
+        }
+        if n == 0 {
+            return;
+        }
+        self.stats.pair_retries += 1;
+        let Some(by) = self.retry(j, &with[..n], found) else {
+            return;
+        };
+        // A decode changes what its neighbours see: queue again those already tried.
+        let ws = &mut self.ctx.ws;
+        let decoded = ws.tried[by];
+        for i in 0..ws.tried.len() {
+            let f = ws.tried[i];
+            if ws.pair_order.len() >= max_retries {
+                break;
+            }
+            if f.done || f.queued != 1 || f.sync < target_sync || !f.overlaps(&decoded, layout) {
+                continue;
+            }
+            if ws
+                .pair_order
+                .iter()
+                .skip(k + 1)
+                .any(|&q| ws.tried[q].same_signal(&f, layout))
+            {
+                continue;
+            }
+            ws.tried[i].queued = 2;
+            ws.pair_order.push(i);
+        }
+    }
+
+    /// Gives failed candidate `j` its block sets again with the signals of the records `with`
+    /// removed from its baseband, and keeps a decode as [`DecodeSession::candidates`] does. When
+    /// the message also matches the hard decisions of an overlapping failed candidate far above
+    /// chance, both carry it (a transmitter's distortion copies a signal some tone spacings
+    /// away), and the decode goes to the one with the stronger sync. Returns the record whose
+    /// signal decoded.
+    fn retry(&mut self, j: usize, with: &[usize], found: &mut Vec<Decode>) -> Option<usize> {
+        let g = self.geometry?;
+        let layout = self.layout;
+        let mode = layout.mode;
+        let stage = &self.stages[self.stage];
+        let (config, pipeline) = (&stage.config, &stage.pipeline);
+        let sp = &config.spectrogram;
+        let blocks = config.demod.blocks(mode);
+        let extra = config.demod.extra_sets(mode);
+        let DecodeContext { hashes, ws, .. } = &mut self.ctx;
+        let Workspace {
+            block,
+            plans,
+            spec,
+            live,
+            llr_alt,
+            ldpc,
+            codeword,
+            seen,
+            noise,
+            floor,
+            tried: failed,
+            ..
+        } = ws;
+        let (spec, live, floor): (&rr73_dsp::Spectrogram, &[bool], &crate::passband::NoiseFloor) =
+            (spec, live, floor);
+        let view = SymbolView {
+            spec,
+            layout,
+            time_osr: sp.time_osr,
+            freq_osr: sp.freq_osr,
+            live: if config.demod.skip_silent_frames {
+                live
+            } else {
+                &[]
+            },
+        };
+        let cand = failed[j].cand;
+        let record = |trace: &mut Option<Vec<CandidateTrace>>, at: &Candidate, outcome: TraceOutcome| {
+            if let Some(t) = trace.as_mut() {
+                t.push(CandidateTrace {
+                    stage: self.stage,
+                    pass: self.pass,
+                    freq_hz: view.freq_hz(at),
+                    dt_s: view.dt_s(at),
+                    score: at.score,
+                    outcome,
+                });
+            }
+        };
+        let sw = Stopwatch::start();
+        let interferers: [Interferer<'_>; MAX_INTERFERERS] = std::array::from_fn(|i| {
+            let f = &failed[with.get(i).copied().unwrap_or(j)];
+            f.interferer(layout)
+        });
+        let start_s = view.dt_s(&cand) + layout.start_offset_s;
+        let reach = (1.0 / sp.time_osr as f32, 1.0 / sp.freq_osr as f32);
+        let matched = block
+            .amplitudes_without(
+                layout,
+                plans,
+                view.freq_hz(&cand),
+                start_s,
+                reach,
+                &interferers[..with.len().min(MAX_INTERFERERS)],
+            )
+            .map(|r| r.sync_matched);
+        self.timings.refine_s += sw.elapsed_s();
+        let Some(m) = matched.filter(|&m| m >= config.demod.min_sync(mode)) else {
+            record(&mut self.trace, &cand, TraceOutcome::NoSync);
+            return None;
+        };
+        let tried = if m >= config.demod.extra_min_sync(mode) {
+            blocks.len() + extra.len()
+        } else {
+            blocks.len()
+        };
+        let sets = blocks
+            .iter()
+            .map(|&n| (n, config.demod.block_score))
+            .chain(extra.iter().copied());
+        let (mut outcome, mut valid, mut by_block) = (LdpcOutcome::default(), None, None);
+        for (n, score) in sets.take(tried) {
+            let sw = Stopwatch::start();
+            block.llrs(layout, usize::from(n), score, config.demod.llr_variance, llr_alt);
+            self.timings.demod_s += sw.elapsed_s();
+            let decoder: &dyn LdpcDecoder = if config.demod.bp_only_blocks.contains(&n) {
+                &pipeline.bp_only
+            } else {
+                pipeline.ldpc.as_ref()
+            };
+            (outcome, valid) = attempt(
+                pipeline,
+                decoder,
+                self.graph,
+                mode,
+                llr_alt,
+                ldpc,
+                codeword,
+                hashes,
+                &mut self.stats,
+                &mut self.timings,
+            );
+            if valid.is_some() {
+                by_block = Some(n);
+                break;
+            }
+        }
+        let Some(valid) = valid else {
+            let outcome = if outcome.converged {
+                TraceOutcome::Rejected
+            } else {
+                TraceOutcome::NoCodeword
+            };
+            record(&mut self.trace, &cand, outcome);
+            return None;
+        };
+        let sw = Stopwatch::start();
+        if pipeline.validator.is_duplicate(&valid, seen) {
+            self.stats.duplicates += 1;
+            self.timings.validate_s += sw.elapsed_s();
+            record(&mut self.trace, &cand, TraceOutcome::Duplicate);
+            return None;
+        }
+        let tones = rr73_ft8::tones::from_payload(mode, &valid.payload);
+        // The neighbour whose hard decisions match the message's data symbols far above chance
+        // (one symbol in `layout.tones`): six standard deviations above it, 23 of 58 symbols in
+        // FT8 and 46 of 87 in FT4, which no unrelated message reaches.
+        let n = layout.data.len() as f64;
+        let p = 1.0 / layout.tones as f64;
+        let least = n * p + 6.0 * (n * p * (1.0 - p)).sqrt();
+        let agree = |f: &Tried| {
+            let same = layout
+                .data
+                .iter()
+                .filter(|&&s| tones.get(s).is_some_and(|&t| f.tones.get(s) == Some(&t)))
+                .count();
+            same as f64 >= least
+        };
+        // Of the target and the neighbours carrying the same message, the strongest sync is the
+        // signal; the others are copies of it, as a transmitter's distortion makes.
+        let target = failed[j];
+        let by = (0..failed.len())
+            .filter(|&w| {
+                let f = &failed[w];
+                w == j
+                    || (!f.known
+                        && !f.done
+                        && f.overlaps(&target, layout)
+                        && !f.same_signal(&target, layout)
+                        && agree(f))
+            })
+            .max_by(|&a, &b| failed[a].sync.cmp(&failed[b].sync).then((a == j).cmp(&(b == j))))
+            .unwrap_or(j);
+        let at = failed[by].cand;
+        let snr_db = g.snr.estimate(&view, &at, &tones, live, floor.db(), noise);
+        if outcome.osd && snr_db < config.validate.osd_floor_db(mode) {
+            self.stats.implausible += 1;
+            self.timings.validate_s += sw.elapsed_s();
+            record(&mut self.trace, &at, TraceOutcome::BelowFloor);
+            return None;
+        }
+        seen.push(valid.payload);
+        hashes.learn(&valid.message);
+        let decode = Decode {
+            text: valid.text,
+            message: valid.message,
+            payload: valid.payload,
+            freq_hz: view.freq_hz(&at),
+            dt_s: view.dt_s(&at),
+            snr_db,
+            pass: self.pass,
+            ldpc_iterations: outcome.iterations,
+            hard_errors: outcome.hard_errors,
+            score: at.score,
+            osd: outcome.osd,
+            osd_distance: outcome.distance,
+            ap: None,
+            block: by_block,
+        };
+        record(&mut self.trace, &at, TraceOutcome::Decoded(self.decodes.len()));
+        found.push(decode.clone());
+        self.decodes.push(decode);
+        self.stage_of.push(self.stage);
+        self.timings.validate_s += sw.elapsed_s();
+        // The signal is known now: its records are done, and it is removed exactly from the
+        // neighbours retried after it.
+        let me = failed[by];
+        for f in failed.iter_mut() {
+            if f.same_signal(&me, layout) {
+                f.done = true;
+            }
+        }
+        let f = &mut failed[by];
+        f.known = true;
+        f.tones[..tones.len().min(MAX_SYMBOLS)].copy_from_slice(&tones[..tones.len().min(MAX_SYMBOLS)]);
+        Some(by)
     }
 
     /// Subtracts up to [`SUBTRACTIONS_PER_STEP`] of this pass's decodes.
@@ -939,6 +1413,14 @@ impl DecodeSession {
             Phase::StartPass
         };
     }
+}
+
+/// `true` when `config` retries failed candidates under overlapping signals: it asks for them,
+/// and the block demodulator and the model subtraction they need are in use.
+fn pairs_enabled(config: &DecoderConfig) -> bool {
+    config.pairs.enabled
+        && config.demod.kind == DemodKind::Block
+        && config.subtract.kind == SubtractKind::Model
 }
 
 /// Decodes one set of soft bits with `decoder`, then validates a codeword with the stage's

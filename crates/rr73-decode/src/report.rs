@@ -66,6 +66,8 @@ pub struct DecodeStats {
     pub implausible: u32,
     /// Decodes found with a priori knowledge.
     pub ap_decodes: u32,
+    /// Retries of failed candidates with their neighbours removed (experiment 0012).
+    pub pair_retries: u32,
 }
 
 /// Wall time per stage for one slot, in seconds, summed over passes and candidates.

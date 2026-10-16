@@ -59,6 +59,70 @@ pub struct DecoderConfig {
     /// SNR estimate. Absent from results written before it existed.
     #[serde(default)]
     pub snr: SnrParams,
+    /// Retries of failed candidates with their overlapping neighbours removed (`crate::session`,
+    /// experiment 0012). Absent from results written before it existed.
+    #[serde(default)]
+    pub pairs: PairParams,
+}
+
+/// Retries of failed candidates under overlapping signals (experiment 0012). At the end of each
+/// pass, each failed candidate with a neighbour gets its block sets again with the neighbours
+/// removed from its baseband (`crate::block::Interferer`): failed candidates whose sync stands
+/// well above chance, as tones from their hard decisions, and candidates decoded by an earlier
+/// retry, as their message's tones. A decode found there passes the same checks as any other,
+/// and the next pass subtracts it from the audio.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PairParams {
+    /// Run the retries (block demodulator and model subtraction only).
+    pub enabled: bool,
+    /// The fewest FT8 sync symbols on their sent tone (of 21) for a failed candidate to serve
+    /// as a hypothesis.
+    pub ft8_min_sync: u8,
+    /// The same for FT4 (of 16).
+    pub ft4_min_sync: u8,
+    /// The fewest FT8 sync symbols on their sent tone for a failed candidate to be tried
+    /// again under a hypothesis.
+    pub ft8_target_min_sync: u8,
+    /// The same for FT4.
+    pub ft4_target_min_sync: u8,
+    /// Most retries per pass, strongest sync first.
+    pub max_retries: usize,
+    /// Most neighbours removed for one retry (1 to 4).
+    pub max_interferers: u8,
+    /// Block length (1 to 4 symbols) whose hard decisions give a failed candidate's tones.
+    pub block: u8,
+}
+
+impl Default for PairParams {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            ft8_min_sync: 12,
+            ft4_min_sync: 10,
+            ft8_target_min_sync: 7,
+            ft4_target_min_sync: 8,
+            max_retries: 16,
+            max_interferers: 2,
+            block: 3,
+        }
+    }
+}
+
+impl PairParams {
+    /// The fewest sync symbols for a hypothesis and for a target in `mode`.
+    pub fn min_sync(&self, mode: Mode) -> (usize, usize) {
+        match mode {
+            Mode::Ft8 => (
+                usize::from(self.ft8_min_sync),
+                usize::from(self.ft8_target_min_sync),
+            ),
+            Mode::Ft4 => (
+                usize::from(self.ft4_min_sync),
+                usize::from(self.ft4_target_min_sync),
+            ),
+        }
+    }
 }
 
 /// SNR estimate parameters (`crate::snr`).
@@ -266,6 +330,18 @@ pub struct DemodParams {
     /// With `block`: the same for FT4 (of 16).
     #[serde(default)]
     pub ft4_extra_min_sync: u8,
+    /// With `block`: candidates whose search score lies below this, in dB, need
+    /// `ft8_weak_min_sync` or `ft4_weak_min_sync` sync symbols on their sent tone for the block
+    /// sets, so a lower search threshold adds few attempts on noise (experiment 0012). `None`
+    /// gates every candidate alike.
+    #[serde(default)]
+    pub weak_score_db: Option<f32>,
+    /// With `block`: the fewest FT8 sync symbols (of 21) for a candidate below `weak_score_db`.
+    #[serde(default)]
+    pub ft8_weak_min_sync: u8,
+    /// With `block`: the same for FT4 (of 16).
+    #[serde(default)]
+    pub ft4_weak_min_sync: u8,
 }
 
 fn default_ft8_blocks() -> Vec<u8> {
@@ -310,6 +386,19 @@ impl DemodParams {
             Mode::Ft8 => self.ft8_min_sync,
             Mode::Ft4 => self.ft4_min_sync,
         })
+    }
+
+    /// The fewest sync symbols a candidate of `mode` with search score `score_db` needs for the
+    /// block sets: [`DemodParams::min_sync`], or the weak candidates' gate below `weak_score_db`.
+    pub fn min_sync_at(&self, mode: Mode, score_db: f32) -> usize {
+        let base = self.min_sync(mode);
+        match self.weak_score_db {
+            Some(below) if score_db < below => base.max(usize::from(match mode {
+                Mode::Ft8 => self.ft8_weak_min_sync,
+                Mode::Ft4 => self.ft4_weak_min_sync,
+            })),
+            _ => base,
+        }
     }
 
     /// `true` when the spectrogram's single-symbol LLRs are tried.
@@ -473,6 +562,9 @@ impl DecoderConfig {
                 ft4_extra_sets: Vec::new(),
                 ft8_extra_min_sync: 0,
                 ft4_extra_min_sync: 0,
+                weak_score_db: None,
+                ft8_weak_min_sync: 0,
+                ft4_weak_min_sync: 0,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,
@@ -499,6 +591,7 @@ impl DecoderConfig {
             passes: 1,
             ap: ApParams::default(),
             snr: SnrParams::default(),
+            pairs: PairParams::default(),
         }
     }
 
@@ -657,6 +750,14 @@ impl DecoderConfig {
         if self.demod.ft8_min_sync > 21 || self.demod.ft4_min_sync > 16 {
             return bad("demod.ft8_min_sync must be at most 21 and demod.ft4_min_sync at most 16");
         }
+        if self.demod.ft8_weak_min_sync > 21
+            || self.demod.ft4_weak_min_sync > 16
+            || self.demod.weak_score_db.is_some_and(|v| !v.is_finite())
+        {
+            return bad(
+                "demod.ft8_weak_min_sync must be at most 21, demod.ft4_weak_min_sync at most 16 and demod.weak_score_db finite",
+            );
+        }
         if self.ldpc.max_iterations > 10_000
             || !(self.ldpc.min_sum_scale > 0.0 && self.ldpc.min_sum_scale <= 1.0)
         {
@@ -675,6 +776,20 @@ impl DecoderConfig {
         }
         if !(1..=8).contains(&self.passes) {
             return bad("passes must be 1 to 8");
+        }
+        let p = &self.pairs;
+        if p.ft8_min_sync > 21
+            || p.ft8_target_min_sync > 21
+            || p.ft4_min_sync > 16
+            || p.ft4_target_min_sync > 16
+            || p.block == 0
+            || usize::from(p.block) > crate::block::MAX_BLOCK
+            || p.max_retries > 256
+            || !(1..=4).contains(&p.max_interferers)
+        {
+            return bad(
+                "pairs: sync limits at most 21 (FT8) and 16 (FT4), block 1 to 4, at most 256 retries, 1 to 4 interferers",
+            );
         }
         let a = &self.ap;
         if !(a.width_hz >= 0.0 && a.strength > 0.0 && a.strength.is_finite() && a.min_snr_db.is_finite())
@@ -766,6 +881,54 @@ mod tests {
         // The research reference keeps the ft8_lib method.
         let b = DecoderConfig::baseline();
         assert!(!b.snr.passband && b.spectrogram.freq_max_hz == 3000.0);
+    }
+
+    #[test]
+    fn weak_candidates_take_their_own_gate_and_pairs_parse() {
+        let base = DecoderConfig::baseline();
+        assert_eq!(base.demod.min_sync_at(Mode::Ft8, 4.5), 0);
+        let c = base
+            .with_overrides(&[
+                "demod.kind=block",
+                "demod.ft8_min_sync=5",
+                "demod.weak_score_db=5",
+                "demod.ft8_weak_min_sync=8",
+                "demod.ft4_weak_min_sync=9",
+            ])
+            .expect("weak gate");
+        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 4.5), 8);
+        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 5.0), 5);
+        assert_eq!(c.demod.min_sync_at(Mode::Ft4, 4.9), 9);
+        // The weak gate never loosens the gate every candidate takes.
+        let c = c
+            .with_overrides(&["demod.ft8_weak_min_sync=3"])
+            .expect("weak gate");
+        assert_eq!(c.demod.min_sync_at(Mode::Ft8, 4.5), 5);
+        let p = base
+            .with_overrides(&[
+                "pairs.enabled=true",
+                "pairs.max_interferers=4",
+                "pairs.ft4_min_sync=11",
+            ])
+            .expect("pairs");
+        assert!(p.pairs.enabled);
+        assert_eq!(p.pairs.min_sync(Mode::Ft4), (11, 8));
+        for bad in [
+            "demod.ft8_weak_min_sync=22",
+            "demod.ft4_weak_min_sync=17",
+            "pairs.ft8_min_sync=22",
+            "pairs.ft4_target_min_sync=17",
+            "pairs.block=0",
+            "pairs.block=5",
+            "pairs.max_interferers=0",
+            "pairs.max_interferers=5",
+            "pairs.max_retries=257",
+        ] {
+            assert!(
+                matches!(base.with_overrides(&[bad]), Err(ConfigError::Invalid(_))),
+                "{bad}"
+            );
+        }
     }
 
     #[test]
@@ -901,9 +1064,13 @@ mod tests {
             "ft4_extra_sets",
             "ft8_extra_min_sync",
             "ft4_extra_min_sync",
+            "weak_score_db",
+            "ft8_weak_min_sync",
+            "ft4_weak_min_sync",
         ] {
             demod.remove(key);
         }
+        old.as_object_mut().expect("config").remove("pairs");
         let back: DecoderConfig = serde_json::from_value(old).expect("old config");
         assert_eq!(back, base);
         for bad in ["spectrogram.window_symbols=0", "spectrogram.window_symbols=3"] {

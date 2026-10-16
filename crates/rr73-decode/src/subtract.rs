@@ -600,7 +600,7 @@ pub fn refine(
 }
 
 /// The error function, to about 1e-15 absolute (series with positive terms).
-fn erf(x: f64) -> f64 {
+pub(crate) fn erf(x: f64) -> f64 {
     let a = x.abs();
     if a >= 6.0 {
         return x.signum();

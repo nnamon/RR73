@@ -119,6 +119,9 @@ pub(crate) struct Workspace {
     pub(crate) subtract: SubtractScratch,
     pub(crate) refine: RefineScratch,
     pub(crate) chunk: Vec<Candidate>,
+    /// The pass's candidates with block soft bits and the queue of retries (experiment 0012).
+    pub(crate) tried: Vec<crate::session::Tried>,
+    pub(crate) pair_order: Vec<usize>,
 }
 
 impl Default for Workspace {
@@ -143,6 +146,8 @@ impl Default for Workspace {
             subtract: SubtractScratch::default(),
             refine: RefineScratch::default(),
             chunk: Vec::new(),
+            tried: Vec::new(),
+            pair_order: Vec::new(),
         }
     }
 }
