@@ -154,11 +154,12 @@ describe('decode colours with QSOs only in Wavelog', () => {
     const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(bigCtyFixture())));
     const own = buildLogIndex([qso('JA7XVZ', 'QM09', '40m')], cty);
     const vk = keysOf([{ CALL: 'VK3/9V1NE', BAND: '20m', MODE: 'FT8' }]);
-    // A CQ from Australia: new until Wavelog's log holds a QSO with an Australian call.
-    expect(colours('CQ VK2ESN QF56', own).bg).toBe('newDxcc');
+    // New DXCC on, as the operator turns it on. A CQ from Australia: new until Wavelog's log holds a QSO with an Australian call.
+    const dxcc = defaultHighlights().map((e) => (e.id === 'newDxcc' ? { ...e, on: true } : e));
+    expect(colours('CQ VK2ESN QF56', own, AT, dxcc).bg).toBe('newDxcc');
     const both = mergeLogIndex(own, buildKeysIndex(vk, cty));
-    expect(colours('CQ VK2ESN QF56', both).bg).not.toBe('newDxcc');
-    expect(colours('CQ VK2ESN QF56', both).isNew).toBe(true);
+    expect(colours('CQ VK2ESN QF56', both, AT, dxcc).bg).not.toBe('newDxcc');
+    expect(colours('CQ VK2ESN QF56', both, AT, dxcc).isNew).toBe(true);
     // Japan was in the log already.
     expect(colours('CQ JA1KXM PM95', both).bg).toBe('newGrid');
   });

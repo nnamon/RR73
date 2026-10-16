@@ -79,6 +79,8 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
     await page.goto('./#/settings/colours');
     await expect(page.getByRole('heading', { level: 1, name: 'Decode colours' })).toBeVisible();
     // The example places its stations once the country file has loaded: A41ZZ is in Oman, an entity the sample log lacks.
+    // New DXCC is off by default: on, as an operator turns it on.
+    await page.getByRole('switch', { name: 'New DXCC entity', exact: true }).check();
     await expect(page.getByTestId('colours-example').locator('[data-hl="newDxcc"]')).toHaveCount(1);
     await page.waitForTimeout(300);
     await checkLayout(page);
@@ -123,6 +125,10 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
       await field.fill(value);
       await field.press('Enter');
     }
+    // New DXCC is off by default: on, as an operator turns it on, so every category shows.
+    await page.getByRole('link', { name: /^Decode colours/ }).click();
+    await page.getByRole('switch', { name: 'New DXCC entity', exact: true }).check();
+    await page.evaluate(() => (location.hash = '#/settings'));
     await page.getByRole('link', { name: 'Operate' }).click();
 
     await page.evaluate(async (log) => {

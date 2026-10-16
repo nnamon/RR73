@@ -277,15 +277,16 @@ test('the WSJT-X preset takes WSJT-X’s own colours and switches', async ({ pag
   for (const r of await example.locator('[data-hl="cq"]').all()) expect(await hlOf(r)).toBe('#66FF66');
   expect(await hlOf(example.locator('[data-hl="sent"]'))).toBe('#FFFF00');
   expect(await hlOf(example.locator('[data-hl="myCall"]'))).toBe('#FF6666');
-  for (const name of ['New ITU zone', 'New ITU zone on this band', 'New grid', 'New grid on this band', 'New call', 'New call on this band', 'Ending a QSO', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
-  for (const name of ['My call in the message', 'New continent', 'New continent on this band', 'New CQ zone', 'New CQ zone on this band', 'New DXCC entity', 'New DXCC entity on this band', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
+  // WSJT-X's switches, but New DXCC off, as in every scheme.
+  for (const name of ['New ITU zone', 'New ITU zone on this band', 'New DXCC entity', 'New DXCC entity on this band', 'New grid', 'New grid on this band', 'New call', 'New call on this band', 'Ending a QSO', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
+  for (const name of ['My call in the message', 'New continent', 'New continent on this band', 'New CQ zone', 'New CQ zone on this band', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('WSJT-X');
 });
 
-test('each editor scheme applies with RR73’s switches: every category on but the place categories other than New DXCC', async ({ page }) => {
+test('each editor scheme applies with RR73’s switches: every category on but the place categories', async ({ page }) => {
   await page.goto('./#/settings/colours');
-  const off = PLACES.filter((name) => name !== 'New DXCC entity');
+  const off = PLACES;
   for (const name of ['Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']) {
     await choose(page, name);
     await expect(preset(page, name)).toBeChecked();
@@ -302,6 +303,10 @@ test('a CQ from a DXCC entity the log lacks takes New DXCC, once the country fil
   const cty = JSON.stringify(bigCtyFixture());
   await page.route('**/data/cty.json', (route) => route.fulfill({ body: cty, contentType: 'application/json' }));
   await setUp(page);
+  // New DXCC is off by default: on, as an operator turns it on.
+  await toColours(page);
+  await page.getByRole('switch', { name: 'New DXCC entity', exact: true }).check();
+  await toOperate(page);
   await decoded(page, ['CQ A41ZZ LL93', 'CQ JA1KXM PM95']);
   const oman = row(page, 'CQ A41ZZ LL93');
   await expect(oman).toHaveAttribute('data-hl', 'newDxcc');

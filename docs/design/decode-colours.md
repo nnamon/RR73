@@ -13,7 +13,7 @@ Operate colours each decode by category, in WSJT-X's order. Settings › Decode 
 - A message addressed to the operator's callsign (its first callsign, by base call) also leads its slot, with a solid red edge in place of the category's bar and heavier text. This sits outside the categories and holds with My call turned off (`web/src/lib/decode/focus.ts`).
 - Own transmissions match only Sent, and received decodes never match it, so its place in the order changes nothing.
 - Calls compare by base callsign: a QSO with ZL1TQK/P counts for ZL1TQK. Grids compare by their first 4 characters.
-- RR73's scheme, the default, turns every category on but the continent, CQ zone and ITU zone categories and New DXCC on this band (RR73's scheme, below). Settings schema 3 gave phones that ran 0.7 the defaults of the time.
+- RR73's scheme, the default, turns every category on but the DXCC, continent, CQ zone and ITU zone categories (RR73's scheme, below). Every scheme starts with New DXCC entity off: until the log holds a long history, nearly every station is a new entity and its magenta tints most decodes. The operator turns it on; RR73 never does. Settings schema 3 gave phones that ran 0.7 the defaults of the time.
 - A stored order that lacks a category, as after an update that adds one, gets it after the last stored category that ranks above it in WSJT-X's order. Its switch and colour come from the preset the stored categories match, so an operator on the WSJT-X preset stays on it, and from RR73's scheme otherwise.
 - The log is indexed once per change of the log or the country file, in sets of calls (any band, per band, per band and mode), grids, DXCC entities, continents and zones (any band, per band), so each row costs a fixed number of set lookups. Places are cached per callsign.
 - Operate's New chip shows the decodes that any enabled new category matches (the place categories, new grid and new call, overall and on the band), whichever category won the background. With none of them on, the chip leaves the row. Hide worked leaves out decodes whose sender is in the log on this band and mode, by the Worked before rule whether its switch is on or not, and keeps messages to the operator.
@@ -34,8 +34,8 @@ The categories keep WSJT-X's order, with Ending a QSO before CQ and Worked befor
 | 5 | New CQ zone on this band | #FFE599, off | #FFE499, on |
 | 6 | New ITU zone | #A6FF00, off | #A6FF00, off |
 | 7 | New ITU zone on this band | #DBFF99, off | #DDFF99, off |
-| 8 | New DXCC entity | #FF00FF magenta | #FF00FF, on |
-| 9 | New DXCC entity on this band | #FF99FF, off | #FFAAFF, on |
+| 8 | New DXCC entity | #FF00FF magenta, off | #FF00FF, off |
+| 9 | New DXCC entity on this band | #FF99FF, off | #FFAAFF, off |
 | 10 | New grid | #E69F00 orange | #FF8000, off |
 | 11 | New grid on this band | #F5D999 | #FFCC99, off |
 | 12 | New call | #0072B2 blue | #00FFFF, off |

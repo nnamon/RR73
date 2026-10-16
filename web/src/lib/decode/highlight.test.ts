@@ -29,9 +29,9 @@ const hl = (text: string, entries = defaultHighlights(), opts: Opts = {}) => bot
 const ink = (text: string, entries = defaultHighlights(), opts: Opts = {}) => both(text, entries, opts).ink;
 
 describe('the default order', () => {
-  it("is WSJT-X's, with New DXCC on and the other place categories off", () => {
+  it("is WSJT-X's, with every place category off, New DXCC too", () => {
     expect(defaultHighlights().map((e) => e.id)).toEqual([...BACKGROUND_ORDER, 'worked']);
-    expect(defaultHighlights().filter((e) => !e.on).map((e) => e.id)).toEqual(['newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxccBand']);
+    expect(defaultHighlights().filter((e) => !e.on).map((e) => e.id)).toEqual(['newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxcc', 'newDxccBand']);
     expect(isDefault(defaultHighlights())).toBe(true);
     expect(isDefault(defaultHighlights().map((e) => ({ ...e, on: true })))).toBe(false);
   });
@@ -248,7 +248,7 @@ describe('presets', () => {
     expect(q.map(({ id, colour }) => ({ id, colour }))).toEqual(defaultHighlights().map(({ id, colour }) => ({ id, colour })));
   });
 
-  it('WSJT-X has WSJT-X 2.7.0’s own colours and switches, and its 2 missing categories off', () => {
+  it('WSJT-X has WSJT-X 2.7.0’s own colours and switches, but New DXCC off, and its 2 missing categories off', () => {
     // Read from WSJT-X 2.7.0's Settings › Colors tab (docs/design/decode-colours.md).
     expect(presetHighlights('wsjtx')).toEqual([
       { id: 'myCall', on: true, colour: '#FF6666' },
@@ -258,8 +258,8 @@ describe('presets', () => {
       { id: 'newCqZoneBand', on: true, colour: '#FFE499' },
       { id: 'newItuZone', on: false, colour: '#A6FF00' },
       { id: 'newItuZoneBand', on: false, colour: '#DDFF99' },
-      { id: 'newDxcc', on: true, colour: '#FF00FF' },
-      { id: 'newDxccBand', on: true, colour: '#FFAAFF' },
+      { id: 'newDxcc', on: false, colour: '#FF00FF' },
+      { id: 'newDxccBand', on: false, colour: '#FFAAFF' },
       { id: 'newGrid', on: false, colour: '#FF8000' },
       { id: 'newGridBand', on: false, colour: '#FFCC99' },
       { id: 'newCall', on: false, colour: '#00FFFF' },
@@ -325,7 +325,8 @@ describe('the place categories', () => {
 
   it('finds a new DXCC entity, continent and zone in the order of the list', () => {
     // Oman: Asia, CQ zone 21, ITU zone 39.
-    expect(placedHl('CQ A41ZZ LL93', defaultHighlights())).toBe('newDxcc');
+    expect(placedHl('CQ A41ZZ LL93', defaultHighlights())).toBe('newGrid');
+    expect(placedHl('CQ A41ZZ LL93', on('newDxcc'))).toBe('newDxcc');
     expect(placedHl('CQ A41ZZ LL93', on(...PLACES))).toBe('newCqZone');
     expect(placedHl('CQ A41ZZ LL93', on('newContinent', 'newItuZone', 'newDxcc'))).toBe('newItuZone');
     expect(placedHl('CQ A41ZZ LL93', on('newContinent', 'newContinentBand'))).toBeNull();

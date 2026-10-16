@@ -169,10 +169,11 @@ export const PALETTE: readonly { name: string; colour: string }[] = [
 ];
 
 /**
- * The categories RR73's scheme leaves off: the DXCC, continent and zone categories but New DXCC.
- * Their colours fall closer to the others than RR73's scheme allows (decode-colours.md).
+ * The categories RR73's scheme leaves off: every DXCC, continent and zone category. Their colours
+ * fall closer to the others than RR73's scheme allows (decode-colours.md), and New DXCC tints most
+ * decodes until the log is long, so the operator turns it on.
  */
-const RR73_OFF: readonly HighlightId[] = ['newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxccBand'];
+const RR73_OFF: readonly HighlightId[] = ['newDxcc', 'newContinent', 'newContinentBand', 'newCqZone', 'newCqZoneBand', 'newItuZone', 'newItuZoneBand', 'newDxccBand'];
 
 /** The categories in WSJT-X's order: background categories by rank, then text layers. */
 function defaultOrder(): HighlightCategory[] {
@@ -293,7 +294,7 @@ export const PRESETS: readonly Preset[] = [
       sent: '#FFFF00',
       worked: '#8C93A0',
     },
-    off: ['newItuZone', 'newItuZoneBand', 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'worked'],
+    off: ['newDxcc', 'newDxccBand', 'newItuZone', 'newItuZoneBand', 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'ending', 'worked'],
   },
   { id: 'monokai', label: 'Monokai', colours: scheme({ myCall: '#F92672', newGrid: '#E6DB74', newCall: '#66D9EF', ending: '#FD971F', cq: '#A6E22E', sent: '#AE81FF', worked: '#75715E' }), off: RR73_OFF },
   { id: 'solarized', label: 'Solarized', colours: scheme({ myCall: '#DC322F', newGrid: '#CB4B16', newCall: '#268BD2', ending: '#D33682', cq: '#859900', sent: '#93A1A1', worked: '#586E75' }), off: RR73_OFF },

@@ -78,7 +78,7 @@ function closestToPlain(id: PresetId, themes: readonly Theme[] = BOTH): number {
 
 describe('RR73’s scheme with colour blindness', () => {
   it('keeps every pair of categories it turns on 5.5 ΔE apart or more, and each 10 ΔE from a plain row, in both themes', () => {
-    expect(backgrounds('rr73')).toContain('newDxcc');
+    expect(backgrounds('rr73')).not.toContain('newDxcc');
     expect(closest('rr73')).toBeGreaterThanOrEqual(5.5);
     expect(closestToPlain('rr73')).toBeGreaterThanOrEqual(10);
   });

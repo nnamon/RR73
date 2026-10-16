@@ -94,7 +94,8 @@ describe('words on screen', () => {
   it('gives a callsign the DXCC, continent and zone colours from the country file', () => {
     const cty = DxccIndex.fromJson(JSON.parse(JSON.stringify(bigCtyFixture())));
     const index = buildLogIndex([{ call: 'JA1XYZ', gridsquare: '', band: '20m', mode: 'RTTY', submode: '' }], cty);
-    const entries = defaultHighlights();
+    // New DXCC on, as the operator turns it on: it is off by default.
+    const entries = defaultHighlights().map((e) => (e.id === 'newDxcc' ? { ...e, on: true } : e));
     const colour = (c: string, band = '20m') => callColour(c, '9V1NE', index, band, 'RTTY', entries).bg;
     const of = (id: string) => entries.find((e) => e.id === id)!.colour;
     expect(colour('OH2BAX')).toBe(of('newDxcc'));
