@@ -1,6 +1,6 @@
 /**
  * The steps of the last connection to the radio, kept in localStorage so they survive the browser
- * closing in the middle (docs/design/cat.md, Permission). Each step is written before it runs:
+ * closing in the middle (docs/design/cat.md, Connection log). Each step is written before it runs:
  * after a crash, the last step written is the one the browser closed in. Only the last attempt is
  * kept, so the entry stays under 1 kB.
  *
@@ -125,6 +125,100 @@ export function logFailure(why: string) {
 export function restoreAttempt(before: ConnectAttempt | null) {
   attempt = null;
   save(before);
+}
+
+const NAMES: Record<CatRadioId, string> = { ic705: 'IC-705', kx2: 'KX2' };
+
+/** Where the attempt stopped, as the rest of a sentence: "at opening the port at 115200 baud". */
+function stoppedAt(a: ConnectAttempt): string {
+  const last = a.steps.at(-1);
+  switch (last?.step) {
+    case 'chooser':
+      return 'in the browser’s port chooser';
+    case 'port':
+      return a.via === 'connect' ? 'after the port was chosen' : 'after the allowed port was found';
+    case 'forget':
+      return 'at forgetting the other allowed ports';
+    case 'open':
+      return `at opening the port at ${last.options.baudRate} baud`;
+    case 'signals':
+      return 'at setting the port’s DTR and RTS lines low';
+    case 'usb-send':
+      return 'at reading USB SEND';
+    default:
+      return `while waiting for the ${NAMES[a.radio]}’s first reply`;
+  }
+}
+
+/**
+ * One line for Rig control when the last attempt on `radio` never connected; null otherwise. An
+ * attempt RR73 saw fail names the failure; one that ends without it is where the browser may
+ * have closed.
+ */
+export function stoppedText(a: ConnectAttempt | null, radio: CatRadioId): string | null {
+  if (!a || a.radio !== radio || reachedConnected(a)) return null;
+  return a.failed ? `The last connection failed ${stoppedAt(a)}: ${inline(failureText(a.failed, a.radio))}.` : `The last connection stopped ${stoppedAt(a)}. The browser may have closed there.`;
+}
+
+/** A sentence continued after a colon: its first letter in lower case, unless it starts a name such as DTR. */
+const inline = (t: string) => (/^[A-Z][a-z]/.test(t) ? t[0].toLowerCase() + t.slice(1) : t);
+
+function failureText(why: string, radio: CatRadioId): string {
+  switch (why) {
+    case 'busy':
+      return 'Another program had the port open';
+    case 'signals':
+      return radio === 'ic705' ? 'The lines could not be set low, and USB SEND did not read OFF' : 'The lines could not be set low';
+    case 'failed':
+      return 'The port did not open';
+    case 'no-wasm':
+      return 'Rig control did not load';
+    case 'lost':
+      return 'The port closed';
+    default:
+      return why;
+  }
+}
+
+const hex4 = (v: number | null) => (v === null ? '?' : v.toString(16).toUpperCase().padStart(4, '0'));
+
+function stepText(e: ConnectEntry, a: ConnectAttempt): string {
+  switch (e.step) {
+    case 'chooser':
+      return 'Port chooser shown';
+    case 'port': {
+      const ids = e.usbVendorId === null && e.usbProductId === null ? 'no USB IDs' : `USB ${hex4(e.usbVendorId)}:${hex4(e.usbProductId)}`;
+      return `${a.via === 'connect' ? 'Port chosen' : 'Allowed port found'}, ${ids}`;
+    }
+    case 'forget':
+      return `Forgetting ${e.ports} other allowed port${e.ports === 1 ? '' : 's'}`;
+    case 'open': {
+      const o = e.options;
+      return `Opening at ${o.baudRate} baud, ${o.dataBits ?? 8} data bits, parity ${o.parity ?? 'none'}, ${o.stopBits ?? 1} stop bit, flow control ${o.flowControl ?? 'none'}`;
+    }
+    case 'signals':
+      return 'Setting DTR and RTS low';
+    case 'usb-send':
+      return 'DTR and RTS refused, reading USB SEND';
+    case 'reply':
+      return 'Waiting for the first reply';
+    case 'connected':
+      return 'Connected';
+  }
+}
+
+const VIA: Record<ConnectVia, string> = { connect: 'Connect radio', reconnect: 'Reconnect radio', auto: 'opened by RR73' };
+
+/** The attempt as text to paste into a report, one step a line, times in UTC. */
+export function connectLogText(a: ConnectAttempt | null, version: string, browser: string): string {
+  const head = [`RR73 ${version} connection log`, `Browser: ${browser}`];
+  if (!a) return [...head, 'No connection attempt stored.'].join('\n');
+  const started = new Date(a.steps[0]?.atMs ?? 0).toISOString();
+  const lines = [...head, `Radio: ${NAMES[a.radio]}, ${VIA[a.via]}, ${started.slice(0, 10)}`];
+  for (const e of a.steps) lines.push(`${new Date(e.atMs).toISOString().slice(11, 23)} UTC  ${stepText(e, a)}`);
+  if (a.failed) lines.push(`Failed: ${failureText(a.failed, a.radio)}`);
+  else if (!reachedConnected(a)) lines.push('No further step recorded');
+  return lines.join('\n');
 }
 
 /** Forgets the attempt in progress on this page, leaving storage alone; tests only. */

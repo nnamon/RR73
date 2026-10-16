@@ -24,7 +24,7 @@
 
 import { CatRadio, LOST_LIMIT, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
 import { SerialLink, choosePort, civPort, grantedPorts, kx2Port, serialApi, type Ic705Baud, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
-import { beginAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, type ConnectVia } from '../cat/connect-log';
+import { beginAttempt, lastAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, restoreAttempt, stoppedText, type ConnectVia } from '../cat/connect-log';
 import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
 import { RADIOS, type CatRadioId } from '../cat/radios';
 import { utcTime } from '../clock/format';
@@ -102,7 +102,6 @@ function follow(hz: number | null) {
 function mirror(s: RadioState) {
   if (s.status !== 'lost' && s.status !== 'closed') rig.status = s.status === 'starting' ? 'connecting' : s.status;
   if (s.status === 'connected') {
-    logStep({ step: 'connected' });
     rig.error = null;
     recover = false;
     recoverShift = null;
@@ -163,7 +162,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   const options = kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud);
   // The IC-705's port stays open when the driver refuses to lower the lines, until USB SEND is read
   // below. The KX2's closes: the Digirig keys it by RTS.
-  const link = new SerialLink(port, options, { keepOpenWithoutLines: !kx2 });
+  const link = new SerialLink(port, options, { keepOpenWithoutLines: !kx2, steps: { signals: () => logStep({ step: 'signals' }) } });
   logStep({ step: 'open', options });
   const err = await link.open();
   if (err) {
@@ -189,6 +188,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   // keying (Advanced Manual p. 9-2); on a line, or unread, the port closes. Nothing else goes out
   // first, and the radio's state reaches the app only after, so the attempt connects only then.
   if (!link.linesLow) {
+    logStep({ step: 'usb-send' });
     const off = await usbSendReadsOff(radio);
     if (current !== me) return false;
     if (!off) {
@@ -200,8 +200,15 @@ async function open(port: SerialPortLike): Promise<boolean> {
     }
     rig.linesHigh = true;
   }
+  // The link's first answer completes the attempt in the connection log.
+  let answered = false;
   radio.onChange((s) => {
-    if (current === me) mirror(s);
+    if (current !== me) return;
+    if (s.status === 'connected' && !answered) {
+      answered = true;
+      logStep({ step: 'connected' });
+    }
+    mirror(s);
   });
   radio.onEnd((end) => {
     if (current === me && end === 'lost') lost(me);
@@ -234,6 +241,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   );
   // PTT off at once if the radio transmits and RR73 may have left it keyed (this page lost the port,
   // or an earlier page went while keyed), or keys it by CAT.
+  logStep({ step: 'reply' });
   radio.start({ recover: recover || settings.cat.leftKeyed || settings.cat.keyPtt, shifted: recoverShift });
   return true;
 }
@@ -262,6 +270,7 @@ function mayOpenByItself(): boolean {
 /** Starts the connection log of an attempt on `port`, found or chosen. */
 function beginOn(port: SerialPortLike, via: ConnectVia) {
   const i = port.getInfo();
+  rig.lastStop = null;
   beginAttempt(settings.cat.radio, via, { step: 'port', usbVendorId: i.usbVendorId ?? null, usbProductId: i.usbProductId ?? null });
 }
 
@@ -343,24 +352,30 @@ export async function connectRadio(): Promise<void> {
   if (!api) return;
   const before = { status: rig.status, error: rig.error };
   rig.status = 'choosing';
+  // Logged before the chooser shows: Chrome on Windows has closed while a port was chosen in it.
+  const logged = beginAttempt(settings.cat.radio, 'connect', { step: 'chooser' });
   const chosen = await choosePort(api);
   if ('error' in chosen) {
+    // Nothing opened: the attempt before stays the last one.
+    restoreAttempt(logged);
     rig.status = before.status === 'choosing' ? 'off' : before.status;
     rig.error = chosen.error === 'refused' ? 'refused' : before.error;
     return;
   }
-  beginOn(chosen.port, 'connect');
+  rig.lastStop = null;
+  const info = chosen.port.getInfo();
+  logStep({ step: 'port', usbVendorId: info.usbVendorId ?? null, usbProductId: info.usbProductId ?? null });
   await closeCurrent();
   // Only this port opens again by itself: the browser forgets the others RR73 was allowed.
-  for (const p of await grantedPorts(api)) {
-    if (p === chosen.port) continue;
+  const others = (await grantedPorts(api)).filter((p) => p !== chosen.port);
+  if (others.length) logStep({ step: 'forget', ports: others.length });
+  for (const p of others) {
     try {
       await p.forget?.();
     } catch {
       // A port the browser cannot forget stays allowed; RR73 then opens none by itself.
     }
   }
-  const info = chosen.port.getInfo();
   void updateSettings({ cat: { ...settings.cat, connect: true, usbVendorId: info.usbVendorId ?? null, usbProductId: info.usbProductId ?? null } });
   await open(chosen.port);
 }
@@ -593,6 +608,7 @@ export async function initCat(): Promise<void> {
     if (settings.cat.connect && mayOpenByItself() && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api, 'auto');
   });
   void deps.wasm();
+  rig.lastStop = stoppedText(lastAttempt(), settings.cat.radio);
   if (settings.cat.connect && mayOpenByItself()) await reconnect(api, 'auto');
 }
 

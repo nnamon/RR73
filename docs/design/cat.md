@@ -74,6 +74,14 @@ On the Windows tablet, before stage 1:
 - Revoking the permission in the browser's site settings empties `getPorts()`; Connect radio then shows the chooser again.
 - Where `navigator.serial` is absent (Safari 26.6, measured, and iOS) `serialApi()` returns null and no rig control setting renders.
 
+### Connection log
+
+The owner reported Chrome on Windows 10 closing when a COM port was chosen for the IC-705, with Icom's driver. Nothing on the page survives that, so each attempt writes its steps to localStorage (`rr73.connectLog`, `lib/cat/connect-log.ts`) before it runs them: the port chooser shown, the port chosen or found (with `getInfo()`'s USB IDs), the other allowed ports forgotten, `open()` with its options, `setSignals`, the USB SEND read when the lines stay up, the wait for the first reply, and connected. Connect radio, Reconnect radio and every automatic open write them. Only the last attempt is kept, under 1 kB, and a closed chooser puts back the attempt before it. Every storage access sits in try/catch. With storage refused, rig control connects without a log.
+
+- When the app starts and the last attempt on the chosen radio never reached connected, Rig control says in one line where it stopped: "The last connection stopped at opening the port at 115200 baud. The browser may have closed there." A failure RR73 saw, such as another program holding the port, is named instead.
+- Copy connection log copies the attempt as text, one step a line with its UTC time, with RR73's version and the browser's user agent. Where the browser refuses the clipboard, the text shows for selecting.
+- Such an attempt also stops RR73 opening the port by itself (Permission, above).
+
 ### Port settings
 
 - 115200 baud by default, 8 data bits, no parity, 1 stop bit, no flow control (`civPort` in `lib/cat/serial.ts`).

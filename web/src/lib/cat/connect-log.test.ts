@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONNECT_LOG_KEY, beginAttempt, lastAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, restoreAttempt } from './connect-log';
+import { CONNECT_LOG_KEY, beginAttempt, connectLogText, lastAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, restoreAttempt, stoppedText } from './connect-log';
 
 beforeEach(() => {
   localStorage.clear();
@@ -64,5 +64,45 @@ describe('the connection log', () => {
     expect(() => logFailure('busy')).not.toThrow();
     expect(lastAttempt()).toBeNull();
     expect(lastAttemptStopped('ic705')).toBe(false);
+  });
+
+  it('says where an attempt stopped, in one line', () => {
+    const at = (step: Parameters<typeof logStep>[0]) => {
+      beginAttempt('ic705', 'connect', { step: 'chooser' }, 0);
+      if (step.step !== 'chooser') logStep(step, 1);
+      return stoppedText(lastAttempt(), 'ic705');
+    };
+    expect(at({ step: 'chooser' })).toBe('The last connection stopped in the browser’s port chooser. The browser may have closed there.');
+    expect(at({ step: 'open', options: { baudRate: 9600 } })).toBe('The last connection stopped at opening the port at 9600 baud. The browser may have closed there.');
+    expect(at({ step: 'signals' })).toBe('The last connection stopped at setting the port’s DTR and RTS lines low. The browser may have closed there.');
+    expect(at({ step: 'reply' })).toBe('The last connection stopped while waiting for the IC-705’s first reply. The browser may have closed there.');
+    logFailure('signals');
+    expect(stoppedText(lastAttempt(), 'ic705')).toBe('The last connection failed while waiting for the IC-705’s first reply: the lines could not be set low, and USB SEND did not read OFF.');
+    expect(stoppedText(lastAttempt(), 'kx2')).toBeNull();
+    beginAttempt('ic705', 'auto', { step: 'port', usbVendorId: null, usbProductId: null }, 2);
+    logStep({ step: 'connected' }, 3);
+    expect(stoppedText(lastAttempt(), 'ic705')).toBeNull();
+    expect(stoppedText(null, 'ic705')).toBeNull();
+  });
+
+  it('gives the log as text, one step a line in UTC', () => {
+    const t0 = Date.UTC(2026, 9, 17, 13, 14, 30, 120);
+    beginAttempt('ic705', 'connect', { step: 'chooser' }, t0);
+    logStep({ step: 'port', usbVendorId: 0x0c26, usbProductId: 0x0036 }, t0 + 900);
+    logStep({ step: 'forget', ports: 1 }, t0 + 910);
+    logStep({ step: 'open', options: { baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' } }, t0 + 920);
+    expect(connectLogText(lastAttempt(), '0.24.3', 'Chrome 141 on Windows 10')).toBe(
+      [
+        'RR73 0.24.3 connection log',
+        'Browser: Chrome 141 on Windows 10',
+        'Radio: IC-705, Connect radio, 2026-10-17',
+        '13:14:30.120 UTC  Port chooser shown',
+        '13:14:31.020 UTC  Port chosen, USB 0C26:0036',
+        '13:14:31.030 UTC  Forgetting 1 other allowed port',
+        '13:14:31.040 UTC  Opening at 115200 baud, 8 data bits, parity none, 1 stop bit, flow control none',
+        'No further step recorded',
+      ].join('\n'),
+    );
+    expect(connectLogText(null, '0.24.3', 'x')).toContain('No connection attempt stored.');
   });
 });

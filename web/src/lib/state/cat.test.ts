@@ -5,6 +5,7 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { loadWasm, type Wasm } from '../../../e2e/wasm';
 import type { CatWasm } from '../cat/protocol';
+import { lastAttempt } from '../cat/connect-log';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, reconnectRadio, resetCat, setCatDeps, setIc705Baud, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
@@ -395,6 +396,89 @@ describe('connecting', () => {
     expect(rig.status).toBe('off');
     expect(txKeyer()).toBeNull();
     expect(rigGate()).toBeNull();
+  });
+});
+
+describe('the connection log', () => {
+  const steps = () => lastAttempt()?.steps.map((e) => e.step);
+
+  it('writes each step of Connect radio, Reconnect radio and the automatic reopen', async () => {
+    granted.push(new SimSerialPort());
+    await connect();
+    expect(lastAttempt()).toMatchObject({ radio: 'ic705', via: 'connect' });
+    expect(steps()).toEqual(['chooser', 'port', 'forget', 'open', 'signals', 'reply', 'connected']);
+    expect(lastAttempt()?.steps[1]).toMatchObject({ usbVendorId: 0x0c26, usbProductId: 0x0036 });
+    expect(lastAttempt()?.steps[2]).toMatchObject({ ports: 1 });
+    expect(lastAttempt()?.steps[3]).toMatchObject({ options: { baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' } });
+    // The port closes with the cable in; Reconnect radio.
+    chosen.unplug();
+    await run(50);
+    const again = reconnectRadio();
+    await run(OPEN_SETTLE_MS + 300);
+    await again;
+    expect(lastAttempt()?.via).toBe('reconnect');
+    expect(steps()).toEqual(['port', 'open', 'signals', 'reply', 'connected']);
+    // The next start.
+    resetCat();
+    const opening = initCat();
+    await run(OPEN_SETTLE_MS + 300);
+    await opening;
+    expect(lastAttempt()?.via).toBe('auto');
+    expect(steps()).toEqual(['port', 'open', 'signals', 'reply', 'connected']);
+  });
+
+  it('writes the USB SEND read when the driver refuses the lines', async () => {
+    chosen.setSignals = async () => Promise.reject(new DOMException('Failed to set control signals.', 'NetworkError'));
+    await connect();
+    expect(steps()).toEqual(['chooser', 'port', 'open', 'signals', 'usb-send', 'reply', 'connected']);
+  });
+
+  it('says on starting where the last attempt stopped, until a new attempt', async () => {
+    chosen.open = () => new Promise<void>(() => {});
+    await initCat();
+    void connectRadio();
+    await run(OPEN_SETTLE_MS + 300);
+    resetCat();
+    await initCat();
+    expect(rig.lastStop).toBe('The last connection stopped at opening the port at 115200 baud. The browser may have closed there.');
+    // A failure RR73 saw is named.
+    chosen.open = async () => Promise.reject(new DOMException('Failed to open serial port.', 'NetworkError'));
+    const busy = reconnectRadio();
+    await run(OPEN_SETTLE_MS + 300);
+    await busy;
+    expect(rig.lastStop).toBeNull();
+    resetCat();
+    await initCat();
+    expect(rig.lastStop).toBe('The last connection failed at opening the port at 115200 baud: another program had the port open.');
+  });
+
+  it('keeps the attempt before when the chooser is closed', async () => {
+    await connect();
+    await disconnectRadio();
+    api.requestPort = async () => Promise.reject(new DOMException('No port selected by the user.', 'NotFoundError'));
+    await connectRadio();
+    expect(steps()).toEqual(['chooser', 'port', 'open', 'signals', 'reply', 'connected']);
+  });
+
+  it('connects when storage refuses', async () => {
+    const set = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Quota exceeded.', 'QuotaExceededError');
+    });
+    const get = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Denied.', 'SecurityError');
+    });
+    try {
+      await connect();
+      expect(rig.status).toBe('connected');
+      resetCat();
+      const opening = initCat();
+      await run(OPEN_SETTLE_MS + 300);
+      await opening;
+      expect(rig.status).toBe('connected');
+    } finally {
+      set.mockRestore();
+      get.mockRestore();
+    }
   });
 });
 

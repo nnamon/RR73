@@ -14,6 +14,7 @@
   import { mhz } from '../lib/clock/format';
   import { IC705_BAUDS, KX2_BAUDS, type Ic705Baud, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
+  import { connectLogText, lastAttempt } from '../lib/cat/connect-log';
   import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setIc705Baud, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
   import { catKeys, radioName, radioTraits, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
@@ -107,6 +108,21 @@
         return rig.error === 'refused' ? { text: 'The browser did not allow the port. Tap Connect radio again.', bad: true } : null;
     }
   });
+
+  /** Copy connection log: the last attempt's steps, for a report when the browser closed while connecting. */
+  let copyState = $state<'idle' | 'copied' | 'failed'>('idle');
+  let logText = $state('');
+  async function copyLog() {
+    const text = connectLogText(lastAttempt(), __APP_VERSION__, navigator.userAgent);
+    try {
+      await navigator.clipboard.writeText(text);
+      copyState = 'copied';
+      logText = '';
+    } catch {
+      copyState = 'failed';
+      logText = text;
+    }
+  }
 
   const dialText = $derived(rig.hz === null ? 'Reading' : `${mhz(rig.hz)} ${rigModeText()}`);
 
@@ -350,7 +366,18 @@
           </span>
         </button>
       {/if}
+      <button class="row act" onclick={() => void copyLog()}>
+        <span class="row-main">
+          <span class="row-title">Copy connection log</span>
+          {#if copyState === 'copied'}<span class="row-sub" role="status">Copied</span>{/if}
+        </span>
+      </button>
     </div>
+    {#if rig.lastStop && !connected}<p class="section-foot err" data-testid="rig-last">{rig.lastStop}</p>{/if}
+    {#if copyState === 'failed'}
+      <p class="section-foot">The browser refused to copy. Select the log below and copy it.</p>
+      <textarea class="report" readonly aria-label="Connection log" value={logText}></textarea>
+    {/if}
     {#if connectionText}<p class="section-foot" class:err={connectionText.bad} role={connectionText.bad ? 'alert' : undefined} data-testid="rig-help">{connectionText.text}</p>{/if}
     {#if connected && rig.linesHigh}<p class="section-foot" data-testid="rig-lines">DTR and RTS could not be lowered. With USB SEND OFF, the radio ignores them.</p>{/if}
     {#if micBtnFirst}<p class="section-foot" class:err={micBtnFirst.bad} role={micBtnFirst.bad ? 'alert' : undefined} data-testid="rig-micbtn">{micBtnFirst.text}</p>{/if}
@@ -451,6 +478,19 @@
 
   .dial {
     font-variant-numeric: tabular-nums;
+  }
+
+  .report {
+    width: 100%;
+    min-height: 160px;
+    margin-top: var(--rr-space-2);
+    padding: var(--rr-space-2);
+    border: 0;
+    border-radius: var(--rr-radius-m);
+    background: var(--rr-fill);
+    color: var(--rr-label);
+    font-family: var(--rr-mono);
+    font-size: var(--rr-text-caption);
   }
 
   .select {
