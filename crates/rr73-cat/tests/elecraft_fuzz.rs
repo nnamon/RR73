@@ -23,7 +23,9 @@ fn stream(rng: &mut ChaCha8Rng, len: usize) -> Vec<u8> {
 
 /// A plausible answer: a command RR73 reads, random digits and spaces, a semicolon.
 fn answer_like(rng: &mut ChaCha8Rng) -> Vec<u8> {
-    const NAMES: [&str; 10] = ["FA", "IF", "MD", "DT", "TQ", "OM", "VX", "MN", "MP", "?"];
+    const NAMES: [&str; 12] = [
+        "FA", "IF", "MD", "DT", "TQ", "OM", "VX", "MN", "MP", "BW", "K2", "?",
+    ];
     let mut out = NAMES[rng.random_range(0..NAMES.len())].as_bytes().to_vec();
     for _ in 0..rng.random_range(0..40) {
         out.push(if rng.random_bool(0.85) {
@@ -116,7 +118,7 @@ fn frequencies_round_trip_through_the_format() {
 }
 
 fn random_request(rng: &mut ChaCha8Rng) -> Request {
-    match rng.random_range(0..12) {
+    match rng.random_range(0..16) {
         0 => Request::ReadFrequency,
         1 => Request::SetFrequency {
             hz: if rng.random_bool(0.8) {
@@ -140,6 +142,10 @@ fn random_request(rng: &mut ChaCha8Rng) -> Request {
         8 => Request::ReadOptions,
         9 => Request::ReadVox,
         10 => Request::ReadMenuEntry,
+        11 => Request::LeaveMenu,
+        12 => Request::ReadInfo,
+        13 => Request::ReadBandwidth,
+        14 => Request::ReadK2Mode,
         _ => Request::ReadSetting {
             item: MenuItem::MicBtn,
         },
