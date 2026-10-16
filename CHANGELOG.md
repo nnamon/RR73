@@ -10,6 +10,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Settings › Radio and audio › Timing shows how long the decoder takes per slot, the last slot and the 95th percentile of recent ones, and counts the slots it could not decode because it was still busy. The timing report carries both.
 - Resume audio finds the radio's audio input after its USB cable moved to another port, in the same tap. It took a second tap, on Start audio.
 - Tune's sheet names the radio's dial while rig control reads one, on any band. It named the band's usual dial.
+- A keystroke restarts the Tx watchdog, as a tap or a click does, so typing and the keyboard shortcuts count as the operator being there.
 
 ## 0.24.0 · 2026-10-16
 

@@ -459,17 +459,16 @@ export function startQso() {
     if (on || !txOff || always) qso.notice = { kind: 'refused', text, atMs: Date.now() };
   });
   wake.every(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
+  // The operator is here: a tap, a click or a keystroke restarts the watchdog, at most once a second.
   let lastTouch = 0;
-  window.addEventListener(
-    'pointerdown',
-    () => {
-      const now = Date.now();
-      if (now - lastTouch < 1000) return;
-      lastTouch = now;
-      dispatch({ type: 'touch', nowMs: now });
-    },
-    { capture: true, passive: true },
-  );
+  const touched = () => {
+    const now = Date.now();
+    if (now - lastTouch < 1000) return;
+    lastTouch = now;
+    dispatch({ type: 'touch', nowMs: now });
+  };
+  window.addEventListener('pointerdown', touched, { capture: true, passive: true });
+  window.addEventListener('keydown', touched, { capture: true, passive: true });
   // Settings and the running activation feed the sequencer's configuration; the log's QSOs are
   // its worked-before list, so dupes survive a reload. In WSPR and RTTY the sequencer stops: Tx,
   // Hunt and a transmission on air.
