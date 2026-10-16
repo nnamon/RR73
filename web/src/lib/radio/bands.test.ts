@@ -10,11 +10,18 @@ describe('bands', () => {
     expect(dialHz('60m', 'FT4')).toBeNull();
   });
 
-  it('lists 12 bands, each with an FT8 frequency inside the band except 2m', () => {
-    expect(BAND_IDS).toHaveLength(12);
-    for (const b of BAND_IDS.filter((b) => b !== '2m')) expect(bandOfHz(dialHz(b, 'FT8')!)).toBe(b);
-    expect(dialHz('2m', 'FT8')).toBeNull();
-    expect(dialHz('2m', 'FT4')).toBeNull();
+  it('lists 13 bands, each with an FT8 frequency inside the band', () => {
+    expect(BAND_IDS).toHaveLength(13);
+    for (const b of BAND_IDS) expect(bandOfHz(dialHz(b, 'FT8')!)).toBe(b);
+  });
+
+  it('has the published FT8 and FT4 dials on 2m and 70cm, and no FT4 dial on 70cm', () => {
+    expect(dialHz('2m', 'FT8')).toBe(144174000);
+    expect(dialHz('2m', 'FT4')).toBe(144170000);
+    expect(dialHz('70cm', 'FT8')).toBe(432174000);
+    expect(dialHz('70cm', 'FT4')).toBeNull();
+    // FT4's 3 kHz on 2m ends below the FT8 dial.
+    expect(dialHz('2m', 'FT4')! + 3000).toBeLessThan(dialHz('2m', 'FT8')!);
   });
 
   it("has WSPRnet's WSPR dial on every band", () => {
@@ -32,6 +39,7 @@ describe('bands', () => {
       '10m': 28124.6,
       '6m': 50293.0,
       '2m': 144488.5,
+      '70cm': 432300,
     });
     // The 200 Hz of signals, 1400 to 1600 Hz above the dial, stay inside the band.
     for (const b of BAND_IDS) {
@@ -43,6 +51,7 @@ describe('bands', () => {
   it('recognises band names', () => {
     expect(isBand('20m')).toBe(true);
     expect(isBand('2m')).toBe(true);
+    expect(isBand('70cm')).toBe(true);
     expect(isBand('4m')).toBe(false);
     expect(isBand(20)).toBe(false);
   });
@@ -61,6 +70,7 @@ describe('bands', () => {
       '10m': 28080,
       '6m': 50300,
       '2m': 0,
+      '70cm': 0,
     });
     // FT4 on 20m sits 14.0802 to 14.0830 MHz: the RTTY pair starts above it.
     expect(dialHz('20m', 'RTTY')! + 1415).toBeGreaterThan(14083000);

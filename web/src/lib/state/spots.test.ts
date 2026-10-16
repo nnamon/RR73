@@ -67,7 +67,9 @@ describe('Go on a spot', () => {
     expect(goTarget(spot())).toEqual({ band: '20m', mode: 'FT8' });
     expect(goTarget(spot({ band: '40m', digital: 'FT4' }))).toEqual({ band: '40m', mode: 'FT4' });
     expect(goTarget(spot({ digital: null, mode: 'CW' }))).toBeNull();
-    expect(goTarget(spot({ band: '70cm' }))).toBeNull();
+    expect(goTarget(spot({ band: '2m' }))).toEqual({ band: '2m', mode: 'FT8' });
+    expect(goTarget(spot({ band: '70cm', digital: 'FT4' }))).toBeNull();
+    expect(goTarget(spot({ band: '23cm' }))).toBeNull();
     expect(goTarget(spot({ band: null }))).toBeNull();
     // 160m has no FT4 frequency.
     expect(goTarget(spot({ band: '160m', digital: 'FT4' }))).toBeNull();

@@ -69,15 +69,15 @@ for (const theme of ['light', 'dark'] as const) {
     await page.clock.setFixedTime(at(14, 5, 12));
     await openOperate(page, theme);
 
-    // The band sheet: WSPR is a third mode, with WSPRnet's dial; 2m has WSPR only.
+    // The band sheet: WSPR is a third mode, with WSPRnet's dial; RTTY has none on 60m, 2m and 70cm.
     await page.getByRole('button', { name: /^Change band/ }).click();
     const sheet = page.getByRole('dialog', { name: 'Change band' });
     await sheet.getByText('WSPR', { exact: true }).click();
     await expect(sheet.getByText('14.0956 MHz')).toBeVisible();
-    await expect(sheet.getByRole('radio', { name: '2m', exact: true })).toBeEnabled();
+    await expect(sheet.getByRole('radio', { name: '70cm', exact: true })).toBeEnabled();
     await shot(page, info, SHOTS, `${theme}-band`, 400);
-    await sheet.getByText('FT8', { exact: true }).click();
-    await expect(sheet.getByRole('radio', { name: '2m', exact: true })).toBeDisabled();
+    await sheet.getByText('RTTY', { exact: true }).click();
+    for (const b of ['60m', '2m', '70cm']) await expect(sheet.getByRole('radio', { name: b, exact: true })).toBeDisabled();
     await sheet.getByText('WSPR', { exact: true }).click();
     await page.keyboard.press('Escape');
     await expect(sheet).toBeHidden();

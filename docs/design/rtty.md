@@ -44,6 +44,7 @@ RTTY has no fixed calling frequency. Operators tune across a segment of 10 to 20
 | 10m | 28.0800 | 28.0815 | 28.080 to 28.100 | |
 | 6m | 50.3000 | 50.3015 | Unverified | Little activity. |
 | 2m | Off | | | |
+| 70cm | Off | | | |
 
 Sources: electronics-notes.com, "Amateur radio RTTY frequencies" (read 14 October 2026), and the IARU Region 1 HF band plan (2016 revision: 18.095 to 18.105 narrow band modes). The Region 3 plan's current limits (Rev. 2, November 2024) were not read: Unverified for 9V1.
 

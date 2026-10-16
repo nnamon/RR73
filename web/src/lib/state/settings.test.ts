@@ -273,10 +273,13 @@ describe('the WSPR settings migration', () => {
     expect(validate({ wspr: 'x' }).wspr).toEqual(WSPR_DEFAULTS);
   });
 
-  it('keeps a band and mode pair that has a dial frequency, and takes WSPR on 2m', () => {
+  it('keeps a band and mode pair that has a dial frequency, FT8 and FT4 on 2m and FT8 on 70cm, and FT8 where the mode has none', () => {
     expect(validate({ band: '2m', mode: 'WSPR' })).toMatchObject({ band: '2m', mode: 'WSPR' });
-    expect(validate({ band: '2m', mode: 'FT8' })).toMatchObject({ band: '2m', mode: 'WSPR' });
-    expect(validate({ band: '2m' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+    expect(validate({ band: '2m', mode: 'FT8' })).toMatchObject({ band: '2m', mode: 'FT8' });
+    expect(validate({ band: '2m', mode: 'FT4' })).toMatchObject({ band: '2m', mode: 'FT4' });
+    expect(validate({ band: '2m' })).toMatchObject({ band: '2m', mode: 'FT8' });
+    expect(validate({ band: '70cm', mode: 'FT8' })).toMatchObject({ band: '70cm', mode: 'FT8' });
+    expect(validate({ band: '70cm', mode: 'FT4' })).toMatchObject({ band: '70cm', mode: 'FT8' });
     expect(validate({ band: '60m', mode: 'FT4' })).toMatchObject({ band: '60m', mode: 'FT8' });
   });
 });
@@ -292,10 +295,11 @@ describe('the RTTY settings migration', () => {
     await expect.poll(() => getKv('settings')).toEqual({ ...stored, ...KB, schema: SETTINGS_SCHEMA });
   });
 
-  it('keeps RTTY on a band with an RTTY dial and refuses it on 60m and 2m', () => {
+  it('keeps RTTY on a band with an RTTY dial and refuses it on 60m, 2m and 70cm', () => {
     expect(validate({ band: '20m', mode: 'RTTY' })).toMatchObject({ band: '20m', mode: 'RTTY' });
     expect(validate({ band: '60m', mode: 'RTTY' })).toMatchObject({ band: '60m', mode: 'FT8' });
-    expect(validate({ band: '2m', mode: 'RTTY' })).toMatchObject({ band: '2m', mode: 'WSPR' });
+    expect(validate({ band: '2m', mode: 'RTTY' })).toMatchObject({ band: '2m', mode: 'FT8' });
+    expect(validate({ band: '70cm', mode: 'RTTY' })).toMatchObject({ band: '70cm', mode: 'FT8' });
   });
 
   it('keeps stored RTTY values that are valid and drops the rest', () => {

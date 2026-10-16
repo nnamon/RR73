@@ -23,10 +23,11 @@ test('POTA spots: the list, Go to a spot on 80m, and the station marked in the d
   await expect(page.getByText(/^Updated 13:14 UTC$/)).toBeVisible();
   expect(stand.requests).toEqual({ pota: 1, hamqth: 0 });
 
-  // 70 cm has no FT8 dial in RR73: its spot opens without Go.
+  // 70cm has an FT8 dial in RR73: its spot opens with Go.
   await spotRow(page, 'JE1QEV').locator('button.pick').click();
   await expect(spotRow(page, 'JE1QEV').locator('.by')).toContainText('Spotted by');
-  await expect(page.getByRole('button', { name: /^Go to / })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /^Go to / })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Go to JE1QEV' })).toBeVisible();
 
   await spotRow(page, 'KC5JEC').locator('button.pick').click();
   await page.getByRole('button', { name: 'Go to KC5JEC' }).click();

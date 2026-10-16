@@ -314,6 +314,18 @@ describe('the dial', () => {
     expect(settings.band).toBe('40m');
   });
 
+  it('keeps FT8 when the radio moves to the FT8 dial on 2m or 70cm', async () => {
+    await connect();
+    chosen.send(chosen.sim.turn_dial(144_174_000));
+    await run(20);
+    expect(settings.band).toBe('2m');
+    expect(settings.mode).toBe('FT8');
+    chosen.send(chosen.sim.turn_dial(432_174_000));
+    await run(20);
+    expect(settings.band).toBe('70cm');
+    expect(settings.mode).toBe('FT8');
+  });
+
   it('is the dial QSOs log while the radio is on RR73’s band, and the band’s dial without a radio', async () => {
     chosen.sim.receive(wasm.cat_encode('{"type":"set_frequency","hz":14076000}', 0xa4));
     expect(configNow().dialHz).toBe(14_074_000);

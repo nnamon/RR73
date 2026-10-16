@@ -1,8 +1,7 @@
 /**
  * FT8 and FT4 detection: from the mode, then the comments, then the frequency.
  *
- * Dial frequencies (USB), kHz. 160m to 6m come from the app's own table (lib/radio/bands.ts);
- * 2m FT8 is added because cluster spots carry it.
+ * Dial frequencies (USB), kHz, from the app's own table (lib/radio/bands.ts).
  *
  * | Band | FT8 | FT4 |
  * | --- | --- | --- |
@@ -17,7 +16,8 @@
  * | 12m | 24915 | 24919 |
  * | 10m | 28074 | 28180 |
  * | 6m | 50313 | 50318 |
- * | 2m | 144174 | |
+ * | 2m | 144174 | 144170 |
+ * | 70cm | 432174 | |
  *
  * A spot carries the dial frequency or the dial plus the audio frequency of the signal (up to
  * 3000 Hz), so the window runs from 0.5 kHz below a dial to 3 kHz above it, and the nearest dial
@@ -39,7 +39,6 @@ export const DIALS: readonly Dial[] = [
       return hz === null ? [] : [{ mode, hz }];
     }),
   ),
-  { mode: 'FT8', hz: 144_174_000 },
 ];
 
 const BELOW_HZ = 500;

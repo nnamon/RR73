@@ -337,9 +337,10 @@
     border: 0;
   }
 
+  /* 13 bands in rows of 5: HF, then 6m, 2m and 70cm on the last row. */
   .bands {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(5, 1fr);
     gap: var(--rr-space-2);
     margin-top: var(--rr-space-3);
   }
@@ -539,9 +540,9 @@
     color: var(--rr-tx-text);
   }
 
-  /* A phone on its side: six bands to a row and the dial on one line, so the sheet fits its height. */
+  /* A phone on its side: seven bands to a row and the dial on one line, so the sheet fits its height. */
   :global([data-size='compact-height']) .bands {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     margin-top: 0;
   }
 

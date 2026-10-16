@@ -76,7 +76,7 @@ export function catSupported(): boolean {
   return deps.api() !== null;
 }
 
-/** The mode on band `b`: the same where it has a dial there, else FT8, else WSPR (2m). */
+/** The mode on band `b`: the same where it has a dial there, else FT8, else WSPR. */
 function modeOn(b: BandId, m: Mode): Mode {
   if (dialHz(b, m) !== null) return m;
   return dialHz(b, 'FT8') !== null ? 'FT8' : 'WSPR';

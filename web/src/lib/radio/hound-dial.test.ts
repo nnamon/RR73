@@ -28,8 +28,8 @@ describe('Hound dial frequency', () => {
   });
 
   it('is stored per band and keeps only values inside the band', () => {
-    const s = validate({ houndDialHz: { '20m': 14_090_000, '40m': 14_090_000, '6m': 50_323_000.4, '2m': 144_174_000, '17m': 'x' } });
-    expect(s.houndDialHz).toEqual({ '20m': 14_090_000, '6m': 50_323_000 });
+    const s = validate({ houndDialHz: { '20m': 14_090_000, '40m': 14_090_000, '6m': 50_323_000.4, '2m': 144_174_000, '70cm': 144_174_000, '17m': 'x' } });
+    expect(s.houndDialHz).toEqual({ '20m': 14_090_000, '6m': 50_323_000, '2m': 144_174_000 });
     expect(validate({}).houndDialHz).toEqual({});
   });
 });
@@ -46,7 +46,7 @@ describe('the operator’s own FT8 and FT4 dials', () => {
     expect(operatingDialHz('20m', 'FT8', true, {}, own)).toBe(14_076_000);
     // WSPR and RTTY keep theirs; a mode with no dial on the band has none.
     expect(operatingDialHz('20m', 'WSPR', false, {}, own)).toBe(14_095_600);
-    expect(operatingDialHz('2m', 'FT8', false, {}, own)).toBeNull();
+    expect(operatingDialHz('70cm', 'FT4', false, {}, own)).toBeNull();
   });
 
   it('show 3 decimals, or 4 where the dial needs them', () => {
@@ -56,8 +56,8 @@ describe('the operator’s own FT8 and FT4 dials', () => {
   });
 
   it('are stored per mode and band, inside the band, on bands with that mode', () => {
-    const s = validate({ ftDialHz: { FT8: { '60m': 5_313_000, '20m': 7_074_000, xx: 1, '2m': 144_174_000 }, FT4: { '160m': 1_840_000, '40m': 7_048_000.4 }, WSPR: { '20m': 14_000_000 } } });
-    expect(s.ftDialHz).toEqual({ FT8: { '60m': 5_313_000 }, FT4: { '40m': 7_048_000 } });
+    const s = validate({ ftDialHz: { FT8: { '60m': 5_313_000, '20m': 7_074_000, xx: 1, '2m': 144_175_000 }, FT4: { '160m': 1_840_000, '40m': 7_048_000.4, '70cm': 432_170_000 }, WSPR: { '20m': 14_000_000 } } });
+    expect(s.ftDialHz).toEqual({ FT8: { '60m': 5_313_000, '2m': 144_175_000 }, FT4: { '40m': 7_048_000 } });
     expect(validate({}).ftDialHz).toEqual({ FT8: {}, FT4: {} });
   });
 });

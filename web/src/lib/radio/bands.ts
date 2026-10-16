@@ -1,16 +1,31 @@
 /**
  * Bands and their dial frequencies (USB), Hz: the usual FT8 and FT4 frequencies, and for WSPR
  * the frequencies of WSPRnet's table (wsprnet.org, wspr-qrg.pdf), the same in every region.
- * WSPR signals sit 1400 to 1600 Hz above the dial. 2m has a WSPR dial only.
+ * WSPR signals sit 1400 to 1600 Hz above the dial.
+ *
+ * 2m and 70cm: the IARU band plans of all three regions name no FT8 or FT4 frequency there
+ * (Region 1 VHF Handbook 10.03, February 2026; Region 2 band plan, September 2020; Region 3
+ * R3-004 revision 2, November 2024), so the dials come from national band plans and published
+ * lists:
+ *
+ * - 2m FT8 144.174 MHz: WIA Australian Amateur Radio Band Plan, revision 2026-1, p. 19; the
+ *   NZART New Zealand 2 m and 70 cm band plan, 2022, p. 1.
+ * - 2m FT4 144.170 MHz: the recommended FT4 frequencies in ARRL News, 19 July 2019, "New Summer
+ *   EURAO Party to Premier FT4".
+ * - 70cm FT8 432.174 MHz: the NZART band plan, p. 2. Other plans name 432.065
+ *   MHz (NZART, shared with other weak-signal modes) and 432.313 MHz (WIA, domestic); a dial of
+ *   the operator's own covers those.
+ * - 70cm FT4: no plan or list names one, so FT4 has none there.
+ * - 70cm WSPR 432.300 MHz: WSPRnet's list of USB dials on wsprnet.org; the PDF table stops at 2m.
  *
  * RTTY has no calling frequency: its dial is the bottom of the usual RTTY segment, moved up
  * clear of FT8 and FT4 (docs/design/rtty.md, "Dials"). The pair sits 1415 to 1585 Hz above it.
- * 60m and 2m have none. The 17m, 12m and 6m dials are Unverified.
+ * 60m, 2m and 70cm have none. The 17m, 12m and 6m dials are Unverified.
  */
 
 import type { Mode } from '../clock/slots';
 
-export const BAND_IDS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m'] as const;
+export const BAND_IDS = ['160m', '80m', '60m', '40m', '30m', '20m', '17m', '15m', '12m', '10m', '6m', '2m', '70cm'] as const;
 export type BandId = (typeof BAND_IDS)[number];
 
 const DIAL: Record<BandId, Record<Mode, number | null>> = {
@@ -25,7 +40,8 @@ const DIAL: Record<BandId, Record<Mode, number | null>> = {
   '12m': { FT8: 24915000, FT4: 24919000, WSPR: 24924600, RTTY: 24922000 },
   '10m': { FT8: 28074000, FT4: 28180000, WSPR: 28124600, RTTY: 28080000 },
   '6m': { FT8: 50313000, FT4: 50318000, WSPR: 50293000, RTTY: 50300000 },
-  '2m': { FT8: null, FT4: null, WSPR: 144488500, RTTY: null },
+  '2m': { FT8: 144174000, FT4: 144170000, WSPR: 144488500, RTTY: null },
+  '70cm': { FT8: 432174000, FT4: null, WSPR: 432300000, RTTY: null },
 };
 
 /** Dial frequency for a band and mode, Hz, or null where the mode has no usual frequency. */

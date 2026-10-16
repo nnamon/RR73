@@ -27,6 +27,8 @@ describe('the dial table', () => {
       'FT8 50313',
       'FT4 50318',
       'FT8 144174',
+      'FT4 144170',
+      'FT8 432174',
     ]);
   });
 });
@@ -46,6 +48,8 @@ describe('digitalByFrequency', () => {
     [21076.9, 'FT8'],
     [144174, 'FT8'],
     [144175.7, 'FT8'],
+    [144171.2, 'FT4'],
+    [432175.5, 'FT8'],
     // 30m: FT8 audio 2500 Hz sits nearer the FT4 dial but below it.
     [10138.5, 'FT8'],
     [10140.2, 'FT4'],
