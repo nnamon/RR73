@@ -52,6 +52,8 @@ export interface FakeRig {
   turnDial(hz: number): void;
   /** The cable comes out. */
   unplug(): void;
+  /** The cable goes back in: the browser's connect event, for a port it still allows. */
+  plug(): void;
 }
 
 declare global {
@@ -75,6 +77,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
       let controller: ReadableStreamDefaultController<Uint8Array> | null = null;
       let buffer: number[] = [];
       const port = new EventTarget() as EventTarget & Record<string, unknown>;
+      const connectListeners: (() => void)[] = [];
       const rig: FakeRig = {
         log: [],
         hz,
@@ -111,6 +114,9 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
           readable = null;
           c?.error(new DOMException('The device has been lost.', 'NetworkError'));
           port.dispatchEvent(new Event('disconnect'));
+        },
+        plug() {
+          if (rig.granted) for (const f of connectListeners) f();
         },
       };
       window.__rig = rig;
@@ -224,7 +230,9 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         async getPorts() {
           return rig.granted ? [port] : [];
         },
-        addEventListener() {},
+        addEventListener(type: string, f: () => void) {
+          if (type === 'connect') connectListeners.push(f);
+        },
       };
       Object.defineProperty(navigator, 'serial', { value: serial, configurable: true });
     },
