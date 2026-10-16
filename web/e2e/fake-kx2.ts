@@ -7,6 +7,7 @@
 // PTT follows RTS, and with its KX cable and MIC BTN at its default the radio transmits while RTS
 // is asserted.
 import { expect, type Page } from '@playwright/test';
+import { rigOn } from './fake-ic705';
 
 export interface Kx2Write {
   /** Date.now() when written. */
@@ -261,6 +262,7 @@ export const kx2Ptt = async (page: Page) => (await kx2Log(page)).filter((w) => w
 /** Settings › Rig control: chooses the KX2, then Connect radio; the fake browser's chooser returns the fake radio. */
 export async function connectKx2(page: Page, status = 'Connected') {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await page.getByRole('radio', { name: /Elecraft KX2/ }).click();
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText(status);

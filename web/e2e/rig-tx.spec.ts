@@ -15,7 +15,7 @@
 // measurement when it fell behind, as decode.spec does; on GitHub Actions it fails. With that check
 // the tests need no retries.
 import { expect, test, type Page } from '@playwright/test';
-import { chooseOutput, connect, installFakeIc705, ptt, rigFrames, rigLog, setKeying } from './fake-ic705';
+import { chooseOutput, connect, installFakeIc705, ptt, rigFrames, rigLog, setKeying, rigOn } from './fake-ic705';
 import { prepare, waitForTransmissions } from './txhelp';
 import { decodeCaptured, installTap, SLOT_MS } from './tap';
 import { loadWasm } from './wasm';
@@ -150,6 +150,7 @@ test('a lost port during a transmission stops the audio and turns Tx off', async
   await dock.getByRole('button', { name: 'CQ', exact: true }).click();
   await expect(dock.getByText('Radio not connected')).toBeVisible({ timeout: 20_000 });
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-status')).toHaveText('Port closed');
   await expect(page.getByTestId('rig-help')).toContainText('Tx went off');
 });
@@ -276,6 +277,7 @@ test('audio stopping during a transmission sends PTT off at once and turns Tx of
 /** Turns Keep Tx audio centred on in Settings › Rig control; Key the radio with CAT must be on. */
 async function setShift(page: Page) {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   const sw = page.getByRole('switch', { name: /Keep Tx audio centred/ });
   await sw.click();
   await expect(sw).toBeChecked();

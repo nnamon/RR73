@@ -138,7 +138,7 @@ beforeEach(async () => {
     getPorts: async () => granted.filter((p) => !p.forgotten),
   };
   setCatDeps({ api: () => api, wasm: async () => wasm, timers: { now: () => Date.now(), set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) } });
-  await updateSettings({ band: '20m', mode: 'FT8', cat: { ...CAT_DEFAULTS, radio: 'kx2' } });
+  await updateSettings({ band: '20m', mode: 'FT8', cat: { ...CAT_DEFAULTS, enabled: true, radio: 'kx2' } });
 });
 
 afterEach(() => {
@@ -386,6 +386,7 @@ describe('keying a KX2', () => {
 
   it('Key the radio with CAT is off by default: a transmission sends no TX or RX', async () => {
     expect(CAT_DEFAULTS.keyPtt).toBe(false);
+    expect(CAT_DEFAULTS.enabled).toBe(false);
     await connect();
     const { done, played } = await transmit();
     await run(6000);

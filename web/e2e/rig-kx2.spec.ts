@@ -6,11 +6,13 @@
 // transmissions are in rig-kx2-tx.spec.ts.
 import { expect, test } from '@playwright/test';
 import { connectKx2, installFakeKx2, kx2Log, kx2Ptt } from './fake-kx2';
+import { rigOn } from './fake-ic705';
 
 test('connects a KX2, lowers the lines at once, reads its dial and settings, and a band change sets VFO A and DATA A', async ({ page }) => {
   await installFakeKx2(page, { hz: 14_076_000 });
   await page.goto('./#/settings');
   await page.getByRole('link', { name: /Rig control/ }).click();
+  await rigOn(page);
   // The IC-705 stays the default choice.
   await expect(page.getByRole('radio', { name: /Icom IC-705/ })).toHaveAttribute('aria-checked', 'true');
   await page.getByRole('radio', { name: /Elecraft KX2/ }).click();
@@ -80,12 +82,14 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await expect(band).toContainText('15m', { timeout: 2000 });
 
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-mode')).toHaveCount(0);
 
   // MIC BTN read PTT: the port allowed before stays closed when the app opens, and the advice is
   // an error until Connect radio reads MIC BTN OFF.
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-status')).toHaveText('Off');
   await expect(page.getByTestId('rig-micbtn')).toHaveClass(/err/);
   expect(await page.evaluate(() => window.__kx2.opened)).toBe(false);
@@ -100,6 +104,7 @@ test('after MIC BTN read OFF, the port allowed before opens again by itself when
   await expect(page.getByTestId('rig-advice').filter({ hasText: 'MIC BTN reads' })).toHaveCount(0);
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
   expect(await page.evaluate(() => [window.__kx2.dtr, window.__kx2.rts])).toEqual([false, false]);
   expect(await kx2Ptt(page)).toEqual([]);

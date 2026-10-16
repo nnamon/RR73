@@ -112,6 +112,7 @@ export function rigInDataMode(): boolean | null {
 /** The Rig control row's value in Settings: "Connected", "No reply", or Off with no radio chosen. */
 export function rigSummary(): string {
   if (rig.unkeyFailed) return 'PTT off not confirmed';
+  if (!settings.cat.enabled) return 'Off';
   switch (rig.status) {
     case 'connected':
       return 'Connected';
@@ -188,7 +189,7 @@ export interface RigBadge {
  * the whole.
  */
 export function rigBadge(): RigBadge | null {
-  if (!settings.cat.connect && rig.status === 'off') return null;
+  if (!settings.cat.enabled || (!settings.cat.connect && rig.status === 'off')) return null;
   const name = radioName();
   const open = 'Open Rig control';
   if (rig.unkeyFailed) return { text: 'Transmitting', tone: 'bad', label: `${name} may still transmit: PTT off not confirmed. ${open}` };
@@ -269,7 +270,7 @@ export function provideKeyer(k: Keyer | null) {
  * off, practice plays no Tx audio and keys nothing.
  */
 export function catKeys(): boolean {
-  return settings.cat.keyPtt && (!practice.on || practice.playTx);
+  return settings.cat.enabled && settings.cat.keyPtt && (!practice.on || practice.playTx);
 }
 
 /**

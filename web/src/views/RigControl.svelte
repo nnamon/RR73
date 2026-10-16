@@ -15,7 +15,7 @@
   import { IC705_BAUDS, KX2_BAUDS, type Ic705Baud, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { connectLogText, lastAttempt } from '../lib/cat/connect-log';
-  import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setIc705Baud, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
+  import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setIc705Baud, setKx2Baud, setRigEnabled, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
   import { catKeys, radioName, radioTraits, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
@@ -309,6 +309,19 @@
   <BackLink to={href('settings')} label="Settings" title="Rig control" id="rig-title" />
 
   <div class="section">
+    <div class="group">
+      <label class="row">
+        <span class="row-main"><span class="row-title">Rig control</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={settings.cat.enabled} onchange={(e) => void setRigEnabled(e.currentTarget.checked)} />
+      </label>
+    </div>
+    <p class="section-foot">{settings.cat.enabled ? 'Reads and sets the radio’s dial and mode over USB.' : 'Off: the radio’s port stays closed, and transmissions key the radio by VOX.'}</p>
+    {#if !settings.cat.enabled && rig.unkeyFailed}<p class="section-foot err" role="alert">{unkeyFailedText()}</p>{/if}
+  </div>
+
+  {#if settings.cat.enabled}
+
+  <div class="section">
     <h2 class="section-head" id="rig-radio">Radio</h2>
     <div class="group" role="radiogroup" aria-labelledby="rig-radio">
       {#each radios as r (r.id)}
@@ -445,6 +458,7 @@
       </ul>
       {#each advice as a (a.text)}<p class="section-foot" class:err={a.bad} data-testid="rig-advice">{a.text}</p>{/each}
     </div>
+  {/if}
   {/if}
 </section>
 

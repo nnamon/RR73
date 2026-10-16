@@ -3,12 +3,13 @@
 // the radio's dial followed, opening again after a reload, and Test keying with a radio that answers
 // and one that keeps transmitting. The transmissions, timed against the audio, are in rig-tx.spec.ts.
 import { expect, test, type Page } from '@playwright/test';
-import { connect, installFakeIc705, ptt, rigFrames, rigLog } from './fake-ic705';
+import { connect, installFakeIc705, ptt, rigFrames, rigLog, rigOn } from './fake-ic705';
 
 test('connects, shows the dial the radio reports, and a band change sets the radio', async ({ page }) => {
   await installFakeIc705(page, { hz: 14_076_000 });
   await page.goto('./#/settings');
   await page.getByRole('link', { name: /Rig control/ }).click();
+  await rigOn(page);
   await expect(page.getByTestId('rig-status')).toHaveText('Off');
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
@@ -50,6 +51,7 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   // The port allowed before opens again by itself when the app opens.
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
   expect(await ptt(page)).toEqual([]);
 });
@@ -57,6 +59,7 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
 test('connects when the driver refuses to lower DTR and RTS and USB SEND reads OFF', async ({ page }) => {
   await installFakeIc705(page);
   await page.goto('./#/settings/rig');
+  await rigOn(page);
   await page.evaluate(() => (window.__rig.refuseSignals = true));
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
@@ -150,15 +153,18 @@ test('Radio and audio says that Key the radio with CAT needs the radio’s audio
   await expect(page.getByRole('combobox', { name: /^Output/ })).toHaveValue('');
   await expect(foot).toHaveCount(0);
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await expect(foot).toHaveText('Key the radio with CAT needs the IC-705’s USB audio here.');
   // The KX2 names the Digirig's sound card.
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await page.getByRole('radio', { name: /^Elecraft KX2/ }).click();
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await expect(foot).toHaveText('Key the radio with CAT needs the Digirig’s sound card here.');
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await expect(foot).toHaveCount(0);
@@ -183,6 +189,7 @@ test('Keep Tx audio centred is off by default and works only with Key the radio 
   await page.waitForTimeout(500);
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(shift).toBeChecked();
   await keying.click();
   await expect(shift).toBeDisabled();
@@ -378,6 +385,7 @@ test('plugging the radio in reconnects it until Disconnect radio, which shows wh
   await installFakeIc705(page);
   await page.goto('./#/settings');
   await page.getByRole('link', { name: /Rig control/ }).click();
+  await rigOn(page);
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
 
@@ -397,5 +405,39 @@ test('plugging the radio in reconnects it until Disconnect radio, which shows wh
   await page.waitForTimeout(1000);
   expect(await page.evaluate(() => window.__rig.opened)).toBe(false);
   await expect(page.getByTestId('rig-status')).toHaveText('Off');
+  expect(await ptt(page)).toEqual([]);
+});
+
+test('Rig control’s switch off closes the port, opens nothing by itself and hides the badge; on opens the port again', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./#/settings');
+  await page.getByRole('link', { name: /Rig control/ }).click();
+  const on = page.getByRole('switch', { name: 'Rig control' });
+  await expect(on).not.toBeChecked();
+  await on.check();
+  await page.getByRole('button', { name: 'Connect radio' }).click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+
+  await on.uncheck();
+  await expect.poll(() => page.evaluate(() => window.__rig.opened)).toBe(false);
+  await expect(page.getByTestId('rig-status')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /Connect radio/ })).toHaveCount(0);
+
+  // Plugging in, and opening the app again, open nothing while it is off.
+  await page.evaluate(() => window.__rig.plug());
+  await page.reload();
+  await expect(page.getByRole('switch', { name: 'Rig control' })).not.toBeChecked();
+  await page.waitForTimeout(1000);
+  expect(await page.evaluate(() => window.__rig.opened)).toBe(false);
+  await page.evaluate(() => (location.hash = '#/settings'));
+  await expect(page.getByRole('link', { name: /Rig control/ })).toContainText('Off');
+  await page.evaluate(() => (location.hash = '#/'));
+  await expect(page.locator('header.top')).toBeVisible();
+  await expect(page.getByTestId('radio-badge')).toHaveCount(0);
+
+  // On again: the port opens by itself, as the operator connected it before.
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await page.getByRole('switch', { name: 'Rig control' }).check();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
   expect(await ptt(page)).toEqual([]);
 });

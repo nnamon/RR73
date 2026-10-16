@@ -263,6 +263,7 @@ async function usbSendReadsOff(radio: CatRadio): Promise<boolean> {
  * MIC BTN OFF, as every open asserts RTS, which the Digirig's KX cable takes to the MIC jack's PTT.
  */
 function mayOpenByItself(): boolean {
+  if (!settings.cat.enabled) return false;
   if (lastAttemptStopped(settings.cat.radio)) return false;
   return settings.cat.radio !== 'kx2' || settings.cat.kx2MicBtn === 0;
 }
@@ -349,7 +350,7 @@ async function reconnect(api: SerialApiLike, via: ConnectVia) {
  */
 export async function connectRadio(): Promise<void> {
   const api = deps.api();
-  if (!api) return;
+  if (!api || !settings.cat.enabled) return;
   const before = { status: rig.status, error: rig.error };
   rig.status = 'choosing';
   // Logged before the chooser shows: Chrome on Windows has closed while a port was chosen in it.
@@ -389,7 +390,7 @@ export async function connectRadio(): Promise<void> {
  */
 export async function reconnectRadio(): Promise<void> {
   const api = deps.api();
-  if (!api || current || rig.status === 'choosing' || rig.status === 'connecting') return;
+  if (!api || !settings.cat.enabled || current || rig.status === 'choosing' || rig.status === 'connecting') return;
   await reconnect(api, 'reconnect');
 }
 
@@ -409,6 +410,26 @@ export async function disconnectRadio(): Promise<void> {
   // sends PTT off if it does.
   recover = !confirmed;
   if (!confirmed) rig.unkeyFailed = true;
+}
+
+/**
+ * Settings › Rig control's switch. Off closes the link, PTT off confirmed first, and RR73 then opens
+ * no port until it is on again. The port stays allowed and the choice of Connect radio stays, so On
+ * opens that port again by itself, as on opening the app.
+ */
+export async function setRigEnabled(on: boolean): Promise<void> {
+  if (settings.cat.enabled === on) return;
+  await updateSettings({ cat: { ...settings.cat, enabled: on } });
+  if (!on) {
+    testGen++;
+    const confirmed = await closeCurrent();
+    resetRig();
+    recover = !confirmed;
+    if (!confirmed) rig.unkeyFailed = true;
+    return;
+  }
+  const api = deps.api();
+  if (api && !current && settings.cat.connect && mayOpenByItself()) await reconnect(api, 'auto');
 }
 
 /**

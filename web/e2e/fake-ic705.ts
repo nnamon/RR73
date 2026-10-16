@@ -254,6 +254,7 @@ export const ptt = async (page: Page) => rigFrames(await rigLog(page)).filter((f
 /** Settings › Rig control › Connect radio; the fake browser's chooser returns the fake radio. */
 export async function connect(page: Page) {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await page.getByRole('button', { name: 'Connect radio' }).click();
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
 }
@@ -273,7 +274,15 @@ export async function chooseOutput(page: Page, label = 'Fake Audio Output 1') {
 /** Turns Key the radio with CAT on or off in Settings › Rig control. */
 export async function setKeying(page: Page, on: boolean) {
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   const sw = page.getByRole('switch', { name: /^Key the radio with CAT/ });
   if ((await sw.isChecked()) !== on) await sw.click();
   await expect(sw).toBeChecked({ checked: on });
+}
+
+/** Turns Settings › Rig control's switch on, as an operator does before Connect radio: rig control is off by default. */
+export async function rigOn(page: Page) {
+  const on = page.getByRole('switch', { name: 'Rig control' });
+  await expect(on).toBeVisible();
+  if (!(await on.isChecked())) await on.check();
 }

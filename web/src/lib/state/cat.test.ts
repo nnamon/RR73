@@ -157,7 +157,7 @@ beforeEach(async () => {
   };
   // CatRadio's clock on the faked Date: performance.now() keeps real time under fake timers.
   setCatDeps({ api: () => api, wasm: async () => wasm, timers: { now: () => Date.now(), set: (fn, ms) => setTimeout(fn, ms), clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>) } });
-  await updateSettings({ band: '20m', mode: 'FT8', cat: { ...CAT_DEFAULTS } });
+  await updateSettings({ band: '20m', mode: 'FT8', cat: { ...CAT_DEFAULTS, enabled: true } });
 });
 
 afterEach(() => {

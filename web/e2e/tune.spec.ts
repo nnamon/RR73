@@ -2,7 +2,7 @@
 // counts down, and Halt stops the tone at once. Web Audio is instrumented in the page to record what reaches the
 // destination.
 import { expect, test, type Page } from '@playwright/test';
-import { connect, installFakeIc705 } from './fake-ic705';
+import { connect, installFakeIc705, rigOn } from './fake-ic705';
 
 declare global {
   interface Window {
@@ -149,6 +149,7 @@ test('Tune names the dial the radio reports while rig control reads one, on any 
   // 4m is outside RR73's bands: the band stays 20m, and Tune goes out on the radio's dial.
   await page.evaluate(() => window.__rig.turnDial(70_100_000));
   await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await rigOn(page);
   await expect(page.getByTestId('rig-dial')).toContainText('70.100');
   await page.evaluate(() => (location.hash = '#/settings/radio'));
   await tune.click();

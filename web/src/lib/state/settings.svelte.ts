@@ -77,6 +77,8 @@ export type { CatRadioId };
 
 /** Rig control (Settings › Rig control, docs/design/cat.md). Desktop Chromium only. */
 export interface CatSettings {
+  /** Rig control's own switch. Off: RR73 opens no port, by itself or on a tap, and transmissions key the radio by VOX. */
+  enabled: boolean;
   radio: CatRadioId;
   /** Transmissions key the radio by PTT over CI-V. Off: the radio keys by VOX, and RR73 only reads and sets its dial and mode. */
   keyPtt: boolean;
@@ -104,7 +106,7 @@ export interface CatSettings {
   leftKeyed: boolean;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, ic705Baud: IC705_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { enabled: false, radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, ic705Baud: IC705_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -320,7 +322,7 @@ export function normaliseMinutes(v: number): number | null {
 function validateCat(raw: unknown): CatSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const c = { ...CAT_DEFAULTS };
-  for (const k of ['keyPtt', 'shiftDial', 'connect', 'leftKeyed'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  for (const k of ['enabled', 'keyPtt', 'shiftDial', 'connect', 'leftKeyed'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
   if (typeof r.kx2MicBtn === 'number' && Number.isInteger(r.kx2MicBtn) && r.kx2MicBtn >= 0 && r.kx2MicBtn <= 255) c.kx2MicBtn = r.kx2MicBtn;
   if (r.radio === 'ic705' || r.radio === 'kx2') c.radio = r.radio;
   if (KX2_BAUDS.includes(r.kx2Baud as Kx2Baud)) c.kx2Baud = r.kx2Baud as Kx2Baud;
