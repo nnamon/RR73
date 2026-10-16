@@ -1,5 +1,5 @@
 /**
- * Worked before from Wavelog as reactive state: the keys read from Wavelog's log, laid over the
+ * Read Wavelog's log as reactive state: the keys read from Wavelog's log, laid over the
  * phone's log for decode colours, the New chip and Hide worked, and the switch, Refresh from
  * Wavelog and the status under it (docs/design/wavelog-worked.md).
  *
@@ -62,7 +62,7 @@ export function wavelogBandModes(call: string): string[] {
   return keys && !practice.on && !log.practice ? bandModesOf(keys, call) : [];
 }
 
-/** Turns Worked before from Wavelog on, which reads Wavelog's log at once, or off, which deletes what was read. */
+/** Turns Read Wavelog's log on, which reads it at once, or off, which deletes what was read. */
 export async function setReadWorked(on: boolean): Promise<void> {
   await setWavelog({ readWorked: on });
   if (!on) await sync.forget();

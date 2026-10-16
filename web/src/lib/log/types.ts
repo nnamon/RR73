@@ -225,7 +225,7 @@ export interface WavelogConfig {
   stations: WavelogStation[];
   lastTest: WavelogTest | null;
   /**
-   * Worked before from Wavelog: RR73 reads what Wavelog's log holds for decode colours, the New
+   * Read Wavelog's log: RR73 reads what Wavelog's log holds for decode colours, the New
    * chip and Hide worked only (docs/design/wavelog-worked.md). Off by default.
    */
   readWorked: boolean;

@@ -60,7 +60,7 @@
   if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
   const resolves = $derived(countries ? (call: string) => countries!.lookup(call).found : null);
 
-  // What Wavelog's log holds counts for the colours too, with Worked before from Wavelog on.
+  // What Wavelog's log holds counts for the colours too, with Read Wavelog's log on.
   const ownIndex = $derived(buildLogIndex(log.live, countries));
   const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex(countries)));
   const colourOf = $derived.by(() => {

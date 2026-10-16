@@ -591,7 +591,7 @@ export async function testWavelog(cfg: Pick<WavelogConfig, 'url' | 'apiKey' | 's
 }
 
 /**
- * Removes the Wavelog address and key from this phone, and Worked before from Wavelog with them.
+ * Removes the Wavelog address and key from this phone, and what Read Wavelog's log read with them.
  * QSOs keep their delivery history.
  */
 export async function forgetWavelog(): Promise<void> {

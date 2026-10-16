@@ -1,8 +1,9 @@
 // The app's screens, for the layout, accessibility and screenshot checks. Screens with a seed show
-// a log written into IndexedDB first (e2e/log-data.ts).
+// a log written into IndexedDB first (e2e/log-data.ts). With 'wavelog-read', Read Wavelog's log
+// is on and reads the mock Wavelog's log (route interception; no real server is called).
 import type { Page } from '@playwright/test';
 import type { Features } from '../src/lib/state/settings.svelte';
-import { emptySeed, mockupLog, seed, withFeatures } from './log-data';
+import { emptySeed, mockupLog, mockWavelog, seed, withFeatures } from './log-data';
 import { RELAY_SET_UP, routeRelay } from './relay-stand-in';
 import { feedSpot, publish, routeFeed } from './feed-stand-in';
 import { FIXED_TIME } from './time';
@@ -10,7 +11,7 @@ import { useTheme, type TestTheme } from './theme';
 
 export { FIXED_TIME };
 
-export type SeedName = 'log' | 'running' | 'station';
+export type SeedName = 'log' | 'running' | 'station' | 'wavelog-read';
 
 export interface Screen {
   name: string;
@@ -53,6 +54,7 @@ export const SCREENS: readonly Screen[] = [
   { name: 'operate-running', path: '#/operate', heading: 'Operate', seed: 'running', features: ACTIVATIONS },
   { name: 'logging-set-up', path: '#/settings/logging', heading: 'Logging', seed: 'log', features: ACTIVATIONS },
   { name: 'wavelog-set-up', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'log' },
+  { name: 'wavelog-read', path: '#/settings/logging/wavelog', heading: 'Wavelog', seed: 'wavelog-read' },
   { name: 'practice', path: '#/settings/practice', heading: 'Practice band' },
   { name: 'practice-on', path: '#/settings/practice', heading: 'Practice band', practice: true },
   { name: 'operate-practice', path: '#/operate', heading: 'Operate', practice: true },
@@ -88,15 +90,22 @@ export async function open(page: Page, path: string, theme: TestTheme, withSeed?
         ws.send(publish(`pskr/filter/v2/${band}/FT8/${tx}/${rc}/OJ11/${rl.slice(0, 4)}/381/1`, feedSpot(nowS, tx, rc, rl, rp, band, ago)));
     });
   }
+  if (withSeed === 'wavelog-read') {
+    const mock = await mockWavelog(page);
+    for (const call of ['JA1KXM', 'VK3ARR', 'ZL1TQK', 'K1ABC']) mock.add(call, '20m', 'FT8');
+  }
   if (withSeed || features || practice || relay || psk || heard) {
     await page.goto('./');
-    const data = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
+    const log = withSeed ? mockupLog({ running: withSeed === 'running', stationRefusal: withSeed === 'station' }) : emptySeed();
+    const data = withSeed === 'wavelog-read' ? { ...log, destinations: log.destinations.map((d) => (d.kind === 'wavelog' ? { ...d, readWorked: true } : d)) } : log;
     const all = features ? withFeatures(data, features) : data;
     const kv = [...all.kv, ...(practice ? [{ key: 'practice', value: { on: true } }] : []), ...(relay ? [{ key: 'relay', value: RELAY_SET_UP }] : []), ...(psk ? [{ key: 'pskreporter', value: { on: true, antenna: 'Vertical, 10 m up' } }] : []), ...(heard ? [{ key: 'heardyou', value: { on: true } }] : []), ...(heard && !all.kv.some((k) => k.key === 'settings') ? [{ key: 'settings', value: { callsign: '9V1NE', grid: 'OJ11' } }] : [])];
     await seed(page, { ...all, kv });
   }
   await page.goto(`./${path}`);
   await page.locator('main h1').first().waitFor({ state: 'attached' });
+  // The read from the mock Wavelog ends before the screen is measured.
+  if (withSeed === 'wavelog-read' && path.endsWith('/wavelog')) await page.getByTestId('wavelog-read').filter({ hasText: /checked/ }).waitFor();
   await page.waitForTimeout(300);
 }
 

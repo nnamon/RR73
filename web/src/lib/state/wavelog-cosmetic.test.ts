@@ -1,4 +1,4 @@
-// The owner's rule for Worked before from Wavelog: what Wavelog's log holds is cosmetic. It colours
+// The owner's rule for Read Wavelog's log: what Wavelog's log holds is cosmetic. It colours
 // decodes, and counts for New and Hide worked, and changes nothing the sequencer decides: Hunt's
 // pick in any order, Repeat CQ's answer and order, and dupes, which come from this phone's log.
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
@@ -57,7 +57,7 @@ function repeatCq(order: QueueOrder) {
   return { queue: s.st.queue.map((c) => ({ call: c.call, dupe: c.dupe, isNew: c.isNew })), sent: s.sent.map((t) => `${t.slot}:${t.text}`), effects: s.effects };
 }
 
-describe('Worked before from Wavelog', () => {
+describe('Read Wavelog’s log', () => {
   it('colours a station worked only in Wavelog, so the test below has data that counts', () => {
     const own = buildLogIndex(log.live);
     wavelogWorked.keys = wavelogKeys();

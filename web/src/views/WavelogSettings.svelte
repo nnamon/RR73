@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Settings › Logging › Wavelog: the address and API key, Test connection, the default station
-   * location, sending on or off, Worked before from Wavelog with Refresh from Wavelog, and
+   * location, sending on or off, Read Wavelog's log with Refresh from Wavelog, and
    * removing Wavelog from this phone.
    */
   import BackLink from '../ui/BackLink.svelte';
@@ -156,7 +156,7 @@
       <div class="group">
         <label class="row">
           <span class="row-main">
-            <span class="row-title">Worked before from Wavelog</span>
+            <span class="row-title">Read Wavelog’s log</span>
             <span class="row-sub">Decode colours, New and Hide worked</span>
           </span>
           <input type="checkbox" role="switch" class="switch" checked={w.readWorked} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />

@@ -1,7 +1,7 @@
 /**
- * Worked before from Wavelog: what the operator's Wavelog log holds, read for decode colours, the
- * New chip and Hide worked only (docs/design/wavelog-worked.md). Nothing here reaches the log, the
- * ledger, the sequencer, Hunt, Repeat CQ or dupes.
+ * Read Wavelog's log (Settings › Logging › Wavelog): what the operator's Wavelog log holds, read
+ * for decode colours, the New chip and Hide worked only (docs/design/wavelog-worked.md). Nothing
+ * here reaches the log, the ledger, the sequencer, Hunt, Repeat CQ or dupes.
  *
  * The API contract comes from Wavelog's application/controllers/Api.php and
  * models/Adif_data.php (MIT licence), read at tag 3.2.4:

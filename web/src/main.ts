@@ -64,7 +64,7 @@ void Promise.race([Promise.all([settingsLoaded, practiceLoaded, relayLoaded, psk
     .catch(() => undefined)
     .finally(() => {
       void loadLog();
-      // Worked before from Wavelog reads once the operator's log has loaded with its switch on.
+      // Read Wavelog's log (Settings › Logging › Wavelog) starts once the operator's log has loaded.
       initWavelogWorked();
     });
 });

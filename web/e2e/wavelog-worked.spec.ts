@@ -1,4 +1,4 @@
-// Worked before from Wavelog in Chromium: the switch in Settings › Logging › Wavelog, off by
+// Read Wavelog's log in Chromium: the switch in Settings › Logging › Wavelog, off by
 // default, reads the mock Wavelog's log (route interception, e2e/log-data.ts; no real server is
 // called). A station worked only in Wavelog greys in Operate and Hide worked hides it; turning the
 // switch off deletes what was read; Hunt still calls the station. Decodes come through the
@@ -39,7 +39,7 @@ async function start(page: Page): Promise<{ mock: MockWavelog; strays: string[] 
 }
 
 const reads = (mock: MockWavelog) => mock.requests.filter((r) => r.path === '/api/get_contacts_adif');
-const readSwitch = (page: Page) => page.getByRole('switch', { name: /^Worked before from Wavelog/ });
+const readSwitch = (page: Page) => page.getByRole('switch', { name: /^Read Wavelog’s log/ });
 
 async function toWavelog(page: Page) {
   await page.goto('./#/settings/logging/wavelog');

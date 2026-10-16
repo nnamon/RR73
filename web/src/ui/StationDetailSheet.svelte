@@ -30,7 +30,7 @@
   const path = $derived(grid && settings.grid ? gridPath(settings.grid, grid) : null);
   const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
   const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
-  // With Worked before from Wavelog on: the bands and modes Wavelog's log holds the station on.
+  // With Read Wavelog's log on: the bands and modes Wavelog's log holds the station on.
   const inWavelog = $derived(call && open ? wavelogBandModes(call) : []);
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
