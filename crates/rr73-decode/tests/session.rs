@@ -406,3 +406,98 @@ fn a_hashed_callsign_resolves_from_a_message_decoded_later_in_the_slot() {
     // The hashed message was decoded first, before the callsign was known.
     assert!(found[0].text.ends_with("PJ4/W9XYZ"), "{:?}", texts(&found));
 }
+
+#[test]
+fn faded_stations_on_one_frequency_decode_with_their_neighbours_removed() {
+    // Faded stations within 15 Hz and 0.9 s of each other spoil each other's soft bits, and the
+    // preset decodes none of the 7 in these 3 slots. With the retries of experiment 0012, a
+    // failed candidate is tried again with its neighbours' hard decisions removed from its
+    // baseband; once one decodes, the others are tried with its message removed. Each decode is
+    // reported where its station is.
+    let faded = |text: &str, freq_hz: f64, dt_s: f64, snr_db: f64| {
+        let mut s = SimSignal::new(text, freq_hz, dt_s, snr_db);
+        s.fading = Some(rr73_chansim::Watterson::MODERATE);
+        s
+    };
+    let slots = [
+        (
+            17,
+            vec![
+                faded(
+                    "YO3GK JA2KGH PM84",
+                    1410.2375671241475,
+                    0.2788708508639832,
+                    -9.266604062363626,
+                ),
+                faded(
+                    "DF1BN JH6XOD PM52",
+                    1411.411058714047,
+                    0.10818642050233007,
+                    -11.663128548505455,
+                ),
+                faded(
+                    "ZS6KBS JA3JKK PM75",
+                    1396.0651135569558,
+                    0.28503396020471994,
+                    -11.344625066703788,
+                ),
+            ],
+        ),
+        (
+            52,
+            vec![
+                faded(
+                    "YO3GK JA2KGH PM84",
+                    1399.9695350527015,
+                    0.20666050821070137,
+                    -14.164683125321899,
+                ),
+                faded(
+                    "DF1BN JH6XOD PM52",
+                    1403.251637968935,
+                    0.02679900472763208,
+                    -7.111622249978861,
+                ),
+            ],
+        ),
+        (
+            62,
+            vec![
+                faded(
+                    "YO3GK JA2KGH PM84",
+                    1399.80853184015,
+                    0.37531389108418334,
+                    -13.203269153670298,
+                ),
+                faded(
+                    "DF1BN JH6XOD PM52",
+                    1406.310087742414,
+                    -0.48554292940305305,
+                    -14.226850524788903,
+                ),
+            ],
+        ),
+    ];
+    let preset = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let retries = preset.with_overrides(&["pairs.enabled=true"]).expect("overrides");
+    for (seed, signals) in slots {
+        let audio = render(signals.clone(), seed);
+        let slot = SlotAudio::new(&audio, Mode::Ft8);
+        let r = decode(&slot, &preset, &mut DecodeContext::new());
+        assert!(r.decodes.is_empty(), "seed {seed}: {:?}", texts(&r.decodes));
+        let r = decode(&slot, &retries, &mut DecodeContext::new());
+        let mut sent: Vec<String> = signals.iter().map(|s| s.message.clone()).collect();
+        sent.sort();
+        assert_eq!(texts(&r.decodes), sent, "seed {seed}");
+        assert!(r.stats.pair_retries > 0);
+        for d in &r.decodes {
+            let s = signals.iter().find(|s| s.message == d.text).expect("sent");
+            assert!(
+                (f64::from(d.freq_hz) - s.freq_hz).abs() < 3.2,
+                "seed {seed}: {} at {} Hz",
+                d.text,
+                d.freq_hz
+            );
+        }
+    }
+}
