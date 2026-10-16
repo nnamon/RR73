@@ -1,7 +1,7 @@
 {
   "name": "rr73-web",
   "private": true,
-  "version": "0.24.1",
+  "version": "0.24.2",
   "description": "RR73, an FT8 and FT4 app for iPhone that works through the headset jack.",
   "type": "module",
   "scripts": {

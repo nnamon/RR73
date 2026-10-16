@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.2 · 2026-10-16
 
 - FT8 and FT4 decode stations with tones up to 3200 Hz, beyond the 3000 Hz limit before, such as a strong station at the edge of the radio’s passband.
 - The SNR of a station near the edge of the radio’s passband reads within about 2 dB of its true value. Before, it read up to 5 dB high there.
