@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- After a connection to the radio that never completed, such as one during which Chrome closed, RR73 no longer opens the port by itself when the app opens or the radio is plugged in. Connect radio and Reconnect radio still open it.
 - Settings › Rig control has a Baud rate for the IC-705: 4800 to 115200, 115200 by default. A new rate opens the port again at that rate.
 
 ## 0.24.3 · 2026-10-16

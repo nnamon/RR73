@@ -9,7 +9,9 @@
  * drops what arrived meanwhile, then reads the radio. It sends no PTT and changes no setting, with
  * one exception: a radio that reports transmitting gets PTT off when RR73 may have left it keyed
  * (this page lost the port, or the stored leftKeyed flag says an earlier page went while keyed) or
- * Key the radio with CAT is on. A KX2's port opens by itself only after MIC BTN last read OFF. RR73 opens only the port the operator chose:
+ * Key the radio with CAT is on. A KX2's port opens by itself only after MIC BTN last read OFF, and
+ * no port opens by itself after an attempt on the radio that never connected: the browser may have
+ * closed in it (lib/cat/connect-log.ts). RR73 opens only the port the operator chose:
  * Connect radio takes back the browser's permission for every other port, and on opening the app
  * RR73 opens the allowed port only when exactly one of the chosen kind is there.
  *
@@ -22,6 +24,7 @@
 
 import { CatRadio, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
 import { SerialLink, choosePort, civPort, grantedPorts, kx2Port, serialApi, type Ic705Baud, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
+import { beginAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, type ConnectVia } from '../cat/connect-log';
 import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
 import { RADIOS, type CatRadioId } from '../cat/radios';
 import { utcTime } from '../clock/format';
@@ -99,6 +102,7 @@ function follow(hz: number | null) {
 function mirror(s: RadioState) {
   if (s.status !== 'lost' && s.status !== 'closed') rig.status = s.status === 'starting' ? 'connecting' : s.status;
   if (s.status === 'connected') {
+    logStep({ step: 'connected' });
     rig.error = null;
     recover = false;
     recoverShift = null;
@@ -139,6 +143,7 @@ function setLeftKeyed(v: boolean) {
 function fail(error: 'busy' | 'signals' | 'failed' | 'no-wasm' | 'gone' | 'choose') {
   rig.status = 'failed';
   rig.error = error;
+  logFailure(error);
 }
 
 async function open(port: SerialPortLike): Promise<boolean> {
@@ -154,7 +159,9 @@ async function open(port: SerialPortLike): Promise<boolean> {
     return false;
   }
   const kx2 = settings.cat.radio === 'kx2';
-  const link = new SerialLink(port, kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud));
+  const options = kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud);
+  const link = new SerialLink(port, options);
+  logStep({ step: 'open', options });
   const err = await link.open();
   if (err) {
     fail(err);
@@ -166,6 +173,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   if (link.state !== 'open') {
     rig.status = 'lost';
     rig.error = 'lost';
+    logFailure('lost');
     return false;
   }
   const radio = new CatRadio({ codec: kx2 ? kx2Codec(wasm) : wasmCodec(wasm), traits: RADIOS[settings.cat.radio], transport: link, timers: deps.timers });
@@ -213,11 +221,20 @@ async function open(port: SerialPortLike): Promise<boolean> {
 }
 
 /**
- * True when RR73 may open the port by itself: always for the IC-705; for the KX2 only after it read
+ * True when RR73 may open the port by itself: never after an attempt on this radio that did not
+ * reach connected, as the browser may have closed in it (on Windows, Chrome has closed while
+ * opening the IC-705's port) and every start would close it again. For the KX2 only after it read
  * MIC BTN OFF, as every open asserts RTS, which the Digirig's KX cable takes to the MIC jack's PTT.
  */
 function mayOpenByItself(): boolean {
+  if (lastAttemptStopped(settings.cat.radio)) return false;
   return settings.cat.radio !== 'kx2' || settings.cat.kx2MicBtn === 0;
+}
+
+/** Starts the connection log of an attempt on `port`, found or chosen. */
+function beginOn(port: SerialPortLike, via: ConnectVia) {
+  const i = port.getInfo();
+  beginAttempt(settings.cat.radio, via, { step: 'port', usbVendorId: i.usbVendorId ?? null, usbProductId: i.usbProductId ?? null });
 }
 
 /** Reads the KX2's MIC BTN again, as when Rig control opens: the operator may have changed it at the radio. */
@@ -277,14 +294,16 @@ async function closeCurrent(): Promise<boolean> {
  * Opens the port the operator chose before, when the browser allows exactly one of its kind. With
  * none, or several that cannot be told apart, nothing opens: RR73 never tries a port to see.
  */
-async function reconnect(api: SerialApiLike) {
+async function reconnect(api: SerialApiLike, via: ConnectVia) {
   const c = settings.cat;
   const ports = (await grantedPorts(api)).filter((p) => {
     const i = p.getInfo();
     return c.usbVendorId === null || (i.usbVendorId === c.usbVendorId && i.usbProductId === c.usbProductId);
   });
-  if (ports.length === 1) await open(ports[0]);
-  else fail(ports.length ? 'choose' : 'gone');
+  if (ports.length === 1) {
+    beginOn(ports[0], via);
+    await open(ports[0]);
+  } else fail(ports.length ? 'choose' : 'gone');
 }
 
 /**
@@ -302,6 +321,7 @@ export async function connectRadio(): Promise<void> {
     rig.error = chosen.error === 'refused' ? 'refused' : before.error;
     return;
   }
+  beginOn(chosen.port, 'connect');
   await closeCurrent();
   // Only this port opens again by itself: the browser forgets the others RR73 was allowed.
   for (const p of await grantedPorts(api)) {
@@ -327,7 +347,7 @@ export async function connectRadio(): Promise<void> {
 export async function reconnectRadio(): Promise<void> {
   const api = deps.api();
   if (!api || current || rig.status === 'choosing' || rig.status === 'connecting') return;
-  await reconnect(api);
+  await reconnect(api, 'reconnect');
 }
 
 /** Disconnect radio: PTT off if RR73 may hold it, closes the port and forgets it. Transmissions key by VOX again. */
@@ -513,7 +533,10 @@ async function reopenAtNewRate() {
   const c = current;
   if (!c) return;
   recover = !(await closeCurrent());
-  if (mayOpenByItself()) await open(c.port);
+  if (mayOpenByItself()) {
+    beginOn(c.port, 'auto');
+    await open(c.port);
+  }
   else {
     // Closed at the old rate; Connect radio opens it at the new one.
     rig.status = 'off';
@@ -539,10 +562,10 @@ export async function initCat(): Promise<void> {
     if (c && (settings.cat.keyPtt || c.radio.holdsPtt)) c.radio.unkeyAll();
   });
   api.addEventListener?.('connect', () => {
-    if (settings.cat.connect && mayOpenByItself() && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api);
+    if (settings.cat.connect && mayOpenByItself() && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api, 'auto');
   });
   void deps.wasm();
-  if (settings.cat.connect && mayOpenByItself()) await reconnect(api);
+  if (settings.cat.connect && mayOpenByItself()) await reconnect(api, 'auto');
 }
 
 /** Replaces the browser's Web Serial and the WebAssembly loader; tests only. */
@@ -554,6 +577,7 @@ export function setCatDeps(d: Deps) {
 export function resetCat() {
   current?.radio.close();
   current = null;
+  resetConnectLog();
   releasing = null;
   recover = false;
   recoverShift = null;

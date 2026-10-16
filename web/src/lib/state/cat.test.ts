@@ -144,6 +144,7 @@ beforeEach(async () => {
   // IndexedDB (fake-indexeddb) runs on setImmediate, which stays real.
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   resetCat();
+  localStorage.clear();
   chosen = new SimSerialPort();
   granted = [];
   api = {
@@ -244,6 +245,52 @@ describe('connecting', () => {
     granted = [];
     await initCat();
     expect(rig.error).toBe('gone');
+  });
+
+  it('opens no port by itself after an attempt that stopped before connecting, and Reconnect radio still opens it', async () => {
+    // The browser closes while the port opens: open() never resolves, and the page goes.
+    const open = chosen.open.bind(chosen);
+    chosen.open = () => new Promise<void>(() => {});
+    await initCat();
+    void connectRadio();
+    await run(OPEN_SETTLE_MS + 300);
+    resetCat();
+    chosen.open = open;
+    chosen.log = [];
+    const events = new EventTarget();
+    api.addEventListener = (type, fn) => events.addEventListener(type, fn);
+    await initCat();
+    await run(OPEN_SETTLE_MS + 300);
+    expect(chosen.log).toEqual([]);
+    expect(rig.status).toBe('off');
+    // The port coming back opens nothing either.
+    events.dispatchEvent(new Event('connect'));
+    await run(OPEN_SETTLE_MS + 300);
+    expect(chosen.log).toEqual([]);
+    // A tap still opens it.
+    const tapped = reconnectRadio();
+    await run(OPEN_SETTLE_MS + 300);
+    await tapped;
+    expect(rig.status).toBe('connected');
+    // That attempt connected: the next start opens the port by itself again.
+    resetCat();
+    chosen.log = [];
+    const opening = initCat();
+    await run(OPEN_SETTLE_MS + 300);
+    await opening;
+    expect(chosen.log[0]).toBe('open');
+    expect(rig.status).toBe('connected');
+  });
+
+  it('opens the port by itself after an attempt on the other radio that stopped', async () => {
+    await connect();
+    localStorage.setItem('rr73.connectLog', JSON.stringify({ radio: 'kx2', via: 'connect', steps: [{ step: 'open', atMs: 0, options: { baudRate: 4800 } }] }));
+    resetCat();
+    chosen.log = [];
+    const opening = initCat();
+    await run(OPEN_SETTLE_MS + 300);
+    await opening;
+    expect(chosen.log[0]).toBe('open');
   });
 
   it('with USB SEND on a line, keeps the lines low, refuses Tx and Test keying, and says what to set', async () => {

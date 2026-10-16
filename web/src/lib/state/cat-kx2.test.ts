@@ -125,6 +125,7 @@ let granted: Kx2SerialPort[];
 let api: SerialApiLike;
 
 beforeEach(async () => {
+  localStorage.clear();
   vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'setInterval', 'clearInterval', 'Date'] });
   resetCat();
   chosen = new Kx2SerialPort();
