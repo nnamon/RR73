@@ -60,7 +60,7 @@ export function wavelogStandIn(station: () => { callsign: string; grid: string }
       const s = station();
       return json(200, [{ station_id: STATION_ID, station_profile_name: 'Practice', station_callsign: s.callsign, station_gridsquare: s.grid, station_active: '1' }]);
     }
-    if (path === '/api/version') return json(200, { status: 'ok', version: '2.1' });
+    if (path === '/api/version') return json(200, { status: 'ok', version: '3.2.4' });
     if (path === '/api/qso/true') return json(201, { status: 'created', adif_count: 0, adif_errors: 0, messages: ['Dryrun works'] });
     if (path === '/api/qso' && method === 'POST') {
       let body: { key?: string; string?: string } = {};

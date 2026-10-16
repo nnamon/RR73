@@ -119,7 +119,7 @@ test('sets up Wavelog, keeps a new QSO not sent for 30 s, then sends it on Send 
   await page.getByRole('textbox', { name: 'Address' }).fill('wavelog.example.test/');
   await page.getByLabel('API key').fill(API_KEY);
   await page.getByRole('button', { name: 'Test connection' }).click();
-  await expect(page.getByText(/^Connected to Wavelog 2\.1 at 13:1\d UTC\. The key can read and write\.$/)).toBeVisible();
+  await expect(page.getByText(/^Connected to Wavelog 3\.2\.4 at 13:1\d UTC\. The key can read and write\.$/)).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Address' })).toHaveValue(WAVELOG_URL);
   expect(mock.requests.map((r) => `${r.method} ${r.path}`)).toEqual([
     `GET /api/auth/${API_KEY}`,

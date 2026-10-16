@@ -91,14 +91,12 @@ test('reads Wavelog’s log when switched on: a station worked only there greys,
   await readSwitch(page).check();
   const status = page.getByTestId('wavelog-read');
   await expect(status).toHaveText(/^1 station · checked \d\d:\d\d UTC$/);
-  // Two station locations on a Wavelog older than 3.0.0: one series each, from id 0, for the fields the colours need.
+  // Two station locations on Wavelog 3.2.4: one series for both, from id 0, for the fields the colours need.
   expect(reads(mock).map((r) => [r.body?.station_id, r.body?.fetchfromid])).toEqual([
-    ['1', 0],
-    ['1', mock.contacts[0].id],
-    ['7', 0],
-    ['7', mock.contacts[1].id],
+    [['1', '7'], 0],
+    [['1', '7'], mock.contacts[1].id],
   ]);
-  expect(reads(mock)[0].body).toMatchObject({ output_format: 'json', fields: ['CALL', 'BAND', 'MODE', 'SUBMODE', 'GRIDSQUARE'], limit: 5000 });
+  expect(reads(mock)[0].body).toMatchObject({ output_format: 'json', fields: ['CALL', 'BAND', 'MODE', 'SUBMODE', 'GRIDSQUARE'], limit: 1000 });
   expect(await databases(page)).toContain(WORKED_DB);
 
   await toOperate(page);
@@ -118,13 +116,19 @@ test('reads Wavelog’s log when switched on: a station worked only there greys,
   await expect.poll(texts).toEqual(['9V1NE JA1KXM -10', 'CQ K1ABC FN42']);
   await page.getByRole('button', { name: 'Hide worked' }).click();
 
-  // The station's sheet says where Wavelog's log has it; the phone's log has it nowhere.
+  // The station's sheet says where Wavelog's log has it, in its Worked before row.
   await row(page, 'CQ JA1KXM PM95').click({ button: 'right' });
   const sheet = page.getByRole('dialog', { name: 'JA1KXM' });
-  await expect(sheet.locator('.row', { hasText: 'Worked before' })).toContainText('Not yet');
-  await expect(sheet.locator('.row', { hasText: 'In Wavelog' })).toContainText('40m FT4, 20m FT8');
+  await expect(sheet.getByTestId('worked-before')).toHaveText('40m FT4, 20m FT8 in Wavelog');
   await page.keyboard.press('Escape');
   await expect(sheet).toBeHidden();
+
+  // A check that finds a new QSO in Wavelog greys that station too.
+  mock.add('K1ABC', '20m', 'FT8', '', 'FN42');
+  await page.evaluate(() => window.__rr73!.wavelogCheck());
+  await expect(row(page, 'CQ K1ABC FN42')).toHaveAttribute('data-ink', 'worked');
+  await expect(chips.getByRole('radio', { name: /^New/ })).toHaveText(/^New 0$/);
+  expect(reads(mock).at(-2)?.body?.fetchfromid).toBe(mock.contacts[1].id);
 
   // Nothing went into the log, the Log or the backup.
   const qsos = await page.evaluate(
@@ -233,3 +237,44 @@ test('pauses while the practice band is on, keeps what it read, and colours no p
   await expect(row(page, 'CQ VR2XYZ OL72').first()).toHaveAttribute('data-ink', 'worked');
   expect(strays).toEqual([]);
 });
+
+test('says what an older Wavelog means for reading, and keeps the switch', async ({ page }) => {
+  const { mock, strays } = await start(page);
+  for (const [version, note] of [
+    ['2.4.2', 'This Wavelog is 2.4.2. Reading its log needs Wavelog 2.5.1 or later, or a proxy that adds CORS headers.'],
+    ['2.3', 'Wavelog 2.3 has no JSON output, so RR73 cannot read its log. Reading needs Wavelog 2.5.1 or later.'],
+  ] as const) {
+    mock.version = version;
+    await toWavelog(page);
+    await page.getByRole('button', { name: 'Test connection' }).click();
+    await expect(page.getByText(`Connected to Wavelog ${version} at`, { exact: false })).toBeVisible();
+    await expect(page.getByTestId('wavelog-version-note')).toHaveText(note);
+    await expect(readSwitch(page)).toBeEnabled();
+  }
+  mock.version = '3.2.4';
+  await page.getByRole('button', { name: 'Test connection' }).click();
+  await expect(page.getByText('Connected to Wavelog 3.2.4 at', { exact: false })).toBeVisible();
+  await expect(page.getByTestId('wavelog-version-note')).toHaveCount(0);
+  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this phone’s log only.')).toBeVisible();
+  expect(strays).toEqual([]);
+});
+
+test('keeps the switch in reach with the key gone, and Remove Wavelog deletes what was read', async ({ page }) => {
+  const { strays } = await start(page);
+  await toWavelog(page);
+  await readSwitch(page).check();
+  await expect(page.getByTestId('wavelog-read')).toHaveText(/^1 station · /);
+  const key = page.getByRole('textbox', { name: 'API key' });
+  await key.fill('');
+  await key.blur();
+  await expect(readSwitch(page)).toBeChecked();
+  await expect(page.getByText('Type the address and API key above to read Wavelog’s log.')).toBeVisible();
+  expect(await databases(page)).toContain(WORKED_DB);
+  await page.getByRole('button', { name: 'Remove Wavelog…' }).click();
+  await expect(page.getByRole('dialog', { name: 'Remove Wavelog?' })).toContainText('Deletes the address, the API key and what RR73 read from Wavelog’s log. QSOs stay in the log.');
+  await page.getByRole('dialog', { name: 'Remove Wavelog?' }).getByRole('button', { name: 'Remove Wavelog' }).click();
+  await expect.poll(() => databases(page)).not.toContain(WORKED_DB);
+  await expect(readSwitch(page)).toHaveCount(0);
+  expect(strays).toEqual([]);
+});
+

@@ -208,14 +208,14 @@ const healthy = {
   'GET /api/auth/k%2F1': () => new Response('<auth><status>Valid</status><rights>rw</rights></auth>', { status: 200 }),
   'GET /api/station_info/k%2F1': () => json(200, STATIONS),
   'POST /api/qso/true': () => json(201, { status: 'created', adif_count: 0, adif_errors: 0, messages: ['Dryrun works'] }),
-  'POST /api/version': () => json(200, { status: 'ok', version: '2.1' }),
+  'POST /api/version': () => json(200, { status: 'ok', version: '3.2.4' }),
 };
 
 describe('Test connection', () => {
   it('checks the key, lists station locations and dry-runs a QSO to the chosen one', async () => {
     const w = fakeWavelog(healthy);
     const r = await testConnection({ url: 'log.example.test', apiKey: ' k/1 ', stationId: '7' }, w.fetchFn, T);
-    expect(r).toMatchObject({ ok: true, message: 'Can read and write', rights: 'rw', version: '2.1', stationId: '7', at: T });
+    expect(r).toMatchObject({ ok: true, message: 'Can read and write', rights: 'rw', version: '3.2.4', stationId: '7', at: T });
     expect(r.stations.map((s) => s.id)).toEqual(['1', '7']);
     expect(w.requests.map((q) => `${q.method} ${q.url}`)).toEqual([
       'GET https://log.example.test/api/auth/k%2F1',

@@ -56,7 +56,7 @@ const fake: FetchLike = async (url, init) => {
       ]),
     );
   if (path === '/api/qso/true') return new Response(JSON.stringify({ status: 'created', adif_count: 0 }), { status: 201 });
-  if (path === '/api/version') return new Response(JSON.stringify({ status: 'ok', version: '2.1' }));
+  if (path === '/api/version') return new Response(JSON.stringify({ status: 'ok', version: '3.2.4' }));
   if (path === '/api/qso') {
     const body = JSON.parse(init.body as string) as { station_profile_id: string; key: string; string: string };
     const call = /<CALL:\d+>(\S+)/.exec(body.string)?.[1] ?? '';
@@ -114,7 +114,7 @@ describe('the log store', () => {
     expect(log.facts.find((f) => f.id === 'wavelog')?.active).toBe(false);
     const r = await testWavelog({ url: 'https://log.example.test', apiKey: 'key-1', stationId: null });
     expect(r.ok).toBe(true);
-    expect(log.wavelog).toMatchObject({ stationId: '1', lastTest: { ok: true, rights: 'rw', version: '2.1' } });
+    expect(log.wavelog).toMatchObject({ stationId: '1', lastTest: { ok: true, rights: 'rw', version: '3.2.4' } });
     expect(entry(log.qsos[0].id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });
     const q = await addQso({ ...RECORD, call: 'JA1KXM' });
     expect(entry(q.id)).toMatchObject({ state: 'not-sent', nextAttemptAt: null });

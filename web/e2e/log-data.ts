@@ -37,7 +37,7 @@ export const WAVELOG: WavelogConfig = {
   apiKey: API_KEY,
   stationId: '1',
   stations: STATIONS.map((s) => ({ id: s.station_id, name: s.station_profile_name, callsign: s.station_callsign, grid: s.station_gridsquare, active: s.station_active === '1' })),
-  lastTest: { at: FIXED_TIME - 25 * MIN, ok: true, message: 'Can read and write', rights: 'rw', version: '2.1' },
+  lastTest: { at: FIXED_TIME - 25 * MIN, ok: true, message: 'Can read and write', rights: 'rw', version: '3.2.4' },
   readWorked: false,
 };
 
@@ -225,6 +225,8 @@ export interface MockWavelog {
   rights: 'r' | 'rw' | 'invalid';
   /** The log POST /api/get_contacts_adif reads from. */
   contacts: MockContact[];
+  /** What POST /api/version answers. Before 3.0.0, a list in station_id is refused as Wavelog refuses it. */
+  version: string;
   /** Adds a QSO to the log at station location `station`. */
   add(call: string, band?: string, mode?: string, submode?: string, grid?: string, station?: string): MockContact;
 }
@@ -237,7 +239,8 @@ export interface MockWavelog {
 function contactsReply(mock: MockWavelog, body: Record<string, unknown>): { status: number; body: unknown } {
   if (body.key !== API_KEY || mock.rights === 'invalid') return { status: 401, body: { status: 'failed', reason: 'missing api key' } };
   const ids = (Array.isArray(body.station_id) ? body.station_id : [body.station_id]).map(String);
-  if (ids.some((id) => !STATIONS.some((s) => s.station_id === id))) return { status: 401, body: { status: 'failed', reason: 'Station ID not accessible for this API key' } };
+  const listed = Array.isArray(body.station_id) && Number(mock.version.split('.')[0]) < 3;
+  if (listed || ids.some((id) => !STATIONS.some((s) => s.station_id === id))) return { status: 401, body: { status: 'failed', reason: 'Station ID not accessible for this API key' } };
   const from = Number(body.fetchfromid);
   const fields = (body.fields as string[]) ?? ['CALL'];
   const picked = mock.contacts
@@ -265,6 +268,7 @@ export async function mockWavelog(page: Page): Promise<MockWavelog> {
     qso: () => ({ status: 201, body: { status: 'created', adif_count: 1, adif_errors: 0, messages: [''] } }),
     rights: 'rw',
     contacts: [],
+    version: '3.2.4',
     add(call, band = '20m', mode = 'FT8', submode = '', grid = '', station = '1') {
       const c = { id: id++, station, CALL: call, BAND: band, MODE: mode, SUBMODE: submode, GRIDSQUARE: grid };
       mock.contacts.push(c);
@@ -285,7 +289,7 @@ export async function mockWavelog(page: Page): Promise<MockWavelog> {
     }
     if (path.startsWith('/api/station_info/')) return json(200, STATIONS);
     if (path === '/api/qso/true') return mock.rights === 'r' ? json(403, { status: 'failed', reason: 'API key does not have write permissions' }) : json(201, { status: 'created', adif_count: 0, adif_errors: 0, messages: ['Dryrun works'] });
-    if (path === '/api/version') return json(200, { status: 'ok', version: '2.1' });
+    if (path === '/api/version') return json(200, { status: 'ok', version: mock.version });
     if (path === '/api/qso') {
       const r = mock.qso(mock.requests.at(-1)?.body ?? {});
       return json(r.status, r.body);

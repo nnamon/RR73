@@ -9,6 +9,7 @@
   import { callStart, callStation, qso, type Selected } from '../lib/state/qso.svelte';
   import { log } from '../lib/log/log.svelte';
   import { wavelogBandModes } from '../lib/log/wavelog-worked.svelte';
+  import { workedBeforeText } from '../lib/log/worked';
   import { displayMode } from '../lib/log/qso';
   import { signalHistory } from '../lib/decode/signal';
   import { band } from '../lib/state/station.svelte';
@@ -29,11 +30,18 @@
   const grid = $derived(ex?.grid ?? null);
   const path = $derived(grid && settings.grid ? gridPath(settings.grid, grid) : null);
   const start = $derived(item ? callStart(item.slotStartMs, clock.ms) : null);
-  const worked = $derived(call ? log.live.filter((q) => q.call === bare(call)).slice(0, 3) : []);
-  // With Read Wavelog's log on: the bands and modes Wavelog's log holds the station on.
-  const inWavelog = $derived(call && open ? wavelogBandModes(call) : []);
+  const own = $derived(call ? log.live.filter((q) => q.call === bare(call)) : []);
   const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const when = (ms: number) => (new Date(ms).toISOString().slice(0, 10) === today ? `at ${utcHm(ms)}` : `on ${new Date(ms).toISOString().slice(0, 10)}`);
+  // The phone's last 3 QSOs with the station, then, with Read Wavelog's log on, the bands and
+  // modes only Wavelog's log holds it on.
+  const worked = $derived(
+    workedBeforeText(
+      own.slice(0, 3).map((q) => `${q.band} ${displayMode(q)} ${when(q.start)}`),
+      new Set(own.map((q) => `${q.band.toLowerCase()} ${displayMode(q).toUpperCase()}`)),
+      call && open ? wavelogBandModes(call) : [],
+    ),
+  );
   const ord = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
   // The station's last slots of its parity, from the hour Band activity keeps.
   const signal = $derived(call && isFt(settings.mode) ? signalHistory(band.slots, bare(call), settings.mode) : []);
@@ -63,14 +71,9 @@
       <li class="row">
         <span class="row-main">
           <span class="row-title">Worked before</span>
-          <span class="row-sub">{worked.length ? worked.map((q) => `${q.band} ${displayMode(q)} ${when(q.start)}`).join(', ') : 'Not yet'}</span>
+          <span class="row-sub" data-testid="worked-before">{worked}</span>
         </span>
       </li>
-      {#if inWavelog.length}
-        <li class="row">
-          <span class="row-main"><span class="row-title">In Wavelog</span><span class="row-sub">{inWavelog.join(', ')}</span></span>
-        </li>
-      {/if}
     </ul>
     {#if signal.length}<SignalChart points={signal} />{/if}
   {/if}
