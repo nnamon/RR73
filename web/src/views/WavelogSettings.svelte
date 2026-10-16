@@ -12,6 +12,7 @@
   import { forgetWavelog, log, setWavelog, testWavelog } from '../lib/log/log.svelte';
   import { checkAddress } from '../lib/log/wavelog';
   import { refreshFromWavelog, setReadWorked, wavelogWorked } from '../lib/log/wavelog-worked.svelte';
+  import { practice } from '../lib/state/practice.svelte';
 
   let url = $state('');
   let apiKey = $state('');
@@ -154,14 +155,14 @@
     <div class="section">
       <h2 class="section-head">Worked before</h2>
       <div class="group">
-        <label class="row">
+        <label class="row" class:off={practice.on}>
           <span class="row-main">
             <span class="row-title">Read Wavelog’s log</span>
             <span class="row-sub">Decode colours, New and Hide worked</span>
           </span>
-          <input type="checkbox" role="switch" class="switch" checked={w.readWorked} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />
+          <input type="checkbox" role="switch" class="switch" checked={w.readWorked && !practice.on} disabled={practice.on} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />
         </label>
-        {#if w.readWorked}
+        {#if w.readWorked && !practice.on}
           <button class="row act" disabled={read.readingAll} onclick={() => void refreshFromWavelog()}>
             <span class="row-main">
               <span class="row-title">{read.readingAll ? 'Reading Wavelog’s log' : 'Refresh from Wavelog'}</span>
@@ -170,7 +171,9 @@
           </button>
         {/if}
       </div>
-      {#if w.readWorked && read.error}
+      {#if practice.on}
+        <p class="section-foot">Turn off the practice band to read Wavelog’s log.</p>
+      {:else if w.readWorked && read.error}
         <p class="section-foot bad" role="alert">{read.error}</p>
       {:else}
         <p class="section-foot">Dupes, Hunt and Repeat CQ count this phone’s log only.</p>
@@ -234,7 +237,8 @@
     color: var(--rr-accent);
   }
 
-  .act:disabled .row-title {
+  .act:disabled .row-title,
+  .off .row-title {
     opacity: 0.4;
   }
 

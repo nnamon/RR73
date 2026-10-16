@@ -50,6 +50,8 @@ let memo: { keys: WorkedKeys; countries: DxccIndex | null; index: LogIndex } | n
  */
 export function wavelogIndex(countries: DxccIndex | null): LogIndex | null {
   const keys = wavelogWorked.keys;
+  // Nothing read, or reading off: the last index goes, with its memory.
+  if (!keys) memo = null;
   if (!keys || practice.on || log.practice) return null;
   if (memo && memo.keys === keys && memo.countries === countries) return memo.index;
   memo = { keys, countries, index: buildKeysIndex(keys, countries) };

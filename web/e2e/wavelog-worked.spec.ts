@@ -51,15 +51,18 @@ async function toOperate(page: Page) {
   await expect(page.getByTestId('decode-list')).toBeVisible();
 }
 
-/** A slot of decodes that ended a moment ago. */
-async function decoded(page: Page, decodes: [string, number][]) {
-  await page.evaluate((ds) => {
-    const slot = Math.floor(Date.now() / 15_000) * 15_000 - 15_000;
-    window.__rr73!.decoded(
-      slot,
-      ds.map(([text, snr], i) => ({ text, freq_hz: 600 + 300 * i, dt_s: 0.1, snr_db: snr })),
-    );
-  }, decodes);
+/** A slot of decodes that ended a moment ago, or `back` slots before that. */
+async function decoded(page: Page, decodes: [string, number][], back = 0) {
+  await page.evaluate(
+    ([ds, b]) => {
+      const slot = Math.floor(Date.now() / 15_000) * 15_000 - 15_000 * (1 + b);
+      window.__rr73!.decoded(
+        slot,
+        ds.map(([text, snr], i) => ({ text, freq_hz: 600 + 300 * i, dt_s: 0.1, snr_db: snr })),
+      );
+    },
+    [decodes, back] as const,
+  );
 }
 
 const row = (page: Page, text: string) => page.getByTestId('decode-list').locator('button.dr', { has: page.locator('.c-msg', { hasText: new RegExp(`^${text}$`) }) });
@@ -191,5 +194,42 @@ test('Hunt still calls a station worked only in Wavelog', async ({ page }) => {
   // Audio is off here, so nothing goes out: the call waits as the Next row.
   await expect(page.getByTestId('next-row')).toContainText('JA1KXM 9V1NE OJ11');
   await bar.getByRole('button', { name: 'Halt' }).click();
+  expect(strays).toEqual([]);
+});
+
+test('pauses while the practice band is on, keeps what it read, and colours no practice decode', async ({ page }) => {
+  const { mock, strays } = await start(page);
+  mock.add('VR2XYZ', '20m', 'FT8', '', 'OL72');
+  await toWavelog(page);
+  await readSwitch(page).check();
+  await expect(page.getByTestId('wavelog-read')).toHaveText(/^2 stations · /);
+  const before = reads(mock).length;
+
+  await page.goto('./#/settings/practice');
+  const practice = page.getByRole('switch', { name: /^Practice band/ });
+  await practice.check();
+  await expect(practice).toBeChecked();
+  await toWavelog(page);
+  await expect(readSwitch(page)).toBeDisabled();
+  await expect(readSwitch(page)).not.toBeChecked();
+  await expect(page.getByText('Turn off the practice band to read Wavelog’s log.')).toBeVisible();
+  await toOperate(page);
+  // A slot older than the practice band's own, so its decodes leave this one alone.
+  await decoded(page, [['CQ VR2XYZ OL72', -3]], 3);
+  await expect(row(page, 'CQ VR2XYZ OL72')).toBeVisible();
+  await expect(row(page, 'CQ VR2XYZ OL72')).not.toHaveAttribute('data-ink', 'worked');
+  expect(reads(mock).length).toBe(before);
+  expect(await databases(page)).toContain(WORKED_DB);
+
+  // Off again: what was read colours the station once more, from storage.
+  await page.goto('./#/settings/practice');
+  await practice.uncheck();
+  await expect(practice).not.toBeChecked();
+  await toWavelog(page);
+  await expect(readSwitch(page)).toBeChecked();
+  await expect(page.getByTestId('wavelog-read')).toHaveText(/^2 stations · /);
+  await toOperate(page);
+  await decoded(page, [['CQ VR2XYZ OL72', -3]]);
+  await expect(row(page, 'CQ VR2XYZ OL72').first()).toHaveAttribute('data-ink', 'worked');
   expect(strays).toEqual([]);
 });
