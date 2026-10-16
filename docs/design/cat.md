@@ -33,12 +33,24 @@ Downloaded from Icom's site (icomjapan.com/support/manual) on 15 October 2026. P
 | IC-705 Advanced Manual | A7560-7EX-5, April 2026 | USB SEND and keying, serial port settings, data modes |
 | IC-705 Firmware Update Information | Versions 1.11 to 1.40 | Checked for changed CI-V commands: none of those below changed |
 | USB Driver Installation Guide (Windows 11) | A7560-9EX-5, August 2026 | Windows support, port names, USB audio driver |
+| USB Driver download page | Version 1.80, 26 August 2026 | The driver's version and its Web Serial fix |
 
 The CI-V guide prints the frame layout and the data formats but no complete example frames. The test frames in `crates/rr73-cat/tests/reference.rs` are worked from those layouts, each with its page.
 
 ## First session
 
 The owner's first session brings rig control up in stages. Each stage needs the one before, and Key the radio with CAT stays off until stage 6.
+
+On the Windows tablet, before stage 1:
+
+- Driver: install Icom's USB Driver, version 1.80 or later, before the radio is plugged in: "DO NOT connect the USB cable between the radio and the PC until AFTER the USB driver has been installed" (driver guide p. 2). The USB audio driver installs with it (p. 4). Version 1.80 "Fixed a bug where the browser would stop responding when connecting to the radio from the browser using the Web Serial API" (download page). Device Manager then lists IC-705 Serial Port A (CI-V) and IC-705 Serial Port B (Advanced Manual p. 9-2).
+- Audio devices: in Settings › Radio and audio, choose the IC-705's USB audio as Input and as Output. Icom's documents do not name the devices; Windows usually lists them as USB Audio CODEC (Unverified on the owner's tablet).
+- Receive level: the radio's AF Output Level (Connectors set mode, 50 % by default, Basic Manual p. 8-15) and the device's Input volume in Windows Settings › System › Sound › Input. The Level meter in Radio and audio shows the band's noise well below the top.
+- Transmit level: the radio's USB MOD Level (Connectors set mode, 50 % by default, p. 8-15) and RR73's Output level. During Tune, with the TX meter on ALC, the reading stays within the ALC zone: "When operating in the SSB data mode, adjust the device's output level within the ALC zone" (Advanced Manual p. 2-18). The zone is marked on the meter's ALC scale (Basic Manual p. 3-9). Tune at low power into a dummy load, as in stage 4.
+- Windows sound settings: another device stays the default output in Settings › System › Sound › Output, so Windows and other programs never play to the radio. System sounds go off with the No Sounds scheme on the Sounds tab of Settings › System › Sound › More sound settings.
+- USB selective suspend: Disabled, in Control Panel › Power Options › Change plan settings › Change advanced power settings › USB settings › USB selective suspend setting. Windows may otherwise power down the radio's USB connection, and RR73 then loses the port and the audio. Microsoft documents the path for earlier Windows versions; Unverified that every Windows 11 build shows it.
+- Mains power: the tablet on its charger, and the screen and sleep timeouts at Never in Settings › System › Power & battery (Screen and sleep, or Screen, sleep, & hibernate timeouts in newer builds). Sleep stops capture and closes the port.
+- Other windows: RR73 keeps receiving and transmitting with its window minimised or covered, or in a background tab (`docs/decisions/0010-hidden-window.md`). The screen wake lock does not hold while it is hidden, so the sleep timeout above applies.
 
 1. Before the first Connect radio, on the IC-705: set SET > Connectors > USB SEND/Keying > USB SEND to OFF, its default (Basic Manual p. 8-16). Chromium raises the port's DTR and RTS lines while it opens the port, and with USB SEND on a line that may key the radio until RR73 lowers them (Port settings, below). Check that SET > Function > Time-Out Timer is on (default 5 min, Basic Manual p. 8-4): it is the last limit on the radio's side.
 2. Close the other FT8 program: Windows lets one program at a time open the port. In Settings › Rig control, tap Connect radio and choose IC-705 Serial Port A (CI-V). Check that the Dial row and Operate's top bar show the frequency and mode on the radio's screen, and that the Radio settings rows show USB SEND OFF, DATA MOD USB and the Time-Out Timer on.

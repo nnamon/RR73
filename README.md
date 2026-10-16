@@ -111,11 +111,26 @@ On the iPhone there is no CAT control: set the band on the radio and in the band
 
 ## Getting started
 
+On the iPhone:
+
 1. Open https://nnamon.github.io/RR73/ in Safari and choose Share › Add to Home Screen.
 2. Connect the cable. Set the radio to USB with VOX on.
 3. In Settings, enter the callsign and grid. Use GPS fills in the grid.
 4. Set the input and output levels in Settings › Radio and audio.
 5. In Operate, choose the band and tap Start audio. A short chime keys the radio through VOX.
+
+On a Windows computer or tablet, in Chrome or Edge, with an IC-705:
+
+1. Install Icom's USB Driver from the IC-705's page on icomjapan.com before you plug in the radio. The radio's USB audio driver comes with it.
+2. Connect the radio's USB cable.
+3. Open https://nnamon.github.io/RR73/ and install it: select Install at the right of the address bar (App available in Edge). The browser's menu has it too: Cast, save, and share › Install page as app in Chrome, More tools › Apps › Install this site as an app in Edge.
+4. In Settings, enter the callsign and grid.
+5. In Settings › Radio and audio, tap Start audio and allow the microphone. If Windows blocks it, turn on Let desktop apps access your microphone in Windows Settings › Privacy & security › Microphone.
+6. Choose the IC-705's USB audio as Input and as Output. Windows usually names both USB Audio CODEC. Keep another device as the default output in Windows Settings › System › Sound, so Windows sounds stay off the air.
+7. Set the clock: in Windows Settings › Time & language › Date & time, turn on Set time automatically and select Sync now.
+8. Connect the radio in Settings › Rig control, and follow the first session in `docs/design/cat.md` before turning on Key the radio with CAT.
+
+RR73 keeps receiving and transmitting while its window is minimised or behind another one.
 
 Settings › Practice band runs a simulated band for trying RR73 without a radio.
 
