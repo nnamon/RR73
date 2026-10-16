@@ -54,6 +54,20 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   expect(await ptt(page)).toEqual([]);
 });
 
+test('connects when the driver refuses to lower DTR and RTS and USB SEND reads OFF', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./#/settings/rig');
+  await page.evaluate(() => (window.__rig.refuseSignals = true));
+  await page.getByRole('button', { name: 'Connect radio' }).click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+  await expect(page.getByTestId('rig-lines')).toHaveText('DTR and RTS could not be lowered. With USB SEND OFF, the radio ignores them.');
+  expect(await page.evaluate(() => [window.__rig.opened, window.__rig.dtr, window.__rig.rts])).toEqual([true, true, true]);
+  // USB SEND read first, before anything else went out; no PTT.
+  expect(rigFrames(await rigLog(page))[0].body).toBe('1A 05 01 25');
+  expect(await ptt(page)).toEqual([]);
+  await expect(page.getByRole('listitem').filter({ hasText: 'USB SEND' })).toContainText('OFF');
+});
+
 test('reads split, duplex, RIT and ΔTX, and says what to change', async ({ page }) => {
   await installFakeIc705(page);
   await page.goto('./');

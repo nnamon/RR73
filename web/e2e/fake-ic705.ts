@@ -44,6 +44,8 @@ export interface FakeRig {
   ignorePttOff: boolean;
   /** The radio answers nothing, as with another CI-V address. */
   silent: boolean;
+  /** The driver refuses setSignals: DTR and RTS stay as open() left them. */
+  refuseSignals: boolean;
   /** After the OK to a frequency set, the radio also sends a transceive frame of the new dial. Unverified: the CI-V guide does not say whether it does. */
   transceiveSets: boolean;
   /** The operator turns the dial: a transceive frame to address 00. */
@@ -95,6 +97,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         ritHz: 0,
         ignorePttOff: false,
         silent: false,
+        refuseSignals: false,
         transceiveSets: false,
         ctx: null,
         turnDial(f) {
@@ -194,6 +197,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
           writable = new WritableStream<Uint8Array>({ write: (chunk) => receive(chunk) });
         },
         async setSignals(s: { dataTerminalReady?: boolean; requestToSend?: boolean }) {
+          if (rig.refuseSignals) throw new DOMException('Failed to set control signals.', 'NetworkError');
           if (s.dataTerminalReady !== undefined) rig.dtr = s.dataTerminalReady;
           if (s.requestToSend !== undefined) rig.rts = s.requestToSend;
         },
