@@ -105,8 +105,9 @@
 
   /**
    * Decides how much of the radio badge shows, from the room left in its row once everything else
-   * and the band button's band and mode have theirs: the badge whole, else its glyph alone, else
-   * none of it. The band button's chevron and dial give way first, as they do for the other badges.
+   * has its own: the badge whole while the band button keeps its band and mode, else the glyph
+   * alone while it keeps its band, else none of it. The band button's chevron and dial give way
+   * first, as they do for the other badges.
    */
   function fitRadio() {
     const top = topEl;
@@ -121,10 +122,13 @@
     const others = [...row.children].filter((el) => !el.matches('.band, .radio, .radio-measure, .grow') && getComputedStyle(el).position !== 'absolute');
     const room = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - others.reduce((sum, el) => sum + span(el) + gap, 0);
     const bs = getComputedStyle(band);
-    const parts = [band.querySelector('.b'), band.querySelector('.mode')].map((el) => (el ? el.getBoundingClientRect().width : 0));
-    const keep = Math.max(tap, parts[0] + parts[1] + (parseFloat(bs.columnGap) || 0) + parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight));
-    const left = room - keep - gap;
-    fit = left >= span(whole) ? 'text' : left >= tap ? 'glyph' : 'none';
+    const pad = parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight);
+    const [b, m] = [band.querySelector('.b'), band.querySelector('.mode')].map((el) => (el ? el.getBoundingClientRect().width : 0));
+    // The band and mode keep their room before the badge's text; the glyph, the radio's state,
+    // keeps its own before the mode, which then drops out of sight as the dial does.
+    const withMode = room - Math.max(tap, b + m + (parseFloat(bs.columnGap) || 0) + pad) - gap;
+    const bandOnly = room - Math.max(tap, b + pad) - gap;
+    fit = withMode >= span(whole) ? 'text' : bandOnly >= tap ? 'glyph' : 'none';
   }
 
   // Again whenever the row's width or what shares it changes.
