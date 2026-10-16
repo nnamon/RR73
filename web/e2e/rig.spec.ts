@@ -31,7 +31,9 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   const before = (await rigLog(page)).length;
   await sheet.getByText('40m', { exact: true }).click();
   await expect.poll(() => page.evaluate(() => [window.__rig.hz, window.__rig.mode, window.__rig.data])).toEqual([7_074_000, 1, 1]);
-  const set = rigFrames(await rigLog(page), before).map((f) => f.body).filter((b) => !b.startsWith('03') && !b.startsWith('04') && b !== '1A 06' && b !== '1C 00');
+  // Reads aside (the dial, the mode, transmit, split, RIT and ΔTX), the sets in order.
+  const reads = ['1A 06', '1C 00', '0F', '21 00', '21 01', '21 02'];
+  const set = rigFrames(await rigLog(page), before).map((f) => f.body).filter((b) => !b.startsWith('03') && !b.startsWith('04') && !reads.includes(b));
   expect(set).toEqual(['05 00 40 07 07 00', '06 01 01', '1A 06 01 01']);
   await expect(band).toContainText('40m');
   await expect(band).toContainText('7.074');
@@ -49,6 +51,46 @@ test('connects, shows the dial the radio reports, and a band change sets the rad
   await page.reload();
   await page.evaluate(() => (location.hash = '#/settings/rig'));
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+  expect(await ptt(page)).toEqual([]);
+});
+
+test('reads split, duplex, RIT and ΔTX, and says what to change', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./');
+  await connect(page);
+  const row = (title: string) => page.getByRole('listitem').filter({ has: page.locator('.row-title', { hasText: new RegExp(`^${title}$`) }) });
+  await expect(row('Split')).toContainText('Off');
+  await expect(row('RIT')).toContainText('Off');
+  await expect(row('ΔTX')).toContainText('Off');
+  await expect(page.getByTestId('rig-advice')).toHaveCount(0);
+  // The operator turns split and ΔTX on at the radio, with the offset at +120 Hz: read within 5 s.
+  await page.evaluate(() => {
+    window.__rig.split = 0x01;
+    window.__rig.xit = true;
+    window.__rig.ritHz = 120;
+  });
+  await expect(row('Split')).toContainText('On', { timeout: 7000 });
+  await expect(row('ΔTX')).toContainText('On, +120 Hz');
+  await expect(page.getByTestId('rig-advice')).toHaveText([
+    'Split is on: the IC-705 transmits on the other VFO, away from the frequency RR73 logs. Touch SPLIT on the FUNCTION screen to turn it off.',
+    'ΔTX (XIT) is on: the IC-705 transmits 120 Hz above the dial, away from the frequency RR73 logs. Push the RIT/ΔTX key to turn it off.',
+  ]);
+  // Duplex, and RIT in place of ΔTX at −50 Hz.
+  await page.evaluate(() => {
+    window.__rig.split = 0x11;
+    window.__rig.xit = false;
+    window.__rig.rit = true;
+    window.__rig.ritHz = -50;
+  });
+  await expect(row('Split')).toContainText('DUP−', { timeout: 7000 });
+  await expect(row('RIT')).toContainText('On, −50 Hz');
+  await expect(page.getByTestId('rig-advice')).toHaveText([
+    'Duplex is on: the IC-705 transmits at its duplex offset from the dial, away from the frequency RR73 logs. On FUNCTION screen 2, touch DUP until it shows OFF.',
+    'RIT is on: the IC-705 receives 50 Hz below the dial it transmits on, so replies land 50 Hz from the station they answer. Push the RIT/ΔTX key to turn it off.',
+  ]);
+  // Only reads went out: no split, RIT or ΔTX set, and no PTT.
+  const frames = rigFrames(await rigLog(page)).map((f) => f.body);
+  expect(frames.filter((b) => (b.startsWith('0F') && b !== '0F') || (b.startsWith('21 ') && b.length > 5))).toEqual([]);
   expect(await ptt(page)).toEqual([]);
 });
 

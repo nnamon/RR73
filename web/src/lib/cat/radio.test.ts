@@ -20,6 +20,10 @@ interface Sim {
   readonly filter: number;
   /** Frequency, mode and data mode sets that arrived while the radio transmitted. */
   readonly sets_while_transmitting: number;
+  /** Split or duplex on the FUNCTION screen, as JSON: '"on"', '"dup_plus"'. */
+  set_split(split: string): void;
+  /** RIT and ΔTX on or off, and their offset, Hz. */
+  set_rit(rit: boolean, xit: boolean, offsetHz: number): void;
   free(): void;
 }
 
@@ -150,13 +154,18 @@ describe('CatRadio', () => {
     radio.start();
     await timers.advance(400);
     expect(radio.state).toMatchObject({ status: 'connected', hz: 14_074_000, mode: 'usb', filter: 1, data: false, transmitting: false, keyed: false });
-    // DATA MOD USB, USB SEND off, Time-Out Timer 5 min: the Basic Manual's defaults (pp. 8-4, 8-15, 8-16).
-    expect(radio.state.settings).toEqual({ data_mod: 1, usb_send: 0, time_out_timer: 2 });
+    // DATA MOD USB, USB SEND off, Time-Out Timer 5 min: the Basic Manual's defaults (pp. 8-4, 8-15,
+    // 8-16). Split, RIT and ΔTX off, the offset 0 Hz.
+    expect(radio.state.settings).toEqual({ data_mod: 1, usb_send: 0, time_out_timer: 2, split: 0, rit: 0, xit: 0, offset_hz: 0 });
     expect(port.written.map((w) => w.frame)).toEqual([
       'FE FE A4 E0 1C 00 FD',
       'FE FE A4 E0 03 FD',
       'FE FE A4 E0 04 FD',
       'FE FE A4 E0 1A 06 FD',
+      'FE FE A4 E0 0F FD',
+      'FE FE A4 E0 21 01 FD',
+      'FE FE A4 E0 21 02 FD',
+      'FE FE A4 E0 21 00 FD',
       'FE FE A4 E0 1A 05 01 25 FD',
       'FE FE A4 E0 1A 05 01 19 FD',
       'FE FE A4 E0 1A 05 00 43 FD',
@@ -188,6 +197,35 @@ describe('CatRadio', () => {
     expect(port.sent('03').length - before.f).toBe(10);
     expect(port.sent('04').length - before.m).toBe(2);
     expect(port.sent('1A 06').length - before.d).toBe(2);
+  });
+
+  it('reads split, duplex, RIT, ΔTX and their offset every 5 s, and none of them while keyed', async () => {
+    const { timers, sim, port, radio } = setup();
+    radio.start();
+    await timers.advance(400);
+    expect(radio.state.settings).toMatchObject({ split: 0, rit: 0, xit: 0, offset_hz: 0 });
+    // The operator turns split, RIT and ΔTX on at the radio, with the offset at -120 Hz.
+    sim.set_split('"on"');
+    sim.set_rit(true, true, -120);
+    await timers.advance(5 * POLL_MS);
+    expect(radio.state.settings).toMatchObject({ split: 1, rit: 1, xit: 1, offset_hz: -120 });
+    sim.set_split('"dup_minus"');
+    await timers.advance(5 * POLL_MS);
+    expect(radio.state.settings).toMatchObject({ split: 2 });
+    sim.set_split('"dup_plus"');
+    await timers.advance(5 * POLL_MS);
+    expect(radio.state.settings).toMatchObject({ split: 3 });
+    // Keyed: transmit or receive only, for longer than a mode poll.
+    const k = radio.key(15_000);
+    await timers.advance(100);
+    expect(await k.result).toBe('ok');
+    const from = port.written.length;
+    await timers.advance(6 * POLL_MS);
+    expect(port.written.slice(from).map((w) => w.frame.slice(12, -3))).toEqual(Array(6).fill('1C 00'));
+    k.release();
+    await timers.advance(200);
+    expect(port.ptt).toEqual(['01', '00']);
+    expect(sim.sets_while_transmitting).toBe(0);
   });
 
   it('follows the dial at once from a transceive frame', async () => {

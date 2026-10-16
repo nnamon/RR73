@@ -222,7 +222,7 @@ fn request(rng: &mut ChaCha8Rng) -> Request {
         Vfo::Unselected
     };
     let hz = rng.random_range(0..=MAX_FREQUENCY_HZ);
-    match rng.random_range(0..13) {
+    match rng.random_range(0..17) {
         0 => Request::ReadFrequency,
         1 => Request::SetFrequency { hz },
         2 => Request::ReadMode,
@@ -248,6 +248,10 @@ fn request(rng: &mut ChaCha8Rng) -> Request {
         11 => Request::SetTransmit {
             on: rng.random_bool(0.5),
         },
+        12 => Request::ReadSplit,
+        13 => Request::ReadRitOffset,
+        14 => Request::ReadRit,
+        15 => Request::ReadXit,
         _ => Request::ReadSetting {
             item: MenuItem::ALL[rng.random_range(0..MenuItem::ALL.len())],
         },

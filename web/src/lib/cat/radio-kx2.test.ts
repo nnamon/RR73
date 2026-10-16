@@ -27,6 +27,7 @@ interface Kx2Sim {
   set_bandwidth(hz: number): void;
   set_split(on: boolean): void;
   set_xit(on: boolean, offsetHz: number): void;
+  set_rit(on: boolean): void;
   readonly transmit: boolean;
   readonly frequency: number;
   readonly mode: string;
@@ -188,8 +189,8 @@ describe('CatRadio with a KX2', () => {
     // In USB, DT is not read: it is valid only in DATA (Programmer's Reference p. 11).
     expect(radio.state).toMatchObject({ status: 'connected', hz: 14_074_000, mode: 'usb', sub: null, transmitting: false, keyed: false });
     // OM 01: a KX2. K2 mode 0. MIC BTN at its default, PTT UP.DN (Owner's Manual p. 48). VOX off in
-    // USB. IF: no split, no XIT. BW: 2.80 kHz. No menu entry open.
-    expect(radio.state.settings).toEqual({ product: 1, k2: 0, mic_btn: 5, vox: 0, split: 0, xit: 0, xit_hz: 0, bandwidth: 2800, menu_entry: 255 });
+    // USB. IF: no split, no RIT, no XIT. BW: 2.80 kHz. No menu entry open.
+    expect(radio.state.settings).toEqual({ product: 1, k2: 0, mic_btn: 5, vox: 0, split: 0, rit: 0, xit: 0, offset_hz: 0, bandwidth: 2800, menu_entry: 255 });
     expect(port.written.map((w) => w.text)).toEqual(['TQ;', 'FA;', 'MD;', 'VX;', 'IF;', 'BW;', 'OM;', 'K2;', 'MN;', 'MN082;MP;MN255;', 'MN;']);
     expect(port.ptt).toEqual([]);
   });
@@ -202,17 +203,18 @@ describe('CatRadio with a KX2', () => {
     expect(port.sent('DT;')).toHaveLength(1);
   });
 
-  it('reads split, XIT, the filter and the K2 mode, and their changes every 5 s', async () => {
+  it('reads split, RIT, XIT, the filter and the K2 mode, and their changes every 5 s', async () => {
     const { timers, sim, radio } = setup();
     sim.set_k2_mode(1);
     radio.start();
     await timers.advance(600);
-    expect(radio.state.settings).toMatchObject({ k2: 1, split: 0, xit: 0, bandwidth: 2800 });
+    expect(radio.state.settings).toMatchObject({ k2: 1, split: 0, rit: 0, xit: 0, bandwidth: 2800 });
     sim.set_split(true);
     sim.set_xit(true, -150);
+    sim.set_rit(true);
     sim.set_bandwidth(400);
     await timers.advance(5 * POLL_MS);
-    expect(radio.state.settings).toMatchObject({ split: 1, xit: 1, xit_hz: -150, bandwidth: 400 });
+    expect(radio.state.settings).toMatchObject({ split: 1, rit: 1, xit: 1, offset_hz: -150, bandwidth: 400 });
   });
 
   it('sends MN255 again when a menu read did not leave the menu', async () => {

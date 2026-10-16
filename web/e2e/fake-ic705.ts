@@ -1,7 +1,8 @@
 // A fake IC-705 behind navigator.serial, installed in the page by an init script, for the rig
 // control tests (rig.spec.ts). It answers the CI-V frames RR73 sends in the formats of Icom's
-// IC-705 CI-V Reference Guide, A7560-8EX-6 (p. 2 layout and OK/NG, p. 14 transmit, p. 17
-// frequency and mode, p. 22 data mode, pp. 6 and 8 menu settings), 5 ms after each frame, and logs
+// IC-705 CI-V Reference Guide, A7560-8EX-6 (p. 2 layout and OK/NG, p. 3 split, p. 14 transmit,
+// p. 15 RIT and ΔTX, p. 17 frequency and mode, p. 22 data mode, p. 27 the RIT frequency, pp. 6
+// and 8 menu settings), 5 ms after each frame, and logs
 // every frame with the UTC time and the app's audio clock time it was written. Like Chromium on Windows, opening the port raises
 // DTR and RTS; setSignals sets them.
 import { expect, type Page } from '@playwright/test';
@@ -28,6 +29,13 @@ export interface FakeRig {
   forgotten: boolean;
   granted: boolean;
   menu: Record<string, number>;
+  /** Split and duplex as `0F` reads them: 0x00 off, 0x01 on, 0x11 DUP-, 0x12 DUP+. */
+  split: number;
+  rit: boolean;
+  /** ΔTX, Icom's XIT. */
+  xit: boolean;
+  /** The RIT and ΔTX offset, Hz, -9999 to 9999. */
+  ritHz: number;
   /** The app's AudioContext, once it makes one: frames are timed on its clock too. */
   ctx: AudioContext | null;
   /** The radio ignores PTT off: no answer, and it keeps transmitting. */
@@ -76,6 +84,10 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         granted: granted || sessionStorage.getItem('rr73-test-rig-granted') === '1',
         // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
         menu: { '0125': 0, '0119': 1, '0043': 2 },
+        split: 0,
+        rit: false,
+        xit: false,
+        ritHz: 0,
         ignorePttOff: false,
         transceiveSets: false,
         ctx: null,
@@ -131,6 +143,13 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
           const item = hex([d[1], d[2]]).replace(' ', '');
           return item in rig.menu ? reply([0x1a, 0x05, d[1], d[2], bcd(rig.menu[item])]) : ok(false);
         }
+        if (cmd === 0x0f && !d.length) return reply([0x0f, rig.split]);
+        if (cmd === 0x21 && d.length === 1 && d[0] === 0x00) {
+          const n = Math.abs(rig.ritHz);
+          return reply([0x21, 0x00, bcd(n % 100), bcd(Math.floor(n / 100)), rig.ritHz < 0 ? 1 : 0]);
+        }
+        if (cmd === 0x21 && d.length === 1 && d[0] === 0x01) return reply([0x21, 0x01, rig.rit ? 1 : 0]);
+        if (cmd === 0x21 && d.length === 1 && d[0] === 0x02) return reply([0x21, 0x02, rig.xit ? 1 : 0]);
         if (cmd === 0x1c && d[0] === 0x00 && d.length === 1) return reply([0x1c, 0x00, rig.transmit ? 1 : 0]);
         if (cmd === 0x1c && d[0] === 0x00 && d.length === 2) {
           if (d[1] === 0 && rig.ignorePttOff) return;

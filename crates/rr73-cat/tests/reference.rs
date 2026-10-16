@@ -3,7 +3,7 @@
 //! the guide's printed numbers. The guide prints the frame layout (p. 2) and the data formats
 //! (pp. 17 to 29) but no complete example frames, so each frame below follows those layouts.
 
-use rr73_cat::ic705::{Addresses, Event, Filter, MenuItem, Mode, Parser, Request, Vfo};
+use rr73_cat::ic705::{Addresses, Event, Fault, Filter, MenuItem, Mode, Parser, Request, Split, Vfo};
 
 const A: Addresses = Addresses {
     radio: 0xA4,
@@ -283,6 +283,117 @@ fn another_radio_address() {
             command: 0xFB
         }]
     );
+}
+
+#[test]
+fn page_3_split_and_duplex() {
+    // 0F with no data reads; the answer carries 00 split off, 01 split on, 11 DUP- or 12 DUP+.
+    assert_eq!(bytes(&Request::ReadSplit), [0xFE, 0xFE, 0xA4, 0xE0, 0x0F, 0xFD]);
+    for (code, split) in [
+        (0x00, Split::Off),
+        (0x01, Split::On),
+        (0x11, Split::DupMinus),
+        (0x12, Split::DupPlus),
+    ] {
+        assert_eq!(
+            events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x0F, code, 0xFD]),
+            [Event::Split { split }]
+        );
+    }
+    // 10 sets simplex and is no answer to a read; neither is a code p. 3 does not list.
+    for code in [0x02, 0x10, 0x13] {
+        assert_eq!(
+            events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x0F, code, 0xFD]),
+            [Event::Malformed {
+                command: 0x0F,
+                fault: Fault::Code
+            }]
+        );
+    }
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x0F, 0xFD]),
+        [Event::Malformed {
+            command: 0x0F,
+            fault: Fault::Length
+        }]
+    );
+}
+
+#[test]
+fn pages_15_and_27_rit_and_delta_tx() {
+    // 21 00 the RIT frequency, 21 01 RIT, 21 02 ΔTX (p. 15).
+    assert_eq!(
+        bytes(&Request::ReadRitOffset),
+        [0xFE, 0xFE, 0xA4, 0xE0, 0x21, 0x00, 0xFD]
+    );
+    assert_eq!(
+        bytes(&Request::ReadRit),
+        [0xFE, 0xFE, 0xA4, 0xE0, 0x21, 0x01, 0xFD]
+    );
+    assert_eq!(
+        bytes(&Request::ReadXit),
+        [0xFE, 0xFE, 0xA4, 0xE0, 0x21, 0x02, 0xFD]
+    );
+    // p. 27: 10 Hz and 1 Hz, then 1 kHz and 100 Hz, then 00 plus or 01 minus. +1230 Hz and -50 Hz.
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x30, 0x12, 0x00, 0xFD]),
+        [Event::RitOffset { hz: 1230 }]
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x50, 0x00, 0x01, 0xFD]),
+        [Event::RitOffset { hz: -50 }]
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x99, 0x99, 0x01, 0xFD]),
+        [Event::RitOffset { hz: -9999 }]
+    );
+    assert_eq!(rr73_cat::ic705::encode_rit_offset(1230), Some([0x30, 0x12, 0x00]));
+    assert_eq!(rr73_cat::ic705::encode_rit_offset(-50), Some([0x50, 0x00, 0x01]));
+    assert_eq!(rr73_cat::ic705::encode_rit_offset(10_000), None);
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x01, 0x01, 0xFD]),
+        [Event::Rit { on: true }]
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x02, 0x00, 0xFD]),
+        [Event::Xit { on: false }]
+    );
+    let malformed = |fault| [Event::Malformed { command: 0x21, fault }];
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x3A, 0x12, 0x00, 0xFD]),
+        malformed(Fault::NotBcd)
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x30, 0x12, 0x02, 0xFD]),
+        malformed(Fault::Code)
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x00, 0x30, 0x12, 0xFD]),
+        malformed(Fault::Length)
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x01, 0x02, 0xFD]),
+        malformed(Fault::Code)
+    );
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x02, 0xFD]),
+        malformed(Fault::Length)
+    );
+    // Sub-command 03 is not in the table.
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x21, 0x03, 0x01, 0xFD]),
+        [Event::Unknown {
+            command: 0x21,
+            data: vec![0x03, 0x01]
+        }]
+    );
+    assert!(Request::ReadRit.answered_by(&Event::Rit { on: false }));
+    assert!(!Request::ReadRit.answered_by(&Event::Xit { on: false }));
+    assert!(Request::ReadXit.answered_by(&Event::Xit { on: true }));
+    assert!(Request::ReadRitOffset.answered_by(&Event::RitOffset { hz: 0 }));
+    assert!(Request::ReadSplit.answered_by(&Event::Split { split: Split::On }));
+    assert!(Request::ReadSplit.answered_by(&Event::Ng));
+    assert!(!Request::ReadSplit.answered_by(&Event::Ok));
 }
 
 #[test]

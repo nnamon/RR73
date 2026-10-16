@@ -15,7 +15,7 @@
 //!
 //! The radio's CI-V address is `A4` unless the operator changed it; the controller's is `E0`.
 
-use rr73_cat::ic705::{Addresses, CONTROLLER_ADDRESS, Event, Filter, MenuItem, Mode, Parser, Request};
+use rr73_cat::ic705::{Addresses, CONTROLLER_ADDRESS, Event, Filter, MenuItem, Mode, Parser, Request, Split};
 use rr73_cat::sim::SimIc705;
 use wasm_bindgen::prelude::*;
 
@@ -146,6 +146,24 @@ impl CatSimForTests {
     pub fn set_setting(&mut self, item_json: &str, value: u16) {
         if let Ok(item) = serde_json::from_str::<MenuItem>(item_json) {
             self.sim.set_setting(item, value);
+        }
+    }
+
+    /// The operator sets split or duplex (JSON string, as `"on"` or `"dup_minus"`) on the radio's
+    /// FUNCTION screen. Anything else is ignored.
+    pub fn set_split(&mut self, split_json: &str) {
+        if let Ok(split) = serde_json::from_str::<Split>(split_json) {
+            self.sim.split = split;
+        }
+    }
+
+    /// The operator turns RIT on or off, ΔTX on or off, and the shared offset (Hz, -9999 to 9999;
+    /// anything outside is ignored).
+    pub fn set_rit(&mut self, rit: bool, xit: bool, offset_hz: i32) {
+        self.sim.rit = rit;
+        self.sim.xit = xit;
+        if (-rr73_cat::ic705::MAX_RIT_HZ..=rr73_cat::ic705::MAX_RIT_HZ).contains(&offset_hz) {
+            self.sim.rit_hz = offset_hz;
         }
     }
 
@@ -282,6 +300,52 @@ mod tests {
         assert_eq!(
             parser.push(&radio.receive(&read)),
             r#"[{"type":"setting","item":"usb_send","value":1}]"#
+        );
+    }
+
+    #[test]
+    fn split_rit_and_delta_tx_read_as_json() {
+        let mut radio = CatSimForTests::new();
+        let mut parser = CatParser::new(0xA4);
+        let mut ask = |radio: &mut CatSimForTests, json: &str| {
+            let bytes = cat_encode_bytes(json, 0xA4).expect("encode");
+            parser.push(&radio.receive(&bytes))
+        };
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_split"}"#),
+            r#"[{"type":"split","split":"off"}]"#
+        );
+        radio.set_split(r#""dup_minus""#);
+        radio.set_split(r#""sideways""#);
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_split"}"#),
+            r#"[{"type":"split","split":"dup_minus"}]"#
+        );
+        radio.set_rit(true, false, -120);
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_rit"}"#),
+            r#"[{"type":"rit","on":true}]"#
+        );
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_xit"}"#),
+            r#"[{"type":"xit","on":false}]"#
+        );
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_rit_offset"}"#),
+            r#"[{"type":"rit_offset","hz":-120}]"#
+        );
+        radio.set_rit(false, true, 20_000);
+        assert_eq!(
+            ask(&mut radio, r#"{"type":"read_rit_offset"}"#),
+            r#"[{"type":"rit_offset","hz":-120}]"#
+        );
+        assert_eq!(
+            cat_answers_json(r#"{"type":"read_xit"}"#, r#"{"type":"xit","on":true}"#),
+            Ok(true)
+        );
+        assert_eq!(
+            cat_answers_json(r#"{"type":"read_rit"}"#, r#"{"type":"xit","on":true}"#),
+            Ok(false)
         );
     }
 }

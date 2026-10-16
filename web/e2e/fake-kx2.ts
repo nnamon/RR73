@@ -40,6 +40,8 @@ export interface FakeKx2 {
   /** XIT on, at xitHz. */
   xit: boolean;
   xitHz: number;
+  /** RIT on, at the offset XIT shares (xitHz). */
+  rit: boolean;
   /** True while the radio transmits: on TX, or on the Digirig's PTT through the MIC jack. */
   readonly transmit: boolean;
   /** RTS asserted while MIC BTN reads PTT: the Digirig keys the radio. */
@@ -91,6 +93,7 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
         split: false,
         xit: false,
         xitHz: 0,
+        rit: false,
         get lineKeyed() {
           return rig.rts && (rig.micBtn & 1) === 1;
         },
@@ -166,7 +169,7 @@ export async function installFakeKx2(page: Page, opts: { hz?: number; granted?: 
           case 'IF': {
             // IF[f]*****+yyyyrx*00tmvspbd1* (p. 14).
             const sign = rig.xitHz < 0 ? '-' : '+';
-            return `IF${pad(rig.hz, 11)}     ${sign}${pad(Math.abs(rig.xitHz), 4)}0${rig.xit ? 1 : 0} 00${rig.transmit ? 1 : 0}${rig.mode}00${rig.split ? 1 : 0}001 ;`;
+            return `IF${pad(rig.hz, 11)}     ${sign}${pad(Math.abs(rig.xitHz), 4)}${rig.rit ? 1 : 0}${rig.xit ? 1 : 0} 00${rig.transmit ? 1 : 0}${rig.mode}00${rig.split ? 1 : 0}001 ;`;
           }
           case 'BW':
             return data ? '' : `BW${pad(rig.bandwidthHz / 10, 4)};`;

@@ -15,6 +15,10 @@
 //! | Read transmit or receive | `1C 00` | p. 14 |
 //! | Transmit on or off | `1C 00 01`, `1C 00 00` | p. 14 |
 //! | Read a menu setting | `1A 05` + item | pp. 6 to 8 |
+//! | Read split or duplex | `0F` | p. 3 |
+//! | Read the RIT and ΔTX offset | `21 00` | p. 15, p. 27 |
+//! | Read RIT on or off | `21 01` | p. 15 |
+//! | Read ΔTX (XIT) on or off | `21 02` | p. 15 |
 //!
 //! The radio answers a read with the same command and sub-command followed by the data, and a
 //! set with OK (`FB`) or NG (`FA`) (p. 2). With CI-V Transceive on, its default (Basic Manual
@@ -59,6 +63,19 @@ pub const SUB_DATA_MODE: u8 = 0x06;
 pub const CMD_STATUS: u8 = 0x1C;
 /// Sub-command of `1C`: the transceiver's status, `00` receive and `01` transmit (p. 14).
 pub const SUB_TRANSMIT: u8 = 0x00;
+/// Split and duplex: read with no data, set with a code (p. 3).
+pub const CMD_SPLIT: u8 = 0x0F;
+/// RIT and ΔTX: sub-command `00` the offset, `01` RIT on or off, `02` ΔTX on or off (p. 15).
+pub const CMD_RIT: u8 = 0x21;
+/// Sub-command of `21`: the RIT frequency, which RIT and ΔTX share (p. 15, p. 27).
+pub const SUB_RIT_OFFSET: u8 = 0x00;
+/// Sub-command of `21`: RIT on or off (p. 15).
+pub const SUB_RIT: u8 = 0x01;
+/// Sub-command of `21`: ΔTX on or off (p. 15). ΔTX is Icom's name for XIT.
+pub const SUB_XIT: u8 = 0x02;
+/// The largest RIT or ΔTX offset the 4 digits of p. 27 carry, Hz. The radio shifts up to 9.99 kHz
+/// (Basic Manual p. 4-2; Advanced Manual p. 2-3).
+pub const MAX_RIT_HZ: i32 = 9_999;
 /// The selected or unselected VFO's frequency (p. 15).
 pub const CMD_VFO_FREQUENCY: u8 = 0x25;
 /// The selected or unselected VFO's mode, data mode and filter (p. 15).
@@ -226,6 +243,67 @@ impl Vfo {
     }
 }
 
+/// Split and duplex as `0F` reads them (p. 3). With split on the radio transmits on the other VFO
+/// (Basic Manual p. 4-10); with duplex on it transmits the duplex offset below or above the
+/// receive frequency (Advanced Manual p. 2-18).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Split {
+    /// `00`: split off, simplex.
+    Off,
+    /// `01`: split on.
+    On,
+    /// `11`: duplex, the transmit frequency below the receive frequency.
+    DupMinus,
+    /// `12`: duplex, the transmit frequency above the receive frequency.
+    DupPlus,
+}
+
+impl Split {
+    /// Every state, in code order.
+    pub const ALL: [Split; 4] = [Split::Off, Split::On, Split::DupMinus, Split::DupPlus];
+
+    /// The state's byte, as `0F` reads it.
+    pub fn code(self) -> u8 {
+        match self {
+            Split::Off => 0x00,
+            Split::On => 0x01,
+            Split::DupMinus => 0x11,
+            Split::DupPlus => 0x12,
+        }
+    }
+
+    /// The state a byte names, or `None` for a code p. 3 does not list.
+    pub fn from_code(code: u8) -> Option<Split> {
+        Split::ALL.into_iter().find(|s| s.code() == code)
+    }
+}
+
+/// The RIT or ΔTX offset, Hz, from -9999 to 9999, as the 3 bytes of p. 27: 10 Hz and 1 Hz, then
+/// 1 kHz and 100 Hz, then `00` for plus or `01` for minus. 1230 Hz is `30 12 00`.
+pub fn encode_rit_offset(hz: i32) -> Option<[u8; 3]> {
+    if !(-MAX_RIT_HZ..=MAX_RIT_HZ).contains(&hz) {
+        return None;
+    }
+    let n = hz.unsigned_abs();
+    let low = bcd::encode_byte((n % 100) as u8).ok()?;
+    let high = bcd::encode_byte((n / 100) as u8).ok()?;
+    Some([low, high, u8::from(hz < 0)])
+}
+
+/// The offset 3 bytes of p. 27 carry, Hz.
+pub fn decode_rit_offset(data: &[u8]) -> Result<i32, Fault> {
+    let [low, high, sign] = data else {
+        return Err(Fault::Length);
+    };
+    let value = i32::from(bcd::decode_byte(*high)?) * 100 + i32::from(bcd::decode_byte(*low)?);
+    match sign {
+        0x00 => Ok(value),
+        0x01 => Ok(-value),
+        _ => Err(Fault::Code),
+    }
+}
+
 /// Menu settings RR73 reads to check the radio is set up for it, with command `1A 05` and the
 /// item number. Values are the codes the guide lists.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
@@ -363,6 +441,14 @@ pub enum Request {
         /// The item.
         item: MenuItem,
     },
+    /// Read split and duplex: `0F`.
+    ReadSplit,
+    /// Read the RIT and ΔTX offset: `21 00`.
+    ReadRitOffset,
+    /// Read whether RIT is on: `21 01`.
+    ReadRit,
+    /// Read whether ΔTX (XIT) is on: `21 02`.
+    ReadXit,
 }
 
 /// Why a request cannot be written.
@@ -391,6 +477,8 @@ impl Request {
             Request::ReadVfoFrequency { .. } | Request::SetVfoFrequency { .. } => CMD_VFO_FREQUENCY,
             Request::ReadVfoMode { .. } | Request::SetVfoMode { .. } => CMD_VFO_MODE,
             Request::ReadTransmit | Request::SetTransmit { .. } => CMD_STATUS,
+            Request::ReadSplit => CMD_SPLIT,
+            Request::ReadRitOffset | Request::ReadRit | Request::ReadXit => CMD_RIT,
         }
     }
 
@@ -445,6 +533,10 @@ impl Request {
                 let [a, b] = item.bytes();
                 vec![SUB_MENU, a, b]
             }
+            Request::ReadSplit => Vec::new(),
+            Request::ReadRitOffset => vec![SUB_RIT_OFFSET],
+            Request::ReadRit => vec![SUB_RIT],
+            Request::ReadXit => vec![SUB_XIT],
         })
     }
 
@@ -471,6 +563,10 @@ impl Request {
             (Request::ReadVfoMode { vfo }, Event::VfoMode { vfo: v, .. }) => vfo == v,
             (Request::ReadTransmit, Event::Transmit { .. }) => true,
             (Request::ReadSetting { item }, Event::Setting { item: i, .. }) => item == i,
+            (Request::ReadSplit, Event::Split { .. }) => true,
+            (Request::ReadRitOffset, Event::RitOffset { .. }) => true,
+            (Request::ReadRit, Event::Rit { .. }) => true,
+            (Request::ReadXit, Event::Xit { .. }) => true,
             (r, Event::Malformed { command, .. }) => !r.is_set() && r.command() == *command,
             _ => false,
         }
@@ -562,6 +658,26 @@ pub enum Event {
         item: MenuItem,
         /// Its code, as [`MenuItem`] lists them.
         value: u16,
+    },
+    /// Split and duplex: an answer to `0F`.
+    Split {
+        /// The state.
+        split: Split,
+    },
+    /// The RIT and ΔTX offset: an answer to `21 00`.
+    RitOffset {
+        /// Offset, Hz, from -9999 to 9999.
+        hz: i32,
+    },
+    /// RIT on or off: an answer to `21 01`.
+    Rit {
+        /// True with RIT on.
+        on: bool,
+    },
+    /// ΔTX (XIT) on or off: an answer to `21 02`.
+    Xit {
+        /// True with ΔTX on.
+        on: bool,
     },
     /// A frame from the controller to the radio sent back by CI-V USB Echo Back.
     Echo {
@@ -709,6 +825,39 @@ fn status(data: &[u8]) -> Event {
     }
 }
 
+fn split(data: &[u8]) -> Event {
+    let bad = |fault| Event::Malformed {
+        command: CMD_SPLIT,
+        fault,
+    };
+    match data {
+        [code] => Split::from_code(*code).map_or_else(|| bad(Fault::Code), |split| Event::Split { split }),
+        _ => bad(Fault::Length),
+    }
+}
+
+fn rit(data: &[u8]) -> Event {
+    let bad = |fault| Event::Malformed {
+        command: CMD_RIT,
+        fault,
+    };
+    let on = |b: &[u8]| match b {
+        [v] => flag(*v).ok_or(Fault::Code),
+        _ => Err(Fault::Length),
+    };
+    match data {
+        [SUB_RIT_OFFSET, offset @ ..] => {
+            decode_rit_offset(offset).map_or_else(bad, |hz| Event::RitOffset { hz })
+        }
+        [SUB_RIT, v @ ..] => on(v).map_or_else(bad, |on| Event::Rit { on }),
+        [SUB_XIT, v @ ..] => on(v).map_or_else(bad, |on| Event::Xit { on }),
+        _ => Event::Unknown {
+            command: CMD_RIT,
+            data: data.to_vec(),
+        },
+    }
+}
+
 fn vfo_frequency(data: &[u8]) -> Event {
     let bad = |fault| Event::Malformed {
         command: CMD_VFO_FREQUENCY,
@@ -788,6 +937,8 @@ pub fn parse_frame(frame: &Frame, a: Addresses) -> Event {
         CMD_STATUS => status(data),
         CMD_VFO_FREQUENCY => vfo_frequency(data),
         CMD_VFO_MODE => vfo_mode(data),
+        CMD_SPLIT => split(data),
+        CMD_RIT => rit(data),
         command => Event::Unknown {
             command,
             data: data.to_vec(),

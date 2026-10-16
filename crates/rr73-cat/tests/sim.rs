@@ -1,7 +1,7 @@
 //! The requests RR73 makes, answered by the simulated IC-705 (`rr73_cat::sim`), through the
 //! parser, as the app will run them: one request at a time, waiting for its answer.
 
-use rr73_cat::ic705::{Addresses, Event, Filter, MenuItem, Mode, Parser, Request, Vfo};
+use rr73_cat::ic705::{Addresses, Event, Filter, MenuItem, Mode, Parser, Request, Split, Vfo};
 use rr73_cat::sim::SimIc705;
 
 /// A controller with one request in flight at a time, as the app's link will be.
@@ -322,4 +322,83 @@ fn keeps_the_tuning_sets_that_arrive_while_transmitting() {
     assert_eq!(link.ask(Request::SetTransmit { on: false }), Event::Ok);
     assert_eq!(link.ask(Request::SetFrequency { hz: 14_074_000 }), Event::Ok);
     assert_eq!(link.radio.sets_while_transmitting.len(), 5);
+}
+
+#[test]
+fn reads_split_rit_and_delta_tx() {
+    let mut link = Link::new(SimIc705::new());
+    assert_eq!(link.ask(Request::ReadSplit), Event::Split { split: Split::Off });
+    assert_eq!(link.ask(Request::ReadRit), Event::Rit { on: false });
+    assert_eq!(link.ask(Request::ReadXit), Event::Xit { on: false });
+    assert_eq!(link.ask(Request::ReadRitOffset), Event::RitOffset { hz: 0 });
+    // The operator turns split, RIT and ΔTX on at the radio, with an offset of -120 Hz.
+    link.radio.split = Split::On;
+    link.radio.rit = true;
+    link.radio.xit = true;
+    link.radio.rit_hz = -120;
+    assert_eq!(link.ask(Request::ReadSplit), Event::Split { split: Split::On });
+    assert_eq!(link.ask(Request::ReadRit), Event::Rit { on: true });
+    assert_eq!(link.ask(Request::ReadXit), Event::Xit { on: true });
+    assert_eq!(link.ask(Request::ReadRitOffset), Event::RitOffset { hz: -120 });
+    link.radio.split = Split::DupPlus;
+    assert_eq!(
+        link.ask(Request::ReadSplit),
+        Event::Split {
+            split: Split::DupPlus
+        }
+    );
+}
+
+#[test]
+fn counts_split_rit_and_delta_tx_sets_that_arrive_while_transmitting() {
+    let mut radio = SimIc705::new();
+    let mut parser = Parser::new(Addresses::default());
+    let mut set = |radio: &mut SimIc705, data: &[u8]| {
+        let mut f = vec![0xFE, 0xFE, 0xA4, 0xE0];
+        f.extend_from_slice(data);
+        f.push(0xFD);
+        parser.push(&radio.receive(&f))
+    };
+    // In receive: applied, and none counted.
+    assert_eq!(set(&mut radio, &[0x0F, 0x01]), [Event::Ok]);
+    assert_eq!(radio.split, Split::On);
+    assert_eq!(set(&mut radio, &[0x21, 0x00, 0x30, 0x12, 0x00]), [Event::Ok]);
+    assert_eq!(radio.rit_hz, 1230);
+    assert_eq!(set(&mut radio, &[0x0F, 0x12]), [Event::Ok]);
+    assert_eq!(radio.split, Split::DupPlus);
+    // Simplex ends duplex.
+    assert_eq!(set(&mut radio, &[0x0F, 0x10]), [Event::Ok]);
+    assert_eq!(radio.split, Split::Off);
+    assert!(radio.sets_while_transmitting.is_empty());
+    // Keyed: reads are not counted, sets are.
+    assert_eq!(set(&mut radio, &[0x1C, 0x00, 0x01]), [Event::Ok]);
+    set(&mut radio, &[0x0F]);
+    set(&mut radio, &[0x21, 0x00]);
+    set(&mut radio, &[0x21, 0x01]);
+    set(&mut radio, &[0x21, 0x02]);
+    assert!(radio.sets_while_transmitting.is_empty());
+    assert_eq!(set(&mut radio, &[0x0F, 0x00]), [Event::Ok]);
+    assert_eq!(set(&mut radio, &[0x21, 0x01, 0x01]), [Event::Ok]);
+    assert_eq!(set(&mut radio, &[0x21, 0x02, 0x01]), [Event::Ok]);
+    assert_eq!(set(&mut radio, &[0x21, 0x00, 0x50, 0x00, 0x01]), [Event::Ok]);
+    let counted: Vec<Vec<u8>> = radio
+        .sets_while_transmitting
+        .iter()
+        .map(|f| [&[f.command][..], &f.data[..]].concat())
+        .collect();
+    assert_eq!(
+        counted,
+        [
+            vec![0x0F, 0x00],
+            vec![0x21, 0x01, 0x01],
+            vec![0x21, 0x02, 0x01],
+            vec![0x21, 0x00, 0x50, 0x00, 0x01]
+        ]
+    );
+    assert!(radio.rit && radio.xit);
+    assert_eq!(radio.rit_hz, -50);
+    // Codes p. 3 does not list, and an offset that is not BCD, are refused.
+    assert_eq!(set(&mut radio, &[0x0F, 0x13]), [Event::Ng]);
+    assert_eq!(set(&mut radio, &[0x21, 0x00, 0x3A, 0x00, 0x00]), [Event::Ng]);
+    assert_eq!(set(&mut radio, &[0x21, 0x01, 0x02]), [Event::Ng]);
 }

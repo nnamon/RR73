@@ -1,7 +1,7 @@
 // The CI-V exports of rr73-wasm (crates/rr73-wasm/src/cat.rs) and the KX2's
 // (crates/rr73-wasm/src/cat_kx2.rs) as the app calls them: JSON requests to bytes, bytes from the
 // port to JSON events. Frames follow Icom's IC-705 CI-V Reference Guide, A7560-8EX-6 (p. 2 layout,
-// p. 14 transmit, p. 17 frequency); the KX2's commands Elecraft's K3S/K3/KX3/KX2 Programmer's
+// p. 3 split, p. 14 transmit, p. 15 RIT and ΔTX, p. 17 frequency, p. 27 the RIT frequency); the KX2's commands Elecraft's K3S/K3/KX3/KX2 Programmer's
 // Reference, Rev. G5 (p. 3 format and ?;, p. 11 FA, p. 27 TQ, p. 28 TX).
 import { describe, expect, it } from 'vitest';
 import { loadWasm } from '../../../e2e/wasm';
@@ -41,6 +41,23 @@ describe('CI-V through the WebAssembly exports', () => {
     expect(wasm.cat_answers('{"type":"set_transmit","on":true}', JSON.stringify(two[0]))).toBe(false);
     expect(wasm.cat_answers('{"type":"set_transmit","on":true}', JSON.stringify(two[1]))).toBe(true);
     expect(JSON.parse(parser.push(Uint8Array.from([0x41, 0x42])))).toEqual([{ type: 'noise', bytes: 2 }]);
+    parser.free();
+  });
+
+  it('reads split, duplex, RIT and ΔTX (pp. 3, 15 and 27)', async () => {
+    const wasm = await loadWasm();
+    if (!wasm) return;
+    expect(hex(wasm.cat_encode('{"type":"read_split"}', 0xa4))).toBe('FE FE A4 E0 0F FD');
+    expect(hex(wasm.cat_encode('{"type":"read_rit_offset"}', 0xa4))).toBe('FE FE A4 E0 21 00 FD');
+    expect(hex(wasm.cat_encode('{"type":"read_rit"}', 0xa4))).toBe('FE FE A4 E0 21 01 FD');
+    expect(hex(wasm.cat_encode('{"type":"read_xit"}', 0xa4))).toBe('FE FE A4 E0 21 02 FD');
+    const parser = new wasm.CatParser(0xa4);
+    const frame = (...data: number[]) => Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, ...data, 0xfd]);
+    expect(JSON.parse(parser.push(frame(0x0f, 0x12)))).toEqual([{ type: 'split', split: 'dup_plus' }]);
+    expect(JSON.parse(parser.push(frame(0x21, 0x00, 0x20, 0x01, 0x01)))).toEqual([{ type: 'rit_offset', hz: -120 }]);
+    expect(JSON.parse(parser.push(frame(0x21, 0x02, 0x01)))).toEqual([{ type: 'xit', on: true }]);
+    expect(wasm.cat_answers('{"type":"read_xit"}', '{"type":"xit","on":true}')).toBe(true);
+    expect(wasm.cat_answers('{"type":"read_rit"}', '{"type":"xit","on":true}')).toBe(false);
     parser.free();
   });
 });

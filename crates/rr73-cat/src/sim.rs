@@ -20,16 +20,22 @@
 //! - Echo Back sends back every byte received at once, ahead of the answer.
 //! - It accepts transmit on at any frequency.
 //! - It applies frequency, mode and data mode sets that arrive while it transmits, and keeps them
-//!   in [`SimIc705::sets_while_transmitting`] for tests that check none arrive.
+//!   in [`SimIc705::sets_while_transmitting`] for tests that check none arrive. Split, duplex, RIT
+//!   and ΔTX sets count too: they move the transmit or the receive frequency.
+//! - Split and duplex are one state, as `0F` reads one code (p. 3). Setting simplex (`0F 10`)
+//!   ends duplex and leaves split as it is.
+//! - RIT and ΔTX share one offset, as the radio shows one readout for both (Basic Manual p. 2-4),
+//!   and both may be on at once.
 
 use std::collections::BTreeMap;
 
 use crate::bcd;
 use crate::frame::{Decoded, Frame, FrameDecoder, NG, OK};
 use crate::ic705::{
-    CMD_READ_FREQUENCY, CMD_READ_MODE, CMD_SET_FREQUENCY, CMD_SET_MODE, CMD_SETTINGS, CMD_STATUS,
-    CMD_TRANSCEIVE_FREQUENCY, CMD_TRANSCEIVE_MODE, CMD_VFO_FREQUENCY, CMD_VFO_MODE, DEFAULT_RADIO_ADDRESS,
-    Filter, MenuItem, Mode, SUB_DATA_MODE, SUB_MENU, SUB_TRANSMIT, Vfo,
+    CMD_READ_FREQUENCY, CMD_READ_MODE, CMD_RIT, CMD_SET_FREQUENCY, CMD_SET_MODE, CMD_SETTINGS, CMD_SPLIT,
+    CMD_STATUS, CMD_TRANSCEIVE_FREQUENCY, CMD_TRANSCEIVE_MODE, CMD_VFO_FREQUENCY, CMD_VFO_MODE,
+    DEFAULT_RADIO_ADDRESS, Filter, MenuItem, Mode, SUB_DATA_MODE, SUB_MENU, SUB_RIT, SUB_RIT_OFFSET,
+    SUB_TRANSMIT, SUB_XIT, Split, Vfo, decode_rit_offset, encode_rit_offset,
 };
 
 /// The receiving address of the simulator's transceive frames: every controller. The CI-V guide
@@ -50,13 +56,16 @@ pub struct VfoState {
 }
 
 /// True for a frame that sets a frequency, a mode or the data mode: `05`, `06`, `1A 06` with data,
-/// and `25` or `26` with data (CI-V guide pp. 3, 14, 15).
+/// and `25` or `26` with data (CI-V guide pp. 3, 14, 15); or split, duplex, RIT or ΔTX: `0F` with
+/// data and `21` with data (pp. 3, 15).
 fn is_tuning(f: &Frame) -> bool {
     matches!(
         (f.command, f.data.as_slice()),
         (CMD_SET_FREQUENCY | CMD_SET_MODE, _)
             | (CMD_SETTINGS, [SUB_DATA_MODE, _, ..])
             | (CMD_VFO_FREQUENCY | CMD_VFO_MODE, [_, _, ..])
+            | (CMD_SPLIT, [_, ..])
+            | (CMD_RIT, [_, _, ..])
     )
 }
 
@@ -83,9 +92,18 @@ pub struct SimIc705 {
     pub rts: bool,
     /// Every frame addressed to the radio, oldest first.
     pub received: Vec<Frame>,
-    /// Frequency, mode and data mode sets that arrived while transmitting, oldest first. The guide
-    /// does not say what the radio does with them; RR73 never sends one while it may be keyed.
+    /// Frequency, mode and data mode sets, and split, duplex, RIT and ΔTX sets, that arrived while
+    /// transmitting, oldest first. The guide does not say what the radio does with them; RR73 never
+    /// sends one while it may be keyed.
     pub sets_while_transmitting: Vec<Frame>,
+    /// Split or duplex, as the FUNCTION screen sets it (Basic Manual p. 4-10).
+    pub split: Split,
+    /// RIT on (Basic Manual p. 4-2).
+    pub rit: bool,
+    /// ΔTX on (Advanced Manual p. 2-3).
+    pub xit: bool,
+    /// The RIT and ΔTX offset, Hz, from -9999 to 9999.
+    pub rit_hz: i32,
     settings: BTreeMap<MenuItem, u16>,
     decoder: FrameDecoder,
 }
@@ -100,7 +118,7 @@ impl SimIc705 {
     /// A radio at address `A4` on 14.074 MHz USB, FIL1, data mode off, the other VFO on
     /// 7.074 MHz, receiving, with the menu defaults of the Basic Manual: Time-Out Timer 5 min
     /// (p. 8-4), DATA OFF MOD MIC,USB and DATA MOD USB (p. 8-15), USB SEND off, CI-V Transceive
-    /// on and CI-V USB Echo Back off (p. 8-16).
+    /// on and CI-V USB Echo Back off (p. 8-16). Split, RIT and ΔTX are off, the offset 0 Hz.
     pub fn new() -> Self {
         let settings = BTreeMap::from([
             (MenuItem::TimeOutTimer, 2),
@@ -125,6 +143,10 @@ impl SimIc705 {
             rts: false,
             received: Vec::new(),
             sets_while_transmitting: Vec::new(),
+            split: Split::Off,
+            rit: false,
+            xit: false,
+            rit_hz: 0,
             settings,
             decoder: FrameDecoder::new(),
         }
@@ -342,8 +364,46 @@ impl SimIc705 {
             (CMD_VFO_MODE, [v, m]) => ack(self.vfo_mode(*v, *m, 0, 1)),
             (CMD_VFO_MODE, [v, m, d]) => ack(self.vfo_mode(*v, *m, *d, 1)),
             (CMD_VFO_MODE, [v, m, d, fil]) => ack(self.vfo_mode(*v, *m, *d, *fil)),
+            (CMD_SPLIT, []) => reply(vec![self.split.code()]),
+            (CMD_SPLIT, [code]) => ack(self.set_split(*code)),
+            (CMD_RIT, [SUB_RIT_OFFSET]) => match encode_rit_offset(self.rit_hz) {
+                Some(b) => reply([&[SUB_RIT_OFFSET][..], &b[..]].concat()),
+                None => ack(false),
+            },
+            (CMD_RIT, [SUB_RIT_OFFSET, d @ ..]) => match decode_rit_offset(d) {
+                Ok(hz) => {
+                    self.rit_hz = hz;
+                    ack(true)
+                }
+                Err(_) => ack(false),
+            },
+            (CMD_RIT, [SUB_RIT]) => reply(vec![SUB_RIT, u8::from(self.rit)]),
+            (CMD_RIT, [SUB_XIT]) => reply(vec![SUB_XIT, u8::from(self.xit)]),
+            (CMD_RIT, [SUB_RIT, on @ (0x00 | 0x01)]) => {
+                self.rit = *on == 0x01;
+                ack(true)
+            }
+            (CMD_RIT, [SUB_XIT, on @ (0x00 | 0x01)]) => {
+                self.xit = *on == 0x01;
+                ack(true)
+            }
             _ => ack(false),
         }
+    }
+
+    /// Sets split or duplex from a code of p. 3: `00` split off, `01` on, `10` simplex, `11`
+    /// DUP-, `12` DUP+. False for any other code.
+    fn set_split(&mut self, code: u8) -> bool {
+        self.split = match code {
+            0x00 => Split::Off,
+            0x01 => Split::On,
+            0x10 if matches!(self.split, Split::DupMinus | Split::DupPlus) => Split::Off,
+            0x10 => self.split,
+            0x11 => Split::DupMinus,
+            0x12 => Split::DupPlus,
+            _ => return false,
+        };
+        true
     }
 
     fn vfo_mode(&mut self, v: u8, mode: u8, data: u8, filter: u8) -> bool {

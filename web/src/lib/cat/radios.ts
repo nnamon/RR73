@@ -66,7 +66,9 @@ export const IC705: RadioTraits = {
     { type: 'set_mode', mode: 'usb', filter: 1 },
     { type: 'set_data_mode', on: true, filter: 1 },
   ],
-  modeReads: [{ type: 'read_mode' }, { type: 'read_data_mode' }],
+  // Split and duplex (`0F`, p. 3), RIT, ΔTX and their offset (`21`, p. 15): each moves the RF away
+  // from the dial RR73 logs, or the receive frequency away from the dial it transmits on.
+  modeReads: [{ type: 'read_mode' }, { type: 'read_data_mode' }, { type: 'read_split' }, { type: 'read_rit' }, { type: 'read_xit' }, { type: 'read_rit_offset' }],
   settings: (['usb_send', 'data_mod', 'time_out_timer'] as const).map((item) => ({ id: item, request: { type: 'read_setting', item }, value: setting })),
   slow: {},
   readsPtt: false,

@@ -41,6 +41,18 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await expect(page.getByTestId('rig-mode')).toHaveText('The KX2 is in USB. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.');
   await expect(page.getByRole('listitem').filter({ hasText: 'Filter' })).toContainText('2.80 kHz');
   await expect(page.getByRole('listitem').filter({ hasText: 'Split' })).toContainText('Off');
+  await expect(page.getByRole('listitem').filter({ hasText: 'RIT' })).toContainText('Off');
+  // RIT on at −150 Hz: the receive frequency is off the dial RR73 transmits on.
+  await page.evaluate(() => {
+    window.__kx2.rit = true;
+    window.__kx2.xitHz = -150;
+  });
+  await expect(page.getByRole('listitem').filter({ hasText: 'RIT' })).toContainText('On, −150 Hz', { timeout: 7000 });
+  await expect(page.getByTestId('rig-advice').filter({ hasText: 'RIT is on' })).toHaveText('RIT is on: the KX2 receives 150 Hz below VFO A, so replies land 150 Hz from the station they answer. Tap RIT on the KX2 to turn it off.');
+  await page.evaluate(() => {
+    window.__kx2.rit = false;
+    window.__kx2.xitHz = 0;
+  });
   expect(await page.evaluate(() => window.__kx2.menu)).toBe(255);
 
   await page.evaluate(() => (location.hash = '#/'));

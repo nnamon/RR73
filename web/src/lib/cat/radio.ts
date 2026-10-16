@@ -36,7 +36,7 @@
  */
 
 import type { LinkEnd } from './serial';
-import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, DataSub, SettingId } from './protocol';
+import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, CatSplit, DataSub, SettingId } from './protocol';
 import { IC705, type RadioTraits, type SettingRead } from './radios';
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
 
@@ -102,7 +102,7 @@ export interface RadioState {
   sub: DataSub | null;
   /** When the frequency was last read or reported, CatTimers.now() ms. */
   heardAtMs: number | null;
-  /** The settings read, by item: the codes the CI-V guide lists, and for the KX2 its product number, MIC BTN as MP gives it and VOX (1 on). */
+  /** The settings read, by item: the codes the CI-V guide lists, split, RIT, XIT and their offset (SettingId), and for the KX2 its product number, MIC BTN as MP gives it and VOX (1 on). */
   settings: Partial<Record<SettingId, number>>;
   /** Bytes arrived, but never a frame from the radio: another port, such as USB (B). */
   noiseOnly: boolean;
@@ -135,6 +135,9 @@ interface Waiting {
   timeoutMs: number;
   resolve: (r: CatResult) => void;
 }
+
+/** The IC-705's split and duplex as the `split` setting holds them: 0 off, 1 on, 2 DUP−, 3 DUP+. */
+const SPLIT_CODE: Record<CatSplit, number> = { off: 0, on: 1, dup_minus: 2, dup_plus: 3 };
 
 /** Sets that change the dial or mode, which never go out while the radio transmits. */
 const TUNING = new Set<CatRequest['type']>(['set_frequency', 'set_mode', 'set_data_mode', 'set_data_sub_mode']);
@@ -869,8 +872,22 @@ export class CatRadio implements Keyer {
         if (!this.shift) this.patch({ hz: e.hz, heardAtMs: this.timers.now() });
         this.patch({ transmitting: e.transmit, ...(e.mode !== null ? { mode: e.mode } : {}) });
         this.setSetting('split', e.split ? 1 : 0);
+        this.setSetting('rit', e.rit ? 1 : 0);
         this.setSetting('xit', e.xit ? 1 : 0);
-        this.setSetting('xit_hz', e.offset_hz);
+        this.setSetting('offset_hz', e.offset_hz);
+        break;
+      // The IC-705's `0F` and `21`: split or duplex, RIT, ΔTX and their shared offset.
+      case 'split':
+        this.setSetting('split', SPLIT_CODE[e.split]);
+        break;
+      case 'rit':
+        this.setSetting('rit', e.on ? 1 : 0);
+        break;
+      case 'xit':
+        this.setSetting('xit', e.on ? 1 : 0);
+        break;
+      case 'rit_offset':
+        this.setSetting('offset_hz', e.hz);
         break;
       case 'bandwidth':
         this.setSetting('bandwidth', e.hz);

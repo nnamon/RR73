@@ -253,6 +253,11 @@ impl CatKx2SimForTests {
         self.sim.offset_hz = offset_hz.clamp(-9999, 9999);
     }
 
+    /// Turns RIT on or off. RIT and XIT share the offset `set_xit` sets.
+    pub fn set_rit(&mut self, on: bool) {
+        self.sim.rit = on;
+    }
+
     /// The data sub-mode as JSON, as `"data_a"`.
     #[wasm_bindgen(getter)]
     pub fn sub(&self) -> String {

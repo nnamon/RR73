@@ -136,6 +136,15 @@
   const FILTER_MIN_HZ = 2700;
   const khz = (hz: number) => `${(hz / 1000).toFixed(2)} kHz`;
 
+  /** An offset with its sign: "+120 Hz", "−50 Hz", "0 Hz". */
+  const signedHz = (hz: number) => `${hz > 0 ? '+' : hz < 0 ? '−' : ''}${Math.abs(hz)} Hz`;
+  /** RIT or XIT as read, with the offset they share. */
+  const offsetValue = (on: number | undefined) => (on === undefined ? 'Reading' : on ? `On, ${signedHz(rig.menu.offset_hz ?? 0)}` : 'Off');
+  /** Where an offset puts the frequency against the dial: "120 Hz above". */
+  const offsetText = (hz: number) => `${Math.abs(hz)} Hz ${hz > 0 ? 'above' : 'below'}`;
+  /** The IC-705's split and duplex, as the setting holds them (lib/cat/radio.ts). */
+  const splitValues = ['Off', 'On', 'DUP−', 'DUP+'];
+
   /** MIC BTN as MP gives it: bit 0 PTT, bit 2 the UP and DN buttons (Programmer's Reference p. 20). */
   const micBtnText = (v: number) => (v & 1 ? (v & 4 ? 'PTT UP.DN' : 'PTT') : v & 4 ? 'UP.DN' : 'OFF');
 
@@ -162,13 +171,19 @@
         { title: 'VOX', value: m.vox === undefined ? 'Reading' : m.vox ? 'On' : 'Off', ok: m.vox === undefined || !dataMode ? null : settings.cat.keyPtt || m.vox === 1 },
         { title: 'Filter', value: m.bandwidth === undefined ? 'Reading' : khz(m.bandwidth), ok: m.bandwidth === undefined ? null : m.bandwidth >= FILTER_MIN_HZ },
         { title: 'Split', value: m.split === undefined ? 'Reading' : m.split ? 'On' : 'Off', ok: m.split === undefined ? null : m.split === 0 },
-        { title: 'XIT', value: m.xit === undefined ? 'Reading' : m.xit ? `On, ${m.xit_hz !== undefined && m.xit_hz > 0 ? '+' : ''}${m.xit_hz ?? 0} Hz` : 'Off', ok: m.xit === undefined ? null : m.xit === 0 },
+        { title: 'RIT', value: offsetValue(m.rit), ok: m.rit === undefined ? null : m.rit === 0 },
+        { title: 'XIT', value: offsetValue(m.xit), ok: m.xit === undefined ? null : m.xit === 0 },
       ];
     }
     return [
       row('USB SEND', usbSendValues, m.usb_send, (v) => v === 0),
       row('DATA MOD', dataModValues, m.data_mod, (v) => v === 1 || v === 2),
       row('Time-Out Timer', totValues, m.time_out_timer, (v) => v !== 0),
+      // Split, duplex, RIT and ΔTX (Icom's XIT) move the RF away from the frequency RR73 logs, or
+      // the receive frequency away from the dial it transmits on (CI-V guide pp. 3, 15).
+      row('Split', splitValues, m.split, (v) => v === 0),
+      { title: 'RIT', value: offsetValue(m.rit), ok: m.rit === undefined ? null : m.rit === 0 },
+      { title: 'ΔTX', value: offsetValue(m.xit), ok: m.xit === undefined ? null : m.xit === 0 },
     ];
   });
 
@@ -194,13 +209,26 @@
       if (m.bandwidth !== undefined && m.bandwidth < FILTER_MIN_HZ)
         out.push({ text: `The receive filter is ${khz(m.bandwidth)} wide, and FT8 and FT4 use 200 to 2800 Hz. Tap FIL on the KX2 and turn AF/MON to widen it to ${khz(FILTER_MIN_HZ)} or more.`, bad: false });
       if (m.split === 1) out.push({ text: 'Split is on: the KX2 transmits on VFO B, away from the frequency RR73 logs. Turn split off on the KX2.', bad: true });
-      if (m.xit === 1) out.push({ text: `XIT is on: the KX2 transmits ${Math.abs(m.xit_hz ?? 0)} Hz from VFO A, away from the frequency RR73 logs. Set MENU › XIT to OFF.`, bad: true });
+      if (m.xit === 1) out.push({ text: `XIT is on: the KX2 transmits ${Math.abs(m.offset_hz ?? 0)} Hz from VFO A, away from the frequency RR73 logs. Set MENU › XIT to OFF.`, bad: true });
+      if (m.rit === 1 && m.offset_hz)
+        out.push({ text: `RIT is on: the KX2 receives ${offsetText(m.offset_hz)} VFO A, so replies land ${Math.abs(m.offset_hz)} Hz from the station they answer. Tap RIT on the KX2 to turn it off.`, bad: true });
+      else if (m.rit === 1) out.push({ text: 'RIT is on with a 0 Hz offset. Tap RIT on the KX2 to turn it off before the offset moves the receive frequency.', bad: false });
       out.push({ text: 'MENU › AUTO OFF, when set, turns the KX2 off after that many minutes without use of its controls. Keep it at INFINITE while RR73 runs the radio.', bad: false });
       return out;
     }
     if (usbSendOn()) out.push({ text: 'USB SEND keys the radio on a line of the port, so Tx stays off. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF.', bad: true });
     if (m.data_mod === 0 || m.data_mod === 3) out.push({ text: 'Transmit audio from this computer does not reach the transmitter. Set SET › Connectors › MOD Input › DATA MOD to USB.', bad: true });
     if (m.time_out_timer === 0) out.push({ text: 'With the Time-Out Timer off, the radio puts no limit on a transmission. Set SET › Function › Time-Out Timer to 5 min.', bad: false });
+    if (m.split === 1) out.push({ text: 'Split is on: the IC-705 transmits on the other VFO, away from the frequency RR73 logs. Touch SPLIT on the FUNCTION screen to turn it off.', bad: true });
+    if (m.split === 2 || m.split === 3)
+      out.push({ text: 'Duplex is on: the IC-705 transmits at its duplex offset from the dial, away from the frequency RR73 logs. On FUNCTION screen 2, touch DUP until it shows OFF.', bad: true });
+    const off = m.offset_hz ?? 0;
+    if (m.xit === 1 && off)
+      out.push({ text: `ΔTX (XIT) is on: the IC-705 transmits ${offsetText(off)} the dial, away from the frequency RR73 logs. Push the RIT/ΔTX key to turn it off.`, bad: true });
+    else if (m.xit === 1) out.push({ text: 'ΔTX (XIT) is on with a 0 Hz offset. Push the RIT/ΔTX key to turn it off before the offset moves the transmit frequency.', bad: false });
+    if (m.rit === 1 && off)
+      out.push({ text: `RIT is on: the IC-705 receives ${offsetText(off)} the dial it transmits on, so replies land ${Math.abs(off)} Hz from the station they answer. Push the RIT/ΔTX key to turn it off.`, bad: true });
+    else if (m.rit === 1) out.push({ text: 'RIT is on with a 0 Hz offset. Push the RIT/ΔTX key to turn it off before the offset moves the receive frequency.', bad: false });
     return out;
   });
 

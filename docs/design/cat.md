@@ -29,8 +29,8 @@ Downloaded from Icom's site (icomjapan.com/support/manual) on 15 October 2026. P
 | Document | Code, date | Used for |
 | --- | --- | --- |
 | IC-705 CI-V Reference Guide | A7560-8EX-6, January 2023 | Frame layout, command table, data formats, the range of the SSB-D transmit bandwidth |
-| IC-705 Basic Manual | A7560D-1EX-9, December 2025 | Menu items and defaults, filters, coverage, the USB port, the USB-D transmit passband |
-| IC-705 Advanced Manual | A7560-7EX-5, April 2026 | USB SEND and keying, serial port settings, data modes |
+| IC-705 Basic Manual | A7560D-1EX-9, December 2025 | Menu items and defaults, filters, coverage, the USB port, the USB-D transmit passband, RIT, split, the RIT/ΔTX key, troubleshooting |
+| IC-705 Advanced Manual | A7560-7EX-5, April 2026 | USB SEND and keying, serial port settings, data modes, ΔTX, duplex |
 | IC-705 Firmware Update Information | Versions 1.11 to 1.40 | Checked for changed CI-V commands: none of those below changed |
 | USB Driver Installation Guide (Windows 11) | A7560-9EX-5, August 2026 | Windows support, port names, USB audio driver |
 | USB Driver download page | Version 1.80, 26 August 2026 | The driver's version and its Web Serial fix |
@@ -53,7 +53,7 @@ On the Windows tablet, before stage 1:
 - Other windows: RR73 keeps receiving and transmitting with its window minimised or covered, or in a background tab (`docs/decisions/0010-hidden-window.md`). The screen wake lock does not hold while it is hidden, so the sleep timeout above applies.
 
 1. Before the first Connect radio, on the IC-705: set SET > Connectors > USB SEND/Keying > USB SEND to OFF, its default (Basic Manual p. 8-16). Chromium raises the port's DTR and RTS lines while it opens the port, and with USB SEND on a line that may key the radio until RR73 lowers them (Port settings, below). Check that SET > Function > Time-Out Timer is on (default 5 min, Basic Manual p. 8-4): it is the last limit on the radio's side.
-2. Close the other FT8 program: Windows lets one program at a time open the port. In Settings › Rig control, tap Connect radio and choose IC-705 Serial Port A (CI-V). Check that the Dial row and Operate's top bar show the frequency and mode on the radio's screen, and that the Radio settings rows show USB SEND OFF, DATA MOD USB and the Time-Out Timer on.
+2. Close the other FT8 program: Windows lets one program at a time open the port. In Settings › Rig control, tap Connect radio and choose IC-705 Serial Port A (CI-V). Check that the Dial row and Operate's top bar show the frequency and mode on the radio's screen, and that the Radio settings rows show USB SEND OFF, DATA MOD USB, the Time-Out Timer on, and Split, RIT and ΔTX Off.
 3. Change band from RR73's band sheet and check that the radio follows in USB-D. Turn the radio's dial into another band and check that RR73 follows within about 1 s.
 4. Set the radio to low power into a dummy load or a matched antenna.
 5. Tap Test keying. The radio transmits for 1 s with no audio, and the screen says "Keyed and released at 13:14:30 UTC." Any other answer names what went wrong.
@@ -95,6 +95,16 @@ On the Windows tablet, before stage 1:
 | USB AF/IF Output > AF SQL | OFF (Open) | OFF (Open), so receive audio never gates | p. 8-15 |
 | USB SEND/Keying > USB SEND | OFF | OFF: RR73 keys by CI-V, and DTR or RTS changes when a port opens must not key the radio | p. 8-16; Advanced Manual p. 9-2 |
 
+Split, duplex, RIT and ΔTX are front panel functions, read every 5 s with the mode (Commands, below) and shown under Radio settings with what to do:
+
+| Row | Read | Suits RR73 | Advice | Source |
+| --- | --- | --- | --- | --- |
+| Split | `0F`: `00` off, `01` on, `11` DUP−, `12` DUP+ | Off | On: the radio transmits on the other VFO, away from the frequency RR73 logs; touch SPLIT on the FUNCTION screen. DUP− or DUP+: it transmits at the duplex offset; on FUNCTION screen 2 touch DUP until it shows OFF | CI-V guide p. 3; Basic Manual pp. 4-10, 10-4; Advanced Manual p. 2-18 |
+| RIT | `21 01`, with the offset from `21 00` | Off | On: the radio receives the offset away from the dial it transmits on, so replies land that far from the station they answer; push the RIT/ΔTX key | CI-V guide pp. 15, 27; Basic Manual pp. 2-1, 4-2 |
+| ΔTX | `21 02`, with the offset from `21 00` | Off | On: the radio transmits the offset away from the dial, away from the frequency RR73 logs; push the RIT/ΔTX key | CI-V guide p. 15; Advanced Manual p. 2-3 |
+
+ΔTX is Icom's name for XIT: it "shifts your transmit frequency up to 9.99 kHz without shifting the displayed frequency" (Advanced Manual p. 2-3), and RIT "shifts your receive frequency up to 9.99 kHz without shifting the transmit frequency" (Basic Manual p. 4-2). Each answer leaves a row as Reading until it comes. RR73 warns and never sets any of them, and does not refuse to transmit, as for the KX2 (Elecraft KX2, Radio settings): the operator may mean it.
+
 SET > Function > Time-Out Timer (default 5 min, Basic Manual p. 8-4) ends a transmission that runs too long. RR73 reads it and shows it; with it off, a stuck transmission has no limit on the radio's side, and Rig control says to set it.
 
 On connecting, RR73 reads USB SEND, DATA MOD and the Time-Out Timer with `1A 05` and shows each with the menu path of any setting to change. It never sets them. A setting that goes unanswered is read again every 5 s until the radio answers it or refuses it with NG. While USB SEND reads 1 to 4 (a line of port A or B, CI-V guide p. 8), RR73 keeps the lines low, refuses every transmission, Tune and Test keying ("Set USB SEND to OFF" in the status line), and Rig control gives the menu path. The CI-V address is A4: an operator who changed it gets "No reply from the IC-705", which names the setting.
@@ -114,6 +124,9 @@ On connecting, RR73 reads USB SEND, DATA MOD and the Time-Out Timer with `1A 05`
 | A VFO's frequency | `25`, `00` selected or `01` unselected, [5 frequency bytes] | data or OK | p. 15, p. 27 |
 | A VFO's mode, data mode and filter | `26`, VFO, [mode, data, filter] | data or OK | p. 15, p. 27 |
 | Read a menu setting | `1A 05` and the item: `0043` Time-Out Timer, `0118` DATA OFF MOD, `0119` DATA MOD, `0125` USB SEND, `0131` CI-V Transceive, `0132` CI-V USB Echo Back | `1A 05`, the item, the value | p. 6, p. 8 |
+| Read split and duplex | `0F` | `0F`, then `00` split off, `01` split on, `11` DUP− or `12` DUP+ | p. 3 |
+| Read the RIT frequency | `21 00` | `21 00`, then 10 Hz and 1 Hz, 1 kHz and 100 Hz, and `00` plus or `01` minus | p. 15, p. 27 |
+| Read RIT, ΔTX | `21 01`, `21 02` | `21 01` or `21 02`, then `00` off or `01` on | p. 15 |
 | Transceive from the radio | `00` and 5 frequency bytes; `01`, mode, filter | none | p. 3, p. 17 |
 
 - Frequencies are 5 bytes of binary-coded decimal, least significant first: 10 Hz and 1 Hz in the first byte, up to the 1 GHz digit (fixed at 0) and the 100 MHz digit (0 to 4) in the last (p. 17). 14.074 MHz is `00 40 07 14 00`.
@@ -124,6 +137,8 @@ On connecting, RR73 reads USB SEND, DATA MOD and the Time-Out Timer with `1A 05`
 - The guide gives the data mode's answer as the data mode and its filter (p. 22). The parser also reads an answer with the data mode alone, with no filter.
 - The guide's preamble is two `FE` bytes (p. 2). The frame reader also reads a frame whose first `FE` was lost.
 - `19 00` reads the transceiver ID (p. 5), but the guide gives no format for its answer, so RR73 does not use it.
+- The RIT frequency's 3 bytes carry 4 digits, so up to 9999 Hz; +1230 Hz is `30 12 00`, −50 Hz `50 00 01` (p. 27). The guide calls `21 00` the RIT frequency and has no command for a ΔTX offset; the radio shows one readout for both ("RIT/ΔTX/SPLIT/DUPLEX FREQUENCY READOUT", Basic Manual p. 2-4), so RR73 shows the `21 00` offset for ΔTX too. Unverified.
+- `0F` lists its answers in the Data column with no sub-command (p. 3), and its sets as `00`, `01`, `10` simplex, `11` and `12`. RR73 reads `0F` with no data and takes the one byte that follows as the answer. Unverified.
 
 ### USB-D for FT8, FT4, WSPR and RTTY
 
@@ -140,7 +155,7 @@ RR73 sets USB, FIL1 with `06 01 01`, then data mode on with FIL1 with `1A 06 01 
 - PTT on, PTT off and the read that confirms PTT off jump the queue and go out at once, ahead of the polls waiting in it and beside the one in flight. PTT on and the confirming read wait for a drain to end; PTT off never waits. A PTT on held back that way goes out only if its keying still holds and no PTT off has gone out since: Halt inside a drain sends PTT off and nothing after it.
 - A drain ends when its timer fires, even when the timer fires a moment before the page's clock reaches the drain's end. The 1 s poll skips while a request waits, so a drain that outlived its timer would stop the link.
 - Every 5 s the poll also reads transmit or receive (`1C 00`): a radio keyed by VOX, its own PTT or another program shows as Transmitting in Rig control.
-- While connected and not keyed, RR73 reads the frequency (`03`) every 1 s and the mode and data mode (`04`, `1A 06`) every 5 s. While RR73 holds PTT on, this polling stops: RR73 reads `1C 00` every 1 s instead, from 100 ms after the radio's OK (Transmit, PTT off). With Key the radio with CAT off, RR73 does not know when VOX keys the radio, and the polling goes on. Transceive frames (`00`, `01`) update the dial at once when they arrive. CI-V Transceive is on by default (Basic Manual p. 8-16), but the operator can turn it off, and the guide gives no transceive frame for the data mode. Polling covers both.
+- While connected and not keyed, RR73 reads the frequency (`03`) every 1 s, and the mode and data mode (`04`, `1A 06`), split (`0F`), RIT, ΔTX and their offset (`21 01`, `21 02`, `21 00`) every 5 s. While RR73 holds PTT on, this polling stops: RR73 reads `1C 00` every 1 s instead, from 100 ms after the radio's OK (Transmit, PTT off). With Key the radio with CAT off, RR73 does not know when VOX keys the radio, and the polling goes on. Transceive frames (`00`, `01`) update the dial at once when they arrive. CI-V Transceive is on by default (Basic Manual p. 8-16), but the operator can turn it off, and the guide gives no transceive frame for the data mode. Polling covers both.
 - The guide does not say which receiving address transceive frames carry, so the parser takes every frame from the radio's address. The simulator sends them to `00`. Unverified.
 - With Echo Back on, the radio sends each frame back first (Basic Manual p. 8-16; the Bluetooth equivalent "sends back the serial data received", p. 8-22). The parser marks frames from the controller's address to the radio's as echoes, so neither setting needs changing.
 
@@ -324,16 +339,16 @@ Changing the output halts Tune and any transmission, so no transmission moves be
 
 ## Testing
 
-- `crates/rr73-cat/tests/reference.rs`: frames worked from the guide's layouts, with their pages.
-- `crates/rr73-cat/tests/sim.rs`: each request against the simulated IC-705 (`rr73_cat::sim`), with Echo Back and Transceive on and off, transceive frames to `00`, USB SEND keying on a port A line, and the dial and mode sets that arrive while it transmits (`sets_while_transmitting`).
+- `crates/rr73-cat/tests/reference.rs`: frames worked from the guide's layouts, with their pages, `0F` and `21` included.
+- `crates/rr73-cat/tests/sim.rs`: each request against the simulated IC-705 (`rr73_cat::sim`), with Echo Back and Transceive on and off, transceive frames to `00`, USB SEND keying on a port A line, split, duplex, RIT and ΔTX read, and the dial, mode, split, RIT and ΔTX sets that arrive while it transmits (`sets_while_transmitting`).
 - `crates/rr73-cat/tests/fuzz.rs`: random bytes and frame-shaped input against the frame reader, the parser and the simulator; random frequencies through the BCD format; random requests answered exactly once.
 - `crates/rr73-wasm/src/cat.rs` and `web/src/lib/cat/wasm.test.ts`: the JSON form of requests and events through the WebAssembly exports. `CatSimForTests` exposes the simulator to the app's unit tests; the app never uses it.
 - `web/src/lib/cat/serial.test.ts`: the serial link against a fake port, the lines lowered before any write.
-- `web/src/lib/cat/radio.test.ts`: the link against a fake port answered by the simulator on a fake clock: the queue, PTT ahead of it, polling, transceive, menu settings read again, lost requests and the drain, PTT and its confirmation, the keying limit and whether a keying still holds PTT, sets refused while keyed, faults while keyed and the 100 ms after the OK, the lost port and the recovery. With a dial shift: the Tx dial before PTT on and the receive dial after PTT off is confirmed, the state on the receive dial through reports of the Tx dial, a refused and an unanswered Tx dial, Halt, a release before PTT on, PTT off for an earlier keying first, the band sheet held back, a refused restore, and the receive dial set back after a lost port.
+- `web/src/lib/cat/radio.test.ts`: the link against a fake port answered by the simulator on a fake clock: the queue, PTT ahead of it, polling, split, RIT and ΔTX read every 5 s and never while keyed, transceive, menu settings read again, lost requests and the drain, PTT and its confirmation, the keying limit and whether a keying still holds PTT, sets refused while keyed, faults while keyed and the 100 ms after the OK, the lost port and the recovery. With a dial shift: the Tx dial before PTT on and the receive dial after PTT off is confirmed, the state on the receive dial through reports of the Tx dial, a refused and an unanswered Tx dial, Halt, a release before PTT on, PTT off for an earlier keying first, the band sheet held back, a refused restore, and the receive dial set back after a lost port.
 - `web/src/lib/cat/passband.test.ts`: every FT8 and FT4 Tx frequency lands in the window in whole steps, with the RF unchanged.
 - `web/src/lib/tx/scheduler.test.ts`: keying around FT8, FT4 and WSPR on a fake audio clock, its timing, refusals, Halt, cancel, late starts, PTT taken back before the audio, and the audio stopped at the keying's limit. With a shift: the synthesis at the Tx frequency less the shift, the keying with it, no shift inside the window or with the switch off, a shift changed before the pre-roll, and a refused Tx dial.
 - `web/src/lib/state/cat.test.ts` (jsdom): Settings › Rig control's actions against a fake Web Serial and the simulator: connecting, the port chosen and the others forgotten, opening again, USB SEND on a line, Disconnect (and Disconnect while keyed), the dial followed by transceive and by polling, the dial QSOs log, the dial set, the keying switch off and on for FT8 and WSPR, Halt, page hide, the lost port, faults, PTT off unconfirmed, and Test keying with each of its answers. Keep Tx audio centred: off by default, a CQ at 2800 Hz with its frames and timing and the RF it goes out on, no shift with the switch off, inside the window or without CAT keying, USB only, a refused Tx dial, Halt, a lost port, a refused restore and Disconnect radio.
-- `web/e2e/rig.spec.ts` (Playwright `chromium`): `navigator.serial` replaced by a fake IC-705 in the page (`e2e/fake-ic705.ts`): connecting, the dial shown, a band change setting the radio, the radio's dial followed, opening again after a reload, Test keying with a radio that answers and one that keeps transmitting, and Keep Tx audio centred off by default and usable only with CAT keying on.
+- `web/e2e/rig.spec.ts` (Playwright `chromium`): `navigator.serial` replaced by a fake IC-705 in the page (`e2e/fake-ic705.ts`): connecting, the dial shown, a band change setting the radio, the radio's dial followed, split, duplex, RIT and ΔTX shown with their advice, opening again after a reload, Test keying with a radio that answers and one that keeps transmitting, and Keep Tx audio centred off by default and usable only with CAT keying on.
 - `web/e2e/rig-practice.spec.ts` (Playwright `practice`): the fake IC-705 connected with Key the radio with CAT on, the practice band turned on, a practice CQ on air and Tune send no PTT frame, and Test keying is off.
 - `web/e2e/rig-tx.spec.ts` (Playwright `tx-cq`, after the rest of the suite): the output recorded (`e2e/tap.ts`) and PTT timed against it on the audio clock: a CQ with the switch off (no PTT) and on (PTT before and after the audio, at slot + 0.5 s), Halt, Tune with the switch off and on, RTTY, audio stopping and a lost port. With Keep Tx audio centred: a CQ at 2800 Hz sends the Tx dial, PTT on, the audio at 1800 Hz (decoded) on time, PTT off and the receive dial, with the fake radio reporting each dial set by transceive and Operate showing the receive dial throughout, then Halt; and Tune at 2800 Hz plays 1800 Hz on the dial 1000 Hz up. It skips, and fails on GitHub Actions, when the audio clock falls behind real time (docs/testing.md).
 - `e2e/layout.spec.ts` in WebKit checks that Settings has no Rig control without Web Serial.
@@ -374,7 +389,7 @@ Not tested on a device: everything above ran against the simulator and a fake ra
 - Unverified: how long the IC-705 takes to answer `05` with OK. The shift's audio starts on time while that and PTT's OK take 400 ms or less together.
 - Unverified: whether the IC-705 sends a transceive frame for a frequency set by CI-V. RR73 ignores frequency reports while shifted, so either way the receive dial stays on screen.
 - Unverified: whether moving the dial by up to 1500 Hz just before PTT on changes anything on the transmitter, such as an antenna tuner or a band filter, or affects the first symbols. The shift stays within the band.
-- Unverified: `05` with the radio in split, memory mode or with XIT on. RR73 reads none of these. With split on, the radio may transmit on the other VFO, unshifted.
+- Unverified: `05` with the radio in split, memory mode or with ΔTX on. RR73 reads split, duplex and ΔTX and warns in Rig control, and does not read memory mode. With split on, the radio may transmit on the other VFO, unshifted.
 - A dial the operator turns on the radio during a shifted transmission is set back to the receive dial afterwards.
 - RTTY transmits unshifted: a pair tuned within about 100 Hz of a passband edge, or below 1350 Hz with its harmonics in the passband, goes out attenuated or with them. Not measured on a device.
 
@@ -470,7 +485,7 @@ Downloaded on 16 October 2026. Page numbers are the printed numbers.
 - `OM` names the product (p. 21). MIC BTN is entry 082 in the K3's, the KX3's and the KX2's tables (pp. 17 to 19), but `MP` gives its bits on the KX3 and the KX2 only (p. 20; the K3's table does not mark it for `MP`). RR73 reads MIC BTN after `OM` reads 01 or 02.
 - `MN` opens a menu entry and `MN255` leaves the menu (p. 17). RR73 reads `MN;` first and reads MIC BTN only while it says 255: never while the operator has a menu entry open, and never between PTT on and the confirmation of PTT off. After the read, `MN;` must read 255, or `MN255;MN;` goes out. A radio found in entry 082 on connecting, as a read cut off by a lost port leaves it, gets "Tap DISP on the KX2 to leave the menu": the MENU switch leaves the menu (Owner's Manual p. 41), and on the KX2 MENU is the hold of DISP (Programmer's Reference Table 8A, p. 26). Unverified: what `MN` and `MP` do to the radio's keying.
 - `K2;` reads the K2 command mode. In modes 1 and 3, which another program may leave, `MD` and `IF` report DATA as LSB or USB (p. 4; p. 16, note 2), so every band change's read-back reads as refused. Rig control names the mode and says to close that program and turn the KX2 off and on. Unverified: whether the mode survives a power cycle.
-- RR73 never sends `AI`. With MENU › AUTO INF at ANT CTRL the KX2 sends `IF` by itself (Owner's Manual pp. 35 and 44); RR73 reads its frequency and mode as transceive. RR73 reads `IF;` itself on connecting and every 5 s, for split, XIT and its offset (p. 14). It shows the `IF` transmit flag and never takes it as confirming receive: only `TQ` does. On a band change the radio sends `IF`, `FA`, `FB`, `FR`, `FT` and more by itself (p. 11, note 7); `FA` among them may answer the frequency set, with the same frequency.
+- RR73 never sends `AI`. With MENU › AUTO INF at ANT CTRL the KX2 sends `IF` by itself (Owner's Manual pp. 35 and 44); RR73 reads its frequency and mode as transceive. RR73 reads `IF;` itself on connecting and every 5 s, for split, RIT, XIT and their offset (p. 14). It shows the `IF` transmit flag and never takes it as confirming receive: only `TQ` does. On a band change the radio sends `IF`, `FA`, `FB`, `FR`, `FT` and more by itself (p. 11, note 7); `FA` among them may answer the frequency set, with the same frequency.
 
 ### The link
 
@@ -560,6 +575,7 @@ On connecting RR73 reads, and shows under Radio settings:
 | Filter | `BW` | 2.70 kHz or more | Narrower: tap FIL and turn AF/MON to widen it (Owner's Manual p. 17) |
 | Split | `IF` | Off | On: the KX2 transmits on VFO B, away from the frequency RR73 logs |
 | XIT | `IF` | Off | On: the KX2 transmits the offset from VFO A; set MENU › XIT to OFF |
+| RIT | `IF` | Off | On: the KX2 receives the offset from VFO A, so replies land that far from the station they answer; tap RIT (Owner's Manual p. 16) |
 
 `K2;` is read on connecting too, with advice for modes 1 and 3 (Commands, above). A setting that goes unanswered is read again every 5 s; MIC BTN also waits for `OM` and for no menu entry open, and is read again each time Rig control opens. RR73 sets none of them.
 

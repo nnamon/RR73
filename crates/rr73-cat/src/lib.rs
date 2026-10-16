@@ -5,8 +5,8 @@
 //!   addresses, the command, the sub-command and data, and the end code `FD`.
 //! - [`bcd`] carries frequencies and codes in binary-coded decimal.
 //! - [`ic705`] turns typed requests (read and set the operating frequency, the mode and the data
-//!   mode, transmit on and off, read menu settings) into frames, and the radio's frames into
-//!   events.
+//!   mode, transmit on and off, read menu settings, split, RIT and ΔTX) into frames, and the
+//!   radio's frames into events.
 //! - [`sim`] is a simulated IC-705 that answers frames in the formats the reference guide
 //!   gives, for tests.
 //! - [`elecraft`] turns typed requests for the KX2 (VFO A, the mode, the data sub-mode, transmit
@@ -56,4 +56,4 @@ pub mod sim;
 pub mod sim_kx2;
 
 pub use frame::{Decoded, Frame, FrameDecoder, FrameError};
-pub use ic705::{Addresses, Event, Fault, Filter, MenuItem, Mode, Parser, Request, RequestError, Vfo};
+pub use ic705::{Addresses, Event, Fault, Filter, MenuItem, Mode, Parser, Request, RequestError, Split, Vfo};

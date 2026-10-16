@@ -22,11 +22,16 @@ export type CatFilter = 1 | 2 | 3;
 export type MenuItemId = 'time_out_timer' | 'data_off_mod' | 'data_mod' | 'usb_send' | 'civ_transceive' | 'civ_usb_echo_back' | 'mic_btn';
 
 /**
- * What RR73 reads and shows under Radio settings: the menu settings, and the KX2's product number
- * (`OM`), VOX (`VX`, 1 on), K2 command mode (`K2`), split, XIT and its offset (`IF`), receive
- * filter bandwidth in Hz (`BW`) and the menu entry shown (`MN`, 255 with none).
+ * What RR73 reads and shows under Radio settings: the menu settings; split (0 off, 1 on, and on the
+ * IC-705 2 DUP− and 3 DUP+), RIT and XIT (1 on) and their shared offset in Hz, from the IC-705's
+ * `0F` and `21` and the KX2's `IF`; and the KX2's product number (`OM`), VOX (`VX`, 1 on), K2
+ * command mode (`K2`), receive filter bandwidth in Hz (`BW`) and the menu entry shown (`MN`, 255
+ * with none).
  */
-export type SettingId = MenuItemId | 'product' | 'vox' | 'k2' | 'split' | 'xit' | 'xit_hz' | 'bandwidth' | 'menu_entry';
+export type SettingId = MenuItemId | 'product' | 'vox' | 'k2' | 'split' | 'rit' | 'xit' | 'offset_hz' | 'bandwidth' | 'menu_entry';
+
+/** The IC-705's split and duplex, as `0F` reads them (CI-V guide p. 3). */
+export type CatSplit = 'off' | 'on' | 'dup_minus' | 'dup_plus';
 
 export type CatRequest =
   | { type: 'read_frequency' }
@@ -46,7 +51,11 @@ export type CatRequest =
   | { type: 'leave_menu' }
   | { type: 'read_info' }
   | { type: 'read_bandwidth' }
-  | { type: 'read_k2_mode' };
+  | { type: 'read_k2_mode' }
+  | { type: 'read_split' }
+  | { type: 'read_rit_offset' }
+  | { type: 'read_rit' }
+  | { type: 'read_xit' };
 
 export type CatEvent =
   | { type: 'ok' }
@@ -71,7 +80,11 @@ export type CatEvent =
   | { type: 'vox'; on: boolean }
   | { type: 'menu_entry'; entry: number }
   | { type: 'menu_value'; value: number }
-  | { type: 'busy' };
+  | { type: 'busy' }
+  | { type: 'split'; split: CatSplit }
+  | { type: 'rit_offset'; hz: number }
+  | { type: 'rit'; on: boolean }
+  | { type: 'xit'; on: boolean };
 
 /** The IC-705's CI-V address unless the operator changed it (CI-V guide p. 2). */
 export const IC705_ADDRESS = 0xa4;

@@ -176,7 +176,7 @@ describe('connecting', () => {
     expect(chosen.log.slice(0, 3)).toEqual(['open', 'lines dtr rts', 'FE FE A4 E0 1C 00 FD']);
     expect(rig.status).toBe('connected');
     expect(rig.hz).toBe(14_074_000);
-    expect(rig.menu).toEqual({ usb_send: 0, data_mod: 1, time_out_timer: 2 });
+    expect(rig.menu).toEqual({ usb_send: 0, data_mod: 1, time_out_timer: 2, split: 0, rit: 0, xit: 0, offset_hz: 0 });
     expect(chosen.ptt).toEqual([]);
     expect(settings.cat).toMatchObject({ connect: true, usbVendorId: 0x0c26, usbProductId: 0x0036, keyPtt: false });
   });
