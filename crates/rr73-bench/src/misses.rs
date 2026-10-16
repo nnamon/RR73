@@ -98,6 +98,10 @@ pub struct BlockGenie {
     pub hard_errors: Vec<u32>,
     /// The stage's LDPC decoder returns the codeword from one of the block sets.
     pub ldpc: bool,
+    /// Other sets of soft bits at the same position, by name (`a1`, `a3`, `p1`, `p3`, `n1`,
+    /// `n3`: amplitude, power and normalised scores of blocks of 1 and 3 symbols, 4 for
+    /// FT4): hard errors, and whether the LDPC decoder returns the codeword.
+    pub sets: Vec<(String, u32, bool)>,
 }
 
 /// The candidate nearest a missed entry.
@@ -162,6 +166,12 @@ pub struct Miss {
     /// The same on the original audio with every other reference entry subtracted (with
     /// `--oracle`).
     pub oracle_block: Option<BlockGenie>,
+    /// With `--oracle`: whether the block demodulator decodes the entry at its reference position
+    /// on other residuals of the original audio, by name: `ours-strongest` (the run's decodes
+    /// subtracted strongest first), `ours-matched` (only the run's decodes that match a reference
+    /// entry, in the order found) and `ours-and-missed` (the run's decodes and the reference
+    /// entries it missed, strongest first).
+    pub variants: Vec<(String, bool)>,
     /// With `--oracle`: whether the stages decode the entry from the original audio with every
     /// other reference entry subtracted, strongest first. A miss that decodes there was lost
     /// to its neighbours: ones the run did not decode, or the residue of ones it did.
@@ -319,6 +329,25 @@ fn analyse_slot(
     let mut block_ws = [BlockWorkspace::default(), BlockWorkspace::default()];
     block_ws[0].prepare(layout, samples, &mut plans);
     block_ws[1].prepare(layout, &residual, &mut plans);
+    // Residuals of the run's own decodes in other orders and subsets, for the oracle.
+    let mut variant_ws: Vec<(&str, BlockWorkspace)> = Vec::new();
+    if oracle {
+        let mut strongest = decodes.clone();
+        strongest.sort_by(|a, b| b.snr_db.total_cmp(&a.snr_db));
+        let matched: Vec<Decode> = decodes
+            .iter()
+            .zip(&score.decode_match)
+            .filter(|(_, m)| m.is_some())
+            .map(|(d, _)| d.clone())
+            .collect();
+        for (name, set) in [("ours-strongest", strongest), ("ours-matched", matched)] {
+            let mut audio = samples.to_vec();
+            subtractor.subtract(layout, &mut audio, &set, &mut SubtractScratch::default());
+            let mut ws = BlockWorkspace::default();
+            ws.prepare(layout, &audio, &mut plans);
+            variant_ws.push((name, ws));
+        }
+    }
     let references: Vec<(usize, Decode)> = if oracle {
         expected
             .iter()
@@ -450,8 +479,28 @@ fn analyse_slot(
         };
         let orig_block = block(&mut block_ws[0], &mut plans);
         let resid_block = block(&mut block_ws[1], &mut plans);
-        let (mut oracle_block, mut oracle_found) = (None, None);
+        let (mut oracle_block, mut oracle_found, mut variants) = (None, None, Vec::new());
         if oracle && matches!(class, "search" | "failed" | "other-text") {
+            for (name, ws) in variant_ws.iter_mut() {
+                variants.push((name.to_string(), block(ws, &mut plans).is_some_and(|b| b.ldpc)));
+            }
+            // The run's decodes and every reference entry it missed but this one.
+            let mut both: Vec<Decode> = decodes.clone();
+            both.extend(
+                references
+                    .iter()
+                    .filter(|(k, _)| *k != j && score.entry_match[*k].is_none())
+                    .map(|(_, d)| d.clone()),
+            );
+            both.sort_by(|a, b| b.snr_db.total_cmp(&a.snr_db));
+            let mut audio = samples.to_vec();
+            subtractor.subtract(layout, &mut audio, &both, &mut SubtractScratch::default());
+            let mut ws = BlockWorkspace::default();
+            ws.prepare(layout, &audio, &mut plans);
+            variants.push((
+                "ours-and-missed".to_string(),
+                block(&mut ws, &mut plans).is_some_and(|b| b.ldpc),
+            ));
             // Every other reference entry subtracted, strongest first, as a decoder that found
             // them all would subtract them.
             let mut others: Vec<Decode> = references
@@ -503,6 +552,7 @@ fn analyse_slot(
             resid_block,
             oracle_block,
             oracle: oracle_found,
+            variants,
         });
     }
     (
@@ -809,8 +859,17 @@ pub fn render(report: &MissReport) -> String {
     // Block demodulator and oracle outcomes by the nearest other reference entry.
     let ok = |b: &Option<BlockGenie>| b.as_ref().is_some_and(|b| b.ldpc);
     out.push_str(&format!(
-        "\nBlock demodulator decodes at the reference position, and the oracle\n{:<12} {:>8} {:>6} {:>7} {:>8} {:>8} {:>8}\n",
-        "class", "neighbour", "misses", "b:orig", "b:resid", "b:oracle", "oracle"
+        "\nBlock demodulator decodes at the reference position, and the oracle\n{:<12} {:>8} {:>6} {:>7} {:>8} {:>10} {:>10} {:>10} {:>8} {:>8}\n",
+        "class",
+        "neighbour",
+        "misses",
+        "b:orig",
+        "b:resid",
+        "b:strongest",
+        "b:matched",
+        "b:+missed",
+        "b:oracle",
+        "oracle"
     ));
     for c in ["search", "other-text", "failed"] {
         for (label, lo, hi) in [
@@ -837,13 +896,17 @@ pub fn render(report: &MissReport) -> String {
             } else {
                 "-".to_string()
             };
+            let variant = |name: &str| count(&|m| m.variants.iter().any(|(n, ok)| n == name && *ok));
             out.push_str(&format!(
-                "{:<12} {:>8} {:>6} {:>7} {:>8} {:>8} {:>8}\n",
+                "{:<12} {:>8} {:>6} {:>7} {:>8} {:>10} {:>10} {:>10} {:>8} {:>8}\n",
                 c,
                 label,
                 ms.len(),
                 count(&|m| ok(&m.orig_block)),
                 count(&|m| ok(&m.resid_block)),
+                variant("ours-strongest"),
+                variant("ours-matched"),
+                variant("ours-and-missed"),
                 count(&|m| ok(&m.oracle_block)),
                 oracle
             ));
@@ -912,10 +975,29 @@ fn block_genie(
             decoded = true;
         }
     }
+    let long = if layout.mode == Mode::Ft4 { 4 } else { 3 };
+    let mut sets = Vec::new();
+    for (name, kind) in [
+        ("a", BlockScore::Amplitude),
+        ("p", BlockScore::Power),
+        ("n", BlockScore::Normalised),
+    ] {
+        for n in [1, long] {
+            ws.llrs(layout, n, kind, score.1, &mut llr);
+            let errors = llr
+                .iter()
+                .zip(codeword)
+                .filter(|&(&l, &b)| u8::from(l > 0.0) != b)
+                .count() as u32;
+            let ok = ldpc.decode(graph, &llr, &mut scratch, &mut cw).converged && cw == *codeword;
+            sets.push((format!("{name}{n}"), errors, ok));
+        }
+    }
     Some(BlockGenie {
         sync_matched: refined.sync_matched,
         hard_errors,
         ldpc: decoded,
+        sets,
     })
 }
 
