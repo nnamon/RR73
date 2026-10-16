@@ -230,7 +230,7 @@ function lost(me: Link) {
   recover = me.radio.endedKeyed;
   recoverShift = me.radio.endedShift;
   current = null;
-  // The link lets the port go just after it reports the loss: a moment later, its close waits for that.
+  // The link reports the loss before it lets the port go: a moment later, its close waits for that.
   releasing = Promise.resolve().then(() => me.link.close());
   provideKeyer(null);
   rig.status = 'lost';
