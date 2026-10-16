@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.0 · 2026-10-16
 
 - Settings › Logging › Wavelog › Read Wavelog’s log counts the QSOs in your Wavelog log for decode colours, New and Hide worked, so a station worked from another radio or location shows as worked. It is off by default and needs Wavelog 2.5.1 or later. Dupes, Hunt and Repeat CQ still count this phone’s log only.
 
