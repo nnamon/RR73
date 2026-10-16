@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.5 · 2026-10-16
 
 - When the last connection to the radio stopped before it completed, as when the browser closes while connecting, Settings › Rig control says at which step when the app opens.
 - Settings › Rig control › Copy connection log copies the steps of the last connection to the radio, with their times, for a report.
