@@ -127,7 +127,27 @@ pub struct OsdScratch {
     member: Vec<f32>,
     /// Overlaps of one window row with the rows after it.
     overlap: Vec<f32>,
-    found: Vec<(f32, u16, u16)>,
+    /// Candidates within the distance limit as [`found_key`]s.
+    found: Vec<u64>,
+    /// The reference OSD's candidates, in tests.
+    #[cfg(test)]
+    found_ref: Vec<(f32, u16, u16)>,
+}
+
+/// A candidate of distance `metric` from window rows `j` and `k` ([`NONE`] for none) as one
+/// integer: the distance's bits ordered as `f32::total_cmp` orders them, then `j`, then `k`.
+/// Integer order is the order of (distance, `j`, `k`).
+fn found_key(metric: f32, j: u16, k: u16) -> u64 {
+    let b = metric.to_bits() as i32;
+    let ordered = (b ^ ((((b >> 31) as u32) >> 1) as i32)) as u32 ^ 0x8000_0000;
+    (u64::from(ordered) << 32) | (u64::from(j) << 16) | u64::from(k)
+}
+
+/// The distance and rows of a [`found_key`].
+fn from_found_key(key: u64) -> (f32, u16, u16) {
+    let t = (((key >> 32) as u32) ^ 0x8000_0000) as i32;
+    let b = t ^ ((((t >> 31) as u32) >> 1) as i32);
+    (f32::from_bits(b as u32), (key >> 16) as u16, key as u16)
 }
 
 /// An accepted OSD codeword.
@@ -250,7 +270,7 @@ pub fn osd(
     let limit = params.max_distance * total;
     s.found.clear();
     if base_metric <= limit {
-        s.found.push((base_metric, NONE, NONE));
+        s.found.push(found_key(base_metric, NONE, NONE));
     }
     let window = params.window.clamp(1, K);
     let first = K - window;
@@ -271,7 +291,7 @@ pub fn osd(
             deltas.push(d);
             let m = base_metric + d;
             if m <= limit {
-                found.push((m, j as u16, NONE));
+                found.push(found_key(m, j as u16, NONE));
             }
         }
     }
@@ -303,15 +323,15 @@ pub fn osd(
                 let q = r + 1 + c;
                 let m = base_metric + dj + deltas[q] - 2.0 * o;
                 if m <= limit {
-                    found.push((m, (first + r) as u16, (first + q) as u16));
+                    found.push(found_key(m, (first + r) as u16, (first + q) as u16));
                 }
             }
         }
     }
-    s.found
-        .sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+    s.found.sort_unstable();
 
-    for &(metric, j, k) in &s.found {
+    for &key in &s.found {
+        let (metric, j, k) = from_found_key(key);
         let mut c = base;
         if j != NONE {
             xor(&mut c, &s.rows[j as usize]);
@@ -646,9 +666,9 @@ mod tests {
             let signed = |i: usize| if get(&diff, i) { -rel[i] } else { rel[i] };
 
             let limit = params.max_distance * total;
-            s.found.clear();
+            s.found_ref.clear();
             if base_metric <= limit {
-                s.found.push((base_metric, NONE, NONE));
+                s.found_ref.push((base_metric, NONE, NONE));
             }
             let window = params.window.clamp(1, K);
             let first = K - window;
@@ -660,7 +680,7 @@ mod tests {
                     s.deltas.push(d);
                     let m = base_metric + d;
                     if m <= limit {
-                        s.found.push((m, j as u16, NONE));
+                        s.found_ref.push((m, j as u16, NONE));
                     }
                 }
             }
@@ -674,15 +694,15 @@ mod tests {
                         for_each_bit(&both, |i| overlap += signed(i));
                         let m = base_metric + s.deltas[j - first] + s.deltas[k - first] - 2.0 * overlap;
                         if m <= limit {
-                            s.found.push((m, j as u16, k as u16));
+                            s.found_ref.push((m, j as u16, k as u16));
                         }
                     }
                 }
             }
-            s.found
+            s.found_ref
                 .sort_unstable_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
 
-            for &(metric, j, k) in &s.found {
+            for &(metric, j, k) in &s.found_ref {
                 let mut c = base;
                 if j != NONE {
                     xor(&mut c, &s.rows[j as usize]);
@@ -744,11 +764,42 @@ mod tests {
 
     type Found = Vec<(u32, u16, u16)>;
 
-    fn exact(r: Option<OsdResult>, s: &OsdScratch) -> (Option<([u64; 3], u32, u32)>, Found) {
+    fn exact(r: Option<OsdResult>, found: &[(f32, u16, u16)]) -> (Option<([u64; 3], u32, u32)>, Found) {
         (
             r.map(|r| (r.bits, r.distance.to_bits(), r.hard_errors)),
-            s.found.iter().map(|&(m, j, k)| (m.to_bits(), j, k)).collect(),
+            found.iter().map(|&(m, j, k)| (m.to_bits(), j, k)).collect(),
         )
+    }
+
+    #[test]
+    fn found_keys_order_as_the_tuples_and_round_trip() {
+        let metrics = [
+            -f32::INFINITY,
+            -3.5,
+            -1e-30,
+            -0.0,
+            0.0,
+            1e-38,
+            0.25,
+            0.25,
+            7.0,
+            1e30,
+            f32::INFINITY,
+            f32::NAN,
+        ];
+        let mut tuples = Vec::new();
+        for (i, &m) in metrics.iter().enumerate() {
+            for (j, k) in [(NONE, NONE), (3, NONE), (3, 90), (0, 1), (90, NONE)] {
+                tuples.push((m, j, k + (i as u16 % 2) * u16::from(k != NONE)));
+            }
+        }
+        let mut want = tuples.clone();
+        want.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
+        let mut keys: Vec<u64> = tuples.iter().map(|&(m, j, k)| found_key(m, j, k)).collect();
+        keys.sort_unstable();
+        let got: Vec<(f32, u16, u16)> = keys.into_iter().map(from_found_key).collect();
+        let bits = |v: &[(f32, u16, u16)]| v.iter().map(|&(m, j, k)| (m.to_bits(), j, k)).collect::<Vec<_>>();
+        assert_eq!(bits(&want), bits(&got));
     }
 
     #[test]
@@ -793,9 +844,11 @@ mod tests {
                         };
                         let want = before::reference(&p, |i| source[i], &channel, &mut a);
                         let got = osd(&p, |i| source[i], &channel, &mut b);
+                        let found: Vec<(f32, u16, u16)> =
+                            b.found.iter().map(|&k| from_found_key(k)).collect();
                         assert_eq!(
-                            exact(want, &a),
-                            exact(got, &b),
+                            exact(want, &a.found_ref),
+                            exact(got, &found),
                             "trial {trial}, order {order}, window {window}, limit {max_distance}"
                         );
                         cases += 1;
