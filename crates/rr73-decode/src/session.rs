@@ -360,12 +360,12 @@ impl DecodeSession {
         if self.is_done() {
             return None;
         }
-        let mut found = Vec::new();
+        let start = self.decodes.len();
         loop {
             let out = self.step();
-            found.extend(out.decodes);
             if out.stage_done || out.done {
-                return Some(found);
+                // The stage's decodes as they stand at its end, hashes resolved.
+                return Some(self.decodes[start..].to_vec());
             }
         }
     }
@@ -411,6 +411,7 @@ impl DecodeSession {
     }
 
     fn finish_stage(&mut self) {
+        self.resolve_hashes();
         self.stage += 1;
         self.geometry = None;
         self.phase = if self.stage < self.stages.len() {
@@ -418,6 +419,26 @@ impl DecodeSession {
         } else {
             Phase::Done
         };
+    }
+
+    /// Renders again, with every callsign the slot has taught so far, the decodes that show an
+    /// unresolved hash (`<...>`): a message decoded before the message that carries its
+    /// callsign in full. Runs at the end of each stage, so [`DecodeSession::next_stage`] and
+    /// [`DecodeSession::decodes`] give the resolved text; decodes a step returned earlier keep
+    /// the text they had.
+    fn resolve_hashes(&mut self) {
+        for d in &mut self.decodes {
+            if !d.text.contains("<...>") {
+                continue;
+            }
+            if let Ok(message) = rr73_ft8::message::unpack(&d.payload, &self.ctx.hashes) {
+                let text = message.to_string();
+                if text != d.text {
+                    d.text = text;
+                    d.message = message;
+                }
+            }
+        }
     }
 
     /// Subtracts up to [`SUBTRACTIONS_PER_STEP`] decodes that earlier stages left in the

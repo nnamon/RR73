@@ -385,3 +385,24 @@ fn the_shipped_preset_decodes_a_reply_started_4_s_late() {
     let r = decode(&slot, &short, &mut DecodeContext::new());
     assert!(r.decodes.is_empty(), "{:?}", r.decodes);
 }
+
+#[test]
+fn a_hashed_callsign_resolves_from_a_message_decoded_later_in_the_slot() {
+    // The type 4 message carries K1ABC only as a hash and decodes first, being the stronger;
+    // CQ K1ABC FN42, weaker, teaches the callsign. At the end of the stage the first decode
+    // shows it. Before, it kept <...>.
+    let audio = render(
+        vec![
+            SimSignal::new("<K1ABC> PJ4/W9XYZ", 1200.0, 0.1, 0.0),
+            SimSignal::new("CQ K1ABC FN42", 1900.0, 0.2, -14.0),
+        ],
+        44,
+    );
+    let stage = Stage::preset("subtract-3-osd2").expect("preset");
+    let mut session = DecodeSession::new(&SlotAudio::new(&audio, Mode::Ft8), vec![stage]);
+    let found = session.next_stage().expect("a stage");
+    assert_eq!(texts(&found), ["<K1ABC> PJ4/W9XYZ", "CQ K1ABC FN42"]);
+    assert_eq!(texts(session.decodes()), ["<K1ABC> PJ4/W9XYZ", "CQ K1ABC FN42"]);
+    // The hashed message was decoded first, before the callsign was known.
+    assert!(found[0].text.ends_with("PJ4/W9XYZ"), "{:?}", texts(&found));
+}
