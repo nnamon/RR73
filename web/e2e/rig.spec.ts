@@ -128,6 +128,28 @@ test('a radio that keeps transmitting after PTT off: Test keying says to unkey i
   expect(await page.evaluate(() => window.__rig.transmit)).toBe(false);
 });
 
+test('Radio and audio says that Key the radio with CAT needs the radio’s audio as the output, while it is on and the output is System default', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./');
+  const foot = page.getByTestId('output-foot');
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await expect(page.getByRole('combobox', { name: /^Output/ })).toHaveValue('');
+  await expect(foot).toHaveCount(0);
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await expect(foot).toHaveText('Key the radio with CAT needs the IC-705’s USB audio here.');
+  // The KX2 names the Digirig's sound card.
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await page.getByRole('radio', { name: /^Elecraft KX2/ }).click();
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await expect(foot).toHaveText('Key the radio with CAT needs the Digirig’s sound card here.');
+  await page.evaluate(() => (location.hash = '#/settings/rig'));
+  await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
+  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await expect(foot).toHaveCount(0);
+});
+
 test('Keep Tx audio centred is off by default and works only with Key the radio with CAT on', async ({ page }) => {
   await installFakeIc705(page);
   await page.goto('./');

@@ -15,7 +15,7 @@
   import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
-  import { catKeys, radioName, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
+  import { catKeys, radioName, radioTraits, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
 
@@ -256,7 +256,7 @@
   });
 
   /** The radio's audio device, for Settings › Radio and audio › Output. */
-  const radioAudio = $derived(kx2 ? 'the Digirig’s sound card' : 'the IC-705’s USB audio');
+  const radioAudio = $derived(radioTraits().audioDevice);
 
   /**
    * Keying by CAT, a transmission goes only to the output chosen in Radio and audio, so the radio

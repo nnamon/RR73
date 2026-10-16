@@ -14,7 +14,7 @@
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindInput, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
-  import { plannedDialHz, rig, rigConnected, txKeyer } from '../lib/state/radio.svelte';
+  import { catKeys as keysByCat, plannedDialHz, radioTraits, rig, rigConnected, txKeyer } from '../lib/state/radio.svelte';
   import { alcAdvice } from '../lib/radio/alc';
   import { advice } from '../lib/app/advice';
   import { Device, device } from '../lib/app/platform';
@@ -28,8 +28,13 @@
   const outputChoice = outputChoiceSupported();
   /** The chosen output is not among the devices the browser lists now. */
   const outputMissing = $derived(settings.outputDeviceId !== null && (audio.output.error === 'missing' || (outputs.length > 0 && !outputs.some((d) => d.deviceId === settings.outputDeviceId))));
-  /** Why transmit audio is not going to the chosen output, if it is not. */
+  /**
+   * Why transmit audio is not going to the chosen output, if it is not. Keying by CAT, System
+   * default refuses every transmission (lib/state/radio.svelte.ts), so the line names the radio's
+   * own device.
+   */
   const outputFoot = $derived.by(() => {
+    if (outputChoice && settings.outputDeviceId === null && keysByCat()) return `Key the radio with CAT needs ${radioTraits().audioDevice} here.`;
     if (!outputChoice || settings.outputDeviceId === null) return null;
     if (outputMissing) return 'The chosen output is not connected, so transmit audio plays through the system default.';
     if (audio.output.error === 'failed') return 'The browser refused the chosen output, so transmit audio plays through the system default.';

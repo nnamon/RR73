@@ -32,6 +32,8 @@ export interface RadioTraits {
   name: string;
   /** The data mode RR73 sets, as the radio's screen names it: "USB-D", "DATA A". */
   dataModeName: string;
+  /** The audio device to choose as the Tx output, as Rig control and Radio and audio name it. */
+  audioDevice: string;
   /** After the frequency, the requests that set the data mode: USB-D, or DATA A. */
   dataMode: readonly CatRequest[];
   /** The reads of the mode, on connecting and every 5 s after the frequency. */
@@ -62,6 +64,7 @@ export const IC705: RadioTraits = {
   id: 'ic705',
   name: 'IC-705',
   dataModeName: 'USB-D',
+  audioDevice: 'the IC-705’s USB audio',
   dataMode: [
     { type: 'set_mode', mode: 'usb', filter: 1 },
     { type: 'set_data_mode', on: true, filter: 1 },
@@ -91,6 +94,7 @@ export const KX2: RadioTraits = {
   id: 'kx2',
   name: 'KX2',
   dataModeName: 'DATA A',
+  audioDevice: 'the Digirig’s sound card',
   // The frequency first, then the mode, so the mode applies on the new band (p. 5, note 2).
   // MD6 again after DT0: DATA's normal or reverse sideband is held per pair of sub-modes (p. 16,
   // note 2), so DT0 may bring DATA A on the reverse sideband, and MD6 then sets DATA A's pair to
