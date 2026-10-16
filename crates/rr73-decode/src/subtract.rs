@@ -34,6 +34,12 @@ const FS: f64 = 12_000.0;
 /// Decimated samples per symbol used by the refinement search.
 const REFINE_SAMPLES_PER_SYMBOL: usize = 32;
 
+/// Samples between exact recomputations of the model's carrier and modulation phase.
+const RESYNC: usize = 1920;
+
+/// Samples per block of [`Model::fill`].
+const MODEL_BLOCK: usize = 256;
+
 /// Buffers reused across subtractions. Sized on first use; the largest holds one sample per
 /// block of the refinement search (about 2500 values for FT8).
 #[derive(Clone, Debug, Default)]
@@ -262,15 +268,13 @@ impl<'a> Model<'a> {
     }
 
     /// Returns `c(k)` and advances. Carrier and modulation rotate separately, which keeps
-    /// the two multiplication chains independent.
-    #[inline]
+    /// the two multiplication chains independent. [`Model::fill`] gives the same values a
+    /// block at a time; this stays as its reference.
+    #[cfg(test)]
     fn advance(&mut self) -> Complex64 {
         let (theta, delta) = self.phase.advance();
         if self.until_resync == 0 {
-            let a = (self.w * self.k as f64).rem_euclid(std::f64::consts::TAU);
-            self.carrier = Complex64::new(a.cos(), a.sin());
-            self.modulation = Complex64::new(theta.cos(), theta.sin());
-            self.until_resync = 1920;
+            self.resync(theta);
         }
         self.until_resync -= 1;
         let out = self.carrier * self.modulation;
@@ -284,12 +288,78 @@ impl<'a> Model<'a> {
         self.k += 1;
         out
     }
+
+    /// Sets carrier and modulation exactly at sample `k`, whose modulation phase is `theta`.
+    fn resync(&mut self, theta: f64) {
+        let a = (self.w * self.k as f64).rem_euclid(std::f64::consts::TAU);
+        self.carrier = Complex64::new(a.cos(), a.sin());
+        self.modulation = Complex64::new(theta.cos(), theta.sin());
+        self.until_resync = RESYNC;
+    }
+
+    /// Writes the next `out.len()` values of `c(k)` and advances past them, equal bit for
+    /// bit to calling [`Model::advance`] for each. Within a block that stays in one symbol
+    /// and before the next resync, the phase steps and their rotations are independent per
+    /// sample and run as slice operations, which vectorise; only the phase sum and the two
+    /// rotation chains run sample by sample.
+    fn fill(&mut self, out: &mut [Complex64]) {
+        let mut done = 0;
+        let mut delta = [0.0f64; MODEL_BLOCK];
+        let mut rot_re = [0.0f64; MODEL_BLOCK];
+        let mut rot_im = [0.0f64; MODEL_BLOCK];
+        while done < out.len() {
+            if self.until_resync == 0 {
+                self.resync(self.phase.theta);
+            }
+            let p = &mut self.phase;
+            let n = p.n;
+            let r = p.within;
+            let len = (out.len() - done)
+                .min(n - r)
+                .min(self.until_resync)
+                .min(MODEL_BLOCK);
+            let [n0, n1, n2] = p.near;
+            let (prev, here, next) = (
+                &p.pulse[2 * n + r..2 * n + r + len],
+                &p.pulse[n + r..n + r + len],
+                &p.pulse[r..r + len],
+            );
+            for (((d, &a), &b), &c) in delta[..len].iter_mut().zip(prev).zip(here).zip(next) {
+                *d = p.step * (n0 * a + n1 * b + n2 * c);
+            }
+            for ((re, im), &d) in rot_re[..len]
+                .iter_mut()
+                .zip(&mut rot_im[..len])
+                .zip(&delta[..len])
+            {
+                let d2 = d * d;
+                *re = 1.0 - d2 / 2.0 + d2 * d2 / 24.0;
+                *im = d * (1.0 - d2 / 6.0 + d2 * d2 / 120.0);
+            }
+            let rots = rot_re[..len].iter().zip(&rot_im[..len]);
+            for ((o, (&re, &im)), &d) in out[done..done + len].iter_mut().zip(rots).zip(&delta[..len]) {
+                *o = self.carrier * self.modulation;
+                self.modulation *= Complex64::new(re, im);
+                self.carrier *= self.carrier_step;
+                p.theta += d;
+            }
+            p.within += len;
+            if p.within == n {
+                p.within = 0;
+                p.symbol += 1;
+                p.load();
+            }
+            self.k += len;
+            self.until_resync -= len;
+            done += len;
+        }
+    }
 }
 
 /// Estimates the complex amplitude of the model of `tones` at `at` in `audio` with a moving
-/// average of `smooth` samples and subtracts the rebuilt signal. Works in one pass with ring
-/// buffers of `smooth + 2` values: the window reads samples ahead of the one being
-/// subtracted, which are still unchanged.
+/// average of `smooth` samples and subtracts the rebuilt signal. The model and its products
+/// with the audio are computed for the whole span first: the window reads samples ahead of
+/// the one being subtracted, which are still unchanged.
 fn remove(
     layout: &FrameLayout,
     tones: &[u8],
@@ -305,54 +375,90 @@ fn remove(
     if first >= last {
         return;
     }
-    for _ in 0..first {
-        model.advance();
-    }
-    let half = smooth / 2;
-    let ring = smooth + 2;
-    scratch.products.clear();
-    scratch.products.resize(ring, Complex64::new(0.0, 0.0));
-    scratch.models.clear();
-    scratch.models.resize(ring, Complex64::new(0.0, 0.0));
-    let offset = at.start + first as isize;
     let span = last - first;
+    // The samples before the audio, then the span.
+    scratch.models.clear();
+    scratch.models.resize(first.max(span), Complex64::new(0.0, 0.0));
+    model.fill(&mut scratch.models[..first]);
+    model.fill(&mut scratch.models[..span]);
+    scratch.models.truncate(span);
+    let half = smooth / 2;
+    let offset = at.start + first as isize;
     let audio = &mut audio[offset as usize..offset as usize + span];
-    // Ring positions of the window's ends and of the sample being subtracted.
-    let (mut lo, mut hi) = (0usize, 0usize);
-    let (mut lo_at, mut hi_at, mut k_at) = (0usize, 0usize, 0usize);
-    let wrap = |i: &mut usize| {
-        *i += 1;
-        if *i == ring {
-            *i = 0;
-        }
+    scratch.products.clear();
+    scratch.products.extend(
+        scratch
+            .models
+            .iter()
+            .zip(audio.iter())
+            .map(|(c, &x)| c.conj() * f64::from(x)),
+    );
+    let (models, products) = (&scratch.models, &scratch.products);
+    let mut window = Window {
+        lo: 0,
+        hi: 0,
+        sum: Complex64::new(0.0, 0.0),
+        scale: 0.0,
+        scale_for: usize::MAX,
     };
-    let mut sum = Complex64::new(0.0, 0.0);
-    let mut scale = 0.0;
-    let mut scale_for = usize::MAX;
-    for k in 0..span {
-        let want_hi = (k + half + 1).min(span);
-        while hi < want_hi {
-            let c = model.advance();
-            let p = c.conj() * f64::from(audio[hi]);
-            scratch.products[hi_at] = p;
-            scratch.models[hi_at] = c;
-            sum += p;
-            hi += 1;
-            wrap(&mut hi_at);
+    // Where the window holds 2 half + 1 samples, each step adds one product and drops one,
+    // in that order, and the scale stays: a loop without bounds checks. The edges take the
+    // general step.
+    let steady = (half + 1).min(span)..span.saturating_sub(half + 1).max((half + 1).min(span));
+    for k in 0..steady.start {
+        window.step(k, half, products);
+        let rebuilt = (window.sum * models[k]).re * window.scale;
+        audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
+    }
+    if !steady.is_empty() {
+        let adds = &products[steady.start + half..steady.end + half];
+        let drops = &products[steady.start - half - 1..steady.end - half - 1];
+        let (mut sum, scale) = (window.sum, window.scale);
+        let rows = adds.iter().zip(drops).zip(&models[steady.clone()]);
+        for (((&add, &drop), &model), x) in rows.zip(&mut audio[steady.clone()]) {
+            sum += add;
+            sum -= drop;
+            let rebuilt = (sum * model).re * scale;
+            *x = (f64::from(*x) - rebuilt) as f32;
+        }
+        window.sum = sum;
+        window.hi = steady.end + half;
+        window.lo = steady.end - half - 1;
+    }
+    for k in steady.end..span {
+        window.step(k, half, products);
+        let rebuilt = (window.sum * models[k]).re * window.scale;
+        audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
+    }
+}
+
+/// The moving sum of [`remove`]: products `lo..hi` summed in the order they entered.
+struct Window {
+    lo: usize,
+    hi: usize,
+    sum: Complex64,
+    scale: f64,
+    scale_for: usize,
+}
+
+impl Window {
+    /// Moves the window to sample `k`: adds the products up to `k + half`, then drops those
+    /// before `k - half`, and sets the scale to 2 over the samples held.
+    fn step(&mut self, k: usize, half: usize, products: &[Complex64]) {
+        let want_hi = (k + half + 1).min(products.len());
+        while self.hi < want_hi {
+            self.sum += products[self.hi];
+            self.hi += 1;
         }
         let want_lo = k.saturating_sub(half);
-        while lo < want_lo {
-            sum -= scratch.products[lo_at];
-            lo += 1;
-            wrap(&mut lo_at);
+        while self.lo < want_lo {
+            self.sum -= products[self.lo];
+            self.lo += 1;
         }
-        if hi - lo != scale_for {
-            scale_for = hi - lo;
-            scale = 2.0 / scale_for as f64;
+        if self.hi - self.lo != self.scale_for {
+            self.scale_for = self.hi - self.lo;
+            self.scale = 2.0 / self.scale_for as f64;
         }
-        let rebuilt = (sum * scratch.models[k_at]).re * scale;
-        audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
-        wrap(&mut k_at);
     }
 }
 
@@ -669,5 +775,151 @@ mod tests {
         remove(l, &[], &mut audio, at, 1920, &mut s);
         assert_eq!(refine(l, &[], &audio, at, &mut s), at);
         assert!(audio.iter().all(|&v| v == 0.1));
+    }
+
+    /// [`remove`] as it was before experiment 0009, with ring buffers and the model sample by
+    /// sample.
+    ///
+    /// Estimates the complex amplitude of the model of `tones` at `at` in `audio` with a moving
+    /// average of `smooth` samples and subtracts the rebuilt signal. Works in one pass with ring
+    /// buffers of `smooth + 2` values: the window reads samples ahead of the one being
+    /// subtracted, which are still unchanged.
+    fn remove_reference(
+        layout: &FrameLayout,
+        tones: &[u8],
+        audio: &mut [f32],
+        at: Placement,
+        smooth: usize,
+        scratch: &mut SubtractScratch,
+    ) {
+        let mut model = Model::new(layout, tones, at.freq_hz);
+        let total = model.phase.len() as isize;
+        let first = (-at.start).clamp(0, total) as usize;
+        let last = (audio.len() as isize - at.start).clamp(0, total) as usize;
+        if first >= last {
+            return;
+        }
+        for _ in 0..first {
+            model.advance();
+        }
+        let half = smooth / 2;
+        let ring = smooth + 2;
+        scratch.products.clear();
+        scratch.products.resize(ring, Complex64::new(0.0, 0.0));
+        scratch.models.clear();
+        scratch.models.resize(ring, Complex64::new(0.0, 0.0));
+        let offset = at.start + first as isize;
+        let span = last - first;
+        let audio = &mut audio[offset as usize..offset as usize + span];
+        // Ring positions of the window's ends and of the sample being subtracted.
+        let (mut lo, mut hi) = (0usize, 0usize);
+        let (mut lo_at, mut hi_at, mut k_at) = (0usize, 0usize, 0usize);
+        let wrap = |i: &mut usize| {
+            *i += 1;
+            if *i == ring {
+                *i = 0;
+            }
+        };
+        let mut sum = Complex64::new(0.0, 0.0);
+        let mut scale = 0.0;
+        let mut scale_for = usize::MAX;
+        for k in 0..span {
+            let want_hi = (k + half + 1).min(span);
+            while hi < want_hi {
+                let c = model.advance();
+                let p = c.conj() * f64::from(audio[hi]);
+                scratch.products[hi_at] = p;
+                scratch.models[hi_at] = c;
+                sum += p;
+                hi += 1;
+                wrap(&mut hi_at);
+            }
+            let want_lo = k.saturating_sub(half);
+            while lo < want_lo {
+                sum -= scratch.products[lo_at];
+                lo += 1;
+                wrap(&mut lo_at);
+            }
+            if hi - lo != scale_for {
+                scale_for = hi - lo;
+                scale = 2.0 / scale_for as f64;
+            }
+            let rebuilt = (sum * scratch.models[k_at]).re * scale;
+            audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
+            wrap(&mut k_at);
+        }
+    }
+
+    #[test]
+    fn remove_matches_the_reference_bit_for_bit() {
+        let mut checked = 0;
+        for mode in [Mode::Ft8, Mode::Ft4] {
+            let layout = crate::pipeline::layout(mode);
+            let tones = tones_for(mode, "CQ K1ABC FN42");
+            let slot = layout.slot_samples();
+            let total = (tones.len() * layout.samples_per_symbol) as isize;
+            let base: Vec<f32> = crate::testsig::noise(slot, 7)
+                .iter()
+                .enumerate()
+                .map(|(i, x)| x + 0.5 * (i as f32 * 0.071).sin())
+                .collect();
+            let mut scratch = SubtractScratch::default();
+            for (start, len) in [
+                (6000isize, slot),
+                (0, slot),
+                (-5000, slot),
+                (-total + 10, slot),
+                (slot as isize - 3000, slot),
+                (1234, 100_000.min(slot)),
+                (2000, 500),
+                (-total - 5, slot),
+                (slot as isize + 5, slot),
+            ] {
+                for (freq_hz, smooth) in [(1234.56, 1920usize), (377.0, 1), (2950.25, 961), (1500.0, 4000)] {
+                    let mut want = base[..len].to_vec();
+                    let mut got = want.clone();
+                    let at = Placement { start, freq_hz };
+                    remove_reference(layout, &tones, &mut want, at, smooth, &mut scratch);
+                    remove(layout, &tones, &mut got, at, smooth, &mut scratch);
+                    let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
+                    assert!(
+                        bits(&want) == bits(&got),
+                        "{mode:?} start {start} length {len} smooth {smooth}"
+                    );
+                    checked += 1;
+                }
+            }
+        }
+        assert_eq!(checked, 72);
+    }
+
+    #[test]
+    fn model_fill_matches_advance_bit_for_bit() {
+        for mode in [Mode::Ft8, Mode::Ft4] {
+            let layout = crate::pipeline::layout(mode);
+            let tones = tones_for(mode, "W9XYZ K1ABC R-12");
+            let total = tones.len() * layout.samples_per_symbol;
+            let mut a = Model::new(layout, &tones, 1500.5);
+            let want: Vec<Complex64> = (0..total).map(|_| a.advance()).collect();
+            // Uneven pieces cross symbol, block and resync boundaries.
+            let mut b = Model::new(layout, &tones, 1500.5);
+            let mut got = vec![Complex64::new(0.0, 0.0); total];
+            let mut at = 0;
+            for piece in [1usize, 255, 256, 257, 1919, 1920, 1921, 7, 3000].iter().cycle() {
+                let to = (at + piece).min(total);
+                b.fill(&mut got[at..to]);
+                at = to;
+                if at == total {
+                    break;
+                }
+            }
+            let bits = |v: &[Complex64]| {
+                v.iter()
+                    .map(|c| (c.re.to_bits(), c.im.to_bits()))
+                    .collect::<Vec<_>>()
+            };
+            assert!(bits(&want) == bits(&got), "{mode:?}");
+            assert_eq!(a.phase.theta.to_bits(), b.phase.theta.to_bits());
+        }
     }
 }
