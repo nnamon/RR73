@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.7 · 2026-10-16
 
 - Settings › Rig control has its own switch, off by default. Off, RR73 closes the radio’s port, opens it neither by itself nor on a tap, and transmissions key the radio by VOX. On, it opens the port it used before again.
 
