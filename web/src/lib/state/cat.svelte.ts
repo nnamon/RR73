@@ -21,7 +21,7 @@
  */
 
 import { CatRadio, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
-import { CIV_PORT, SerialLink, choosePort, grantedPorts, kx2Port, serialApi, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
+import { SerialLink, choosePort, civPort, grantedPorts, kx2Port, serialApi, type Ic705Baud, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
 import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
 import { RADIOS, type CatRadioId } from '../cat/radios';
 import { utcTime } from '../clock/format';
@@ -154,7 +154,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
     return false;
   }
   const kx2 = settings.cat.radio === 'kx2';
-  const link = new SerialLink(port, kx2 ? kx2Port(settings.cat.kx2Baud) : CIV_PORT);
+  const link = new SerialLink(port, kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud));
   const err = await link.open();
   if (err) {
     fail(err);
@@ -495,8 +495,23 @@ export async function chooseRadio(id: CatRadioId): Promise<void> {
 export async function setKx2Baud(baud: Kx2Baud): Promise<void> {
   if (settings.cat.kx2Baud === baud) return;
   void updateSettings({ cat: { ...settings.cat, kx2Baud: baud } });
+  if (settings.cat.radio === 'kx2') await reopenAtNewRate();
+}
+
+/**
+ * The IC-705's baud rate. With the IC-705 connected, its port closes (PTT off confirmed first) and
+ * opens again at the new rate, as for the KX2.
+ */
+export async function setIc705Baud(baud: Ic705Baud): Promise<void> {
+  if (settings.cat.ic705Baud === baud) return;
+  void updateSettings({ cat: { ...settings.cat, ic705Baud: baud } });
+  if (settings.cat.radio === 'ic705') await reopenAtNewRate();
+}
+
+/** Closes the connected radio's port and opens it again at the rate now set. */
+async function reopenAtNewRate() {
   const c = current;
-  if (!c || settings.cat.radio !== 'kx2') return;
+  if (!c) return;
   recover = !(await closeCurrent());
   if (mayOpenByItself()) await open(c.port);
   else {

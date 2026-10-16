@@ -92,6 +92,11 @@ describe('settings', () => {
     expect(validate({ cat: { radio: 'kx2', kx2Baud: 38400 } }).cat).toMatchObject({ radio: 'kx2', kx2Baud: 38400 });
     expect(validate({ cat: { radio: 'ft991', kx2Baud: 115200 } }).cat).toMatchObject({ radio: 'ic705', kx2Baud: 4800 });
     expect(validate({ cat: { radio: 7, kx2Baud: '9600' } }).cat).toMatchObject({ radio: 'ic705', kx2Baud: 4800 });
+    expect(DEFAULTS.cat.ic705Baud).toBe(115200);
+    expect(validate({ cat: { ic705Baud: 9600 } }).cat.ic705Baud).toBe(9600);
+    expect(validate({ cat: { ic705Baud: 57600 } }).cat.ic705Baud).toBe(57600);
+    expect(validate({ cat: { ic705Baud: 1200 } }).cat.ic705Baud).toBe(115200);
+    expect(validate({ cat: { ic705Baud: '9600' } }).cat.ic705Baud).toBe(115200);
   });
 
   it('stores the callsign in IndexedDB and loads it back', async () => {

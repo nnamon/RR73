@@ -2,7 +2,7 @@
   /**
    * Settings › Rig control (docs/design/cat.md): the radio, Connect radio and its state, keying by
    * CAT, Keep Tx audio centred (the IC-705 only) and Test keying, and the radio's settings with
-   * what to change. The KX2 adds its baud rate. Shown only where the browser has Web Serial (desktop
+   * what to change, and the baud rate. Shown only where the browser has Web Serial (desktop
    * Chrome and Edge). Keying by CAT is off until the operator turns it on; until then the radio
    * keys by VOX and RR73 only reads and sets its dial and mode. Keep Tx audio centred needs keying
    * by CAT and is off by default.
@@ -12,9 +12,9 @@
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { mhz } from '../lib/clock/format';
-  import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
+  import { IC705_BAUDS, KX2_BAUDS, type Ic705Baud, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
-  import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
+  import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setIc705Baud, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
   import { catKeys, radioName, radioTraits, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
@@ -301,19 +301,29 @@
           {#if settings.cat.radio === r.id}<Icon name="check" size={17} class="chk" />{/if}
         </button>
       {/each}
-      {#if kx2}
-        <label class="row">
-          <span class="row-title">Baud rate</span>
+      <label class="row">
+        <span class="row-title">Baud rate</span>
+        {#if kx2}
           <select class="select" value={settings.cat.kx2Baud} onchange={(e) => void setKx2Baud(Number(e.currentTarget.value) as Kx2Baud)}>
             {#each KX2_BAUDS as b (b)}
               <option value={b}>{b}</option>
             {/each}
           </select>
-          <Icon name="updown" size={13} class="row-chevron" />
-        </label>
-      {/if}
+        {:else}
+          <select class="select" value={settings.cat.ic705Baud} onchange={(e) => void setIc705Baud(Number(e.currentTarget.value) as Ic705Baud)}>
+            {#each IC705_BAUDS as b (b)}
+              <option value={b}>{b}</option>
+            {/each}
+          </select>
+        {/if}
+        <Icon name="updown" size={13} class="row-chevron" />
+      </label>
     </div>
-    {#if kx2}<p class="section-foot">Baud rate must match the KX2’s MENU › RS232, which is 4800 by default.</p>{/if}
+    {#if kx2}
+      <p class="section-foot">Baud rate must match the KX2’s MENU › RS232, which is 4800 by default.</p>
+    {:else}
+      <p class="section-foot" data-testid="rig-baud">Over USB the IC-705 answers at any rate. It has no baud rate setting.</p>
+    {/if}
   </div>
 
   <div class="section">

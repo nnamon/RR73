@@ -16,7 +16,7 @@ import { RTTY_DEFAULTS, validateRtty, type RttySettings } from '../rtty/settings
 import { keyboardDefaults, validateKeyboard, type KeyboardSettings } from '../keyboard/settings';
 import { fixShippedReport, normaliseMacros } from '../keyboard/macros';
 import type { CatRadioId } from '../cat/radios';
-import { KX2_BAUDS, KX2_DEFAULT_BAUD, type Kx2Baud } from '../cat/serial';
+import { IC705_BAUDS, IC705_DEFAULT_BAUD, KX2_BAUDS, KX2_DEFAULT_BAUD, type Ic705Baud, type Kx2Baud } from '../cat/serial';
 
 /** Sun: light with the most contrast, for direct sunlight (tokens.css). */
 export type Theme = 'system' | 'light' | 'dark' | 'sun';
@@ -93,6 +93,8 @@ export interface CatSettings {
   usbProductId: number | null;
   /** The KX2's serial rate: its MENU › RS232 must match (Owner's Manual p. 49). */
   kx2Baud: Kx2Baud;
+  /** The IC-705's serial rate: any works over USB (Basic Manual p. 13-2). */
+  ic705Baud: Ic705Baud;
   /**
    * The KX2's MIC BTN as last read, as MP gives it; null before any read. RR73 opens a KX2's port
    * by itself (on starting, on the port coming back, on a new baud rate) only after it read 0, OFF.
@@ -102,7 +104,7 @@ export interface CatSettings {
   leftKeyed: boolean;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, ic705Baud: IC705_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -322,6 +324,7 @@ function validateCat(raw: unknown): CatSettings {
   if (typeof r.kx2MicBtn === 'number' && Number.isInteger(r.kx2MicBtn) && r.kx2MicBtn >= 0 && r.kx2MicBtn <= 255) c.kx2MicBtn = r.kx2MicBtn;
   if (r.radio === 'ic705' || r.radio === 'kx2') c.radio = r.radio;
   if (KX2_BAUDS.includes(r.kx2Baud as Kx2Baud)) c.kx2Baud = r.kx2Baud as Kx2Baud;
+  if (IC705_BAUDS.includes(r.ic705Baud as Ic705Baud)) c.ic705Baud = r.ic705Baud as Ic705Baud;
   for (const k of ['usbVendorId', 'usbProductId'] as const) {
     const v = r[k];
     if (typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= 0xffff) c[k] = v;

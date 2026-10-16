@@ -7,7 +7,7 @@ import { loadWasm, type Wasm } from '../../../e2e/wasm';
 import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
-import { connectRadio, disconnectRadio, initCat, reconnectRadio, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
+import { connectRadio, disconnectRadio, initCat, reconnectRadio, resetCat, setCatDeps, setIc705Baud, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
 import { dialNow, onRadioNotice, rig, rigBadge, rigDialInUse, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { practice, txLevel } from './practice.svelte';
@@ -45,6 +45,8 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
   /** In order: open, the lines set, each frame written (with the radio transmitting or not), close. */
   log: string[] = [];
   forgotten = false;
+  /** The baud rate of each open, in order. */
+  bauds: number[] = [];
   silent = false;
   /** The radio's answer to the next PTT on goes missing; it still keys. */
   dropPttOn = false;
@@ -68,8 +70,9 @@ class SimSerialPort extends EventTarget implements SerialPortLike {
   get writable() {
     return this.writableValue;
   }
-  async open(_o: SerialOptionsLike) {
+  async open(o: SerialOptionsLike) {
     this.log.push('open');
+    this.bauds.push(o.baudRate);
     // Chromium on Windows asserts DTR and RTS before open() resolves.
     this.sim.set_lines(true, true);
     this.readableValue = new ReadableStream<Uint8Array>({ start: (c) => void (this.controller = c) });
@@ -193,6 +196,21 @@ describe('connecting', () => {
     // The dial read afterwards shows 7.074 MHz from the radio itself.
     expect(rig.hz).toBe(7_074_000);
     expect(rig.status).toBe('connected');
+  });
+
+  it('opens at the baud rate chosen, 115200 by default, and a new rate closes the port and opens it again at that rate', async () => {
+    expect(settings.cat.ic705Baud).toBe(115200);
+    await connect();
+    expect(chosen.bauds).toEqual([115200]);
+    const changed = setIc705Baud(9600);
+    await run(OPEN_SETTLE_MS + 400);
+    await changed;
+    expect(settings.cat.ic705Baud).toBe(9600);
+    expect(chosen.bauds).toEqual([115200, 9600]);
+    const reopen = chosen.log.lastIndexOf('open');
+    expect(chosen.log.slice(reopen - 1, reopen + 2)).toEqual(['close', 'open', 'lines dtr rts']);
+    expect(rig.status).toBe('connected');
+    expect(chosen.ptt).toEqual([]);
   });
 
   it('takes back the browser’s permission for every other port when one is chosen', async () => {

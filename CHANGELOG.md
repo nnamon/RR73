@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Rig control has a Baud rate for the IC-705: 4800 to 115200, 115200 by default. A new rate opens the port again at that rate.
+
 ## 0.24.3 · 2026-10-16
 
 - With Key the radio with CAT on, a transmission or Tune whose audio would not reach the output chosen in Settings › Radio and audio is refused, and Rig control and Radio and audio say what to choose. Before, the radio keyed with its Tx audio on the system default, or on nothing.

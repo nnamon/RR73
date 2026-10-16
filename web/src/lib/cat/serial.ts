@@ -68,11 +68,25 @@ export function serialApi(nav: unknown = globalThis.navigator): SerialApiLike | 
 }
 
 /**
- * The IC-705's USB CI-V port. Any baud rate works over USB (Basic Manual p. 13-2). 8 data bits,
- * no parity, 1 stop bit and no flow control are what the Advanced Manual gives for the USB port's
- * serial data (p. 12-14). Unverified on a device.
+ * The rates Rig control offers for the IC-705. Over USB the IC-705 communicates "regardless of the
+ * PC software's baud rate setting" (Basic Manual p. 13-2), and its Set mode has no baud rate item
+ * (p. 8-16): the choice is for a driver or port that works at one rate only.
  */
-export const CIV_PORT: Readonly<SerialOptionsLike> = { baudRate: 115200, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' };
+export const IC705_BAUDS = [4800, 9600, 19200, 38400, 57600, 115200] as const;
+export type Ic705Baud = (typeof IC705_BAUDS)[number];
+/** The IC-705's rate as delivered: any rate works, and 115200 is the fastest offered. */
+export const IC705_DEFAULT_BAUD: Ic705Baud = 115200;
+
+/**
+ * The IC-705's USB CI-V port at `baud`. 8 data bits, no parity, 1 stop bit and no flow control are
+ * what the Advanced Manual gives for the USB port's serial data (p. 12-14). Unverified on a device.
+ */
+export function civPort(baud: Ic705Baud): SerialOptionsLike {
+  return { baudRate: baud, dataBits: 8, stopBits: 1, parity: 'none', flowControl: 'none' };
+}
+
+/** The IC-705's USB CI-V port at its default rate. */
+export const CIV_PORT: Readonly<SerialOptionsLike> = civPort(IC705_DEFAULT_BAUD);
 
 /** The rates of the KX2's MENU › RS232 (Owner's Manual p. 49; `BR`, Programmer's Reference p. 8). */
 export const KX2_BAUDS = [4800, 9600, 19200, 38400] as const;
