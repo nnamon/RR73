@@ -10,6 +10,22 @@ import { LOG_SHEETS, SCREENS, open } from './screens';
 
 const SHOTS = fileURLToPath(new URL('../test-results/screens', import.meta.url));
 
+/** The right edge of the ink of the last glyph in Operate's compact top bar: its drawn shapes plus half their stroke. */
+function topBarLastInk(page: Page) {
+  return page.evaluate(() => {
+    const svg = [...document.querySelectorAll<SVGSVGElement>('header.top nav svg')].at(-1)!;
+    const box = svg.getBoundingClientRect();
+    const scale = box.width / 24;
+    let r = -Infinity;
+    for (const el of svg.querySelectorAll<SVGGraphicsElement>('path, circle, ellipse')) {
+      const bb = el.getBBox();
+      const cs = getComputedStyle(el);
+      r = Math.max(r, bb.x + bb.width + (cs.stroke && cs.stroke !== 'none' ? parseFloat(cs.strokeWidth) / 2 : 0));
+    }
+    return box.left + r * scale;
+  });
+}
+
 /** Ink boxes of every bar button glyph in the visible pane: the drawn shapes plus half their stroke. */
 function barInks(page: Page) {
   return page.evaluate(() =>
@@ -139,6 +155,8 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
         for (let i = 1; i < 3; i++) expect(icons[i - 1].x + icons[i - 1].width, at).toBeLessThanOrEqual(icons[i].x + 0.5);
         expect(icons[2].x + icons[2].width, at).toBeLessThanOrEqual(vw + 0.5);
         for (const b of icons) expect(b.width, at).toBeGreaterThanOrEqual(43.5);
+        // The last glyph's ink, the Settings icon's, ends 16 pt from the edge, as on every bar.
+        expect(vw - (await topBarLastInk(page)), at).toBeCloseTo(16, 0);
         // The dial shows whole inside the band button or not at all (wrapped below its one line).
         const dial = (await page.locator('header.top .dial').boundingBox())!;
         const inside = dial.x >= band.x - 0.5 && dial.x + dial.width <= band.x + band.width + 0.5 && dial.y + dial.height <= band.y + band.height + 0.5;
