@@ -244,6 +244,36 @@ describe('connecting', () => {
     expect(chosen.ptt).toEqual([]);
   });
 
+  it('shows a radio already transmitting at connecting, and sends PTT off then only with CAT keying on or RR73 may have left it keyed', async () => {
+    const key = wasm.cat_encode('{"type":"set_transmit","on":true}', 0xa4);
+    chosen.sim.receive(key);
+    await connect();
+    expect(rig.transmitting).toBe(true);
+    expect(chosen.ptt).toEqual([]);
+    expect(chosen.sim.transmit).toBe(true);
+    await disconnectRadio();
+    // Key the radio with CAT on: PTT off at connecting, confirmed.
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    chosen.log = [];
+    const done = connectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await done;
+    expect(chosen.ptt).toEqual(['00']);
+    expect(chosen.sim.transmit).toBe(false);
+    expect(rig.unkeyFailed).toBe(false);
+    // CAT keying off, but the stored flag says RR73 may have left it keyed: PTT off too.
+    await disconnectRadio();
+    chosen.sim.receive(key);
+    void updateSettings({ cat: { ...settings.cat, keyPtt: false, leftKeyed: true } });
+    chosen.log = [];
+    const again = connectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await again;
+    expect(chosen.ptt).toEqual(['00']);
+    expect(chosen.sim.transmit).toBe(false);
+    expect(settings.cat.leftKeyed).toBe(false);
+  });
+
   it('closes the port when the lines cannot be lowered', async () => {
     chosen.setSignals = async () => Promise.reject(new DOMException('Failed to set control signals.', 'NetworkError'));
     await connect();
