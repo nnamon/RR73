@@ -1,6 +1,6 @@
 # Experiment 0010: search, refinement and subtraction
 
-Status: hypothesis recorded 2026-10-15, before the changes below were built. The miss breakdown (part 1) was measured first, with a diagnostic added to the bench for it, and sets the expectations. Results measured 2026-10-16. The changes stay overrides until they are measured again on top of the block soft bits of experiment 0008.
+Status: hypothesis recorded 2026-10-15, before the changes below were built. The miss breakdown (part 1) was measured first, with a diagnostic added to the bench for it, and sets the expectations. Results measured 2026-10-16, first on the max-log preset of 0.21.8, then again on the block soft bit preset of 0.22.2 (experiment 0008). The one preset change proposed is in its own commit.
 
 ## Question
 
@@ -48,7 +48,7 @@ Measurements, each change in stage 1 and within the later stages: the 60 public 
 
 ## Expected effect
 
-| Measure | Now | Expected | Measured (2026-10-16, results below) |
+| Measure | Now | Expected | Measured on the max-log preset of 0.21.8 |
 | --- | --- | --- | --- |
 | SNR50 AWGN, stage 1 | -19.02 dB | -19.5 to -20.0 dB with refinement | -19.98 dB |
 | SNR50 fading, stage 1 | -15.67 dB | -16.0 to -16.6 dB | -16.72 dB |
@@ -67,9 +67,9 @@ Refinement should carry most of the gain. Local-maximum suppression should chang
 
 A change is kept only if it adds true decodes or lowers SNR50, adds no false decode on the noise sets and in the stress run, and keeps the preset near its current cost and the later stages within decision 0007's 2 s budget on a phone. Negative results are recorded here.
 
-## Results
+## Results on the max-log preset (0.21.8)
 
-Measured 2026-10-16 on the tree of the commits that follow this note's hypothesis: a release build of `rr73-bench` in the `rust` container on the Apple M4 (10 CPUs). Accuracy runs used 10 threads while other work loaded the host (1-minute load average 11 to 64); decodes and false decodes do not depend on load. Times are in their own section. "Three stages" is the app's plan (`DEEP`, decision 0007); "refined" sets `refine.kind=baseband` in every stage that runs. Recall counts reference decodes matched within 10 Hz and 0.5 s, as in decision 0007.
+These results come from before the block soft bits of experiment 0008 entered `subtract-3-osd2` in 0.22.2; the section after them measures the changes again on top of that preset. Measured 2026-10-16 on the tree of the commits that follow this note's hypothesis: a release build of `rr73-bench` in the `rust` container on the Apple M4 (10 CPUs). Accuracy runs used 10 threads while other work loaded the host (1-minute load average 11 to 64); decodes and false decodes do not depend on load. Times are in their own section. "Three stages" is the app's plan (`DEEP`, decision 0007); "refined" sets `refine.kind=baseband` in every stage that runs. Recall counts reference decodes matched within 10 Hz and 0.5 s, as in decision 0007.
 
 ### Refinement before demodulation
 
@@ -168,20 +168,102 @@ Native, single-threaded (`--threads 1`), each slot's fastest of 3 runs, with the
 - The wider DT range costs 22 % in the preset's mean time per slot: the search keeps 31 % more candidates (73513 against 55904 over the 410 slots) and LDPC runs 38 % more often. Past DT 2.5 s the third Costas array lies outside the slot, so the score averages two arrays, and more positions in noise reach the 5 dB threshold (unverified). A higher sync threshold for positions past DT 2.5 s could take back part of the cost; not tried. Both changes together, against the preset as it was, at load 9 to 15: p50 22.9 to 33.7 ms, p95 85.3 to 102.7 ms, max 125.1 to 167.6 ms, mean 39.4 to 51.8 ms (+31 %). Of the decodes past DT 2.5 s, 1042 of 1077 on `late-start` and 44 of 45 on the recordings score at least 7 dB.
 - Longest single step of a session, recordings, three stages: 26.2 ms without refinement and 28.1 ms with, under the app's 40 ms slices.
 
+## Results on the block soft bit preset (0.22.2)
+
+From 0.22.2 `subtract-3-osd2` takes its soft bits from blocks of symbols (`demod.kind=block`, experiment 0008), which find each candidate's start and frequency within one grid step on a baseband of their own. Each change was measured again on top of it, on the tree rebased onto 0.22.2: a release build of `rr73-bench` in the `rust` container on the Apple M4, 10 threads, host load 9 to 46. "Preset" below is the 0.22.2 preset; "three stages" is `DEEP` on top of it.
+
+### Refinement before demodulation
+
+| Set | Preset | Preset, `refine.kind=baseband` |
+| --- | --- | --- |
+| SARTS (350 slots, 4210), matched | 3854 (0.915) | 3849 (0.914) |
+| `public/ft8_lib` (1298), matched | 1250 (0.963) | 1245 (0.959) |
+| `snr-sweep/awgn`, matched, SNR50 | 550, -21.25 dB | 550, -21.25 dB |
+| `snr-sweep/fading`, matched, SNR50 | 432, -18.30 dB | 428, -18.20 dB |
+| `crowded`, matched of 1800 | 1796 | 1796 |
+| `ft4-sweep` AWGN, fading, crowded, matched | 461, 352, 199 | 459, 352, 199 |
+| False: 5000 noise slots, 10000 FT4 noise slots | 0 | 0 |
+
+The block soft bits recover what refinement gave the max-log preset, and refinement in front of them loses a few decodes. Unverified cause: it moves the block search's starting point, and the repeats it skips would have started the block search from other points. Rejected for the block preset. `refine.kind=baseband` stays an option for the spectrogram LLRs.
+
+### DT range and the threshold for partial sync
+
+`search.ft8_dt_max_s=4.5 search.ft4_dt_max_s=1.5 search.partial_min_score_db=6` on the preset:
+
+| Set | Preset | With the late-start search |
+| --- | --- | --- |
+| SARTS, matched | 3854 | 3852 |
+| `public/ft8_lib`, matched | 1250 | 1249 |
+| Unmatched on the recordings (public, SARTS) | 113, 112 | 164, 118 |
+| `late-start` FT8 at 20 slots per step, matched of 11200 | 3824 | 4873 |
+| `late-start` FT4 at 20 slots per step, matched of 10240 | 3326 | 3820 |
+| FT8 `shift` at 3.0, 3.5, 4.0, 4.5 s, of 160 | 0, 0, 0, 0 | 136, 140, 132, 124 |
+| FT4 `shift` at 1.25, 1.5 s, of 160 | 0, 0 | 121, 116 |
+| `snr-sweep`, `crowded`, `ft4-sweep` | 550, 432, 1796; 461, 352, 199 | the same, same SNR50 |
+| First 13.5 s of the recordings, matched (SARTS, public) | 3845, 1246 | 3845, 1246 |
+| First 6 s of `ft4-sweep`, matched | 461, 352, 199 | the same |
+| `ap-sweep` `qso`, `callers`, matched, SNR50 | 188, -22.20 dB; 144, -21.10 dB | the same |
+| False: 5000 noise slots, whole and cut at 13.5 s; 10000 FT4 noise slots, whole and cut at 6 s; 10000 `ap-sweep` noise slots; sweeps; `late-start` | 0 | 0 |
+| False, stress: sync threshold 0 dB on the 5000 noise slots and `crowded` | | 0 |
+
+The 51 more unmatched decodes on `public/ft8_lib` and 6 on SARTS are the late stations of the max-log results, such as `CQ ON3JJT JO20` at DT 2.65 s in 9 files. The partial threshold costs 5 and 2 matches at FT8 `shift` 2.0 and 2.5 s, where the last Costas array already runs past the slot.
+
+Through the three stages, each with the same late-start search:
+
+| Set | Three stages | Three stages, late-start search |
+| --- | --- | --- |
+| SARTS, matched | 3967 (0.942) | 3974 (0.944) |
+| `public/ft8_lib`, matched | 1255 (0.967) | 1256 (0.968) |
+| Unmatched on the recordings (public, SARTS) | 159, 178 | 212, 191 |
+| `snr-sweep` AWGN, fading: matched, SNR50 | 562, -21.55 dB; 455, -18.88 dB | 563, -21.58 dB; 458, -18.95 dB |
+| `crowded`, matched of 1800 | 1797 | 1797 |
+| `ft4-sweep` AWGN, fading, crowded, matched | 482, 377, 200 | 482, 378, 200 |
+| `late-start` at 10 slots per step, FT8 of 5600, FT4 of 5120 | 1987, 1782 | 2545, 2036 |
+| False: 5000 noise slots, 10000 FT4 noise slots, sweeps | 0 | 0 |
+| False: `late-start` (FT8, FT4) | 1, 2 | the same 1, 2 |
+
+`compare` through three stages: on `late-start` 817 decodes gained, all matched, and 5 lost; on the recordings 78 gained (8 matched, 70 unmatched) and 4 unmatched lost. The 3 false decodes on `late-start` are the same decodes in both runs.
+
+### Time on the block preset
+
+Native, single-threaded, each slot's fastest of 3 runs on the 410 recorded slots, the two configurations in turn; 1-minute load average 15 to 37 for the preset rows, 6 to 29 for the three-stage rows.
+
+| ms: p50, p95, max, mean | Preset | Preset, late-start search |
+| --- | --- | --- |
+| Preset alone | 31.1, 154.5, 281.2, 60.1 | 28.3, 125.7, 181.7, 53.2 |
+| Through stage 1 of three | 27.9, 124.4, 169.4, 52.4 | 26.9, 121.7, 179.6, 51.0 |
+| Through stage 2 | 65.3, 231.1, 372.3, 104.1 | 64.0, 227.4, 384.6, 103.7 |
+| Through stage 3 | 259.4, 788.5, 1259.3, 357.8 | 310.3, 838.3, 1332.2, 417.9 |
+| Longest step, three stages | 16.1 | 8.5 |
+
+In the preset the late-start search costs nothing: the partial threshold also removes candidates at the edges of the old range, which decoded nothing extra, and the search keeps 16 % fewer candidates (46172 against 55221 over the 410 slots) with 9 % fewer LDPC attempts. Stage 3, which searches a grid of 8 frames per symbol and 4 bins per tone spacing for 400 candidates from 2 dB, takes 60 ms more on average over the wider range. With stage 3 kept at DT 2.5 s and 1.0 s (`search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null` in its overrides), at load 6 to 24: three stages p50 299.0 to 262.3 ms, p95 838.4 to 802.4 ms, max 1609.3 to 1362.2 ms, mean 386.5 to 363.4 ms against the 0.22.2 preset's three stages, for 7 fewer SARTS matches (3967, as before the change) and 11 FT8 and 12 FT4 fewer `late-start` matches (2534 and 2024 of 5600 and 5120) than with stage 3 on the longer range.
+
+### Where the misses are on the block preset
+
+`rr73-bench misses` on the 0.22.2 preset, the same 403 slots and 5508 reference decodes. The genie positions read max-log LLRs from the spectrogram, so the genie columns of the bench output describe the spectrogram's levels; the block soft bits may decode some of the candidates they mark as hopeless.
+
+| Class | Preset | Three stages |
+| --- | --- | --- |
+| Matched | 5104 | 5222 |
+| Missed | 404 | 286 |
+| Hashed callsign | 27 | 23 |
+| Same text outside the tolerance | 10 | 11 |
+| Search miss | 89 | 34 |
+| Decoded as another message | 5 | 3 |
+| Candidates there, none decoded | 273 | 215 |
+
+The block soft bits leave a quarter of the preset's failures of 0.21.8 (273 of 1058). Search misses are now 22 % of the preset's misses and 12 % through three stages. In the preset 89 of them score under 5 dB at their genie position (72 from 2 to 5 dB), under the preset's threshold; stage 3's 2 dB threshold finds most. Through three stages 14 of the 34 are at -6 dB or above, 13 of them 9A7W above 3000 Hz. Of the 215 failed candidates through three stages, 37 are at -6 dB or above and 78 have another reference decode within 25 Hz: crowded spectrum and subtraction residue are what remain for this experiment's stages, the rest is weak signals (95 below -16 dB).
+
 ## Decision and open risks
 
-The presets stay as they are for now. The block soft bits of experiment 0008 (`demod.kind=block`), which bring their own baseband and refinement inside the demodulator, go into the shipped preset first; each change below is then measured again on top of them, and the miss breakdown with it. Until then they are overrides:
+Proposed on top of 0.22.2, in its own commit: `subtract-3-osd2` searches DT up to 4.5 s in FT8 and 1.5 s in FT4, with a 6 dB sync threshold for positions whose Costas arrays do not all lie inside the slot (`search.ft8_dt_max_s=4.5 search.ft4_dt_max_s=1.5 search.partial_min_score_db=6`). Late replies then decode at about the rate of replies on time (FT8 `shift` at 3 to 4.5 s: 124 to 140 of 160, none before; FT4 at 1.25 and 1.5 s: 121 and 116), every other set stays within 3 matches of the preset, and no false decode is added. The preset takes no more time (mean 60.1 to 53.2 ms); through three stages the longer range costs stage 3 about 17 % (mean 357.8 to 417.9 ms). The later stages inherit the search from the preset. Proposed as well, in `DEEP` (`web/src/lib/decode/worker-client.ts`, the CI bench job and `bench/subtract-3-osd2-deep.json` together, so not committed here): stage 3 keeps DT 2.5 s and 1.0 s with `search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null`. The three stages then take 6 % less time than before the change (mean 386.5 to 363.4 ms) and keep most of the late-start gain.
 
-- `refine.kind=baseband` in the preset and the later stages. On the max-log demodulator it is the largest gain measured here. With the block soft bits it may add nothing to demodulation; its refined start and frequency may still serve the subtraction and the reported DT and frequency.
-- `search.ft8_dt_max_s=4.5 search.ft4_dt_max_s=1.5`: independent of the demodulator. This costs 22 % of the preset's mean time per slot, and with refinement the preset takes 31 % more on average than before, past the 30 % this note expected. A higher sync threshold past DT 2.5 s is the next step if that is too much: 7 dB keeps 97 % of the late decodes.
-- `DEEP` keeps its three stages: refined, they keep more decodes than the two-stage plans tried, and take less time than the three stages without refinement.
-
-Rejected, with the measurements above: local maxima only in the search, the amplitude ramps in the subtraction model, other smoothing windows, a fourth pass, two-stage plans and, for now, a search band above 3000 Hz.
+Rejected on the block preset: `refine.kind=baseband`, which brings no gain there and loses a few decodes. It stays an option for the spectrogram LLRs; with the max-log demodulator it was the largest gain measured here (SARTS recall 0.739 to 0.835 in the preset alone). Rejected on the max-log preset, for reasons that do not depend on the demodulator: local maxima only in the search, the amplitude ramps in the subtraction model, other smoothing windows, a fourth pass, two-stage plans, and a search band above 3000 Hz while the SNR estimate misreads stations there.
 
 Open risks:
 
-- Not tested in a browser or on a device. Refinement adds an FFT per pass and an inverse FFT per candidate; natively the preset's mean time per slot rises 0 to 19 % and the three stages' falls, but the WebAssembly cost is unmeasured.
-- Refinement loses some weak decodes that the grid's levels find: 23 matched in stage 1 and 42 through three stages on the recordings, against 499 and 205 gained. A fallback to the grid's levels was not tried.
-- Experiment 0008 and this work each add a baseband step per pass. Rebasing this branch onto it will conflict in `crates/rr73-decode/src/session.rs` and `pipeline.rs`, and one baseband and one refined position should then serve the demodulator, the subtraction and the reports.
-- The wider DT range adds decodes the reference cannot have; on the recordings they are consistent across slots, but interference-shaped false decodes cannot be measured on the noise sets.
-- After the three refined stages, 501 of the 585 misses on the recordings are candidates at the right place whose levels do not decode at any position tried: a matter for the demodulator.
+- Not tested in a browser or on a device.
+- The wider DT range adds decodes the reference cannot have (51 on `public/ft8_lib`, 6 on SARTS in the preset). They repeat across consecutive slots at one frequency and DT, as real stations do; interference-shaped false decodes cannot be measured on the noise sets.
+- The partial threshold costs a few matches where the last Costas array already runs past the slot: FT8 `shift` at 2.0 and 2.5 s 139 and 138 of 160 against 144 and 140.
+- 9A7W at 2996 Hz and other stations whose tones pass 3000 Hz stay outside the search until the SNR estimate handles a receiver's band edge.
+- `crates/rr73-decode/src/refine.rs` and `crates/rr73-decode/src/block.rs` each cut a baseband from one FFT per pass. If the refinement option stays, one baseband should serve both.
