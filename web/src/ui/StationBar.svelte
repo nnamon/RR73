@@ -15,7 +15,8 @@
   import { dial4 } from '../lib/rtty/dial';
   import { currentDialHz, session } from '../lib/state/keyboard.svelte';
   import { operatingDialHz } from '../lib/radio/hound-dial';
-  import { dialNow } from '../lib/state/radio.svelte';
+  import { dialNow, rigBadge, rigDialInUse } from '../lib/state/radio.svelte';
+  import { catSupported } from '../lib/state/cat.svelte';
   import { spotsShown } from '../lib/state/features.svelte';
   import { clock } from '../lib/state/now.svelte';
   import { practice } from '../lib/state/practice.svelte';
@@ -47,6 +48,10 @@
               : 'Audio off',
   );
 
+  // Rig control exists only where the browser has Web Serial: never on the iPhone.
+  const rigShown = catSupported();
+  const radio = $derived(rigShown ? rigBadge() : null);
+
   // What Halt would stop, for the other screens: on air now, or Tx on and waiting for its slot.
   const air = $derived.by((): { text: string; live: boolean } | null => {
     if (tx.tuning) return { text: 'Tuning', live: true };
@@ -76,6 +81,8 @@
   practice={practice.on}
   sdr={!practice.on && webSdrInput() !== null}
   clockOff={clockCheck.offS === null ? null : clockText(clockCheck.offS)}
+  {radio}
+  dialFallback={radio !== null && !rigDialInUse()}
   onband={() => (sheets.band = true)}
   {regular}
   {tab}

@@ -40,6 +40,8 @@ export interface FakeRig {
   ctx: AudioContext | null;
   /** The radio ignores PTT off: no answer, and it keeps transmitting. */
   ignorePttOff: boolean;
+  /** The radio answers nothing, as with another CI-V address. */
+  silent: boolean;
   /** After the OK to a frequency set, the radio also sends a transceive frame of the new dial. Unverified: the CI-V guide does not say whether it does. */
   transceiveSets: boolean;
   /** The operator turns the dial: a transceive frame to address 00. */
@@ -89,6 +91,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         xit: false,
         ritHz: 0,
         ignorePttOff: false,
+        silent: false,
         transceiveSets: false,
         ctx: null,
         turnDial(f) {
@@ -168,7 +171,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
           const frame = buffer.slice(start, end + 1);
           buffer = buffer.slice(end + 1);
           rig.log.push({ at: Date.now(), ctxS: rig.ctx ? rig.ctx.currentTime : null, hex: hex(frame) });
-          if (frame[1] === 0xfe && frame[2] === 0xa4 && frame[3] === 0xe0) answer(frame.slice(4, -1));
+          if (!rig.silent && frame[1] === 0xfe && frame[2] === 0xa4 && frame[3] === 0xe0) answer(frame.slice(4, -1));
         }
       }
 

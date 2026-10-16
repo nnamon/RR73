@@ -2,7 +2,7 @@
 // IC-705 (fake-ic705.ts): connecting, the dial read from the radio, a band change setting the radio,
 // the radio's dial followed, opening again after a reload, and Test keying with a radio that answers
 // and one that keeps transmitting. The transmissions, timed against the audio, are in rig-tx.spec.ts.
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { connect, installFakeIc705, ptt, rigFrames, rigLog } from './fake-ic705';
 
 test('connects, shows the dial the radio reports, and a band change sets the radio', async ({ page }) => {
@@ -153,4 +153,170 @@ test('Keep Tx audio centred is off by default and works only with Key the radio 
   await expect(page.getByTestId('rig-shift')).toHaveText('Needs Key the radio with CAT');
   // Turning it on sends nothing to the radio.
   expect(rigFrames(await rigLog(page)).filter((f) => f.body.startsWith('05 '))).toEqual([]);
+});
+
+/**
+ * Operate's top bar at `vw` x `vh`: everything in it left to right with no overlaps and inside the
+ * screen, the band button and the radio badge 44 pt targets or more, the badge's capsule 21 pt,
+ * the bar's buttons 44 pt, and no sideways scroll.
+ */
+async function checkTopBar(page: Page, vw: number, vh: number) {
+  await resize(page, vw, vh);
+  const at = `at ${vw} x ${vh}`;
+  const parts = await page.evaluate(() => {
+    const top = document.querySelector('header.top')!;
+    const items = [...top.children].flatMap((el) => (el.classList.contains('side') ? [...el.children] : [el]));
+    return items
+      .filter((el) => !el.classList.contains('grow') && !el.classList.contains('meter') && el.getBoundingClientRect().width > 0 && getComputedStyle(el).position !== 'absolute')
+      .map((el) => {
+        const r = el.getBoundingClientRect();
+        return { name: `${el.tagName.toLowerCase()}.${[...el.classList].filter((c) => !c.startsWith('svelte-')).join('.')}`, x: r.x, w: r.width, h: r.height };
+      });
+  });
+  const names = parts.map((p) => `${p.name} ${Math.round(p.w)}`).join(', ');
+  expect(parts[0].x, `${at}: ${names}`).toBeGreaterThanOrEqual(-0.5);
+  for (let i = 1; i < parts.length; i++) expect(parts[i - 1].x + parts[i - 1].w, `${at}: ${parts[i - 1].name} then ${parts[i].name}`).toBeLessThanOrEqual(parts[i].x + 0.5);
+  const last = parts[parts.length - 1];
+  expect(last.x + last.w, `${at}: ${names}`).toBeLessThanOrEqual(vw + 0.5);
+  // Short of room the badge shows its glyph alone, or none of it, and the band button keeps a 44 pt
+  // target beside it.
+  const band = parts.find((p) => p.name.startsWith('button.band'))!;
+  const link = parts.find((p) => p.name.includes('radio'));
+  if (link) {
+    expect(band.w, `${at}: ${names}`).toBeGreaterThanOrEqual(43.5);
+    expect(band.h, at).toBeGreaterThanOrEqual(43.5);
+    expect(link.w, at).toBeGreaterThanOrEqual(43.5);
+    expect(link.h, at).toBeGreaterThanOrEqual(43.5);
+    expect(Math.round((await page.getByTestId('radio-badge').locator('.badge').boundingBox())!.height), at).toBe(21);
+  }
+  const screens = page.locator('header.top').getByRole('navigation', { name: 'Screens' }).getByRole('link');
+  for (let i = 0; i < (await screens.count()); i++) expect((await screens.nth(i).boundingBox())!.height, `${at} screen ${i}`).toBeGreaterThanOrEqual(43.5);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), at).toBe(true);
+  test.info().annotations.push({ type: 'top-bar', description: `${at}: ${names}` });
+  return parts;
+}
+
+/** Resizes the window and waits for its size class (lib/app/layout.svelte.ts) to follow. */
+async function resize(page: Page, vw: number, vh: number) {
+  await page.setViewportSize({ width: vw, height: vh });
+  const size = vw < 700 ? 'compact' : vh < 500 ? 'compact-height' : 'regular';
+  await page.waitForFunction((s) => document.documentElement.dataset.size === s, size);
+  await expect(page.locator('header.top')).toBeVisible();
+  // The badge fits itself after the resize is laid out: two frames.
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+}
+
+/**
+ * The gap from the last glyph's ink to the screen's edge, pt: the Settings icon's drawn shapes in
+ * the compact bar, the clock's text in the regular one.
+ */
+function edgeGap(page: Page): Promise<number> {
+  return page.evaluate(() => {
+    const top = document.querySelector('header.top')!;
+    const vw = document.documentElement.clientWidth;
+    if (top.classList.contains('regular')) return vw - top.querySelector('.utc')!.getBoundingClientRect().right;
+    const svg = top.querySelector<SVGSVGElement>('a[aria-label="Settings"] svg')!;
+    const box = svg.getBoundingClientRect();
+    const scale = box.width / 24;
+    let r = -Infinity;
+    for (const el of svg.querySelectorAll<SVGGraphicsElement>('path, circle, ellipse, rect, line')) {
+      const bb = el.getBBox();
+      const cs = getComputedStyle(el);
+      r = Math.max(r, bb.x + bb.width + (cs.stroke && cs.stroke !== 'none' ? parseFloat(cs.strokeWidth) / 2 : 0));
+    }
+    return vw - (box.left + r * scale);
+  });
+}
+
+const SIZES = [
+  [350, 667],
+  [375, 667],
+  [393, 852],
+  [852, 393],
+  [1024, 768],
+  [1440, 900],
+] as const;
+
+test('Operate’s radio badge shows the connection, turns amber and red, opens Rig control, and fits the top bar', async ({ page }) => {
+  await installFakeIc705(page);
+  await page.goto('./');
+  // Rig control off: no badge. The last glyph's gap to the edge at each size, to keep.
+  await expect(page.locator('header.top')).toBeVisible();
+  await expect(page.getByTestId('radio-badge')).toHaveCount(0);
+  const gaps: number[] = [];
+  for (const [vw, vh] of SIZES) {
+    await resize(page, vw, vh);
+    gaps.push(await edgeGap(page));
+  }
+  test.info().annotations.push({ type: 'edge-gaps', description: JSON.stringify(SIZES.map(([vw, vh], i) => `${vw}x${vh}: ${gaps[i].toFixed(1)}`)) });
+  await page.setViewportSize({ width: 393, height: 852 });
+  await connect(page);
+  await page.evaluate(() => (location.hash = '#/'));
+  const badge = page.getByTestId('radio-badge');
+  const capsule = badge.locator('.badge');
+  // Connected in USB: amber until the band sheet sets USB-D.
+  await expect(badge).toHaveText('Connected');
+  await expect(capsule).toHaveClass(/\bwarn\b/);
+  await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected, in USB. Open Rig control');
+  await page.getByRole('button', { name: /^Change band/ }).click();
+  await page.getByRole('dialog', { name: 'Change band' }).getByText('20m', { exact: true }).click();
+  await expect(capsule).toHaveClass(/\bok\b/, { timeout: 7000 });
+  await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected. Open Rig control');
+  await expect(page.getByTestId('top-dial')).not.toHaveClass(/fallback/);
+  for (const [i, [vw, vh]] of SIZES.entries()) {
+    await checkTopBar(page, vw, vh);
+    // The badge takes its room from the band button: the right edge stays where it was.
+    expect(await edgeGap(page), `at ${vw} x ${vh}`).toBeCloseTo(gaps[i], 1);
+  }
+  // Short of room, with Spots shown and the practice band on: the band button and the badge give
+  // way down to 44 pt targets, and nothing overlaps.
+  await resize(page, 393, 852);
+  await page.evaluate(() => (location.hash = '#/settings'));
+  await page.getByRole('switch', { name: /^Activations/ }).check();
+  await page.evaluate(() => (location.hash = '#/settings/practice'));
+  await page.getByRole('switch', { name: /^Practice band/ }).check();
+  await page.evaluate(() => (location.hash = '#/'));
+  await expect(page.locator('header.top .practice')).toHaveText('Practice');
+  await expect(page.locator('header.top').getByRole('link', { name: 'Spots' })).toBeVisible();
+  for (const [vw, vh] of SIZES) await checkTopBar(page, vw, vh);
+  await resize(page, 393, 852);
+  await page.evaluate(() => (location.hash = '#/settings/practice'));
+  await page.getByRole('switch', { name: /^Practice band/ }).uncheck();
+  await page.evaluate(() => (location.hash = '#/settings'));
+  await page.getByRole('switch', { name: /^Activations/ }).uncheck();
+  await page.evaluate(() => (location.hash = '#/'));
+  await expect(page.locator('header.top .practice')).toHaveCount(0);
+
+  // The radio transmits with no PTT from RR73 (VOX, its own PTT): amber, read within 5 s.
+  await page.evaluate(() => (window.__rig.transmit = true));
+  await expect(capsule).toHaveClass(/\bwarn\b/, { timeout: 7000 });
+  await expect(badge).toHaveAttribute('aria-label', 'IC-705 connected, transmitting with no PTT from RR73. Open Rig control');
+  await page.evaluate(() => (window.__rig.transmit = false));
+  await expect(capsule).toHaveClass(/\bok\b/, { timeout: 7000 });
+
+  // The radio stops answering: red, with the last dial it read.
+  await page.evaluate(() => (window.__rig.silent = true));
+  await expect(badge).toHaveText('No reply', { timeout: 7000 });
+  await expect(capsule).toHaveClass(/\bbad\b/);
+  await expect(page.getByTestId('top-dial')).not.toHaveClass(/fallback/);
+  await page.evaluate(() => (window.__rig.silent = false));
+  await expect(badge).toHaveText('Connected', { timeout: 3000 });
+
+  // The port closes: red, and the dial shown is the band's own, in the warning tint.
+  await page.evaluate(() => window.__rig.unplug());
+  await expect(badge).toHaveText('Port closed');
+  await expect(capsule).toHaveClass(/\bbad\b/);
+  await expect(page.getByTestId('top-dial')).toHaveClass(/fallback/);
+  await expect(page.getByRole('button', { name: /^Change band/ })).toHaveAttribute('aria-label', /the band’s own dial: the radio’s is not in use\.$/);
+  for (const [vw, vh] of [
+    [375, 667],
+    [1440, 900],
+  ])
+    await checkTopBar(page, vw, vh);
+  await resize(page, 393, 852);
+
+  // A tap opens Rig control.
+  await badge.click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Port closed');
+  expect(await page.evaluate(() => location.hash)).toBe('#/settings/rig');
 });

@@ -8,7 +8,7 @@ import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
 import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
-import { dialNow, onRadioNotice, rig, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
+import { dialNow, onRadioNotice, rig, rigBadge, rigDialInUse, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { practice } from './practice.svelte';
 import { CAT_DEFAULTS, settings, updateSettings } from './settings.svelte';
@@ -294,6 +294,63 @@ describe('connecting', () => {
     expect(rig.status).toBe('off');
     expect(txKeyer()).toBeNull();
     expect(rigGate()).toBeNull();
+  });
+});
+
+describe('Operate’s radio badge', () => {
+  it('shows the connection: amber outside USB-D, off the band or transmitting alone, red when the link is down', async () => {
+    expect(rigBadge()).toBeNull();
+    await connect();
+    // Connecting changes nothing on the radio: it is still in USB.
+    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
+    const tuned = setRadioDial(14_074_000);
+    await run(500);
+    await tuned;
+    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'ok', label: 'IC-705 connected. Open Rig control' });
+    expect(rigDialInUse()).toBe(true);
+    // The operator turns the dial outside every band: RR73 stays on 20m with the band's own dial.
+    chosen.send(chosen.sim.turn_dial(9_000_000));
+    await run(10);
+    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, outside the bands. Open Rig control' });
+    expect(rigDialInUse()).toBe(false);
+    chosen.send(chosen.sim.turn_dial(14_074_000));
+    await run(10);
+    expect(rigBadge()?.tone).toBe('ok');
+    // Another program keys the radio: read within 5 s.
+    chosen.sim.receive(Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x1c, 0x00, 0x01, 0xfd]));
+    await run(5000);
+    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, transmitting with no PTT from RR73. Open Rig control' });
+    chosen.sim.receive(Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x1c, 0x00, 0x00, 0xfd]));
+    await run(5000);
+    expect(rigBadge()?.tone).toBe('ok');
+    chosen.silent = true;
+    await run(5000);
+    expect(rigBadge()).toEqual({ text: 'No reply', tone: 'bad', label: 'No reply from the IC-705. Open Rig control' });
+    chosen.silent = false;
+    await run(2000);
+    expect(rigBadge()?.text).toBe('Connected');
+    chosen.unplug();
+    await run(10);
+    expect(rigBadge()).toEqual({ text: 'Port closed', tone: 'bad', label: 'The IC-705’s port closed. Open Rig control' });
+    expect(rigDialInUse()).toBe(false);
+    await disconnectRadio();
+    expect(rigBadge()).toBeNull();
+  });
+
+  it('stays amber until the mode is read, after connecting to a radio that did not answer at first', async () => {
+    chosen.silent = true;
+    await initCat();
+    const done = connectRadio();
+    await run(OPEN_SETTLE_MS + 50);
+    await done;
+    expect(rigBadge()).toEqual({ text: 'Connecting', tone: 'warn', label: 'IC-705 connecting. Open Rig control' });
+    await run(3000);
+    expect(rigBadge()?.text).toBe('No reply');
+    chosen.silent = false;
+    await run(1500);
+    expect(rigBadge()).toEqual({ text: 'Connected', tone: 'warn', label: 'IC-705 connected, reading its mode. Open Rig control' });
+    await run(5000);
+    expect(rigBadge()).toMatchObject({ tone: 'warn', label: 'IC-705 connected, in USB. Open Rig control' });
   });
 });
 

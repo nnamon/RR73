@@ -15,7 +15,7 @@
   import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
   import { chooseRadio, connectRadio, disconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
-  import { radioName, rig, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
+  import { radioName, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
   import { audio } from '../lib/state/station.svelte';
@@ -122,8 +122,24 @@
     };
   });
 
-  /** The KX2 outside DATA A: TX transmits in the mode it is in. */
-  const notDataA = $derived(kx2 && connected && rigInDataMode() === false ? `The KX2 is in ${rigModeText()}. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.` : null);
+  /**
+   * The radio outside the data mode RR73 sets, USB-D or DATA A: a transmission goes out in the mode
+   * it is in, and Operate's radio badge is amber.
+   */
+  const notDataMode = $derived.by(() => {
+    if (!connected || rigInDataMode() !== false) return null;
+    return kx2
+      ? `The KX2 is in ${rigModeText()}. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.`
+      : `The IC-705 is in ${rigModeText()}. A transmission goes out in that mode: choose a band to set USB-D.`;
+  });
+
+  /** The radio's dial on another band than RR73's, or outside them all: transmissions are refused, and the badge is amber. */
+  const offBand = $derived.by(() => {
+    if (!connected || rig.hz === null) return null;
+    const b = rigBand();
+    if (b === settings.band) return null;
+    return `The ${radioName()} is on ${mhz(rig.hz)}, ${b === null ? 'outside every band' : `outside ${settings.band}`}, so transmissions are refused. Choose a band to set it.`;
+  });
 
   /**
    * The residual risk of CAT keying on the KX2: no transmit time-out in Elecraft's documents, and an
@@ -336,7 +352,8 @@
       </button>
     </div>
     {#if outputText}<p class="section-foot err" role="alert" data-testid="rig-output">{outputText}</p>{/if}
-    {#if notDataA}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataA}</p>{/if}
+    {#if notDataMode}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataMode}</p>{/if}
+    {#if offBand}<p class="section-foot err" role="alert" data-testid="rig-band">{offBand}</p>{/if}
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
     <p class="section-foot" data-testid="rig-practice">The practice band never keys the radio by CAT.</p>
     {#if kx2}<p class="section-foot" data-testid="rig-risk">{KX2_RISK}</p>{/if}

@@ -12,6 +12,12 @@
    *
    * While the phone's clock is 1 s or more off by the decodes, a Clock badge opens Radio and
    * audio at Timing, which says how far and what to do.
+   *
+   * While rig control is on (desktop Chrome and Edge only), a radio badge beside the band shows the
+   * connection and opens Rig control: green while all is well, amber while the radio is not as RR73
+   * needs it, red while the link is down. Then the dial shown is the band's own, and it shows in the
+   * warning tint (`dialFallback`). Short of room, the band button's chevron and dial give way
+   * first, then the badge, to Rig control's plug glyph in a 44 pt target, then to nothing.
    */
   import Icon from './Icon.svelte';
   import LevelMeter from './LevelMeter.svelte';
@@ -27,7 +33,8 @@
     utc,
     progress,
     tone,
-    state,
+    // Named apart from the $state rune.
+    state: stateLabel,
     onair,
     rmsDb,
     live,
@@ -35,6 +42,8 @@
     practice = false,
     sdr = false,
     clockOff = null,
+    radio = null,
+    dialFallback = false,
     onband,
     regular = false,
     tab = 'operate',
@@ -64,6 +73,10 @@
     sdr?: boolean;
     /** The clock warning: "1.2 s slow"; null without one. */
     clockOff?: string | null;
+    /** The radio badge while rig control is on; null otherwise. */
+    radio?: { text: string; tone: 'ok' | 'warn' | 'bad'; label: string } | null;
+    /** Rig control is on and the dial shown is the band's own, as the radio's is not in use. */
+    dialFallback?: boolean;
     onband: () => void;
     /** Regular width: tabs in the middle, and Halt on the other screens while Tx is on. */
     regular?: boolean;
@@ -77,6 +90,53 @@
   } = $props();
 
   const dial = $derived(dialText ?? (dialHz === null ? '' : mhz(dialHz).replace(/\sMHz$/, '')));
+
+  let topEl = $state<HTMLElement>();
+  /** How much of the radio badge the row holds: whole, its plug glyph alone in a 44 pt target, or none of it. */
+  let fit = $state<'text' | 'glyph' | 'none'>('text');
+
+  /** The width an element takes in its row, margins included, px. */
+  function span(el: Element): number {
+    const cs = getComputedStyle(el);
+    return el.getBoundingClientRect().width + parseFloat(cs.marginLeft) + parseFloat(cs.marginRight);
+  }
+
+  /**
+   * Decides how much of the radio badge shows, from the room left in its row once everything else
+   * and the band button's band and mode have theirs: the badge whole, else its glyph alone, else
+   * none of it. The band button's chevron and dial give way first, as they do for the other badges.
+   */
+  function fitRadio() {
+    const top = topEl;
+    if (!top || !radio) return;
+    const row = regular ? top.querySelector<HTMLElement>('.side') : top;
+    const band = top.querySelector<HTMLElement>('.band');
+    const whole = top.querySelector<HTMLElement>('.radio-measure');
+    if (!row || !band || !whole) return;
+    const cs = getComputedStyle(row);
+    const gap = parseFloat(cs.columnGap) || 0;
+    const tap = parseFloat(cs.getPropertyValue('--rr-tap')) || 44;
+    const others = [...row.children].filter((el) => !el.matches('.band, .radio, .radio-measure, .grow') && getComputedStyle(el).position !== 'absolute');
+    const room = row.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - others.reduce((sum, el) => sum + span(el) + gap, 0);
+    const bs = getComputedStyle(band);
+    const parts = [band.querySelector('.b'), band.querySelector('.mode')].map((el) => (el ? el.getBoundingClientRect().width : 0));
+    const keep = Math.max(tap, parts[0] + parts[1] + (parseFloat(bs.columnGap) || 0) + parseFloat(bs.paddingLeft) + parseFloat(bs.paddingRight));
+    const left = room - keep - gap;
+    fit = left >= span(whole) ? 'text' : left >= tap ? 'glyph' : 'none';
+  }
+
+  // Again whenever the row's width or what shares it changes.
+  $effect(() => {
+    void [radio?.text, practice, sdr, clockOff, spots, regular, band, mode, air, tab];
+    fitRadio();
+  });
+  $effect(() => {
+    const top = topEl;
+    if (!top || typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(() => fitRadio());
+    ro.observe(top);
+    return () => ro.disconnect();
+  });
   const tabs = $derived<{ id: Tab; label: string }[]>([
     { id: 'operate', label: 'Operate' },
     { id: 'log', label: 'Log' },
@@ -86,27 +146,36 @@
 </script>
 
 {#snippet bandButton()}
-  <button class="band" onclick={onband} aria-label="Change band. Now {band} {mode}, {dialHz === null ? '' : mhz(dialHz)} USB.">
+  <button class="band" onclick={onband} aria-label="Change band. Now {band} {mode}, {dialHz === null ? '' : mhz(dialHz)} USB{dialFallback ? ', the band’s own dial: the radio’s is not in use' : ''}.">
     <b class="b">{band}</b>
     <span class="mode">{mode}</span>
     <Icon name="chevdown" size={12} class="chev" />
-    <span class="dial">{dial}</span>
+    <span class="dial" class:fallback={dialFallback} data-testid="top-dial">{dial}</span>
   </button>
+  {#if radio}
+    {#if fit !== 'none'}
+      <a class="badge-link radio" href={href('settings', 'rig')} aria-label={radio.label} data-testid="radio-badge"
+        ><span class="badge cap {radio.tone}">{#if fit === 'glyph'}<Icon name="plug" size={13} />{:else}{radio.text}{/if}</span></a
+      >
+    {/if}
+    <!-- The badge whole, out of sight, to measure. -->
+    <span class="badge radio-measure" aria-hidden="true">{radio.text}</span>
+  {/if}
 {/snippet}
 
 {#snippet clockBadge()}
-  {#if clockOff}<a class="clockoff" href={href('settings', 'radio', 'timing')} aria-label="Phone clock {clockOff}. Open Timing"><span class="badge">Clock</span></a>{/if}
+  {#if clockOff}<a class="badge-link" href={href('settings', 'radio', 'timing')} aria-label="Phone clock {clockOff}. Open Timing"><span class="badge">Clock</span></a>{/if}
 {/snippet}
 
 {#snippet clock()}
-  <div class="clk" role="timer" aria-label="{progress === null ? 'UTC time' : 'UTC time and slot progress'}. {state}">
+  <div class="clk" role="timer" aria-label="{progress === null ? 'UTC time' : 'UTC time and slot progress'}. {stateLabel}">
     {#if progress !== null}<SlotRing {progress} {tone} />{/if}
     <span class="utc">{utc}</span>
   </div>
 {/snippet}
 
 {#if regular}
-  <header class="top regular" class:onair>
+  <header class="top regular" class:onair bind:this={topEl}>
     <div class="side">
       {@render bandButton()}
       {#if practice}<span class="practice">Practice</span>{/if}
@@ -128,7 +197,7 @@
     <LevelMeter {rmsDb} {live} />
   </header>
 {:else}
-  <header class="top" class:onair>
+  <header class="top" class:onair bind:this={topEl}>
     {@render bandButton()}
     {#if practice}<span class="practice">Practice</span>{/if}
     {#if sdr}<span class="sdr">Web SDR</span>{/if}
@@ -214,6 +283,11 @@
     color: var(--rr-label2);
   }
 
+  /* Rig control is on and the dial is the band's own: the warning tint, beside the radio badge. */
+  .dial.fallback {
+    color: var(--rr-warn);
+  }
+
   .grow {
     flex: 1;
   }
@@ -235,8 +309,8 @@
     white-space: nowrap;
   }
 
-  /* The Clock badge sits in a 44 pt link. */
-  .clockoff {
+  /* The Clock and radio badges sit in 44 pt links. */
+  .badge-link {
     display: flex;
     flex: none;
     align-items: center;
@@ -245,13 +319,43 @@
     text-decoration: none;
   }
 
-  .clockoff:focus-visible {
+  .badge-link:focus-visible {
     outline: none;
   }
 
-  .clockoff:focus-visible .badge {
+  .badge-link:focus-visible .badge {
     outline: 2px solid var(--rr-accent);
     outline-offset: 2px;
+  }
+
+  /* The radio badge: the connection, or short of room Rig control's plug glyph in a 44 pt target. */
+  .badge-link.radio {
+    justify-content: center;
+    min-width: var(--rr-tap);
+  }
+
+  .badge.cap {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .radio-measure {
+    position: absolute;
+    top: 0;
+    left: 0;
+    visibility: hidden;
+    pointer-events: none;
+  }
+
+  /* The radio badge: green while all is well, red while the link is down; amber, the default, between. */
+  .badge.ok {
+    background: var(--rr-ok-soft);
+    color: var(--rr-ok);
+  }
+
+  .badge.bad {
+    background: var(--rr-tx-soft);
+    color: var(--rr-tx-text);
   }
 
   /* The web SDR badge uses the accent tint. */

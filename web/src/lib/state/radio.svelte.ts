@@ -154,12 +154,67 @@ export function plannedDialHz(band: BandId, mode: Mode): number | null {
   return operatingDialHz(band, mode, hound, settings.houndDialHz, settings.ftDialHz);
 }
 
+/** True while the dial in use is the radio's: one is connected and its dial is on RR73's band. */
+export function rigDialInUse(): boolean {
+  return rigConnected() && rig.hz !== null && rigBand() === settings.band;
+}
+
 /**
- * The dial in use, Hz: the radio's while one is connected and on RR73's band, else `fallback`
- * (the dial the band sheet shows without rig control).
+ * The dial in use, Hz: the radio's while rigDialInUse, else `fallback` (the dial the band sheet
+ * shows without rig control).
  */
 export function dialNow(fallback: number | null): number | null {
-  return rigConnected() && rig.hz !== null && rigBand() === settings.band ? rig.hz : fallback;
+  return rigDialInUse() ? rig.hz : fallback;
+}
+
+/** Operate's radio badge: the connection in a word or two, its tint, and the whole for screen readers. */
+export interface RigBadge {
+  text: string;
+  tone: 'ok' | 'warn' | 'bad';
+  label: string;
+}
+
+/**
+ * Operate's radio badge while rig control is on: a radio connected or connecting, or the one the
+ * operator connected gone; null with rig control off. It shows the connection, amber while the
+ * radio is not in the data mode RR73 sets (USB-D, DATA A) or its mode is not read yet, its dial is
+ * on another band than RR73's, or it transmits while RR73 holds no PTT, and red while the link is
+ * down or PTT off went unconfirmed.
+ */
+export function rigBadge(): RigBadge | null {
+  if (!settings.cat.connect && rig.status === 'off') return null;
+  const name = radioName();
+  const open = 'Open Rig control';
+  if (rig.unkeyFailed) return { text: 'Transmitting', tone: 'bad', label: `${name} may still transmit: PTT off not confirmed. ${open}` };
+  switch (rig.status) {
+    case 'connected': {
+      const band = rigBand();
+      const data = rigInDataMode();
+      // Green only once the mode is read: after a spell without answers it is read again within 5 s.
+      const why =
+        rig.transmitting === true && !rig.keyed
+          ? 'transmitting with no PTT from RR73'
+          : data === false
+            ? `in ${rigModeText()}`
+            : rig.hz !== null && band !== settings.band
+              ? band === null
+                ? 'outside the bands'
+                : `on ${band}`
+              : data === null
+                ? 'reading its mode'
+                : null;
+      return { text: 'Connected', tone: why ? 'warn' : 'ok', label: `${name} connected${why ? `, ${why}` : ''}. ${open}` };
+    }
+    case 'connecting':
+    case 'choosing':
+      return { text: 'Connecting', tone: 'warn', label: `${name} connecting. ${open}` };
+    case 'silent':
+      return { text: 'No reply', tone: 'bad', label: `No reply from the ${name}. ${open}` };
+    case 'lost':
+      return { text: 'Port closed', tone: 'bad', label: `The ${name}’s port closed. ${open}` };
+    default:
+      return { text: 'Not connected', tone: 'bad', label: `${name} not connected. ${open}` };
+  }
 }
 
 let keyer: Keyer | null = null;
