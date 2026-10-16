@@ -173,6 +173,8 @@
         ? 'None since audio started'
         : `${timing.gaps} ${timing.gaps === 1 ? 'gap' : 'gaps'}, ${Math.round(timing.gapMs)} ms in total`,
   );
+  // Slots the decoder was still busy for: the processor falls behind the band.
+  const skippedText = $derived(timing.skippedSlots === 0 ? 'None since the app opened' : `${timing.skippedSlots} since the app opened, decoder busy`);
   const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
   const heardText = $derived.by(() => {
     const h = timing.heardBack;
@@ -373,6 +375,19 @@
       <div class="row">
         <span class="row-main"><span class="row-title">Decoder</span></span>
         <span class="row-value" data-testid="decoder-status">{decoderText}</span>
+      </div>
+      <div class="row">
+        <span class="row-main">
+          <span class="row-title">Decode time</span>
+          {#each timing.decodeTimes as d (d.mode)}
+            <span class="row-sub" data-testid="timing-decode">{d.mode}: {Math.round(d.lastMs)} ms last, 95 % within {Math.round(d.p95Ms)} ms</span>
+          {:else}
+            <span class="row-sub" data-testid="timing-decode">Shows after the first slot</span>
+          {/each}
+        </span>
+      </div>
+      <div class="row">
+        <span class="row-main"><span class="row-title">Slots not decoded</span><span class="row-sub" class:off={timing.skippedSlots > 0} data-testid="timing-skipped">{skippedText}</span></span>
       </div>
       <div class="row">
         <span class="row-main"><span class="row-title">{Device} clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>

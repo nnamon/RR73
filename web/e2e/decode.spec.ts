@@ -247,6 +247,12 @@ test('decodes a real FT8 slot into the list, marked as in WSJT-X', async ({ page
   for (const t of timings) firstShown.set(t.slot, Math.min(firstShown.get(t.slot) ?? Infinity, t.afterSlotEndS));
   expect([...firstShown.values()].some((s) => s < 0), JSON.stringify([...firstShown])).toBe(true);
   expect(loadLog).toHaveLength(1);
+
+  // Settings › Radio and audio › Timing shows the time per slot, and the slots not decoded.
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
+  await page.getByRole('link', { name: /^Radio and audio/ }).click();
+  await expect(page.getByTestId('timing-decode')).toHaveText(/^FT8: \d+ ms last, 95 % within \d+ ms$/);
+  await expect(page.getByTestId('timing-skipped')).toHaveText(/^(None|\d+) since the app opened(, decoder busy)?$/);
 });
 
 test('without the decoder module, the list says so and receive carries on', async ({ page }) => {

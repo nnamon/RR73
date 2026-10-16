@@ -6,6 +6,7 @@
 
 import { isoUtc, signed, utcTime } from './format';
 import { Device } from '../app/platform';
+import type { DecodeTime } from '../decode/times';
 
 /** One reading the engine takes with each chunk: everything the mapping is built from. */
 export interface ClockReading {
@@ -138,6 +139,10 @@ export interface TimingSnapshot {
   clockS: number | null;
   strongDecodes: number;
   heardBack: HeardBack[];
+  /** Each mode's last decode time and 95th percentile over its recent slots (lib/decode/times.ts). */
+  decodeTimes: DecodeTime[];
+  /** Slots not decoded because the decoder was busy, since the app opened. */
+  skippedSlots: number;
   resumes: ResumeRecord[];
   readings: ClockReading[];
   /** The mapper's observations, UTC ms minus audio-clock ms, oldest first. */
@@ -159,6 +164,9 @@ export function timingReport(s: TimingSnapshot): string {
     `Input offset: ${signed(s.inputOffsetS, 3)} s`,
     `Median DT: ${s.medianDtS === null ? 'none' : `${signed(s.medianDtS, 3)} s`} from ${s.strongDecodes} decodes at -10 dB or stronger`,
     `${Device} clock by the decodes: ${s.clockS === null ? 'not measured yet' : `${Math.abs(s.clockS).toFixed(3)} s ${s.clockS >= 0 ? 'slow' : 'fast'}`}`,
+    'Decode time per slot:',
+    ...(s.decodeTimes.length ? s.decodeTimes.map((d) => `  ${d.mode}: last ${Math.round(d.lastMs)} ms, 95th percentile ${Math.round(d.p95Ms)} ms over ${d.slots} ${d.slots === 1 ? 'slot' : 'slots'}`) : ['  none yet']),
+    `Slots not decoded, the decoder busy: ${s.skippedSlots}`,
     'Your Tx, heard back:',
     ...(s.heardBack.length ? s.heardBack.map((h) => `  ${utcTime(h.slotStartUtcMs)} ${h.text}: ${h.dtS === null ? 'not heard' : `DT ${signed(h.dtS, 2)} s, SNR ${signed(h.snrDb ?? 0)} dB`}`) : ['  no transmissions']),
     'Stops and resumes (mapping offset before, after):',

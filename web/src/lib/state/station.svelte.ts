@@ -38,6 +38,7 @@ import { dialNow, radioNotice, rig, tuneGate, txKeyer, txShiftHz } from './radio
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 import { STATUS } from '../qso/status';
 import { capturesHidden } from '../app/platform';
+import { DecodeTimes } from '../decode/times';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -128,6 +129,8 @@ let heardBack: HeardBack[] = [];
 const HEARD_KEEP = 6;
 /** Receive calibration from the DT of strong decodes; moves capture stamps only. */
 const calibration = new RxCalibration();
+/** Each mode's recent decode times and the slots the busy decoder skipped, for Timing. */
+const decodeTimes = new DecodeTimes();
 
 /**
  * The clock warning: how far the phone's clock is off by the decodes, s, positive slow, while it
@@ -330,9 +333,14 @@ function onSlot(slot: AssembledSlot) {
   // The decoder gets a copy: the recorder keeps the slot for Save slot. The QSO under way
   // lets it try weak messages with what it expects.
   decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice(), qso: qsoContext() ?? undefined }, (more) => addDecodes(slot.startUtcMs, more)).then(
-    (decodes) => deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0 }),
+    (decodes) => {
+      const ms = performance.now() - t0;
+      decodeTimes.add(mode, ms);
+      deliverDecodes({ startUtcMs: slot.startUtcMs, mode, decodes, ms });
+    },
     (e: unknown) => {
       if (!(e instanceof DecoderBusyError)) return;
+      decodeTimes.skip();
       // The early pass's decodes stand for the slot; without them it was not decoded.
       const early = band.slots.find((s) => s.startUtcMs === slot.startUtcMs && s.early);
       if (early) deliverDecodes({ ...early, early: undefined });
@@ -369,15 +377,19 @@ function decodeWspr(slot: AssembledSlot) {
   const done = () => {
     if (wsprDecoding.startUtcMs === slot.startUtcMs) wsprDecoding.startUtcMs = null;
   };
+  const t0 = performance.now();
   decoder.decodeWspr(slot.samples.slice()).then(
     ({ decodes, ms }) => {
       done();
       console.info(`RR73 WSPR slot ${new Date(slot.startUtcMs).toISOString().slice(11, 16)} decoded in ${Math.round(ms)} ms: ${decodes.length} spots`);
+      decodeTimes.add('WSPR', performance.now() - t0);
       deliverWspr({ startUtcMs: slot.startUtcMs, decodes, ms });
     },
     (e: unknown) => {
       done();
-      if (e instanceof DecoderBusyError) deliverWspr({ startUtcMs: slot.startUtcMs, decodes: [], ms: 0, skipped: true });
+      if (!(e instanceof DecoderBusyError)) return;
+      decodeTimes.skip();
+      deliverWspr({ startUtcMs: slot.startUtcMs, decodes: [], ms: 0, skipped: true });
     },
   );
 }
@@ -444,6 +456,8 @@ export function timingSnapshot(): TimingSnapshot {
     clockS: calibration.clockS,
     strongDecodes: calibration.count,
     heardBack: heardBack.map((h) => ({ ...h })),
+    decodeTimes: decodeTimes.summary(),
+    skippedSlots: decodeTimes.skipped,
     resumes: e?.timing.resumes ?? [],
     readings: e?.timing.readings ?? [],
     observations: e?.mapper.observations ?? [],

@@ -22,7 +22,7 @@ describe('on Windows', () => {
       ok: false,
       message: 'Location is off for RR73. Allow it for this site in the browser’s site settings and in Windows Settings › Privacy & security › Location, or type the grid.',
     });
-    const snap = { atUtcMs: 0, appVersion: '0.0.0 (local)', audio: 'off', source: null, offsetMs: null, driftPpm: null, captureLagMs: null, gaps: 0, gapMs: 0, inputOffsetS: 0, medianDtS: null, clockS: 1.2, strongDecodes: 0, heardBack: [], resumes: [], readings: [], observations: [] } as unknown as TimingSnapshot;
+    const snap: TimingSnapshot = { atUtcMs: 0, appVersion: '0.0.0 (local)', audio: 'off', source: null, offsetMs: null, driftPpm: null, captureLagMs: null, gaps: 0, gapMs: 0, inputOffsetS: 0, medianDtS: null, clockS: 1.2, strongDecodes: 0, heardBack: [], decodeTimes: [], skippedSlots: 0, resumes: [], readings: [], observations: [] };
     expect(timingReport(snap)).toContain('Computer clock by the decodes: 1.200 s slow');
   });
 });

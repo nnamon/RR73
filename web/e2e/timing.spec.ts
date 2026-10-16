@@ -13,6 +13,8 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   await expect(page.getByTestId('timing-median')).toHaveText('Waiting for strong decodes');
   await expect(page.getByTestId('timing-clock')).toHaveText('Waiting for strong decodes');
   await expect(page.getByTestId('timing-heard')).toHaveText('Shows after you transmit');
+  await expect(page.getByTestId('timing-decode')).toHaveText('Shows after the first slot');
+  await expect(page.getByTestId('timing-skipped')).toHaveText('None since the app opened');
 
   await page.getByRole('button', { name: 'Start audio' }).click();
   // Chromium gives usable output timestamps.
@@ -64,6 +66,8 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   expect(report).toContain('Median DT: −0.800 s from 10 decodes at -10 dB or stronger');
   expect(report).toContain('Computer clock by the decodes: 0.800 s slow');
   expect(report).toContain('13:35:30 CQ N0CALL EM12: DT −0.70 s, SNR 24 dB');
+  expect(report).toMatch(/\nDecode time per slot:\n( {2}none yet| {2}FT8: last \d+ ms, 95th percentile \d+ ms over \d+ slots?)\n/);
+  expect(report).toMatch(/\nSlots not decoded, the decoder busy: \d+\n/);
   expect(report).toMatch(/Clock readings \(contextTime s, performanceTime ms, perfNow ms, dateNow ms, currentTime s\):\n {2}\d+\.\d{6} \d+\.\d{3}/);
 });
 
