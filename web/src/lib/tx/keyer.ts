@@ -9,6 +9,7 @@
  */
 
 import { STATUS } from '../qso/status';
+import { wake } from '../clock/wake';
 
 /** How long the radio has to answer PTT on with OK, ms. Unverified on a device. */
 export const PTT_TIMEOUT_MS = 300;
@@ -79,7 +80,11 @@ export function keyFailedText(r: Exclude<KeyResult, 'ok'>): string {
   return r === 'ng' ? STATUS.pttRefused : r === 'timeout' ? STATUS.pttNoReply : r === 'dial' ? STATUS.txDialFailed : STATUS.radioDown;
 }
 
-/** Waits `ms`; resolves at once for 0. */
-export function pause(ms: number, timer: (fn: () => void, ms: number) => unknown = (fn, t) => setTimeout(fn, t)): Promise<void> {
+/**
+ * Waits `ms`; resolves at once for 0. On the wake timers (lib/clock/wake.ts), so the waits around
+ * a keying, such as the 0.1 s from the radio's OK to the audio and Test keying's 1 s, keep time in a
+ * hidden page.
+ */
+export function pause(ms: number, timer: (fn: () => void, ms: number) => unknown = (fn, t) => wake.set(fn, t)): Promise<void> {
   return ms > 0 ? new Promise((r) => timer(r, ms)) : Promise.resolve();
 }

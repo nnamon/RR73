@@ -39,6 +39,7 @@ import type { LinkEnd } from './serial';
 import type { CatCodec, CatEvent, CatFilter, CatMode, CatRequest, CatSplit, DataSub, SettingId } from './protocol';
 import { IC705, type RadioTraits, type SettingRead } from './radios';
 import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, type KeyResult, type Keyer, type Keying } from '../tx/keyer';
+import { wake } from '../clock/wake';
 
 /** The serial link as the radio uses it. */
 export interface CatTransport {
@@ -55,10 +56,16 @@ export interface CatTimers {
   clear(h: unknown): void;
 }
 
+/**
+ * The page's clock, with every timeout on the wake timers (lib/clock/wake.ts): desktop Chromium
+ * keeps a hidden page receiving and transmitting, but runs its own timers up to about 1 s late
+ * there, and the reply timeouts, PTT on's confirmation, PTT off's retries, the drain and the
+ * keying's limit must keep time. The polls ride along.
+ */
 export const realTimers: CatTimers = {
   now: () => performance.now(),
-  set: (fn, ms) => setTimeout(fn, ms),
-  clear: (h) => clearTimeout(h as ReturnType<typeof setTimeout>),
+  set: (fn, ms) => wake.set(fn, ms),
+  clear: (h) => wake.clear(h),
 };
 
 /** A request without an answer within this long counts as lost, ms. Unverified on a device. */
