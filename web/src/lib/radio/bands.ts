@@ -12,10 +12,14 @@
  *   NZART New Zealand 2 m and 70 cm band plan, 2022, p. 1.
  * - 2m FT4 144.170 MHz: the recommended FT4 frequencies in ARRL News, 19 July 2019, "New Summer
  *   EURAO Party to Premier FT4".
- * - 70cm FT8 432.174 MHz: the NZART band plan, p. 2. Other plans name 432.065
- *   MHz (NZART, shared with other weak-signal modes) and 432.313 MHz (WIA, domestic); a dial of
- *   the operator's own covers those.
+ * - 70cm FT8 432.174 MHz: the NZART band plan, p. 2. The plans disagree here: NZART also names
+ *   432.065 MHz, shared with other weak-signal modes, and WIA 432.313 MHz for domestic FT8. A
+ *   dial of the operator's own covers those.
  * - 70cm FT4: no plan or list names one, so FT4 has none there.
+ * - 2m WSPR 144.489 MHz: WSPRnet's list of USB dials on wsprnet.org, the WIA plan (p. 19,
+ *   "144.4904 – 144.4906 MHz – WSPR (USB Dial 144.489 MHz)") and the IARU Region 3 plan (p. 14,
+ *   note 2, "WSPR on 144.4890 MHz") agree on it. WSPRnet's PDF table gives 144.4885 MHz, 500 Hz
+ *   lower, which put the 200 Hz of signals outside the window the others name.
  * - 70cm WSPR 432.300 MHz: WSPRnet's list of USB dials on wsprnet.org; the PDF table stops at 2m.
  *
  * RTTY has no calling frequency: its dial is the bottom of the usual RTTY segment, moved up
@@ -40,7 +44,7 @@ const DIAL: Record<BandId, Record<Mode, number | null>> = {
   '12m': { FT8: 24915000, FT4: 24919000, WSPR: 24924600, RTTY: 24922000 },
   '10m': { FT8: 28074000, FT4: 28180000, WSPR: 28124600, RTTY: 28080000 },
   '6m': { FT8: 50313000, FT4: 50318000, WSPR: 50293000, RTTY: 50300000 },
-  '2m': { FT8: 144174000, FT4: 144170000, WSPR: 144488500, RTTY: null },
+  '2m': { FT8: 144174000, FT4: 144170000, WSPR: 144489000, RTTY: null },
   '70cm': { FT8: 432174000, FT4: null, WSPR: 432300000, RTTY: null },
 };
 

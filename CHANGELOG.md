@@ -12,6 +12,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Tune's sheet names the radio's dial while rig control reads one, on any band. It named the band's usual dial.
 - A keystroke restarts the Tx watchdog, as a tap or a click does, so typing and the keyboard shortcuts count as the operator being there.
 - 2m has FT8 on 144.174 MHz and FT4 on 144.170 MHz, and 70cm is a band with FT8 on 432.174 MHz and WSPR on 432.300 MHz. A radio tuned to 144.174 MHz keeps RR73 in FT8: it switched to WSPR.
+- WSPR on 2m uses the 144.489 MHz dial that WSPRnet, the WIA and IARU Region 3 give, so its signals sit at 144.4904 to 144.4906 MHz. It was 144.4885 MHz, 500 Hz lower.
 - Text on Windows uses Segoe UI, Windows' own font, where it fell back to Arial.
 
 ## 0.24.0 · 2026-10-16

@@ -20,7 +20,7 @@ Source for slot, timing, modulation and message types: the Wikipedia article on 
 
 ## Dial frequencies
 
-`web/src/lib/radio/bands.ts` has a WSPR column, from WSPRnet's frequency sheet (wsprnet.org, wspr-qrg.pdf). The same dials apply everywhere; the operator works within their licence. Signals sit 1400 to 1600 Hz above the dial. 2m and 70cm also have FT8 dials, and 2m an FT4 dial (`bands.ts` gives the sources). The sheet stops at 2m: 70cm's 432.300 MHz comes from the list of USB dials on wsprnet.org.
+`web/src/lib/radio/bands.ts` has a WSPR column, from WSPRnet's frequency sheet (wsprnet.org, wspr-qrg.pdf). The same dials apply everywhere; the operator works within their licence. Signals sit 1400 to 1600 Hz above the dial. 2m and 70cm also have FT8 dials, and 2m an FT4 dial (`bands.ts` gives the sources). 2m and 70cm come from the list of USB dials on wsprnet.org: 144.489 MHz on 2m, as the WIA and IARU Region 3 plans also give it, where the sheet's 144.4885 MHz put the signals 500 Hz lower, and 432.300 MHz on 70cm, where the sheet stops.
 
 | Band | Dial, kHz | Signals, kHz |
 | --- | --- | --- |
@@ -35,7 +35,7 @@ Source for slot, timing, modulation and message types: the Wikipedia article on 
 | 12m | 24924.6 | 24926.0 to 24926.2 |
 | 10m | 28124.6 | 28126.0 to 28126.2 |
 | 6m | 50293.0 | 50294.4 to 50294.6 |
-| 2m | 144488.5 | 144489.9 to 144490.1 |
+| 2m | 144489.0 | 144490.4 to 144490.6 |
 | 70cm | 432300.0 | 432301.4 to 432301.6 |
 
 ## Mode switching

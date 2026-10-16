@@ -38,7 +38,7 @@ describe('bands', () => {
       '12m': 24924.6,
       '10m': 28124.6,
       '6m': 50293.0,
-      '2m': 144488.5,
+      '2m': 144489,
       '70cm': 432300,
     });
     // The 200 Hz of signals, 1400 to 1600 Hz above the dial, stay inside the band.
