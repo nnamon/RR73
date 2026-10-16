@@ -10,8 +10,9 @@
    * tabs for Operate, Log, Spots and Settings sit in its middle in place of the buttons, and on
    * the other screens, while Tx is on, it says so ("On air · Tx3") and carries Halt.
    *
-   * While the phone's clock is 1 s or more off by the decodes, a Clock badge opens Radio and
-   * audio at Timing, which says how far and what to do.
+   * While the phone's or computer's clock is 1 s or more off by the decodes, a Clock badge opens
+   * Radio and audio at Timing, which says how far and what to do. Its label names the device as
+   * the status line does (lib/app/platform.ts): the phone on iOS and Android, the computer elsewhere.
    *
    * While rig control is on (desktop Chrome and Edge only), a radio badge beside the band shows the
    * connection and opens Rig control: green while all is well, amber while the radio is not as RR73
@@ -24,6 +25,7 @@
   import SlotRing from './SlotRing.svelte';
   import { href, type Tab } from '../lib/app/router.svelte';
   import { mhz } from '../lib/clock/format';
+  import { Device } from '../lib/app/platform';
 
   let {
     band,
@@ -164,7 +166,7 @@
 {/snippet}
 
 {#snippet clockBadge()}
-  {#if clockOff}<a class="badge-link" href={href('settings', 'radio', 'timing')} aria-label="Phone clock {clockOff}. Open Timing"><span class="badge">Clock</span></a>{/if}
+  {#if clockOff}<a class="badge-link" href={href('settings', 'radio', 'timing')} aria-label="{Device} clock {clockOff}. Open Timing"><span class="badge">Clock</span></a>{/if}
 {/snippet}
 
 {#snippet clock()}

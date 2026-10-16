@@ -86,7 +86,7 @@ test.describe('on Windows', () => {
       );
     });
     await expect(page.getByRole('region', { name: 'Transmit' }).getByRole('status')).toHaveText('Computer clock 1.3 s slow');
-    const badge = page.getByRole('link', { name: 'Phone clock 1.3 s slow. Open Timing' });
+    const badge = page.getByRole('link', { name: 'Computer clock 1.3 s slow. Open Timing' });
     await expect(badge).toHaveText('Clock');
     const box = (await badge.boundingBox())!;
     expect(box.height).toBeGreaterThanOrEqual(44);
@@ -109,6 +109,6 @@ test.describe('on Windows', () => {
     await expect(page.getByTestId('timing-clock-foot')).toHaveCount(0);
     await page.goBack();
     await expect(page.getByRole('region', { name: 'Transmit' })).toBeVisible();
-    await expect(page.getByRole('link', { name: /^Phone clock/ })).toHaveCount(0);
+    await expect(page.getByRole('link', { name: /^Computer clock/ })).toHaveCount(0);
   });
 });
