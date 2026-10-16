@@ -28,6 +28,8 @@ export interface FakeRig {
   opened: boolean;
   forgotten: boolean;
   granted: boolean;
+  /** Times the page opened the browser's port chooser (requestPort). */
+  chooser: number;
   menu: Record<string, number>;
   /** Split and duplex as `0F` reads them: 0x00 off, 0x01 on, 0x11 DUP-, 0x12 DUP+. */
   split: number;
@@ -82,6 +84,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
         rts: false,
         opened: false,
         forgotten: false,
+        chooser: 0,
         // The browser remembers an allowed port across reloads.
         granted: granted || sessionStorage.getItem('rr73-test-rig-granted') === '1',
         // USB SEND OFF, DATA MOD USB, Time-Out Timer 5 min: the Basic Manual's defaults.
@@ -209,6 +212,7 @@ export async function installFakeIc705(page: Page, opts: { hz?: number; granted?
       });
       const serial = {
         async requestPort() {
+          rig.chooser++;
           rig.granted = true;
           sessionStorage.setItem('rr73-test-rig-granted', '1');
           return port;

@@ -56,6 +56,8 @@ interface Deps {
 
 let deps: Deps = { api: () => serialApi(), wasm: loadCatWasm };
 let current: Link | null = null;
+/** A lost link still letting its port go: the port opens again only after. */
+let releasing: Promise<void> | null = null;
 /** This page lost the port while RR73 may have held PTT on. */
 let recover = false;
 /** This page lost the port while a shifted transmission had the radio on its Tx dial. */
@@ -143,6 +145,9 @@ async function open(port: SerialPortLike): Promise<boolean> {
   rig.status = 'connecting';
   rig.error = null;
   rig.noiseOnly = false;
+  const before = releasing;
+  releasing = null;
+  if (before) await before;
   const wasm = await deps.wasm();
   if (!wasm) {
     fail('no-wasm');
@@ -225,6 +230,8 @@ function lost(me: Link) {
   recover = me.radio.endedKeyed;
   recoverShift = me.radio.endedShift;
   current = null;
+  // The link lets the port go just after it reports the loss: a moment later, its close waits for that.
+  releasing = Promise.resolve().then(() => me.link.close());
   provideKeyer(null);
   rig.status = 'lost';
   rig.error = 'lost';
@@ -308,6 +315,19 @@ export async function connectRadio(): Promise<void> {
   const info = chosen.port.getInfo();
   void updateSettings({ cat: { ...settings.cat, connect: true, usbVendorId: info.usbVendorId ?? null, usbProductId: info.usbProductId ?? null } });
   await open(chosen.port);
+}
+
+/**
+ * Reconnect radio: opens the port the browser already allows (`getPorts`), without the chooser, as
+ * when the port closed with the cable still in and no `connect` event came. It opens the port only
+ * when exactly one of the chosen kind is allowed, as on opening the app; otherwise Rig control says
+ * why, and Connect radio chooses. Connecting is the same as ever: the lines lowered first, no PTT,
+ * and PTT off to a radio still transmitting when RR73 may have left it keyed.
+ */
+export async function reconnectRadio(): Promise<void> {
+  const api = deps.api();
+  if (!api || current || rig.status === 'choosing' || rig.status === 'connecting') return;
+  await reconnect(api);
 }
 
 /** Disconnect radio: PTT off if RR73 may hold it, closes the port and forgets it. Transmissions key by VOX again. */
@@ -518,6 +538,7 @@ export function setCatDeps(d: Deps) {
 export function resetCat() {
   current?.radio.close();
   current = null;
+  releasing = null;
   recover = false;
   recoverShift = null;
   testGen++;

@@ -7,7 +7,7 @@ import { loadWasm, type Wasm } from '../../../e2e/wasm';
 import type { CatWasm } from '../cat/protocol';
 import type { SerialApiLike, SerialOptionsLike, SerialPortLike, SerialSignalsLike } from '../cat/serial';
 import { TxScheduler, type TxAudio, type TxReport } from '../tx/scheduler';
-import { connectRadio, disconnectRadio, initCat, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
+import { connectRadio, disconnectRadio, initCat, reconnectRadio, resetCat, setCatDeps, setRadioDial, testKeying, OPEN_SETTLE_MS, TEST_KEY_MS } from './cat.svelte';
 import { dialNow, onRadioNotice, rig, rigBadge, rigDialInUse, rigGate, tuneGate, txKeyer, txShiftHz } from './radio.svelte';
 import { configNow } from './qso.svelte';
 import { practice } from './practice.svelte';
@@ -696,6 +696,44 @@ describe('keying', () => {
     await again;
     expect(chosen.ptt).toEqual(['00']);
     expect(chosen.sim.transmit).toBe(false);
+  });
+
+  it('Reconnect radio opens the port the browser allows after it closed, without the chooser, and sends PTT off if the radio still transmits', async () => {
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await connect();
+    const asked = vi.fn(api.requestPort);
+    api.requestPort = asked;
+    const { done } = await transmit();
+    await run(2200);
+    await done;
+    expect(chosen.sim.transmit).toBe(true);
+    // The port closes with the cable still in: no connect event comes.
+    chosen.unplug();
+    await run(10);
+    expect(rig.status).toBe('lost');
+    const before = chosen.ptt.length;
+    const again = reconnectRadio();
+    await run(OPEN_SETTLE_MS + 400);
+    await again;
+    expect(asked).not.toHaveBeenCalled();
+    expect(rig.status).toBe('connected');
+    // The old link let the port go first; then the lines low before any write, the read that finds
+    // the radio transmitting, and PTT off.
+    const opened = chosen.log.lastIndexOf('open');
+    expect(chosen.log.lastIndexOf('close')).toBeLessThan(opened);
+    expect(chosen.log.slice(opened, opened + 3)).toEqual(['open', 'lines dtr rts', 'FE FE A4 E0 1C 00 FD']);
+    expect(chosen.ptt.slice(before)).toEqual(['00']);
+    expect(chosen.sim.transmit).toBe(false);
+    // Connected, it does nothing; with no port allowed, Rig control says so.
+    const opens = chosen.log.filter((l) => l === 'open').length;
+    await reconnectRadio();
+    expect(chosen.log.filter((l) => l === 'open')).toHaveLength(opens);
+    chosen.unplug();
+    await run(10);
+    chosen.forgotten = true;
+    await reconnectRadio();
+    expect(rig).toMatchObject({ status: 'failed', error: 'gone' });
+    expect(asked).not.toHaveBeenCalled();
   });
 
   it('Test keying keys for 1 s with no audio and releases, with the switch off and on', async () => {

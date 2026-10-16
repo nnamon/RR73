@@ -8,6 +8,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - An output the browser refused is applied again once audio starts and when a device is plugged in or out.
 - Settings › Rig control reads the IC-705’s split, duplex, RIT and ΔTX (XIT) and says what to change when one is on: with split, duplex or ΔTX on, the radio transmits away from the frequency RR73 logs. The KX2 shows RIT too.
 - With rig control on, Operate shows a radio badge beside the band: Connected, No reply or Port closed. It is amber while the radio is outside USB-D or DATA A, off RR73’s band or transmitting with no PTT from RR73, and a tap opens Rig control. While the radio’s dial is not in use, the band’s own dial shows in amber.
+- Settings › Rig control › Reconnect radio opens the radio’s port again without the port chooser after it closed with the cable still in. Connect radio still chooses another port.
 - The practice band never keys the radio by CAT, whatever Key the radio with CAT says, and Test keying waits until it is off. Before, a practice transmission keyed a connected radio. Settings › Practice band says that a radio on the Tx output with VOX on transmits practice audio.
 
 ## 0.24.2 · 2026-10-16

@@ -319,4 +319,19 @@ test('Operate’s radio badge shows the connection, turns amber and red, opens R
   await badge.click();
   await expect(page.getByTestId('rig-status')).toHaveText('Port closed');
   expect(await page.evaluate(() => location.hash)).toBe('#/settings/rig');
+  await expect(page.getByTestId('rig-help')).toHaveText('The IC-705’s port closed, and Tx went off. Check the cable and the radio, then tap Reconnect radio.');
+
+  // No connect event comes with the cable still in: Reconnect radio opens the allowed port without
+  // the chooser. Connect radio stays, to choose another port.
+  const chooser = await page.evaluate(() => window.__rig.chooser);
+  await expect(page.getByRole('button', { name: /^Connect radio/ })).toContainText('Choose another port');
+  await page.getByRole('button', { name: 'Reconnect radio' }).click();
+  await expect(page.getByTestId('rig-status')).toHaveText('Connected');
+  expect(await page.evaluate(() => window.__rig.chooser)).toBe(chooser);
+  expect(await page.evaluate(() => [window.__rig.dtr, window.__rig.rts])).toEqual([false, false]);
+  await expect(page.getByRole('button', { name: 'Reconnect radio' })).toHaveCount(0);
+  await page.evaluate(() => (location.hash = '#/'));
+  await expect(badge).toHaveText('Connected');
+  await expect(page.getByTestId('top-dial')).not.toHaveClass(/fallback/);
+  expect(await ptt(page)).toEqual([]);
 });

@@ -14,7 +14,7 @@
   import { mhz } from '../lib/clock/format';
   import { KX2_BAUDS, type Kx2Baud } from '../lib/cat/serial';
   import { KX2_PRODUCT, KX3_PRODUCT } from '../lib/cat/radios';
-  import { chooseRadio, connectRadio, disconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
+  import { chooseRadio, connectRadio, disconnectRadio, reconnectRadio, rereadMicBtn, setKx2Baud, testKeying, unkeyFailedText } from '../lib/state/cat.svelte';
   import { radioName, rig, rigBand, rigConnected, rigInDataMode, rigModeText, txOutput, usbSendOn } from '../lib/state/radio.svelte';
   import { practice } from '../lib/state/practice.svelte';
   import { settings, updateSettings } from '../lib/state/settings.svelte';
@@ -23,6 +23,11 @@
   const connected = $derived(rigConnected());
   /** A link is open or opening: the button disconnects. */
   const linked = $derived(connected || rig.status === 'connecting');
+  /**
+   * The radio the operator connected is not open now: the port closed, or did not open. Reconnect
+   * radio opens the port the browser allows without the chooser, as when no `connect` event came.
+   */
+  const reconnectable = $derived(settings.cat.connect && !linked && rig.status !== 'choosing' && rig.error !== 'no-wasm');
   const kx2 = $derived(settings.cat.radio === 'kx2');
 
   // Once on opening: the operator may have changed MIC BTN at the radio since the last read.
@@ -72,16 +77,16 @@
           : { text: `No reply from the IC-705. Check that it is on, that you chose ${port}, and that SET › Connectors › CI-V › CI-V Address is A4.`, bad: true };
       case 'lost':
         return kx2
-          ? { text: 'The Digirig’s port closed, and Tx went off. Check its USB cable, then tap Connect radio.', bad: true }
-          : { text: 'The IC-705’s port closed, and Tx went off. Check the cable and the radio, then tap Connect radio.', bad: true };
+          ? { text: 'The Digirig’s port closed, and Tx went off. Check its USB cable, then tap Reconnect radio.', bad: true }
+          : { text: 'The IC-705’s port closed, and Tx went off. Check the cable and the radio, then tap Reconnect radio.', bad: true };
       case 'failed':
         switch (rig.error) {
           case 'busy':
-            return { text: 'Another program has the port open. Close it, then tap Connect radio.', bad: true };
+            return { text: 'Another program has the port open. Close it, then tap Reconnect radio.', bad: true };
           case 'signals':
             return kx2
-              ? { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. RTS keys the Digirig’s PTT. Set MENU › MIC BTN on the KX2 to OFF, then tap Connect radio.', bad: true }
-              : { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Connect radio.', bad: true };
+              ? { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. RTS keys the Digirig’s PTT. Set MENU › MIC BTN on the KX2 to OFF, then tap Reconnect radio.', bad: true }
+              : { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
           case 'no-wasm':
             return { text: 'Rig control did not load. Reload the app.', bad: true };
           case 'gone':
@@ -91,7 +96,7 @@
           case 'choose':
             return { text: `The browser allows more than one port of this kind. Tap Connect radio and choose ${port}.`, bad: true };
           default:
-            return { text: 'The port did not open. Unplug the USB cable, plug it in again, then tap Connect radio.', bad: true };
+            return { text: 'The port did not open. Unplug the USB cable, plug it in again, then tap Reconnect radio.', bad: true };
         }
       case 'connected':
         if (usbSendOn()) return { text: 'Tx stays off until USB SEND is OFF. Radio settings, below, gives the menu path.', bad: true };
@@ -325,7 +330,13 @@
       {#if linked}
         <button class="row act" onclick={() => void disconnectRadio()}><span class="row-title">Disconnect radio</span></button>
       {:else}
-        <button class="row act" disabled={rig.status === 'choosing'} onclick={() => void connectRadio()}><span class="row-title">Connect radio</span></button>
+        {#if reconnectable}<button class="row act" onclick={() => void reconnectRadio()}><span class="row-title">Reconnect radio</span></button>{/if}
+        <button class="row act" disabled={rig.status === 'choosing'} onclick={() => void connectRadio()}>
+          <span class="row-main">
+            <span class="row-title">Connect radio</span>
+            {#if reconnectable}<span class="row-sub">Choose another port</span>{/if}
+          </span>
+        </button>
       {/if}
     </div>
     {#if connectionText}<p class="section-foot" class:err={connectionText.bad} role={connectionText.bad ? 'alert' : undefined} data-testid="rig-help">{connectionText.text}</p>{/if}
