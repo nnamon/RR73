@@ -83,9 +83,16 @@ export interface CatSettings {
   usbProductId: number | null;
   /** The KX2's serial rate: its MENU › RS232 must match (Owner's Manual p. 49). */
   kx2Baud: Kx2Baud;
+  /**
+   * The KX2's MIC BTN as last read, as MP gives it; null before any read. RR73 opens a KX2's port
+   * by itself (on starting, on the port coming back, on a new baud rate) only after it read 0, OFF.
+   */
+  kx2MicBtn: number | null;
+  /** RR73 may have left the radio keyed: set from PTT on until a read confirms PTT off, kept across reloads. */
+  leftKeyed: boolean;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -301,7 +308,8 @@ export function normaliseMinutes(v: number): number | null {
 function validateCat(raw: unknown): CatSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const c = { ...CAT_DEFAULTS };
-  for (const k of ['keyPtt', 'shiftDial', 'connect'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  for (const k of ['keyPtt', 'shiftDial', 'connect', 'leftKeyed'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  if (typeof r.kx2MicBtn === 'number' && Number.isInteger(r.kx2MicBtn) && r.kx2MicBtn >= 0 && r.kx2MicBtn <= 255) c.kx2MicBtn = r.kx2MicBtn;
   if (r.radio === 'ic705' || r.radio === 'kx2') c.radio = r.radio;
   if (KX2_BAUDS.includes(r.kx2Baud as Kx2Baud)) c.kx2Baud = r.kx2Baud as Kx2Baud;
   for (const k of ['usbVendorId', 'usbProductId'] as const) {
