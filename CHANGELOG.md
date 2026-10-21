@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.14 · 2026-10-21
 
 - The radio badge goes amber with FIL2 or FIL3 when the IC-705 is on a narrow filter that cuts most of the FT8 range.
 - An answer from the radio cut short no longer swallows the answer after it.
