@@ -16,7 +16,7 @@ import { TransmitOutput, TUNE, type TuneEnd } from '../audio/output';
 import { inputChoices, matchInput, matchOutput, outputChange, outputChoices, outputChoiceSupported, type OutputState } from '../audio/sink';
 import type { CaptureReport } from '../audio/report';
 import type { AudioClockMapper } from '../clock/mapping';
-import { RxCalibration, clockWarns } from '../clock/calibration';
+import { CALIBRATION, RxCalibration, clockWarns } from '../clock/calibration';
 import { findOwnDecode, type HeardBack, type SentTx, type TimingSnapshot } from '../clock/timing';
 import { WakeLockKeeper, type WakeState } from '../audio/wakelock';
 import { EARLY_S, SLOT_MS, SLOT_SAMPLES, hasSlots, type FtMode, type Mode, type SlotMode } from '../clock/slots';
@@ -140,6 +140,17 @@ const decodeTimes = new DecodeTimes();
  */
 export const clockCheck = $state({ offS: null as number | null });
 const clockListeners = new Set<(offS: number) => void>();
+
+/**
+ * The Tx clock correction in force, s: the clock error measured from decodes with Correct Tx
+ * timing on, positive while the clock runs slow; 0 with it off, before 8 strong decodes and with
+ * the web SDR or the practice band as input, which measure no radio path.
+ */
+export function txClockFixS(): number {
+  if (!settings.txClockFix || inputSource) return 0;
+  const c = calibration.clockS;
+  return c === null ? 0 : Math.max(-CALIBRATION.maxOffsetS, Math.min(CALIBRATION.maxOffsetS, c));
+}
 
 /** Listens for the clock warning coming on. */
 export function onClockWarning(fn: (offS: number) => void): () => void {

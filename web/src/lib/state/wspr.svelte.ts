@@ -24,7 +24,7 @@ import { features } from './features.svelte';
 import { txLevel } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
-import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onWsprDecoded, showTx, type WsprSlotResult } from './station.svelte';
+import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onWsprDecoded, showTx, txClockFixS, type WsprSlotResult } from './station.svelte';
 import { monitorNode } from '../tx/monitor';
 
 /** One slot's spots, newest slot first in the list. */
@@ -109,7 +109,7 @@ export function nextText(): string | null {
 const scheduler = new TxScheduler({
   audio: () => {
     const out = audioOut();
-    return out ? webAudioOut(out.ctx, out.mapper, () => monitorNode(out.ctx, settings.monitorDeviceId, settings.monitorLevel)) : null;
+    return out ? webAudioOut(out.ctx, out.mapper, () => monitorNode(out.ctx, settings.monitorDeviceId, settings.monitorLevel), txClockFixS) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
   gate: () => (audio.status !== 'running' ? STATUS.audioOff : rigGate()),

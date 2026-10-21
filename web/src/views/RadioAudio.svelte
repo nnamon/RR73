@@ -152,6 +152,7 @@
     if (off === null) return null;
     const by = clockText(off);
     const air = `${Math.abs(off).toFixed(1)} s ${off > 0 ? 'late' : 'early'}`;
+    if (settings.txClockFix) return `The ${device}’s clock runs ${by} by the decodes. Each transmission starts ${Math.abs(off).toFixed(1)} s ${off > 0 ? 'earlier' : 'later'} to match.`;
     return `The ${device}’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input reads the same.' : ''} ${advice.clockFix}`;
   });
   const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
@@ -403,6 +404,10 @@
       <div class="row">
         <span class="row-main"><span class="row-title">{Device} clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
       </div>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">From the clock error in decodes</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.txClockFix} onchange={(e) => void updateSettings({ txClockFix: e.currentTarget.checked })} />
+      </label>
       <div class="row">
         <span class="row-main"><span class="row-title">Median DT</span><span class="row-sub" data-testid="timing-median">{medianText}</span></span>
       </div>

@@ -38,3 +38,15 @@ describe('the monitor output', () => {
     expect(off.links.map(([from, to]) => `${from}>${(to as { name: string }).name}`)).toEqual(['source>gain', 'gain>destination']);
   });
 });
+
+describe('the Tx clock correction', () => {
+  it('plays a sound meant for UTC T when a clock 1.2 s slow reads T − 1.2 s, and maps back', () => {
+    const { ctx } = fakeCtx();
+    const out = webAudioOut(ctx, { baseMs: 1_000_000 } as unknown as AudioClockMapper, undefined, () => 1.2);
+    expect(out.toContextTime(1_010_000)).toBeCloseTo(8.8, 9);
+    expect(out.toUtcMs(8.8)).toBeCloseTo(1_010_000, 6);
+    // Off, or a clock 0.5 s fast.
+    expect(webAudioOut(ctx, { baseMs: 1_000_000 } as unknown as AudioClockMapper).toContextTime(1_010_000)).toBeCloseTo(10, 9);
+    expect(webAudioOut(ctx, { baseMs: 1_000_000 } as unknown as AudioClockMapper, undefined, () => -0.5).toContextTime(1_010_000)).toBeCloseTo(10.5, 9);
+  });
+});

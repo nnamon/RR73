@@ -100,6 +100,13 @@ test.describe('on Windows', () => {
       'The computer’s clock runs 1.3 s slow by the decodes, so other stations hear you 1.3 s late. In Windows Settings › Time & language › Date & time, turn on Set time automatically and select Sync now. It needs a network.',
     );
 
+    // Correct Tx timing on: each transmission starts 1.3 s earlier, and the notice says so.
+    await page.getByRole('switch', { name: 'Correct Tx timing' }).check();
+    await expect(page.getByTestId('timing-clock-foot')).toHaveText('The computer’s clock runs 1.3 s slow by the decodes. Each transmission starts 1.3 s earlier to match.');
+    expect(await page.evaluate(() => window.__rr73!.txClockFixS())).toBeCloseTo(1.3, 1);
+    await page.getByRole('switch', { name: 'Correct Tx timing' }).uncheck();
+    expect(await page.evaluate(() => window.__rr73!.txClockFixS())).toBe(0);
+
     // Decodes on time again: the warning goes once the clock reads under 0.8 s off.
     await page.evaluate(() => {
       const slot = Math.floor(Date.now() / 15000) * 15000;

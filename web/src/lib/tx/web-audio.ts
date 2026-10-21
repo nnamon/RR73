@@ -9,8 +9,12 @@ import type { Playing, TxAudio } from './scheduler';
 
 const QUANTUM = 128;
 
-/** `monitor`: the node for the monitor output, if one is chosen (monitor.ts). */
-export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper, monitor?: () => AudioNode | null): TxAudio {
+/**
+ * `monitor`: the node for the monitor output, if one is chosen (monitor.ts). `clockFixS`: how far
+ * this computer's clock runs slow, s (negative fast), read at each mapping; a sound meant for UTC
+ * T plays when the clock reads T minus it.
+ */
+export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper, monitor?: () => AudioNode | null, clockFixS: () => number = () => 0): TxAudio {
   return {
     get sampleRate() {
       return ctx.sampleRate;
@@ -26,11 +30,11 @@ export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper, monitor
     },
     toContextTime(utcMs) {
       const base = mapper.baseMs;
-      return base === null ? null : (utcMs - base) / 1000;
+      return base === null ? null : (utcMs - clockFixS() * 1000 - base) / 1000;
     },
     toUtcMs(t) {
       const base = mapper.baseMs;
-      return base === null ? null : t * 1000 + base;
+      return base === null ? null : t * 1000 + base + clockFixS() * 1000;
     },
     play(samples, when, level): Playing {
       const buffer = ctx.createBuffer(1, samples.length, ctx.sampleRate);
