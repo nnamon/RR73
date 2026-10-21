@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- A KX2 band change answered `?;` before each read-back still sets the dial and DATA A. It was reported as refused, and DATA A was never set.
+- The IC-705 has 400 ms to confirm PTT on, up from 300 ms, still inside the 0.5 s before the audio.
+- Rig control reads the KX2’s auto-info mode and says when it sends its dial and mode by itself, which can make a band change read as refused.
+
 ## 0.24.14 · 2026-10-21
 
 - The radio badge goes amber with FIL2 or FIL3 when the IC-705 is on a narrow filter that cuts most of the FT8 range.

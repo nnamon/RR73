@@ -28,7 +28,7 @@ export type MenuItemId = 'time_out_timer' | 'data_off_mod' | 'data_mod' | 'usb_s
  * command mode (`K2`), receive filter bandwidth in Hz (`BW`) and the menu entry shown (`MN`, 255
  * with none).
  */
-export type SettingId = MenuItemId | 'product' | 'vox' | 'k2' | 'split' | 'rit' | 'xit' | 'offset_hz' | 'bandwidth' | 'menu_entry';
+export type SettingId = MenuItemId | 'product' | 'vox' | 'k2' | 'auto_info' | 'split' | 'rit' | 'xit' | 'offset_hz' | 'bandwidth' | 'menu_entry';
 
 /** The IC-705's split and duplex, as `0F` reads them (CI-V guide p. 3). */
 export type CatSplit = 'off' | 'on' | 'dup_minus' | 'dup_plus';
@@ -52,6 +52,7 @@ export type CatRequest =
   | { type: 'read_info' }
   | { type: 'read_bandwidth' }
   | { type: 'read_k2_mode' }
+  | { type: 'read_auto_info' }
   | { type: 'read_split' }
   | { type: 'read_rit_offset' }
   | { type: 'read_rit' }
@@ -76,6 +77,7 @@ export type CatEvent =
   | { type: 'info'; hz: number; mode: CatMode | null; transmit: boolean; rit: boolean; xit: boolean; offset_hz: number; split: boolean }
   | { type: 'bandwidth'; hz: number }
   | { type: 'k2_mode'; mode: number }
+  | { type: 'auto_info'; mode: number }
   | { type: 'options'; product: number | null; modules: string }
   | { type: 'vox'; on: boolean }
   | { type: 'menu_entry'; entry: number }

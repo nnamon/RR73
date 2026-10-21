@@ -12,7 +12,7 @@ import { STATUS } from '../qso/status';
 import { wake } from '../clock/wake';
 
 /** How long the radio has to answer PTT on with OK, ms. Unverified on a device. */
-export const PTT_TIMEOUT_MS = 300;
+export const PTT_TIMEOUT_MS = 400;
 /** Audio starts at least this long after the radio's OK, ms: the radio's switch to transmit. Unverified on a device. */
 export const PTT_SETTLE_MS = 100;
 /**

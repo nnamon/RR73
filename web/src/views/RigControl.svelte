@@ -239,6 +239,8 @@
       if (mic !== undefined && mic >= 0 && mic & 1)
         out.push({ text: 'MIC BTN reads the mic jack’s ring as PTT, and the Digirig’s KX cable puts its PTT line there: the KX2 transmits while the browser opens the port. Set MENU › MIC BTN to OFF.', bad: true });
       else if (mic === 4) out.push({ text: 'MIC BTN reads the mic jack’s ring for UP and DN, where the Digirig’s KX cable puts its PTT line: VFO A may move by itself. Set MENU › MIC BTN to OFF.', bad: false });
+      if (m.auto_info !== undefined && m.auto_info !== null && m.auto_info > 0)
+        out.push({ text: `The KX2 sends its dial and mode by itself (AI${m.auto_info}), set by another program or MENU › AUTO INF, and a change during a band change can read as refused. Turn the KX2 off and on, or set MENU › AUTO INF back to its default.`, bad: false });
       if (m.k2 === 1 || m.k2 === 3)
         out.push({ text: `The KX2 is in K2 command mode ${m.k2}, left by another program: it reports DATA as LSB or USB, so every band change reads as refused. Close that program, turn the KX2 off and on, then connect again.`, bad: true });
       if (m.vox === 0 && !settings.cat.keyPtt && (rig.mode === 'data' || rig.mode === 'data-rev'))

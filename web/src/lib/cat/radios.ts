@@ -50,6 +50,8 @@ export interface RadioTraits {
    * PTT itself: the Programmer's Reference advises against polling during transmit (p. 3).
    */
   quietWhileKeyed?: boolean;
+  /** How long the radio has to confirm PTT on, ms; PTT_TIMEOUT_MS without. */
+  pttTimeoutMs?: number;
   /**
    * PTT on is confirmed by the read that follows it, and a read that says receive is read again
    * until PTT_TIMEOUT_MS: the KX2's TX has no answer of its own (Programmer's Reference p. 28).
@@ -112,6 +114,7 @@ export const KX2: RadioTraits = {
     { id: 'product', request: { type: 'read_options' }, value: (e) => (e.type === 'options' ? (e.product ?? 0) : null) },
     // K21 and K23, left by another program, make MD report DATA as LSB or USB (p. 4; p. 16, note 2).
     { id: 'k2', request: { type: 'read_k2_mode' }, value: (e) => (e.type === 'k2_mode' ? e.mode : null) },
+    { id: 'auto_info', request: { type: 'read_auto_info' }, value: (e) => (e.type === 'auto_info' ? e.mode : null) },
     {
       id: 'mic_btn',
       request: { type: 'read_setting', item: 'mic_btn' },
@@ -128,6 +131,8 @@ export const KX2: RadioTraits = {
   slow: { set_frequency: KX2_BAND_CHANGE_MS },
   drainAfter: ['set_frequency'],
   quietWhileKeyed: true,
+  // TQ is read again until 300 ms after TX: Unverified on a device.
+  pttTimeoutMs: 300,
   readsPtt: true,
 };
 

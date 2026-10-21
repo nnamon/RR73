@@ -517,11 +517,12 @@ export class CatRadio implements Keyer {
       this.pttGen++;
       this.setMayBeKeyed(true);
       this.patch({ keyed: true });
-      const until = this.timers.now() + PTT_TIMEOUT_MS;
+      const pttMs = this.traits.pttTimeoutMs ?? PTT_TIMEOUT_MS;
+      const until = this.timers.now() + pttMs;
       // Held back by a drain, PTT on goes out only while this keying still holds and no PTT off
       // has gone out since (every PTT off bumps pttGen).
       const gen = this.pttGen;
-      const on = this.sendNow({ type: 'set_transmit', on: true }, PTT_TIMEOUT_MS, () => held() && gen === this.pttGen);
+      const on = this.sendNow({ type: 'set_transmit', on: true }, pttMs, () => held() && gen === this.pttGen);
       return (this.traits.readsPtt ? on.then((r) => this.readUntilKeyed(r, until, held)) : on).then((r) => {
         const answer: KeyResult = r.ok ? 'ok' : r.why === 'timeout' ? 'timeout' : r.why === 'ng' ? 'ng' : 'closed';
         if (answer === 'ok' && this.holder === token) this.okAt = this.timers.now();
@@ -873,6 +874,10 @@ export class CatRadio implements Keyer {
       return;
     }
     this.note(e);
+    // The KX2 sends each dial or mode set with a read of the same command (FA…;FA;). A `?;` then
+    // answers the set half only: the read that follows decides, so the set stays in flight and no
+    // drain drops the read. Without a read, the set times out.
+    if (e.type === 'busy' && this.inFlight[0] && TUNING.has(this.inFlight[0].req.type)) return;
     const i = this.inFlight.findIndex((f) => this.codec.answers(f.req, e));
     if (i >= 0) {
       const [f] = this.inFlight.splice(i, 1);

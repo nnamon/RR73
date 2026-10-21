@@ -8,7 +8,8 @@ import { kx2Codec, type CatWasm } from './protocol';
 import { CatRadio, DRAIN_MS, OFF_CONFIRM_MS, POLL_MS, PTT_READ_MS, REPLY_MS, UNKEY_ACK_MS, UNKEY_TRIES, type CatTimers, type CatTransport } from './radio';
 import { KX2, KX2_BAND_CHANGE_MS } from './radios';
 import type { LinkEnd } from './serial';
-import { PTT_TIMEOUT_MS } from '../tx/keyer';
+/** The KX2's own window to confirm PTT on (radios.ts). */
+const PTT_TIMEOUT_MS = KX2.pttTimeoutMs!;
 
 interface Kx2Sim {
   receive(bytes: Uint8Array): Uint8Array;
@@ -107,6 +108,8 @@ class Kx2Port implements CatTransport {
   bandChangeMs = 0;
   /** Each answer to these commands is replaced: `FA;` answered `?;` and then the read, as a late pair. */
   replace = new Map<string, string>();
+  /** Dial and mode sets with their reads (FA…;FA;) are answered `?;` before the read. */
+  busySets = false;
   private slowLeft = 0;
   private lastAt = 0;
   private data = new Set<(b: Uint8Array) => void>();
@@ -125,6 +128,7 @@ class Kx2Port implements CatTransport {
     else if (t === 'TX;TQ;' && this.busyTxKeys) reply = '?;' + text(this.sim.receive(b));
     else if (t === 'MN082;MP;MN255;' && this.menuExitLost) reply = text(this.sim.receive(bytes('MN082;MP;')));
     else if (t === 'RX;TQ;' && this.ignoreRx) reply = 'TQ1;';
+    else if (this.busySets && /^(FA|MD|DT)\d+;(FA|MD|DT);$/.test(t)) reply = '?;' + text(this.sim.receive(b));
     else reply = this.replace.get(t) ?? text(this.sim.receive(b));
     if (t === 'TX;TQ;' && this.slowKey > 0) {
       this.slowLeft = this.slowKey;
@@ -190,8 +194,8 @@ describe('CatRadio with a KX2', () => {
     expect(radio.state).toMatchObject({ status: 'connected', hz: 14_074_000, mode: 'usb', sub: null, transmitting: false, keyed: false });
     // OM 01: a KX2. K2 mode 0. MIC BTN at its default, PTT UP.DN (Owner's Manual p. 48). VOX off in
     // USB. IF: no split, no RIT, no XIT. BW: 2.80 kHz. No menu entry open.
-    expect(radio.state.settings).toEqual({ product: 1, k2: 0, mic_btn: 5, vox: 0, split: 0, rit: 0, xit: 0, offset_hz: 0, bandwidth: 2800, menu_entry: 255 });
-    expect(port.written.map((w) => w.text)).toEqual(['TQ;', 'FA;', 'MD;', 'VX;', 'IF;', 'BW;', 'OM;', 'K2;', 'MN;', 'MN082;MP;MN255;', 'MN;']);
+    expect(radio.state.settings).toEqual({ product: 1, k2: 0, auto_info: 0, mic_btn: 5, vox: 0, split: 0, rit: 0, xit: 0, offset_hz: 0, bandwidth: 2800, menu_entry: 255 });
+    expect(port.written.map((w) => w.text)).toEqual(['TQ;', 'FA;', 'MD;', 'VX;', 'IF;', 'BW;', 'OM;', 'K2;', 'AI;', 'MN;', 'MN082;MP;MN255;', 'MN;']);
     expect(port.ptt).toEqual([]);
   });
 
@@ -450,6 +454,16 @@ describe('CatRadio with a KX2', () => {
     const next = radio.request({ type: 'read_transmit' });
     await timers.advance(REPLY_MS);
     expect(await next).toMatchObject({ ok: true, event: { type: 'transmit' } });
+  });
+
+  it('a band change answered ?; before each read-back still sets the dial and DATA A', async () => {
+    const { timers, sim, port, radio } = await started();
+    port.busySets = true;
+    const done = radio.tune(7_074_000);
+    await timers.advance(3000);
+    expect(await done).toMatchObject({ ok: true });
+    expect(sim.frequency).toBe(7_074_000);
+    expect(port.written.some((w) => w.text.startsWith('MD6;'))).toBe(true);
   });
 
   it('never sends a TX held back by a drain once Halt has sent RX', async () => {

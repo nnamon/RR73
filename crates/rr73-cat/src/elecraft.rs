@@ -245,6 +245,9 @@ pub enum Request {
     ReadBandwidth,
     /// Read the K2 command mode: `K2;`. In 1 and 3, `MD` and `IF` report DATA as LSB or USB.
     ReadK2Mode,
+    /// Read the auto-info mode: `AI;` (p. 7). In 1 and 2 the radio sends `FA`, `MD` and others by
+    /// itself on every change, which can be taken for answers.
+    ReadAutoInfo,
 }
 
 /// Why a request cannot be written.
@@ -271,6 +274,7 @@ impl Request {
             Request::ReadInfo => "IF",
             Request::ReadBandwidth => "BW",
             Request::ReadK2Mode => "K2",
+            Request::ReadAutoInfo => "AI",
         }
     }
 
@@ -311,6 +315,7 @@ impl Request {
             Request::ReadInfo => "IF;".to_string(),
             Request::ReadBandwidth => "BW;".to_string(),
             Request::ReadK2Mode => "K2;".to_string(),
+            Request::ReadAutoInfo => "AI;".to_string(),
         })
     }
 
@@ -335,6 +340,7 @@ impl Request {
             (Request::ReadInfo, Event::Info { .. }) => true,
             (Request::ReadBandwidth, Event::Bandwidth { .. }) => true,
             (Request::ReadK2Mode, Event::K2Mode { .. }) => true,
+            (Request::ReadAutoInfo, Event::AutoInfo { .. }) => true,
             (r, Event::Malformed { command, .. }) => r.answer_command() == command,
             _ => false,
         }
@@ -452,6 +458,11 @@ pub enum Event {
     /// The K2 command mode: `K2` (p. 14). 1 and 3 make `MD` and `IF` report DATA as LSB or USB
     /// (p. 4; p. 16, note 2).
     K2Mode {
+        /// 0 to 3.
+        mode: u8,
+    },
+    /// The auto-info mode: `AI` (p. 7), 0 to 3. 0 sends nothing unasked.
+    AutoInfo {
         /// 0 to 3.
         mode: u8,
     },
@@ -666,6 +677,17 @@ pub fn parse_answer(text: &str) -> Event {
             command: "BW".to_string(),
             fault,
         })
+    } else if known("AI") {
+        digit("AI", data).and_then(|mode| {
+            if mode <= 3 {
+                Ok(Event::AutoInfo { mode })
+            } else {
+                Err(Event::Malformed {
+                    command: "AI".to_string(),
+                    fault: Fault::Code,
+                })
+            }
+        })
     } else if known("K2") {
         digit("K2", data).and_then(|mode| {
             if mode <= 3 {
@@ -751,6 +773,13 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn reads_the_auto_info_mode() {
+        let mut p = Parser::default();
+        assert_eq!(p.push(b"AI2;"), vec![Event::AutoInfo { mode: 2 }]);
+        assert_eq!(Request::ReadAutoInfo.encode(), Ok(b"AI;".to_vec()));
+    }
+
     use super::*;
 
     fn events(text: &str) -> Vec<Event> {
