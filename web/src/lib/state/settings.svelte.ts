@@ -120,6 +120,8 @@ export interface Settings {
   theme: Theme;
   font: FontChoice;
   monoFont: MonoChoice;
+  /** Decode messages in the monospace font, lined up row to row, or in the interface font. */
+  monoDecodes: boolean;
   band: BandId;
   mode: Mode;
   /** Input device, or null for the system default. */
@@ -210,6 +212,7 @@ export const DEFAULTS: Settings = {
   theme: 'light',
   font: 'auto',
   monoFont: 'system',
+  monoDecodes: true,
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,
@@ -381,6 +384,7 @@ export function validate(raw: unknown): Settings {
   if (r.theme === 'light' || r.theme === 'dark' || r.theme === 'sun' || r.theme === 'system') s.theme = r.theme;
   if (r.font === 'auto' || r.font === 'system' || r.font === 'inter') s.font = r.font;
   if (r.monoFont === 'system' || r.monoFont === 'jetbrains' || r.monoFont === 'roboto') s.monoFont = r.monoFont;
+  if (typeof r.monoDecodes === 'boolean') s.monoDecodes = r.monoDecodes;
   if (isBand(r.band)) s.band = r.band;
   if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';

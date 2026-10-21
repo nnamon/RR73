@@ -252,7 +252,7 @@ async function picture(page: Page) {
 }
 
 async function choose(page: Page, label: string) {
-  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await page.evaluate(() => (location.hash = '#/settings/appearance'));
   const group = page.getByRole('radiogroup', { name: 'Waterfall colours' });
   await group.getByText(label, { exact: true }).click();
   await expect(group.getByRole('radio', { name: label })).toBeChecked();
@@ -287,6 +287,6 @@ test('the waterfall takes the colours chosen in Settings at once, rows drawn bef
 
   // The choice is stored.
   await page.reload();
-  await page.evaluate(() => (location.hash = '#/settings/radio'));
+  await page.evaluate(() => (location.hash = '#/settings/appearance'));
   await expect(page.getByRole('radiogroup', { name: 'Waterfall colours' }).getByRole('radio', { name: 'Fire' })).toBeChecked();
 });

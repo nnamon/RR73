@@ -85,6 +85,8 @@
     const root = document.documentElement;
     if (settings.monoFont === 'system') delete root.dataset.mono;
     else root.dataset.mono = settings.monoFont;
+    if (settings.monoDecodes) root.dataset.monoDecodes = '';
+    else delete root.dataset.monoDecodes;
   });
 
   // Each screen has its own title; after a change of screen, focus moves to its heading so a

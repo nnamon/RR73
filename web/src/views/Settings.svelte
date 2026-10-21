@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import Icon from '../ui/Icon.svelte';
   import BackLink from '../ui/BackLink.svelte';
   import LocateButton from '../ui/LocateButton.svelte';
@@ -143,6 +144,14 @@
     { id: 'jetbrains', label: 'JetBrains' },
     { id: 'roboto', label: 'Roboto' },
   ];
+
+  // Waterfall colours: each name over a strip of its colours.
+  const ramp = (id: PaletteId) => {
+    const at = paletteSpec(id).positions;
+    return `linear-gradient(to right, ${stopTokens(id)
+      .map((t, i) => `var(${t}) ${at[i] * 100}%`)
+      .join(', ')})`;
+  };
 
   const fonts: { id: FontChoice; label: string }[] = [
     { id: 'auto', label: 'Automatic' },
@@ -364,6 +373,33 @@
         </span>
       </div>
       <div class="row stack">
+        <span class="row-main"><span class="row-title" id="decode-font">Decode messages</span><span class="row-sub">Monospace lines them up</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="decode-font">
+          {#each [[true, 'Monospace'], [false, 'Interface font']] as const as [mono, label] (label)}
+            <label class="seg-i" class:on={settings.monoDecodes === mono}>
+              <input class="visually-hidden" type="radio" name="decode-font" checked={settings.monoDecodes === mono} onchange={() => void updateSettings({ monoDecodes: mono })} />
+              {label}
+            </label>
+          {/each}
+        </span>
+      </div>
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="wf-colours">Waterfall colours</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="wf-colours">
+          {#each PALETTES as p (p.id)}
+            <label class="seg-i ramped" class:on={settings.waterfallPalette === p.id}>
+              <input class="visually-hidden" type="radio" name="wf-colours" value={p.id} checked={settings.waterfallPalette === p.id} onchange={() => void updateSettings({ waterfallPalette: p.id })} />
+              {p.label}
+              <i class="ramp" style:background={ramp(p.id)} aria-hidden="true"></i>
+            </label>
+          {/each}
+        </span>
+      </div>
+      <label class="row">
+        <span class="row-main"><span class="row-title">Callsigns on the waterfall</span><span class="row-sub">FT8 and FT4</span></span>
+        <input type="checkbox" role="switch" class="switch" checked={settings.waterfallCalls} onchange={(e) => void updateSettings({ waterfallCalls: e.currentTarget.checked })} />
+      </label>
+      <div class="row stack">
         <span class="row-main"><span class="row-title" id="night-after">Night display</span><span class="row-sub">After Operate sits untouched</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="night-after">
           {#each NIGHT_AFTER as m (m)}
@@ -505,5 +541,17 @@
 
   .row:has(.field:focus-visible) {
     box-shadow: inset 0 0 0 2px var(--rr-accent);
+  }
+
+  /* Waterfall colours: each name over a strip of its colours. */
+  .ramped {
+    flex-direction: column;
+    gap: var(--rr-space-1);
+  }
+
+  .ramp {
+    width: 60%;
+    height: var(--rr-space-1-5);
+    border-radius: var(--rr-radius-pill);
   }
 </style>

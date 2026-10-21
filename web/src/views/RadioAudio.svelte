@@ -10,7 +10,6 @@
   import { clockText } from '../lib/clock/calibration';
   import type { Applied } from '../lib/audio/report';
   import type { Contrast } from '../lib/waterfall/levels';
-  import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
   import { monitorSupported } from '../lib/tx/monitor';
@@ -95,13 +94,6 @@
   ];
 
   /** A palette's colours left to right, from its tokens, for the strip under its name. */
-  const ramp = (id: PaletteId) => {
-    const at = paletteSpec(id).positions;
-    return `linear-gradient(to right, ${stopTokens(id)
-      .map((t, i) => `var(${t}) ${at[i] * 100}%`)
-      .join(', ')})`;
-  };
-
   const checks = advice.checklist;
 
   const keyingText = $derived.by(() => {
@@ -256,22 +248,6 @@
           {/each}
         </span>
       </div>
-      <div class="row stack">
-        <span class="row-main"><span class="row-title" id="wf-colours">Waterfall colours</span></span>
-        <span class="seg" role="radiogroup" aria-labelledby="wf-colours">
-          {#each PALETTES as p (p.id)}
-            <label class="seg-i ramped" class:on={settings.waterfallPalette === p.id}>
-              <input class="visually-hidden" type="radio" name="wf-colours" value={p.id} checked={settings.waterfallPalette === p.id} onchange={() => void updateSettings({ waterfallPalette: p.id })} />
-              {p.label}
-              <i class="ramp" style:background={ramp(p.id)} aria-hidden="true"></i>
-            </label>
-          {/each}
-        </span>
-      </div>
-      <label class="row">
-        <span class="row-main"><span class="row-title">Callsigns on the waterfall</span><span class="row-sub">FT8 and FT4</span></span>
-        <input type="checkbox" role="switch" class="switch" checked={settings.waterfallCalls} onchange={(e) => void updateSettings({ waterfallCalls: e.currentTarget.checked })} />
-      </label>
       <div class="row">
         <span class="row-main"><span class="row-title">Sample rate</span><span class="row-sub">{rateText}</span></span>
       </div>
@@ -537,18 +513,6 @@
     flex-direction: column;
     gap: var(--rr-space-2);
     align-items: stretch;
-  }
-
-  /* Waterfall colours: each name over a strip of its colours. */
-  .ramped {
-    flex-direction: column;
-    gap: var(--rr-space-1);
-  }
-
-  .ramp {
-    width: 60%;
-    height: var(--rr-space-1-5);
-    border-radius: var(--rr-radius-pill);
   }
 
   .tune {

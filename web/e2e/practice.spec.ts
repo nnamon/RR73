@@ -94,15 +94,13 @@ test('practice on shows the tag and decodes the band without a microphone', asyn
   await expect(row(page, /^CQ /).first()).toBeVisible();
   expect(media).toEqual([]);
 
-  // Radio and audio turns on the sender written over each signal on the waterfall; off by default.
+  // Appearance turns on the sender written over each signal on the waterfall; off by default.
   const labels = async (on: boolean) => {
-    await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Settings' }).click();
-    await page.getByRole('link', { name: /^Radio and audio/ }).click();
+    await page.evaluate(() => (location.hash = '#/settings/appearance'));
     const sw = page.getByRole('switch', { name: /^Callsigns on the waterfall/ });
     await expect(sw).toBeChecked({ checked: !on });
     await sw.setChecked(on);
-    await page.getByRole('link', { name: 'Settings', exact: true }).click();
-    await page.getByRole('link', { name: 'Operate' }).click();
+    await page.evaluate(() => (location.hash = '#/operate'));
   };
   await expect(page.getByTestId('wf-call')).toHaveCount(0);
   await labels(true);

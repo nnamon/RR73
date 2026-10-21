@@ -4,7 +4,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- Decode messages use the monospace font, so callsigns, grids and reports line up from row to row.
+- Settings › Appearance › Decode messages sets decode messages in the monospace font, so callsigns, grids and reports line up from row to row, or in the interface font as before. Monospace is the default.
+- Waterfall colours and Callsigns on the waterfall moved from Radio and audio to Settings › Appearance, with the theme and the fonts.
 
 ## 0.24.19 · 2026-10-21
 
