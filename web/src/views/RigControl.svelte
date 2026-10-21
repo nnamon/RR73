@@ -74,7 +74,7 @@
       case 'silent':
         if (kx2)
           return rig.noiseOnly
-            ? { text: digirig ? 'Data arrives, but no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232, and check that the Digirig is set for RS-232.' : 'Data arrives, but no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232.', bad: true }
+            ? { text: digirig ? 'Data arrives with no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232, and check that the Digirig is set for RS-232.' : 'Data arrives with no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232.', bad: true }
             : { text: 'No reply from the KX2. Check that it is on, that the serial cable is in its ACC jack, and that Baud rate matches MENU › RS232.', bad: true };
         return rig.noiseOnly
           ? { text: `This port sends data that is not CI-V. Tap Connect radio and choose ${port}.`, bad: true }
@@ -90,7 +90,7 @@
           case 'signals':
             return kx2
               ? { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. RTS keys the Digirig’s PTT. Set MENU › MIC BTN on the KX2 to OFF, then tap Reconnect radio.', bad: true }
-              : { text: 'The port’s DTR and RTS lines could not be set low, and USB SEND did not read OFF, so the port was closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
+              : { text: 'DTR and RTS could not be set low, and USB SEND does not read OFF. The port is closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
           case 'no-wasm':
             return { text: 'Rig control did not load. Reload the app.', bad: true };
           case 'gone':
@@ -243,7 +243,7 @@
         out.push({ text: 'MIC BTN reads the mic jack’s ring as PTT, and the Digirig’s KX cable puts its PTT line there: the KX2 transmits while the browser opens the port. Set MENU › MIC BTN to OFF.', bad: true });
       else if (digirig && mic === 4) out.push({ text: 'MIC BTN reads the mic jack’s ring for UP and DN, where the Digirig’s KX cable puts its PTT line: VFO A may move by itself. Set MENU › MIC BTN to OFF.', bad: false });
       if (m.auto_info !== undefined && m.auto_info !== null && m.auto_info > 0)
-        out.push({ text: `The KX2 sends its dial and mode by itself (AI${m.auto_info}), set by another program or MENU › AUTO INF, and a change during a band change can read as refused. Turn the KX2 off and on, or set MENU › AUTO INF back to its default.`, bad: false });
+        out.push({ text: `MENU › AUTO INF is on (AI${m.auto_info}), so a band change can read as refused. Set it back to its default, or turn the KX2 off and on.`, bad: false });
       if (m.k2 === 1 || m.k2 === 3)
         out.push({ text: `The KX2 is in K2 command mode ${m.k2}, left by another program: it reports DATA as LSB or USB, so every band change reads as refused. Close that program, turn the KX2 off and on, then connect again.`, bad: true });
       if (m.vox === 0 && !settings.cat.keyPtt && (rig.mode === 'data' || rig.mode === 'data-rev'))
@@ -320,7 +320,7 @@
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.enabled} onchange={(e) => void setRigEnabled(e.currentTarget.checked)} />
       </label>
     </div>
-    <p class="section-foot">{settings.cat.enabled ? 'Reads and sets the radio’s dial and mode over USB.' : 'Off: the radio’s port stays closed, and transmissions key the radio by VOX.'}</p>
+    {#if !settings.cat.enabled}<p class="section-foot">Off, transmissions key the radio by VOX.</p>{/if}
     {#if !settings.cat.enabled && rig.unkeyFailed}<p class="section-foot err" role="alert">{unkeyFailedText()}</p>{/if}
   </div>
 
@@ -337,7 +337,7 @@
       {/each}
       {#if kx2}
         <label class="row">
-          <span class="row-main"><span class="row-title">Connection</span><span class="row-sub">Digirig keys the mic jack</span></span>
+          <span class="row-main"><span class="row-title">Connection</span></span>
           <select class="select" value={settings.cat.kx2Link} onchange={(e) => void updateSettings({ cat: { ...settings.cat, kx2Link: e.currentTarget.value === 'cable' ? 'cable' : 'digirig' } })}>
             <option value="digirig">Digirig</option>
             <option value="cable">KX2 cable</option>

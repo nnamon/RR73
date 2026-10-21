@@ -373,9 +373,9 @@
         </span>
       </div>
       <div class="row stack">
-        <span class="row-main"><span class="row-title" id="decode-font">Decode messages</span><span class="row-sub">Monospace lines them up</span></span>
+        <span class="row-main"><span class="row-title" id="decode-font">Decode messages</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="decode-font">
-          {#each [[true, 'Monospace'], [false, 'Interface font']] as const as [mono, label] (label)}
+          {#each [[false, 'Interface font'], [true, 'Monospace']] as const as [mono, label] (label)}
             <label class="seg-i" class:on={settings.monoDecodes === mono}>
               <input class="visually-hidden" type="radio" name="decode-font" checked={settings.monoDecodes === mono} onchange={() => void updateSettings({ monoDecodes: mono })} />
               {label}

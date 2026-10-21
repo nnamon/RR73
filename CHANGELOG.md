@@ -2,134 +2,138 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Decode messages use the interface font by default. Settings › Appearance › Decode messages › Monospace lines them up.
+
 ## 0.24.20 · 2026-10-21
 
-- Settings › Appearance › Decode messages sets decode messages in the monospace font, so callsigns, grids and reports line up from row to row, or in the interface font as before. Monospace is the default.
-- Waterfall colours and Callsigns on the waterfall moved from Radio and audio to Settings › Appearance, with the theme and the fonts.
+- Settings › Appearance › Decode messages sets decode messages in the monospace font, which lines up callsigns, grids and reports, or in the interface font. Monospace is the default.
+- Waterfall colours and Callsigns on the waterfall moved from Radio and audio to Settings › Appearance.
 
 ## 0.24.19 · 2026-10-21
 
-- Settings › Appearance › Monospace chooses the font for Tx messages, times, the waterfall scale and other monospaced text: System, JetBrains Mono or Roboto Mono. Both come with the app and work offline.
+- Settings › Appearance › Monospace sets the font for Tx messages, times and the waterfall scale: System, JetBrains Mono or Roboto Mono.
 
 ## 0.24.18 · 2026-10-21
 
-- Settings › Logging › Wavelog › Send radio status sends the dial and mode to Wavelog on each change and every 2 minutes, for logging by hand there. Off by default.
-- Settings › FT8 and FT4 › Decoding: Depth Fast runs the first decoding stage only, for a slow device, and A priori decoding can be turned off. Deep and a priori on stay the defaults.
-- Settings › Rig control no longer shows Disconnect radio while the port is closed. Turning off Rig control does that job, and Disconnect radio stays while a radio is connected.
+- Settings › Logging › Wavelog › Send radio status sends the dial and mode to Wavelog on each change and every 2 minutes. Off by default.
+- Settings › FT8 and FT4 › Decoding: Depth Fast runs only the first decoding stage, and A priori decoding can be turned off. Deep and a priori on are the defaults.
+- Settings › Rig control no longer shows Disconnect radio while the port is closed.
 
 ## 0.24.17 · 2026-10-21
 
-- Settings › Rig control › Connection says how a KX2 connects: a Digirig, or a KX2 cable such as KXUSB. Through a KX2 cable, the Digirig’s MIC BTN rule and advice no longer apply, and the port reopens by itself as for the IC-705.
+- Settings › Rig control › Connection sets how a KX2 connects: Digirig or KX2 cable. With a KX2 cable, the MIC BTN check is skipped and the port reopens by itself.
 
 ## 0.24.16 · 2026-10-21
 
-- On a computer, Settings › Radio and audio › Monitor plays Tx audio on a second output, such as the speakers, at its own level, while the signal goes to the radio.
+- On a computer, Settings › Radio and audio › Monitor plays Tx audio on a second output at its own level.
 
 ## 0.24.15 · 2026-10-21
 
-- A KX2 band change answered `?;` before each read-back still sets the dial and DATA A. It was reported as refused, and DATA A was never set.
-- The IC-705 has 400 ms to confirm PTT on, up from 300 ms, still inside the 0.5 s before the audio.
-- Rig control reads the KX2’s auto-info mode and says when it sends its dial and mode by itself, which can make a band change read as refused.
+- A KX2 band change answered with `?;` sets the dial and DATA A. It was reported as refused and left DATA A unset.
+- The IC-705 has 400 ms to confirm PTT on, up from 300 ms.
+- Rig control warns when the KX2’s auto-info is on, which can make a band change read as refused.
 
 ## 0.24.14 · 2026-10-21
 
-- The radio badge goes amber with FIL2 or FIL3 when the IC-705 is on a narrow filter that cuts most of the FT8 range.
-- An answer from the radio cut short no longer swallows the answer after it.
-- Halt sends no PTT off when RR73 holds none and the radio reads receive, so Halt on the KX2 no longer holds other requests back for 0.6 s.
-- Settings › Appearance › Font: Automatic uses Apple’s system font on Apple devices and Inter elsewhere, such as Windows. System and Inter fix the choice. Inter comes with the app and works offline.
-- Monospaced text on Windows uses Cascadia Mono or Consolas, where it fell back to Courier New.
-- When the browser keeps audio paused until a tap, as Chrome can when Web SDR starts with the app, the audio banner says so within 1 s and Resume audio starts it. Audio stayed at starting, with a black waterfall.
-- On a computer or tablet, Operate's ••• menu opens over the waterfall in full. Its top rows were cut off behind the waterfall.
-- Worked before greys a decode only for a dupe: a station worked today on this band and mode, in the running activation, the rule Hunt and Repeat CQ use. Hide worked hides only dupes.
-- Decode rows show worked status on their right edge: solid for a dupe, light for a station worked on this band and mode on another day, which can be worked again.
+- The radio badge shows FIL2 or FIL3 in amber when the IC-705’s filter cuts most of the FT8 range.
+- An answer from the radio that is cut short no longer swallows the next answer.
+- Halt sends no PTT off when RR73 holds no PTT and the radio reads receive. On the KX2, Halt no longer delays other requests by 0.6 s.
+- Settings › Appearance › Font: Automatic, System or Inter. Automatic uses Apple’s system font on Apple devices and Inter elsewhere.
+- Monospaced text on Windows uses Cascadia Mono or Consolas. It used Courier New.
+- When the browser holds audio paused until a tap, the audio banner shows it within 1 s and Resume audio starts it. Audio stayed at starting with a black waterfall.
+- On a computer or tablet, Operate’s ••• menu opens over the waterfall. Its top rows were hidden behind it.
+- Worked before greys only dupes: stations worked today on this band and mode, in the running activation. Hide worked hides only dupes.
+- Decode rows mark worked status on their right edge: solid for a dupe, light for a station worked on this band and mode on another day.
 
 ## 0.24.13 · 2026-10-21
 
-- Operate's Sort chip lists each slot's decodes by kind: messages to you, then CQs, then calls, reports and endings, each from the lowest audio frequency. It stays as set. Off keeps the decoder's order.
-- A row of a station calling you names its country, as a CQ row does, where it has no Next, Dupe or Lost tag.
-- Log names each QSO's country beside the callsign, from the country file.
+- Operate’s Sort chip orders each slot’s decodes: messages to you, CQs, calls, reports, then endings, each from the lowest audio frequency. Off keeps the decoder’s order.
+- Rows of stations calling you show the country, as CQ rows do, when they carry no Next, Dupe or Lost tag.
+- Log shows each QSO’s country beside the callsign.
 
 ## 0.24.12 · 2026-10-21
 
-- Hunt answers a station calling you while the station it called has not answered, unless that caller is a dupe with Work dupes off.
-- Rows read Lost only while Tx still calls that station. Calling CQ or another station clears them.
+- Hunt answers a station calling you while the station Hunt called has not answered. A dupe caller is answered only with Work dupes on.
+- Rows read Lost only while Tx calls that station.
 
 ## 0.24.11 · 2026-10-21
 
-- A station that missed RR73 and sends its R-report again gets RR73 again with Repeat CQ and Hunt on too, up to the usual repeats.
-- A QSO logged again with the same station, band and mode within 10 minutes, as when RR73 went again by hand, updates the end time of the QSO already in the log. QSOs added by hand in Log are never merged.
+- With Repeat CQ or Hunt on, a station that sends its R-report again gets RR73 again, up to the usual repeats.
+- A QSO logged again with the same station, band and mode within 10 minutes updates the end time of the logged QSO. QSOs added by hand are never merged.
 
 ## 0.24.10 · 2026-10-21
 
-- After a shifted transmission, a receive dial the IC-705 refuses just after transmit is tried once more, 0.1 s later, before Tx goes off.
-- The IC-705's Split row reads a simplex answer as Off, and rig control ignores answers the radio addresses to another program.
-- After PTT off, rig control reads transmit or receive every 100 ms for up to 0.5 s before it says PTT off was not confirmed, so a radio still switching to receive no longer turns Tx off.
-- On reconnecting, the read that finds a radio still transmitting is tried up to 3 times, so a radio RR73 left keyed gets its PTT off even when the first read goes unanswered.
-- Keying the IC-705 by CAT, Tx waits until USB SEND has read OFF. Before, it was allowed while USB SEND was unread.
+- After a shifted transmission, an IC-705 receive dial refused just after transmit is sent again 0.1 s later.
+- The IC-705’s Split row reads a simplex answer as Off. Rig control ignores answers addressed to another program.
+- After PTT off, rig control checks for receive every 100 ms for up to 0.5 s before it reports PTT off not confirmed. A radio slow to return to receive no longer turns Tx off.
+- On reconnecting, the read that checks whether the radio is still transmitting is tried up to 3 times.
+- Keying the IC-705 by CAT waits until USB SEND reads OFF. It was allowed while USB SEND was unread.
 
 ## 0.24.9 · 2026-10-21
 
-- Settings › Rig control › Copy connection log includes the first 96 bytes RR73 sent to the radio and the first 96 it received, in hex.
+- Settings › Rig control › Copy connection log includes the first 96 bytes sent to and received from the radio, in hex.
 
 ## 0.24.8 · 2026-10-16
 
-- New DXCC entity starts off in every decode colour scheme. With a short log nearly every station is a new entity, and its magenta covered most decodes. Turn it on in Settings › Decode colours.
+- New DXCC entity is off by default in every decode colour scheme. Turn it on in Settings › Decode colours.
 
 ## 0.24.7 · 2026-10-16
 
-- Settings › Rig control has its own switch, off by default. Off, RR73 closes the radio’s port, opens it neither by itself nor on a tap, and transmissions key the radio by VOX. On, it opens the port it used before again.
+- Settings › Rig control has its own switch, off by default. Off, RR73 closes the radio’s port and transmissions key the radio by VOX. On, it reopens the last port.
 
 ## 0.24.6 · 2026-10-16
 
-- Settings › Rig control shows Disconnect radio while the radio’s port is closed, as after the cable comes out. It stops RR73 opening the port by itself when the radio is plugged in again. Connect radio opens it.
+- Settings › Rig control shows Disconnect radio while the radio’s port is closed. It stops the port reopening when the radio is plugged in again.
 
 ## 0.24.5 · 2026-10-16
 
-- When the last connection to the radio stopped before it completed, as when the browser closes while connecting, Settings › Rig control says at which step when the app opens.
-- Settings › Rig control › Copy connection log copies the steps of the last connection to the radio, with their times, for a report.
-- When the IC-705’s USB driver does not let RR73 set DTR and RTS low, rig control still connects if USB SEND reads OFF, and Rig control notes it. With USB SEND on a line, or unread, the port closes and Rig control says to set it to OFF. Before, the port always closed.
+- When the last connection to the radio did not complete, Settings › Rig control shows the step where it stopped.
+- Settings › Rig control › Copy connection log copies the timed steps of the last connection.
+- When the IC-705’s USB driver refuses to set DTR and RTS low, rig control connects if USB SEND reads OFF. With USB SEND on a line or unread, the port closes and Rig control says to set it to OFF.
 
 ## 0.24.4 · 2026-10-16
 
-- After a connection to the radio that never completed, such as one during which Chrome closed, RR73 no longer opens the port by itself when the app opens or the radio is plugged in. Connect radio and Reconnect radio still open it.
-- Settings › Rig control has a Baud rate for the IC-705: 4800 to 115200, 115200 by default. A new rate opens the port again at that rate.
+- After a connection that did not complete, RR73 no longer reopens the port by itself. Connect radio and Reconnect radio still open it.
+- Settings › Rig control › Baud rate for the IC-705: 4800 to 115200, 115200 by default. A new rate reopens the port.
 
 ## 0.24.3 · 2026-10-16
 
-- With Key the radio with CAT on, a transmission or Tune whose audio would not reach the output chosen in Settings › Radio and audio is refused, and Rig control and Radio and audio say what to choose. Before, the radio keyed with its Tx audio on the system default, or on nothing.
-- An output the browser refused is applied again once audio starts and when a device is plugged in or out.
-- Settings › Rig control reads the IC-705’s split, duplex, RIT and ΔTX (XIT) and says what to change when one is on: with split, duplex or ΔTX on, the radio transmits away from the frequency RR73 logs. The KX2 shows RIT too.
-- With rig control on, Operate shows a radio badge beside the band: Connected, No reply or Port closed, and a tap opens Rig control. In amber it names what is wrong: Transmitting with no PTT from RR73, the radio’s mode outside USB-D or DATA A, such as USB, or Off band. While the radio’s dial is not in use, the band’s own dial shows in amber.
-- Settings › Rig control › Reconnect radio opens the radio’s port again without the port chooser after it closed with the cable still in. Connect radio still chooses another port.
-- On a phone, the Settings button at the top of Operate ends its glyph 16 pt from the screen’s edge, as every other bar does. It ended 11 pt in.
-- The app’s description names both ways to run it: an iPhone through a headset-jack or USB interface, or a computer with rig control.
-- The Clock badge’s label for screen readers says computer off iOS and Android, as the status line does.
-- With the window hidden, rig control keeps time as transmissions do: the radio’s reply timeouts, PTT off and its retries, and each keying’s limit no longer run up to 1 s late.
-- Settings › Practice band › Play Tx audio, now “Can key a connected radio”, decides whether practice keys the radio. On, with Key the radio with CAT on, practice transmissions, Tune and Test keying key it as real ones do. Off, practice plays no Tx audio and keys nothing. Before, it keyed PTT with no audio.
+- With Key the radio with CAT on, a transmission or Tune is refused when its audio would not reach the output set in Settings › Radio and audio. Rig control and Radio and audio name the output to choose.
+- An output the browser refused is applied again when audio starts and when a device is plugged in or out.
+- Settings › Rig control reads the IC-705’s split, duplex, RIT and ΔTX (XIT) and says what to turn off. With split, duplex or ΔTX on, the radio transmits away from the logged frequency. The KX2 shows RIT too.
+- With rig control on, Operate shows a radio badge beside the band: Connected, No reply or Port closed. A tap opens Rig control. In amber it names the fault: Transmitting with no PTT from RR73, a mode other than USB-D or DATA A, or Off band. While the radio’s dial is not in use, the band’s dial shows in amber.
+- Settings › Rig control › Reconnect radio reopens the radio’s port without the port chooser. Connect radio chooses another port.
+- On a phone, the Settings button at the top of Operate ends 16 pt from the screen edge, as on every other bar. It ended 11 pt in.
+- The app’s description names both setups: an iPhone with a headset-jack or USB interface, or a computer with rig control.
+- The Clock badge’s screen reader label says computer off iOS and Android.
+- With the window hidden, rig control timeouts, PTT off retries and keying limits no longer run up to 1 s late.
+- Settings › Practice band › Play Tx audio is now Can key a connected radio. On, with Key the radio with CAT on, practice transmissions, Tune and Test keying key the radio. Off, practice plays no Tx audio and keys nothing. It keyed PTT with no audio.
 
 ## 0.24.2 · 2026-10-16
 
-- FT8 and FT4 decode stations with tones up to 3200 Hz, beyond the 3000 Hz limit before, such as a strong station at the edge of the radio’s passband.
-- The SNR of a station near the edge of the radio’s passband reads within about 2 dB of its true value. Before, it read up to 5 dB high there.
-- The first decoding stage finds 93% of the reference decodes in 350 slots recorded on 40m, up from 92%, and all 3 stages 95%, up from 94%. A further set of soft bits gives every symbol the same weight, so a symbol that a neighbour or a fading peak dominates cannot outvote the rest.
-- A first-stage decode that names a callsign only by its hash shows the callsign when another decode of the stage carries it in full.
+- FT8 and FT4 decode tones up to 3200 Hz, up from 3000 Hz.
+- The SNR of a station near the edge of the radio’s passband reads within about 2 dB. It read up to 5 dB high.
+- The first decoding stage finds 93% of the reference decodes in 350 slots recorded on 40m, up from 92%. All 3 stages find 95%, up from 94%.
+- A first-stage decode that names a callsign by its hash shows the full callsign when another decode in the stage carries it.
 
 ## 0.24.1 · 2026-10-16
 
-- In Chrome and Edge on a computer, RR73 keeps receiving, decoding and transmitting while its window is minimised, covered or in a background tab, with no tap to resume. On the iPhone audio stops when RR73 leaves the screen, as before.
-- On Windows the advice names Chrome, Edge and Windows Settings: allowing the microphone and location, keeping the screen on, and syncing the clock in Settings › Time & language › Date & time. Before you transmit asks there for system sounds off, the radio not the default output and sleep set to Never. Off iOS and Android, RR73 says computer where it said phone.
-- The level advice under Tune follows the connected radio: within the ALC zone on an IC-705, 4 to 5 ALC bars on a KX2, and both without a radio.
-- Settings › Radio and audio › Timing shows how long the decoder takes per slot, the last slot and the 95th percentile of recent ones, and counts the slots it could not decode because it was still busy. The timing report carries both.
-- Resume audio finds the radio's audio input after its USB cable moved to another port, in the same tap. It took a second tap, on Start audio.
-- Tune's sheet names the radio's dial while rig control reads one, on any band. It named the band's usual dial.
-- A keystroke restarts the Tx watchdog, as a tap or a click does, so typing and the keyboard shortcuts count as the operator being there.
-- 2m has FT8 on 144.174 MHz and FT4 on 144.170 MHz, and 70cm is a band with FT8 on 432.174 MHz and WSPR on 432.300 MHz. A radio tuned to 144.174 MHz keeps RR73 in FT8: it switched to WSPR.
-- WSPR on 2m uses the 144.489 MHz dial that WSPRnet, the WIA and IARU Region 3 give, so its signals sit at 144.4904 to 144.4906 MHz. It was 144.4885 MHz, 500 Hz lower.
-- Text on Windows uses Segoe UI, Windows' own font, where it fell back to Arial.
+- In Chrome and Edge on a computer, RR73 keeps receiving, decoding and transmitting while minimised, covered or in a background tab. On the iPhone, audio stops when RR73 leaves the screen.
+- On Windows the setup advice names Chrome, Edge and Windows Settings: microphone and location access, screen on, and clock sync in Settings › Time & language › Date & time. Before you transmit asks for system sounds off, the radio not the default output and sleep set to Never. Off iOS and Android, RR73 says computer for phone.
+- The level advice under Tune follows the connected radio: the ALC zone on an IC-705, 4 to 5 ALC bars on a KX2, both with no radio.
+- Settings › Radio and audio › Timing shows decode time per slot, the last slot and the 95th percentile, and counts slots skipped while the decoder was busy. The timing report includes both.
+- Resume audio finds the radio’s audio input after its USB cable moves to another port. It took a second tap, on Start audio.
+- Tune’s sheet shows the radio’s dial while rig control reads one. It showed the band’s usual dial.
+- A keystroke restarts the Tx watchdog, as a tap or a click does.
+- 2m has FT8 on 144.174 MHz and FT4 on 144.170 MHz. 70cm is added, with FT8 on 432.174 MHz and WSPR on 432.300 MHz. A radio on 144.174 MHz keeps RR73 in FT8. It switched to WSPR.
+- WSPR on 2m dials 144.489 MHz, 500 Hz up from 144.4885 MHz.
+- Text on Windows uses Segoe UI. It used Arial.
 
 ## 0.24.0 · 2026-10-16
 
-- Settings › Logging › Wavelog › Read Wavelog’s log counts the QSOs in your Wavelog log for decode colours, New and Hide worked, so a station worked from another radio or location shows as worked. It is off by default and needs Wavelog 2.5.1 or later. Dupes, Hunt and Repeat CQ still count this phone’s log only.
+- Settings › Logging › Wavelog › Read Wavelog’s log adds the QSOs in your Wavelog log to decode colours, New and Hide worked. Off by default. It needs Wavelog 2.5.1 or later. Dupes, Hunt and Repeat CQ count this phone’s log only.
 
 ## 0.23.1 · 2026-10-16
 

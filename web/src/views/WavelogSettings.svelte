@@ -162,7 +162,7 @@
       <h2 class="section-head">Radio status</h2>
       <div class="group">
         <label class="row">
-          <span class="row-main"><span class="row-title">Send radio status</span><span class="row-sub">Dial and mode, for hand logging</span></span>
+          <span class="row-main"><span class="row-title">Send radio status</span><span class="row-sub">Dial and mode</span></span>
           <input class="switch" type="checkbox" role="switch" checked={settings.wavelogRadio} onchange={(e) => void updateSettings({ wavelogRadio: (e.currentTarget as HTMLInputElement).checked })} />
         </label>
       </div>

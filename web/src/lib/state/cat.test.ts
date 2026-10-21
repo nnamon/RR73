@@ -456,7 +456,7 @@ describe('the connection log', () => {
     await run(OPEN_SETTLE_MS + 300);
     resetCat();
     await initCat();
-    expect(rig.lastStop).toBe('The last connection stopped at opening the port at 115200 baud. The browser may have closed there.');
+    expect(rig.lastStop).toBe('The last connection stopped at opening the port at 115200 baud.');
     // A failure RR73 saw is named.
     chosen.open = async () => Promise.reject(new DOMException('Failed to open serial port.', 'NetworkError'));
     const busy = reconnectRadio();

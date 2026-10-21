@@ -184,7 +184,7 @@ function stoppedAt(a: ConnectAttempt): string {
  */
 export function stoppedText(a: ConnectAttempt | null, radio: CatRadioId): string | null {
   if (!a || a.radio !== radio || reachedConnected(a)) return null;
-  return a.failed ? `The last connection failed ${stoppedAt(a)}: ${inline(failureText(a.failed, a.radio))}.` : `The last connection stopped ${stoppedAt(a)}. The browser may have closed there.`;
+  return a.failed ? `The last connection failed ${stoppedAt(a)}: ${inline(failureText(a.failed, a.radio))}.` : `The last connection stopped ${stoppedAt(a)}.`;
 }
 
 /** A sentence continued after a colon: its first letter in lower case, unless it starts a name such as DTR. */

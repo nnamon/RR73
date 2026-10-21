@@ -212,7 +212,7 @@ export const DEFAULTS: Settings = {
   theme: 'light',
   font: 'auto',
   monoFont: 'system',
-  monoDecodes: true,
+  monoDecodes: false,
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,

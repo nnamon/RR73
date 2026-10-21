@@ -289,7 +289,7 @@
         </label>
         {#if monitorSupported()}
           <label class="row">
-            <span class="row-main"><span class="row-title">Monitor</span><span class="row-sub">Also plays Tx audio here</span></span>
+            <span class="row-main"><span class="row-title">Monitor</span></span>
             <select class="select" value={settings.monitorDeviceId ?? ''} onchange={(e) => void updateSettings({ monitorDeviceId: (e.currentTarget as HTMLSelectElement).value || null })}>
               <option value="">Off</option>
               {#each outputs as d, i (d.deviceId)}
