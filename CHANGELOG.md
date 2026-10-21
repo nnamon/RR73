@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.25 · 2026-10-21
 
 - WSPR spots show the reported power in watts: 5 W on a phone, 37 dBm (5 W) in the wider table.
 - Settings › Radio and audio › Timing › Correct Tx timing moves each transmission by the clock error measured from decodes, for operating with no network to set the clock. Off by default.
