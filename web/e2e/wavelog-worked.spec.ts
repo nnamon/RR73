@@ -1,6 +1,6 @@
 // Read Wavelog's log in Chromium: the switch in Settings › Logging › Wavelog, off by
 // default, reads the mock Wavelog's log (route interception, e2e/log-data.ts; no real server is
-// called). A station worked only in Wavelog greys in Operate and Hide worked hides it; turning the
+// called). A station worked only in Wavelog gets the light edge of a station worked on another day in Operate; turning the
 // switch off deletes what was read; Hunt still calls the station. Decodes come through the
 // screen-review hooks (src/lib/testing/e2e-hooks.ts).
 import { expect, test, type Page } from '@playwright/test';
@@ -105,15 +105,18 @@ test('reads Wavelog’s log when switched on: a station worked only there greys,
     ['CQ K1ABC FN42', -12],
     ['9V1NE JA1KXM -10', -9],
   ]);
-  await expect(row(page, 'CQ JA1KXM PM95')).toHaveAttribute('data-ink', 'worked');
+  // Worked only in Wavelog is no dupe: the light edge of a station worked on another day, not grey.
+  await expect(row(page, 'CQ JA1KXM PM95')).toHaveClass(/\bbefore\b/);
+  await expect(row(page, 'CQ JA1KXM PM95')).not.toHaveAttribute('data-ink', 'worked');
   await expect(row(page, 'CQ JA1KXM PM95')).toHaveAttribute('data-hl', 'cq');
   await expect(row(page, 'CQ K1ABC FN42')).toHaveAttribute('data-hl', 'newGrid');
-  await expect(row(page, 'CQ K1ABC FN42')).not.toHaveAttribute('data-ink', 'worked');
+  await expect(row(page, 'CQ K1ABC FN42')).not.toHaveClass(/\bbefore\b/);
   const chips = page.getByRole('radiogroup', { name: 'Show decodes' });
   await expect(chips.getByRole('radio', { name: /^New/ })).toHaveText(/^New 1$/);
   const texts = () => page.getByTestId('decode-list').locator('button.dr .c-msg').allTextContents();
+  // Hide worked hides dupes only, so the station worked only in Wavelog stays.
   await page.getByRole('button', { name: 'Hide worked' }).click();
-  await expect.poll(texts).toEqual(['9V1NE JA1KXM -10', 'CQ K1ABC FN42']);
+  await expect.poll(texts).toEqual(['9V1NE JA1KXM -10', 'CQ JA1KXM PM95', 'CQ K1ABC FN42']);
   await page.getByRole('button', { name: 'Hide worked' }).click();
 
   // The station's sheet says where Wavelog's log has it, in its Worked before row.
@@ -126,7 +129,7 @@ test('reads Wavelog’s log when switched on: a station worked only there greys,
   // A check that finds a new QSO in Wavelog greys that station too.
   mock.add('K1ABC', '20m', 'FT8', '', 'FN42');
   await page.evaluate(() => window.__rr73!.wavelogCheck());
-  await expect(row(page, 'CQ K1ABC FN42')).toHaveAttribute('data-ink', 'worked');
+  await expect(row(page, 'CQ K1ABC FN42')).toHaveClass(/\bbefore\b/);
   await expect(chips.getByRole('radio', { name: /^New/ })).toHaveText(/^New 0$/);
   expect(reads(mock).at(-2)?.body?.fetchfromid).toBe(mock.contacts[1].id);
 
@@ -193,7 +196,7 @@ test('Hunt still calls a station worked only in Wavelog', async ({ page }) => {
     ['CQ K1ABC FN42', -15],
     ['CQ JA1KXM PM95', -5],
   ]);
-  await expect(row(page, 'CQ JA1KXM PM95')).toHaveAttribute('data-ink', 'worked');
+  await expect(row(page, 'CQ JA1KXM PM95')).toHaveClass(/\bbefore\b/);
   await expect(bar.getByRole('list', { name: 'QSO progress' })).toBeVisible();
   // Audio is off here, so nothing goes out: the call waits as the Next row.
   await expect(page.getByTestId('next-row')).toContainText('JA1KXM 9V1NE OJ11');
@@ -221,7 +224,7 @@ test('pauses while the practice band is on, keeps what it read, and colours no p
   // A slot older than the practice band's own, so its decodes leave this one alone.
   await decoded(page, [['CQ VR2XYZ OL72', -3]], 3);
   await expect(row(page, 'CQ VR2XYZ OL72')).toBeVisible();
-  await expect(row(page, 'CQ VR2XYZ OL72')).not.toHaveAttribute('data-ink', 'worked');
+  await expect(row(page, 'CQ VR2XYZ OL72')).not.toHaveClass(/\bbefore\b/);
   expect(reads(mock).length).toBe(before);
   expect(await databases(page)).toContain(WORKED_DB);
 
@@ -234,7 +237,7 @@ test('pauses while the practice band is on, keeps what it read, and colours no p
   await expect(page.getByTestId('wavelog-read')).toHaveText(/^2 stations · /);
   await toOperate(page);
   await decoded(page, [['CQ VR2XYZ OL72', -3]]);
-  await expect(row(page, 'CQ VR2XYZ OL72').first()).toHaveAttribute('data-ink', 'worked');
+  await expect(row(page, 'CQ VR2XYZ OL72').first()).toHaveClass(/\bbefore\b/);
   expect(strays).toEqual([]);
 });
 

@@ -121,17 +121,17 @@ test('the app starts in light whatever the system, and Settings › Theme change
   const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   const light = await bg();
-  await page.getByText('System', { exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('System', { exact: true }).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
   expect(await bg()).not.toBe(light);
-  await page.getByText('Light', { exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Light', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
-  await page.getByText('Dark', { exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Dark', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   expect(await bg()).not.toBe(light);
 
   // Sun: light with its own colours, whatever the system, and kept after a reload.
-  await page.getByText('Sun', { exact: true }).click();
+  await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Sun', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
   expect(await bg()).toBe('rgb(229, 229, 234)');
@@ -156,7 +156,7 @@ test('Settings › About › Credits shows each third-party licence in full', as
   await page.goto('./#/settings');
   await page.getByRole('link', { name: 'Credits' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide']);
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide', 'Inter']);
   const text = (await page.locator('main .pane:not([hidden])').innerText()).replace(/\s+/g, ' ');
   // Lucide's ISC licence, word for word.
   const isc = readFileSync(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8').split('```text\nISC License')[1].split('```')[0];
