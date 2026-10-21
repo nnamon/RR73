@@ -357,7 +357,7 @@ export class CaptureEngine {
   }
 
   private async openInput(ctx: AudioContext) {
-    this.opened = await this.input.open(ctx, this.deviceId, { ended: () => this.interrupt('input-ended'), muted: () => this.interrupt('input-muted') });
+    this.opened = await this.input.open(ctx, this.deviceId, { ended: () => this.interrupt('input-ended'), muted: () => this.interrupt('input-muted'), offset: (s) => (this.mapper.inputOffsetS = s) });
     let node: AudioWorkletNode;
     try {
       node = await this.deps.createNode(ctx);

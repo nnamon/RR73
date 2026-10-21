@@ -71,11 +71,11 @@
     else root.dataset.theme = settings.theme;
   });
 
-  // The font: Automatic uses Apple's system font on Apple devices and Inter elsewhere.
-  const apple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+  // The font: Automatic uses the system font on Apple devices and Windows (Segoe UI), and Inter elsewhere.
+  const systemFont = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod|Win/.test(navigator.platform || navigator.userAgent);
   $effect(() => {
     const root = document.documentElement;
-    const inter = settings.font === 'inter' || (settings.font === 'auto' && !apple);
+    const inter = settings.font === 'inter' || (settings.font === 'auto' && !systemFont);
     if (inter) root.dataset.font = 'inter';
     else delete root.dataset.font;
   });

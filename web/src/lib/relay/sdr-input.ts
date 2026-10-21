@@ -1,8 +1,9 @@
 /**
  * A web SDR, through a QSP relay, as a capture input (docs/design/qsp.md). QSP stamps each frame
- * with the UTC of its first sample. Each frame plays PLAYOUT_S after that time on the audio clock
- * to absorb network jitter. The input's offset subtracts the same delay from capture's
- * timestamps, so the decoder sees each sample at QSP's time. Contiguous frames share one mapping
+ * with the UTC of its first sample. Each frame plays a delay after that time on the audio clock
+ * to absorb network jitter: PLAYOUT_S, or more when frames arrive later than that by this
+ * computer's clock, as when the clock runs fast. The input's offset subtracts the same delay
+ * from capture's timestamps, so the decoder sees each sample at QSP's time whatever the clock. Contiguous frames share one mapping
  * from UTC to the audio clock and join without a gap. The mapping is reset after a gap, or when it
  * drifts 20 ms from the clocks. The node feeds only the capture worklet, like the practice band's.
  */
@@ -16,6 +17,12 @@ import { QspError, qspErrorText, qspStartSession, qspStop, qspTune, streamUrl, t
 export const PLAYOUT_S = 1.5;
 /** Drift between the mapping and the clocks that resets the mapping, ms. */
 const DRIFT_MS = 20;
+/** Margin kept between the least lag of recent frames and the delay, s. */
+export const LAG_MARGIN_S = 1;
+/** Recent frames whose lag sets the delay, ms. */
+const LAG_WINDOW_MS = 8_000;
+/** Change in the needed delay that moves it, s. */
+const DELAY_STEP_S = 0.25;
 
 /** Where the session goes and what it reports, read when the input opens. */
 export interface WebSdrConfig {
@@ -63,8 +70,12 @@ function startFailure(e: unknown): string {
 }
 
 export class WebSdrInput implements InputSource {
+  /** The playout delay in force, s. */
+  private delayS = PLAYOUT_S;
   /** Subtracts the playout delay from capture's timestamps, so each sample keeps QSP's time. */
-  readonly offsetS = -PLAYOUT_S;
+  get offsetS(): number {
+    return -this.delayS;
+  }
   private session: { base: string; key: string; id: string } | null = null;
 
   constructor(
@@ -95,6 +106,32 @@ export class WebSdrInput implements InputSource {
     let ended = false;
     /** UTC (ms, with the playout delay) and the audio clock time it maps to. */
     let anchor: { utcMs: number; ctxS: number } | null = null;
+    /** Each recent frame's arrival by this computer's clock and its lag behind QSP's stamp, ms. */
+    let lags: [number, number][] = [];
+    this.delayS = PLAYOUT_S;
+
+    /**
+     * Sets the delay from the least lag of the last frames: PLAYOUT_S, or the lag plus
+     * LAG_MARGIN_S when that is more. A new delay drops the audio already scheduled, so no
+     * sample plays under the old delay with the new offset.
+     */
+    const follow = (now: number, utcMs: number) => {
+      lags.push([now, now - utcMs]);
+      if (lags[0][0] < now - LAG_WINDOW_MS) lags = lags.filter(([at]) => at >= now - LAG_WINDOW_MS);
+      const least = Math.min(...lags.map(([, lag]) => lag)) / 1000;
+      const need = Math.max(PLAYOUT_S, Math.ceil((least + LAG_MARGIN_S) * 10) / 10);
+      if (Math.abs(need - this.delayS) < DELAY_STEP_S) return;
+      this.delayS = need;
+      for (const p of playing) {
+        try {
+          p.stop();
+        } catch {
+          // Not started.
+        }
+      }
+      anchor = null;
+      events.offset?.(this.offsetS);
+    };
 
     const end = (reason: string, message: string) => {
       if (closed || ended) return;
@@ -104,9 +141,11 @@ export class WebSdrInput implements InputSource {
     };
 
     const play = (utcMs: number, samples: Float32Array, gap: boolean) => {
+      const now = this.now();
+      follow(now, utcMs);
       const t = ctx.currentTime;
-      const at = utcMs + PLAYOUT_S * 1000;
-      const fresh = t + (at - this.now()) / 1000;
+      const at = utcMs + this.delayS * 1000;
+      const fresh = t + (at - now) / 1000;
       if (!anchor || gap || Math.abs(anchor.ctxS + (at - anchor.utcMs) / 1000 - fresh) * 1000 > DRIFT_MS) anchor = { utcMs: at, ctxS: fresh };
       const when = anchor.ctxS + (at - anchor.utcMs) / 1000;
       const late = Math.max(0, t - when);

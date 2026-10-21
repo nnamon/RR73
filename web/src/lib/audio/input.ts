@@ -21,13 +21,15 @@ export interface OpenedInput {
 export interface InputEvents {
   ended(): void;
   muted(): void;
+  /** The input's offsetS changed: capture applies the new value at once. */
+  offset?(s: number): void;
 }
 
 export interface InputSource {
   /**
-   * A fixed correction of capture's timestamps, s, for an input that plays its audio late on
-   * purpose (the web SDR's playout delay). Left out: none. Inputs other than the microphone take
-   * no receive calibration.
+   * A correction of capture's timestamps, s, for an input that plays its audio late on purpose
+   * (the web SDR's playout delay). Left out: none. Inputs other than the microphone take no
+   * receive calibration. A change is reported through InputEvents.offset.
    */
   readonly offsetS?: number;
   /** Why the source cannot open in this browser, or null. */

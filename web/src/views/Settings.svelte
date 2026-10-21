@@ -351,7 +351,7 @@
     </div>
     <div class="group night">
       <div class="row stack">
-        <span class="row-main"><span class="row-title" id="font-choice">Font</span><span class="row-sub">Automatic: Apple's font, else Inter</span></span>
+        <span class="row-main"><span class="row-title" id="font-choice">Font</span><span class="row-sub">Automatic: Inter on Linux and Android</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="font-choice">
           {#each fonts as f (f.id)}
             <label class="seg-i" class:on={settings.font === f.id}>

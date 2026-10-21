@@ -20,7 +20,7 @@ import { IC705_BAUDS, IC705_DEFAULT_BAUD, KX2_BAUDS, KX2_DEFAULT_BAUD, type Ic70
 
 /** Sun: light with the most contrast, for direct sunlight (tokens.css). */
 export type Theme = 'system' | 'light' | 'dark' | 'sun';
-/** The interface font: Apple's system font where there is one and Inter elsewhere, the system's own, or Inter. */
+/** The interface font: the system font on Apple devices and Windows and Inter elsewhere, the system's own, or Inter. */
 export type FontChoice = 'auto' | 'system' | 'inter';
 /** The monospace font for messages, times and callsigns: the system's, or a bundled one. */
 export type MonoChoice = 'system' | 'jetbrains' | 'roboto';

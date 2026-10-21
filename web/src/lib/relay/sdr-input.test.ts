@@ -149,6 +149,34 @@ describe('the web SDR input', () => {
     expect(s.starts[1].when).toBeCloseTo(110.5 + 1.2, 6);
   });
 
+  it('lengthens the delay when every frame arrives late, as with a clock 3 s fast, and tells capture', async () => {
+    const s = setup();
+    const offsets: number[] = [];
+    await s.input.open(s.ctx, null, { ...s.events, offset: (o) => offsets.push(o) });
+    await settle();
+    const ws = FakeSocket.last!;
+    // Stamped 3.05 s before this computer's clock: past a 1.5 s delay. The delay becomes the lag
+    // plus 1 s, rounded up to 0.1 s, and the frame plays 1.05 s from now.
+    ws.send(frame(0, T - 3050));
+    expect(s.input.offsetS).toBeCloseTo(-4.1, 6);
+    expect(offsets).toEqual([-4.1]);
+    expect(s.starts).toHaveLength(1);
+    expect(s.starts[0].when).toBeCloseTo(100 + 1.05, 6);
+    // The next frames join it under the same delay.
+    s.ctx.currentTime = 100 + 512 / 12000;
+    s.setNow(T + (512 / 12000) * 1000);
+    ws.send(frame(1, T - 3050 + (512 / 12000) * 1000));
+    expect(offsets).toHaveLength(1);
+    expect(s.starts[1].when).toBeCloseTo(s.starts[0].when + 512 / 12000, 6);
+    // With the clock set right, the lag falls and the delay returns to 1.5 s once the late
+    // frames leave the 8 s window.
+    s.setNow(T + 9_000);
+    s.ctx.currentTime = 109;
+    ws.send(frame(2, T + 9_000 - 300, 512, 2));
+    expect(s.input.offsetS).toBeCloseTo(-PLAYOUT_S, 6);
+    expect(offsets).toEqual([-4.1, -PLAYOUT_S]);
+  });
+
   it('ends the input when the relay refuses or the session ends, and says why', async () => {
     const s = setup();
     await s.input.open(s.ctx, null, s.events);
