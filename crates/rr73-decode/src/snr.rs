@@ -90,6 +90,24 @@ impl SnrScale {
         floor: &[f32],
         scratch: &mut SnrScratch,
     ) -> f32 {
+        self.estimate_where(view, cand, tones, live, floor, &|_| true, scratch)
+    }
+
+    /// As [`SnrScale::estimate`], with the signal read only at the channel symbols `keep`
+    /// accepts: the session leaves out symbols whose tone a neighbour shares when it decoded
+    /// the signal with that neighbour still in the audio (experiment 0012). With every symbol
+    /// kept, the same value.
+    #[allow(clippy::too_many_arguments)]
+    pub fn estimate_where(
+        &self,
+        view: &SymbolView<'_>,
+        cand: &Candidate,
+        tones: &[u8],
+        live: &[bool],
+        floor: &[f32],
+        keep: &dyn Fn(usize) -> bool,
+        scratch: &mut SnrScratch,
+    ) -> f32 {
         let edge = passband_level(view, cand, floor, &mut scratch.cells).map(|level| Edge { floor, level });
         let skirt = edge.map(|e| skirt(view, cand, live, e, scratch));
         let noise = noise_power(
@@ -104,7 +122,7 @@ impl SnrScale {
         let mut gain = 0.0f64;
         for (k, &tone) in tones.iter().enumerate().take(layout.symbols) {
             let frame = view.symbol_frame(cand.frame, k);
-            if !is_live(live, frame) {
+            if !keep(k) || !is_live(live, frame) {
                 continue;
             }
             let Some(row) = view.row(frame) else {

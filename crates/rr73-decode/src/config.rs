@@ -345,6 +345,14 @@ pub struct DemodParams {
     /// With `block`: the same for FT4 (of 16).
     #[serde(default)]
     pub ft4_weak_min_sync: u8,
+    /// With `block`: the fewest FT8 sync symbols (of 21) whose sent tone is the strongest on the
+    /// search's grid for a weak candidate to get the block demodulator at all; 0 tries every one.
+    /// Cheaper than the block demodulator's own gate, which needs a baseband per candidate.
+    #[serde(default)]
+    pub ft8_weak_grid_sync: u8,
+    /// With `block`: the same for FT4 (of 16).
+    #[serde(default)]
+    pub ft4_weak_grid_sync: u8,
 }
 
 fn default_ft8_blocks() -> Vec<u8> {
@@ -396,6 +404,15 @@ impl DemodParams {
         usize::from(match mode {
             Mode::Ft8 => self.ft8_weak_min_sync,
             Mode::Ft4 => self.ft4_weak_min_sync,
+        })
+    }
+
+    /// The fewest sync symbols on the search's grid a weak candidate of `mode` needs for the
+    /// block demodulator.
+    pub fn weak_grid_sync(&self, mode: Mode) -> usize {
+        usize::from(match mode {
+            Mode::Ft8 => self.ft8_weak_grid_sync,
+            Mode::Ft4 => self.ft4_weak_grid_sync,
         })
     }
 
@@ -586,6 +603,8 @@ impl DecoderConfig {
                 ft4_extra_min_sync: 0,
                 ft8_weak_min_sync: 0,
                 ft4_weak_min_sync: 0,
+                ft8_weak_grid_sync: 0,
+                ft4_weak_grid_sync: 0,
             },
             ldpc: LdpcParams {
                 kind: LdpcKind::SumProduct,
@@ -773,6 +792,8 @@ impl DecoderConfig {
         }
         if self.demod.ft8_weak_min_sync > 21
             || self.demod.ft4_weak_min_sync > 16
+            || self.demod.ft8_weak_grid_sync > 21
+            || self.demod.ft4_weak_grid_sync > 16
             || [self.search.ft8_weak_score_db, self.search.ft4_weak_score_db]
                 .iter()
                 .any(|v| v.is_some_and(|v| !v.is_finite()))
@@ -1100,6 +1121,8 @@ mod tests {
             "ft4_extra_min_sync",
             "ft8_weak_min_sync",
             "ft4_weak_min_sync",
+            "ft8_weak_grid_sync",
+            "ft4_weak_grid_sync",
         ] {
             demod.remove(key);
         }

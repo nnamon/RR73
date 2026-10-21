@@ -207,6 +207,32 @@ fn hard_tones(layout: &FrameLayout, llr: &[f32; crate::layout::CODEWORD_BITS], o
     }
 }
 
+/// Sync symbols of `cand` whose sent tone is the strongest of the symbol's tones on the
+/// spectrogram's grid.
+fn grid_sync(view: &SymbolView<'_>, cand: &Candidate) -> usize {
+    let layout = view.layout;
+    let mut n = 0;
+    for g in &layout.sync {
+        for (k, &sent) in g.tones.iter().enumerate() {
+            let Some(row) = view.row(view.symbol_frame(cand.frame, g.start + k)) else {
+                continue;
+            };
+            let level = |t: usize| {
+                usize::try_from(view.tone_bin(cand.bin, t))
+                    .ok()
+                    .and_then(|b| row.get(b))
+                    .copied()
+                    .unwrap_or(f32::NEG_INFINITY)
+            };
+            let own = level(usize::from(sent));
+            if own.is_finite() && (0..layout.tones).all(|t| level(t) <= own) {
+                n += 1;
+            }
+        }
+    }
+    n
+}
+
 /// What one step did.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct StepOutcome {
@@ -842,9 +868,15 @@ impl DecodeSession {
                 // Search one grid step either way.
                 let reach = (1.0 / sp.time_osr as f32, 1.0 / sp.freq_osr as f32);
                 // Candidates whose sync symbols mostly lose to other tones get no block sets.
-                let at = ws
-                    .block
-                    .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach);
+                // A weak candidate first needs its sync tones to stand out on the search grid,
+                // which costs no baseband.
+                let weak = cand.score < config.search.min_score_db;
+                let at = if weak && grid_sync(&view, &cand) < config.demod.weak_grid_sync(mode) {
+                    None
+                } else {
+                    ws.block
+                        .amplitudes(self.layout, &mut ws.plans, view.freq_hz(&cand), start_s, reach)
+                };
                 let matched = at.map(|r| r.sync_matched);
                 let ready = matched.is_some_and(|m| m >= config.block_min_sync(mode, cand.score));
                 if ready {
@@ -1354,7 +1386,43 @@ impl DecodeSession {
             .max_by(|&a, &b| failed[a].sync.cmp(&failed[b].sync).then((a == j).cmp(&(b == j))))
             .unwrap_or(j);
         let at = failed[by].cand;
-        let snr_db = g.snr.estimate(&view, &at, &tones, live, floor.db(), noise);
+        // The neighbours removed from the baseband are still in the spectrogram: the signal is
+        // read only at symbols whose tone no neighbour's tone comes within 1.5 spacings of.
+        let me = failed[by];
+        let near: [Option<&Tried>; MAX_INTERFERERS + 1] = std::array::from_fn(|i| match with.get(i) {
+            Some(&w) => Some(&failed[w]),
+            None if i == with.len() && by != j => Some(&failed[j]),
+            None => None,
+        });
+        let clear = |k: usize| {
+            let Some(&t) = tones.get(k) else {
+                return true;
+            };
+            let spacing = f64::from(layout.tone_spacing_hz);
+            let symbol = f64::from(layout.symbol_s());
+            let hz = me.freq_hz + f64::from(t) * spacing;
+            let s = me.start_s + k as f64 * symbol;
+            near.iter().flatten().all(|n| {
+                let from = ((s - n.start_s) / symbol).floor();
+                [from, from + 1.0].iter().all(|&q| {
+                    let q = q as isize;
+                    match usize::try_from(q)
+                        .ok()
+                        .and_then(|q| n.tones.get(q).filter(|_| q < layout.symbols))
+                    {
+                        Some(&u) => (n.freq_hz + f64::from(u) * spacing - hz).abs() >= 1.5 * spacing,
+                        None => true,
+                    }
+                })
+            })
+        };
+        let kept = (0..layout.symbols).filter(|&k| clear(k)).count();
+        let snr_db = if kept >= layout.symbols / 4 {
+            g.snr
+                .estimate_where(&view, &at, &tones, live, floor.db(), &clear, noise)
+        } else {
+            g.snr.estimate(&view, &at, &tones, live, floor.db(), noise)
+        };
         if outcome.osd && snr_db < config.validate.osd_floor_db(mode) {
             self.stats.implausible += 1;
             self.timings.validate_s += sw.elapsed_s();
