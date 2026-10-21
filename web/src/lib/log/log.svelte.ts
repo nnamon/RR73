@@ -348,8 +348,40 @@ export async function addQso(record: LogQsoRecord): Promise<Qso> {
   return q;
 }
 
-/** The sequencer's logQso effect: stores the QSO and shows "Logged … · Edit · Undo". */
+/** A QSO with the same station, band and mode ending this long before another counts as the same QSO, ms. */
+export const REPEAT_QSO_MS = 10 * 60_000;
+
+/**
+ * The QSO `record` repeats: the same station, band, mode and activation, ended at most
+ * REPEAT_QSO_MS before it starts, as when the station missed RR73 and it went again.
+ */
+function repeatOf(record: LogQsoRecord): Qso | null {
+  // A QSO the operator adds by hand is always its own.
+  if (record.source === 'manual') return null;
+  const call = record.call.toUpperCase();
+  const activationId = record.activationId === undefined ? (features.activations ? (log.current?.id ?? null) : null) : record.activationId;
+  let best: Qso | null = null;
+  for (const q of byId.values()) {
+    if (q.deletedAt !== null || q.call !== call || q.band !== record.band || (q.submode || q.mode) !== record.mode) continue;
+    if ((q.activationId ?? null) !== activationId) continue;
+    if (record.startUtcMs < q.start || record.startUtcMs - q.end > REPEAT_QSO_MS) continue;
+    if (!best || q.end > best.end) best = q;
+  }
+  return best;
+}
+
+/**
+ * The sequencer's logQso effect: stores the QSO and shows "Logged … · Edit · Undo". A repeat of a
+ * QSO just logged updates that QSO's end instead of adding another.
+ */
 export async function logQso(record: LogQsoRecord): Promise<Qso> {
+  await loadLog();
+  const prev = repeatOf(record);
+  if (prev) {
+    const q = record.endUtcMs > prev.end ? await updateQso(prev.id, { end: record.endUtcMs }) : prev;
+    show({ kind: 'info', qsoId: q.id, text: `${q.call} already logged` });
+    return q;
+  }
   const q = await addQso(record);
   showLogged(q);
   return q;

@@ -1051,9 +1051,9 @@ class Machine {
       const replies = e.decodes.map((d) => parseExchange(d.text)).filter((x) => sameCall(x.to, me) && sameCall(x.from, p.call));
       const ex = replies[replies.length - 1];
       if (p.logged) {
-        // Calling side after RR73: the QSO is in the log. Without Run, a station that missed our
-        // RR73 and repeats its R-report gets it again; otherwise the QSO is over.
-        if (!this.cfg.run && ex?.kind === 'rreport') {
+        // After RR73: the QSO is in the log. A station that missed our RR73 and repeats its
+        // R-report gets it again, in every mode, up to maxRetries; otherwise the QSO is over.
+        if (ex?.kind === 'rreport') {
           this.goTo(4, e.nowMs);
           return;
         }

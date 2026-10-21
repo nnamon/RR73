@@ -332,6 +332,14 @@ describe('Run mode', () => {
     expect(s.st).toMatchObject({ phase: 'idle', txEnabled: false });
   });
 
+  it('repeats RR73 with Run too when the caller repeats the R-report, logs once, then goes on to CQ', () => {
+    const s = new Sim({ run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 8, { 1: ['9V1NE K1ABC FN42'], 3: ['9V1NE K1ABC R-12'], 5: ['9V1NE K1ABC R-12'], 7: ['9V1NE K1ABC 73'] });
+    expect(texts(s).slice(-3)).toEqual(['4:K1ABC 9V1NE RR73', '6:K1ABC 9V1NE RR73', '8:CQ 9V1NE OJ11']);
+    expect(s.logged()).toHaveLength(1);
+  });
+
   it('stops repeating RR73 after the repeats to a caller who keeps sending the R-report, and keeps the QSO logged', () => {
     const s = new Sim();
     s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });

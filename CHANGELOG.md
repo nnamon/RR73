@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- A station that missed RR73 and sends its R-report again gets RR73 again with Repeat CQ and Hunt on too, up to the usual repeats.
+- A QSO logged again with the same station, band and mode within 10 minutes, as when RR73 went again by hand, updates the end time of the QSO already in the log. QSOs added by hand in Log are never merged.
+
 ## 0.24.10 · 2026-10-21
 
 - After a shifted transmission, a receive dial the IC-705 refuses just after transmit is tried once more, 0.1 s later, before Tx goes off.
