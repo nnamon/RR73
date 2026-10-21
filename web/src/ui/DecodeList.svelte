@@ -125,6 +125,7 @@
       item.old ? 'old' : '',
       item.out ? `out ${item.out.stage}` : '',
       item.toYou ? 'to-you' : '',
+      !item.out && r.worked ? 'dupe' : !item.out && r.before ? 'before' : '',
       item.dim ? 'dim' : '',
       selected ? 'sel' : '',
     ]
@@ -518,6 +519,16 @@
   .dr.old.hl-background .c-meta,
   .dr.old.hl-background .c-tag {
     color: var(--rr-hl-old-ink);
+  }
+
+  /* Worked status on the right edge: a dupe (worked today on this band and mode) solid, a station
+     worked on another day light, as it can be worked again. */
+  .dr.dupe:not(.sel) {
+    box-shadow: inset -4px 0 0 var(--rr-dupe-edge);
+  }
+
+  .dr.before:not(.sel) {
+    box-shadow: inset -4px 0 0 var(--rr-before-edge);
   }
 
   /* A message to you: a solid red edge over the decode colour's bar, and heavier text. */

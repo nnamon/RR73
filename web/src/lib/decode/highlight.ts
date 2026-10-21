@@ -116,7 +116,7 @@ export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: RR73.ending, spoken: 'ending a QSO' },
   { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: RR73.cq, spoken: 'CQ' },
   { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: RR73.sent, spoken: 'sent' },
-  { id: 'worked', rank: 17, label: 'Worked before', sub: 'On this band and mode', style: 'text', colour: RR73.worked, spoken: 'worked before' },
+  { id: 'worked', rank: 17, label: 'Worked before', sub: 'Dupe: today, this band and mode', style: 'text', colour: RR73.worked, spoken: 'worked before' },
 ];
 
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
@@ -335,6 +335,8 @@ export function moveEntry(entries: readonly HighlightEntry[], from: number, to: 
 export interface Where {
   band: string;
   mode: string;
+  /** True for a dupe: worked today on this band and mode in the running activation (the sequencer's rule). Without it, any day counts. */
+  dupe?: (call: string) => boolean;
 }
 
 /** A decode as the matcher needs it; `sent` is true for the operator's own transmissions. */
@@ -360,7 +362,10 @@ export interface DecodeHighlight {
   bg: HighlightId | null;
   ink: HighlightId | null;
   isNew: boolean;
+  /** A dupe: Worked before greys it, Hide worked leaves it out. */
   worked: boolean;
+  /** Worked on this band and mode on another day: workable again, marked lightly. */
+  before?: boolean;
 }
 
 /**
@@ -385,6 +390,9 @@ export function highlightDecode(decode: HighlightInput, myCall: string, index: L
   // RR73 or 73 from a station to anyone but the operator: that station is about to be free.
   const ending = !!station && (ex?.kind === '73' || ex?.kind === 'rr73') && !!ex.to && callKey(ex.to) !== me;
   const band = where.band.toLowerCase();
+  // Worked on this band and mode on any day, and a dupe: today, in the running activation.
+  const here = !!sender && setOf(index.callsByBandMode, bandModeKey(band, where.mode)).has(sender);
+  const dupe = where.dupe ? !!sender && here && where.dupe(sender) : here;
 
   const test: Record<HighlightId, () => boolean> = {
     myCall: () => mine,
@@ -403,8 +411,8 @@ export function highlightDecode(decode: HighlightInput, myCall: string, index: L
     newCallBand: () => !!station && !setOf(index.callsByBand, band).has(station),
     newGrid: () => !!grid && !index.grids.has(grid),
     newGridBand: () => !!grid && !setOf(index.gridsByBand, band).has(grid),
-    worked: () => !!sender && setOf(index.callsByBandMode, bandModeKey(band, where.mode)).has(sender),
+    worked: () => dupe,
   };
   const first = (style: HighlightStyle) => entries.find((e) => e.on && category(e.id).style === style && test[e.id]())?.id ?? null;
-  return { bg: first('background'), ink: first('text'), isNew: entries.some((e) => e.on && NEW_IDS.has(e.id) && test[e.id]()), worked: test.worked() };
+  return { bg: first('background'), ink: first('text'), isNew: entries.some((e) => e.on && NEW_IDS.has(e.id) && test[e.id]()), worked: dupe, before: here && !dupe };
 }

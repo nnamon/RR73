@@ -117,9 +117,18 @@ describe('highlightDecode', () => {
     expect(hl('TNX FOR QSO 73', on('newCall', 'cq'))).toBeNull();
   });
 
+  it('greys only a dupe, and marks a station worked on another day as workable', () => {
+    const log = buildLogIndex([qso('K1ABC', 'FN42', '20m')]);
+    const today = (call: string) => call === 'K1ABC';
+    const dupe = highlightDecode({ text: 'CQ K1ABC FN42' }, ME, log, { ...AT, dupe: today }, on('worked'));
+    expect(dupe).toMatchObject({ ink: 'worked', worked: true, before: false });
+    const another = highlightDecode({ text: 'CQ K1ABC FN42' }, ME, log, { ...AT, dupe: () => false }, on('worked'));
+    expect(another).toMatchObject({ ink: null, worked: false, before: true });
+  });
+
   it("ignores the operator's own callsign for new and worked before", () => {
     const log = buildLogIndex([qso('9V1NE/P', 'OJ11', '20m')]);
-    const none = { bg: null, ink: null, isNew: false, worked: false };
+    const none = { bg: null, ink: null, isNew: false, worked: false, before: false };
     expect(highlightDecode({ text: 'CQ 9V1NE OJ11' }, ME, log, AT, on('newCall', 'newCallBand', 'newGrid', 'worked'))).toEqual(none);
     expect(highlightDecode({ text: 'CQ 9V1NE/P OJ11' }, ME, log, AT, on('worked'))).toEqual(none);
     expect(highlightDecode({ text: 'JA1KXM VK3/9V1NE 73' }, ME, buildLogIndex([]), AT, on('newCall'))).toEqual(none);

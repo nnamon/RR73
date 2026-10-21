@@ -32,7 +32,7 @@
   import { log } from '../../lib/log/log.svelte';
   import { buildLogIndex, mergeLogIndex } from '../../lib/log/worked';
   import { wavelogIndex } from '../../lib/log/wavelog-worked.svelte';
-  import { orderQueue } from '../../lib/qso/sequencer';
+  import { dupeOf, orderQueue } from '../../lib/qso/sequencer';
   import { STATUS } from '../../lib/qso/status';
   import { clock } from '../../lib/state/now.svelte';
   import { settings, updateSettings } from '../../lib/state/settings.svelte';
@@ -208,9 +208,15 @@
   // on, what Wavelog's log holds counts too, for the colours, New and Hide worked only.
   const ownIndex = $derived(buildLogIndex(log.live, countries));
   const logIndex = $derived(mergeLogIndex(ownIndex, wavelogIndex()));
+  /** Today's UTC date: dupes reset with it. Changes once a day, so the colours do not redraw every second. */
+  const today = $derived(new Date(clock.ms).toISOString().slice(0, 10));
   const classify: Classify = $derived.by(() => {
     const index = logIndex;
-    const where = { band: settings.band, mode: ftMode };
+    // A dupe by the sequencer's rule, from this phone's log: worked today on this band and mode in
+    // the running activation. Stations worked on another day stay workable and are only marked.
+    const st = qso.st;
+    const noon = Date.parse(`${today}T12:00:00Z`);
+    const where = { band: settings.band, mode: ftMode, dupe: (call: string) => dupeOf(st.worked, call, st.config, noon) };
     const me = settings.callsign;
     const entries = settings.highlights;
     return (d, sent) => highlightDecode({ text: d.text, sent }, me, index, where, entries);

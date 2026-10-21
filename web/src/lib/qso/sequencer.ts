@@ -416,7 +416,7 @@ function workedHere(worked: Worked[], call: string, c: SeqConfig): boolean {
  * any activation when none runs. A new activation the same day, at a second park for example,
  * starts with no dupes.
  */
-function dupeOf(worked: Worked[], call: string, c: SeqConfig, nowMs: number): boolean {
+export function dupeOf(worked: Worked[], call: string, c: SeqConfig, nowMs: number): boolean {
   const day = dayOf(nowMs);
   return worked.some((w) => sameCall(w.call, call) && w.band === c.band && w.mode === c.mode && w.day === day && w.activationId === c.activationId);
 }

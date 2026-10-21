@@ -132,7 +132,8 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
     await page.getByRole('link', { name: 'Operate' }).click();
 
     await page.evaluate(async (log) => {
-      const end = Date.now() - 86_400_000;
+      // Logged minutes ago: today's QSOs, so the worked ones are dupes and grey.
+      const end = Date.now() - 120_000;
       for (const [call, grid, band, mode] of log) {
         await window.__rr73!.logged({ call, grid, band, mode, dialHz: band === '40m' ? 7_074_000 : 14_074_000, audioHz: 1500, startUtcMs: end - 60_000, endUtcMs: end, reportSent: -10, reportRcvd: -12 });
       }

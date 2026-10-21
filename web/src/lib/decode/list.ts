@@ -17,11 +17,11 @@ import type { Decode } from './types';
 /** The decode colours for a decode; `sent` is true for the operator's own transmissions. */
 export type Classify = (decode: Decode, sent: boolean) => DecodeHighlight;
 
-const NO_COLOUR: DecodeHighlight = { bg: null, ink: null, isNew: false, worked: false };
+const NO_COLOUR: DecodeHighlight = { bg: null, ink: null, isNew: false, worked: false, before: false };
 
-function colours(classify: Classify | undefined, d: Decode, sent: boolean): Pick<DecodeRowData, 'hl' | 'ink' | 'isNew' | 'worked'> {
+function colours(classify: Classify | undefined, d: Decode, sent: boolean): Pick<DecodeRowData, 'hl' | 'ink' | 'isNew' | 'worked' | 'before'> {
   const h = classify ? classify(d, sent) : NO_COLOUR;
-  return { hl: h.bg, ink: h.ink, isNew: h.isNew, worked: h.worked };
+  return { hl: h.bg, ink: h.ink, isNew: h.isNew, worked: h.worked, before: h.before };
 }
 
 /** A decode as the list shows it, and whether it is addressed to the operator. */

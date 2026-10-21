@@ -351,6 +351,9 @@
    */
   --rr-weight-heavy: 800;
   --rr-to-you-edge: var(--rr-tx);
+  /* Worked status on a decode row's right edge: a dupe, and a station worked on another day. */
+  --rr-dupe-edge: var(--rr-label2);
+  --rr-before-edge: light-dark(#C7C7CC, rgb(235 235 245 / 30%));
   --rr-focus-dim: 0.4;
   --rr-slot-quiet: light-dark(#F2F2F7, #1C1C1E);
   --rr-slot-quiet-rule: var(--rr-sep-strong);

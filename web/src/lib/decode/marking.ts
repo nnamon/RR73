@@ -33,8 +33,10 @@ export interface DecodeRowData {
   ink?: HighlightId | null;
   /** An enabled new category matches: the New filter shows it. */
   isNew?: boolean;
-  /** The sender is in the log on this band and mode: Hide worked hides it. */
+  /** The sender is a dupe, worked today on this band and mode: Hide worked hides it. */
   worked?: boolean;
+  /** Worked on this band and mode on another day (DecodeHighlight.before). */
+  before?: boolean;
 }
 
 /** Text with one bold span, for rendering without HTML. */

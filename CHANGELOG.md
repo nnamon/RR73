@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Worked before greys a decode only for a dupe: a station worked today on this band and mode, in the running activation, the rule Hunt and Repeat CQ use. Hide worked hides only dupes.
+- Decode rows show worked status on their right edge: solid for a dupe, light for a station worked on this band and mode on another day, which can be worked again.
+
 ## 0.24.13 · 2026-10-21
 
 - Operate's Sort chip lists each slot's decodes by kind: messages to you, then CQs, then calls, reports and endings, each from the lowest audio frequency. It stays as set. Off keeps the decoder's order.
