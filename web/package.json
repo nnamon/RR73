@@ -1,7 +1,7 @@
 {
   "name": "rr73-web",
   "private": true,
-  "version": "0.24.28",
+  "version": "0.24.29",
   "description": "RR73: FT8, FT4, WSPR and RTTY on an iPhone through a headset-jack or USB interface, or on a computer with rig control.",
   "type": "module",
   "scripts": {

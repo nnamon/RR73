@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.29 · 2026-10-21
 
 - Web SDR keeps streaming from KiwiSDR v1.902 receivers. A stream ended after 10 s with The receiver has no free channel when the receiver said it was not busy.
 
