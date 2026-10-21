@@ -12,6 +12,7 @@
   import { tick } from 'svelte';
   import BackLink from '../ui/BackLink.svelte';
   import ColourSheet from '../ui/ColourSheet.svelte';
+  import ColourLegend from './ColourLegend.svelte';
   import DecodeList, { type DecodeListItem } from '../ui/DecodeList.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
@@ -235,6 +236,18 @@
   </div>
 
   <div class="section">
+    <div class="group">
+      <label class="row">
+        <span class="row-main"><span class="row-title">Show legend</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.colourLegend} onchange={(e) => void updateSettings({ colourLegend: e.currentTarget.checked })} />
+      </label>
+    </div>
+  </div>
+
+  {#if settings.colourLegend}
+    <ColourLegend highlights={entries} {me} {countries} />
+  {:else}
+  <div class="section">
     <h2 class="section-head" id="highlight-head">Highlight</h2>
     <ul class="group hl-list" class:dragging={drag !== null} aria-labelledby="highlight-head" bind:this={listEl}>
       {#each backgrounds as e, i (e.id)}
@@ -276,6 +289,8 @@
       {/each}
     </ul>
   </div>
+
+  {/if}
 
   <span class="visually-hidden" role="status">{announce}</span>
   <div class="notice" role="status">

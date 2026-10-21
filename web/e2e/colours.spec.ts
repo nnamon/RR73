@@ -290,7 +290,7 @@ test('each editor scheme applies with RR73’s switches: every category on but t
   for (const name of ['Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']) {
     await choose(page, name);
     await expect(preset(page, name)).toBeChecked();
-    for (const sw of await page.getByRole('switch').all()) {
+    for (const sw of await page.locator('.hl-list').getByRole('switch').all()) {
       const label = (await sw.getAttribute('aria-label')) ?? '';
       if (off.includes(label)) await expect(sw, label).not.toBeChecked();
       else await expect(sw, label).toBeChecked();
@@ -316,4 +316,48 @@ test('a CQ from a DXCC entity the log lacks takes New DXCC, once the country fil
   await page.evaluate(() => window.__rr73!.logged({ call: 'A45XR', grid: 'LL72', band: '20m', mode: 'FT8', dialHz: 14_074_000, audioHz: 1500, startUtcMs: Date.now() - 120_000, endUtcMs: Date.now() - 60_000, reportSent: -10, reportRcvd: -12 }));
   await expect(oman).toHaveAttribute('data-hl', 'newGrid');
   await expect(row(page, 'CQ JA1KXM PM95')).toHaveAttribute('data-hl', 'newDxcc');
+});
+
+test('Show legend draws each row style with its meaning and stays as set', async ({ page }) => {
+  await setUp(page);
+  await toColours(page);
+  await page.getByRole('switch', { name: 'Show legend' }).check();
+  await expect(page.getByRole('heading', { name: 'Highlight' })).toHaveCount(0);
+
+  // The colours in the operator's order, enabled ones only: RR73's scheme leaves New DXCC off.
+  const colours = page.getByTestId('legend-colours');
+  await expect(colours.locator('li.lg').first()).toHaveAttribute('data-key', 'myCall');
+  await expect(colours.locator('li.lg[data-key="newDxcc"]')).toHaveCount(0);
+  await expect(colours.locator('li.lg[data-key="cq"] .dr')).toHaveAttribute('data-hl', 'cq');
+  await expect(colours.locator('li.lg[data-key="myCall"] .dr')).toHaveClass(/to-you/);
+
+  const worked = page.getByTestId('legend-worked');
+  await expect(worked.locator('li.lg[data-key="dupe"] .dr')).toHaveClass(/\bdupe\b/);
+  await expect(worked.locator('li.lg[data-key="dupe"] .dr')).toHaveAttribute('data-ink', 'worked');
+  await expect(worked.locator('li.lg[data-key="before"] .dr')).toHaveClass(/\bbefore\b/);
+
+  const rows = page.getByTestId('legend-rows');
+  await expect(rows.locator('li.lg[data-key="next"] .c-tag')).toHaveText('Next · :45');
+  await expect(rows.locator('li.lg[data-key="sending"] .c-tag')).toHaveText('Sending');
+  await expect(rows.locator('li.lg[data-key="old"] .dr')).toHaveClass(/\bold\b/);
+  await expect(rows.locator('li.lg[data-key="dim"] .dr')).toHaveClass(/\bdim\b/);
+
+  const tags = page.getByTestId('legend-tags');
+  await expect(tags.locator('li.lg[data-key="lost"] .c-lost')).toHaveText('Lost');
+  await expect(tags.locator('li.lg[data-key="queue"] .c-queue')).toHaveText('Next');
+  await expect(tags.locator('li.lg[data-key="queue-dupe"] .c-queue')).toHaveText('Dupe');
+  await expect(tags.getByTestId('chase-tag')).toHaveText('US-0817');
+
+  // A colour turned off leaves the legend; grey text goes with Worked before.
+  await page.getByRole('switch', { name: 'Show legend' }).uncheck();
+  await page.getByRole('switch', { name: 'Worked before' }).uncheck();
+  await page.getByRole('switch', { name: 'CQ in the message' }).uncheck();
+  await page.getByRole('switch', { name: 'Show legend' }).check();
+  await expect(colours.locator('li.lg[data-key="cq"]')).toHaveCount(0);
+  await expect(worked.locator('li.lg[data-key="dupe"] .dr')).not.toHaveAttribute('data-ink', 'worked');
+
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.getByRole('switch', { name: 'Show legend' })).toBeChecked();
+  await expect(page.getByTestId('legend-worked')).toBeVisible();
 });

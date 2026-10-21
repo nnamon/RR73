@@ -188,6 +188,8 @@ export interface Settings {
   waterfallCalls: boolean;
   /** Sort decodes: each slot lists messages to us, then CQs, then the other kinds, each by frequency. */
   sortDecodes: boolean;
+  /** Settings › Decode colours shows the legend in place of the Highlight and Text lists. */
+  colourLegend: boolean;
   /** FT8 and FT4 decoding: deep runs the later stages after the first (decision 0007); fast stops after the first, for a slow device. */
   decodeDepth: 'deep' | 'fast';
   /** A priori decoding: the decoder tries the messages the QSO under way expects (decision 0009). */
@@ -249,6 +251,7 @@ export const DEFAULTS: Settings = {
   waterfallPalette: 'rr73',
   waterfallCalls: false,
   sortDecodes: false,
+  colourLegend: false,
   decodeDepth: 'deep',
   aPriori: true,
   wavelogRadio: false,
@@ -437,6 +440,7 @@ export function validate(raw: unknown): Settings {
   if (isPaletteId(r.waterfallPalette)) s.waterfallPalette = r.waterfallPalette;
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
   if (typeof r.sortDecodes === 'boolean') s.sortDecodes = r.sortDecodes;
+  if (typeof r.colourLegend === 'boolean') s.colourLegend = r.colourLegend;
   if (r.decodeDepth === 'deep' || r.decodeDepth === 'fast') s.decodeDepth = r.decodeDepth;
   if (typeof r.aPriori === 'boolean') s.aPriori = r.aPriori;
   if (typeof r.wavelogRadio === 'boolean') s.wavelogRadio = r.wavelogRadio;

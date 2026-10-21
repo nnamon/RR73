@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Decode colours › Show legend draws each row style in your colours with its meaning: the enabled colours in order, dupes and stations worked on another day, transmissions, faded and dimmed rows, and the Next, Dupe, Lost, country and reference tags.
+
 ## 0.24.21 · 2026-10-21
 
 - Decode messages use the interface font by default. Settings › Appearance › Decode messages › Monospace lines them up.
