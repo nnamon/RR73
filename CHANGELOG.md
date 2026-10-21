@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Turning off Read Wavelog's log keeps the copy already read. Turning it on again reads only the QSOs added since. Remove Wavelog still deletes it.
+
 ## 0.24.25 · 2026-10-21
 
 - WSPR spots show the reported power in watts: 5 W on a phone, 37 dBm (5 W) in the wider table.

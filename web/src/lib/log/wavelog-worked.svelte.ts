@@ -133,10 +133,12 @@ export function wavelogBandModes(call: string): string[] {
   return index ? bandModesOf(index, call) : [];
 }
 
-/** Turns Read Wavelog's log on, which reads it at once, or off, which deletes what was read. */
+/**
+ * Turns Read Wavelog's log on, which reads what is new at once, or off, which stops using it and
+ * keeps what was read, so switching on again needs only the QSOs added since.
+ */
 export async function setReadWorked(on: boolean): Promise<void> {
   await setWavelog({ readWorked: on });
-  if (!on) await sync.forget();
 }
 
 /** Deletes what was read, as Remove Wavelog does. */
@@ -161,21 +163,12 @@ let started = false;
 export function initWavelogWorked(): void {
   if (started || typeof window === 'undefined') return;
   started = true;
-  let cleaned = false;
   $effect.root(() => {
     $effect(() => {
       const own = ownLog();
       const w = log.wavelog;
-      const healthy = own && !log.storageError;
       const source = own && w.readWorked && !!w.url && !!w.apiKey ? { url: w.url, apiKey: w.apiKey } : null;
       untrack(() => {
-        // The effect never deletes while it runs: switching the practice log in and out only
-        // pauses reading. Once per start, with the operator's log loaded and the switch off, what
-        // an earlier delete left behind goes.
-        if (healthy && !cleaned) {
-          cleaned = true;
-          if (!w.readWorked) void sync.forget();
-        }
         void sync.use(source);
       });
     });

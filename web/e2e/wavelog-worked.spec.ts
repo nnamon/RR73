@@ -1,7 +1,7 @@
 // Read Wavelog's log in Chromium: the switch in Settings › Logging › Wavelog, off by
 // default, reads the mock Wavelog's log (route interception, e2e/log-data.ts; no real server is
 // called). A station worked only in Wavelog gets the light edge of a station worked on another day in Operate; turning the
-// switch off deletes what was read; Hunt still calls the station. Decodes come through the
+// switch off keeps what was read for switching on again; Hunt still calls the station. Decodes come through the
 // screen-review hooks (src/lib/testing/e2e-hooks.ts).
 import { expect, test, type Page } from '@playwright/test';
 import { mockWavelog, seed, wavelogOnly, WAVELOG_URL, type MockWavelog } from './log-data';
@@ -85,7 +85,7 @@ test('starts off and reads nothing from Wavelog', async ({ page }) => {
   expect(strays).toEqual([]);
 });
 
-test('reads Wavelog’s log when switched on: a station worked only there greys, Hide worked hides it, and switching off deletes it', async ({ page }) => {
+test('reads Wavelog’s log when switched on: a station worked only there greys, Hide worked hides it, and switching off keeps the copy for switching on again', async ({ page }) => {
   const { mock, strays } = await start(page);
   await toWavelog(page);
   await readSwitch(page).check();
@@ -146,17 +146,24 @@ test('reads Wavelog’s log when switched on: a station worked only there greys,
   );
   expect(qsos).toBe(0);
 
-  // Off: what was read is deleted, and the colours go back to the phone's log.
+  // Off: the colours go back to the phone's log, and the copy of Wavelog's log stays.
   await toWavelog(page);
   await readSwitch(page).uncheck();
   await expect(page.getByTestId('wavelog-read')).toHaveCount(0);
-  await expect.poll(() => databases(page)).not.toContain(WORKED_DB);
+  expect(await databases(page)).toContain(WORKED_DB);
   await toOperate(page);
   await decoded(page, [['CQ JA1KXM PM95', -8]]);
   await expect(row(page, 'CQ JA1KXM PM95').first()).not.toHaveAttribute('data-ink', 'worked');
   const before = reads(mock).length;
   await page.reload();
   await toOperate(page);
+  await page.waitForTimeout(500);
+  expect(reads(mock).length).toBe(before);
+
+  // On again: the stored copy serves at once. Checked minutes ago, it needs no read.
+  await toWavelog(page);
+  await readSwitch(page).check();
+  await expect(page.getByTestId('wavelog-read')).toHaveText(/^2 stations · checked \d\d:\d\d UTC$/);
   await page.waitForTimeout(500);
   expect(reads(mock).length).toBe(before);
   expect(strays).toEqual([]);
