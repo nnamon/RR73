@@ -229,6 +229,21 @@ describe('connecting a KX2', () => {
     expect(rig.status).toBe('off');
   });
 
+  it('through a KX2 cable, keeps the port open when the lines cannot be lowered and reopens it by itself whatever MIC BTN reads', async () => {
+    void updateSettings({ cat: { ...settings.cat, kx2Link: 'cable' } });
+    chosen.setSignals = async () => Promise.reject(new DOMException('Failed to set control signals.', 'NetworkError'));
+    await connect();
+    expect(rig.status).toBe('connected');
+    expect(chosen.log).not.toContain('close');
+    resetCat();
+    chosen.log = [];
+    const opening = initCat();
+    await run(OPEN_SETTLE_MS + 400);
+    await opening;
+    expect(chosen.log[0]).toBe('open 4800');
+    void updateSettings({ cat: { ...settings.cat, kx2Link: 'digirig' } });
+  });
+
   it('opens the port by itself on starting, or when it comes back, only after MIC BTN read OFF', async () => {
     // Connected once with MIC BTN at PTT UP.DN: the stored read says PTT.
     await connect();

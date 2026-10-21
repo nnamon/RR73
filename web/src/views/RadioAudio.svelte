@@ -35,7 +35,7 @@
    * own device.
    */
   const outputFoot = $derived.by(() => {
-    if (outputChoice && settings.outputDeviceId === null && keysByCat()) return `Key the radio with CAT needs ${radioTraits().audioDevice} here.`;
+    if (outputChoice && settings.outputDeviceId === null && keysByCat()) return `Key the radio with CAT needs ${settings.cat.radio === 'kx2' && settings.cat.kx2Link === 'cable' ? 'the KX2’s audio interface' : radioTraits().audioDevice} here.`;
     if (!outputChoice || settings.outputDeviceId === null) return null;
     if (outputMissing) return 'The chosen output is not connected, so transmit audio plays through the system default.';
     if (audio.output.error === 'failed') return 'The browser refused the chosen output, so transmit audio plays through the system default.';

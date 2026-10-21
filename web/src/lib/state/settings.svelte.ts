@@ -104,11 +104,13 @@ export interface CatSettings {
    * by itself (on starting, on the port coming back, on a new baud rate) only after it read 0, OFF.
    */
   kx2MicBtn: number | null;
+  /** How the KX2 connects: a Digirig, whose KX cable keys the mic jack by RTS, or an Elecraft cable (KXUSB, KXSER) or other serial cable with no PTT line. */
+  kx2Link: 'digirig' | 'cable';
   /** RR73 may have left the radio keyed: set from PTT on until a read confirms PTT off, kept across reloads. */
   leftKeyed: boolean;
 }
 
-export const CAT_DEFAULTS: Readonly<CatSettings> = { enabled: false, radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, ic705Baud: IC705_DEFAULT_BAUD, kx2MicBtn: null, leftKeyed: false };
+export const CAT_DEFAULTS: Readonly<CatSettings> = { enabled: false, radio: 'ic705', keyPtt: false, shiftDial: false, connect: false, usbVendorId: null, usbProductId: null, kx2Baud: KX2_DEFAULT_BAUD, ic705Baud: IC705_DEFAULT_BAUD, kx2MicBtn: null, kx2Link: 'digirig', leftKeyed: false };
 
 export interface Settings {
   /** Operator callsign, upper case; empty until set. */
@@ -335,6 +337,7 @@ function validateCat(raw: unknown): CatSettings {
   const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
   const c = { ...CAT_DEFAULTS };
   for (const k of ['enabled', 'keyPtt', 'shiftDial', 'connect', 'leftKeyed'] as const) if (typeof r[k] === 'boolean') c[k] = r[k];
+  if (r.kx2Link === 'digirig' || r.kx2Link === 'cable') c.kx2Link = r.kx2Link;
   if (typeof r.kx2MicBtn === 'number' && Number.isInteger(r.kx2MicBtn) && r.kx2MicBtn >= 0 && r.kx2MicBtn <= 255) c.kx2MicBtn = r.kx2MicBtn;
   if (r.radio === 'ic705' || r.radio === 'kx2') c.radio = r.radio;
   if (KX2_BAUDS.includes(r.kx2Baud as Kx2Baud)) c.kx2Baud = r.kx2Baud as Kx2Baud;

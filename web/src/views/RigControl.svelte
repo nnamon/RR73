@@ -60,27 +60,28 @@
   });
 
   /** The port to choose in the browser's chooser: the IC-705's CI-V port, or the Digirig's serial port. */
-  const port = $derived(kx2 ? 'the Digirig’s CP210x serial port' : 'IC-705 Serial Port A (CI-V)');
+  const digirig = $derived(kx2 && settings.cat.kx2Link === 'digirig');
+  const port = $derived(kx2 ? (digirig ? 'the Digirig’s CP210x serial port' : 'the KX2 cable’s serial port') : 'IC-705 Serial Port A (CI-V)');
 
   /** What is wrong with the connection and what to do, or how to start. */
   const connectionText = $derived.by((): { text: string; bad: boolean } | null => {
     if (rig.unkeyFailed) return { text: unkeyFailedText(), bad: true };
     switch (rig.status) {
       case 'off':
-        return { text: kx2 ? `Plug in the Digirig by USB, tap Connect radio, then choose ${port}.` : `Plug in the IC-705 by USB, tap Connect radio, then choose ${port}.`, bad: false };
+        return { text: kx2 ? `Plug in the ${digirig ? 'Digirig' : 'KX2 cable'} by USB, tap Connect radio, then choose ${port}.` : `Plug in the IC-705 by USB, tap Connect radio, then choose ${port}.`, bad: false };
       case 'choosing':
         return { text: `Choose ${port}.`, bad: false };
       case 'silent':
         if (kx2)
           return rig.noiseOnly
-            ? { text: 'Data arrives, but no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232, and check that the Digirig is set for RS-232.', bad: true }
-            : { text: 'No reply from the KX2. Check that it is on, that the Digirig’s serial cable is in its ACC jack, and that Baud rate matches MENU › RS232.', bad: true };
+            ? { text: digirig ? 'Data arrives, but no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232, and check that the Digirig is set for RS-232.' : 'Data arrives, but no answer from the KX2. Set Baud rate to the KX2’s MENU › RS232.', bad: true }
+            : { text: 'No reply from the KX2. Check that it is on, that the serial cable is in its ACC jack, and that Baud rate matches MENU › RS232.', bad: true };
         return rig.noiseOnly
           ? { text: `This port sends data that is not CI-V. Tap Connect radio and choose ${port}.`, bad: true }
           : { text: `No reply from the IC-705. Check that it is on, that you chose ${port}, and that SET › Connectors › CI-V › CI-V Address is A4.`, bad: true };
       case 'lost':
         return kx2
-          ? { text: 'The Digirig’s port closed, and Tx went off. Check its USB cable, then tap Reconnect radio.', bad: true }
+          ? { text: 'The KX2’s port closed, and Tx went off. Check the USB cable, then tap Reconnect radio.', bad: true }
           : { text: 'The IC-705’s port closed, and Tx went off. Check the cable and the radio, then tap Reconnect radio.', bad: true };
       case 'failed':
         switch (rig.error) {
@@ -94,7 +95,7 @@
             return { text: 'Rig control did not load. Reload the app.', bad: true };
           case 'gone':
             return kx2
-              ? { text: 'The Digirig is not plugged in, or the browser no longer allows its port. Plug it in, then tap Connect radio.', bad: true }
+              ? { text: 'The KX2’s cable is not plugged in, or the browser no longer allows its port. Plug it in, then tap Connect radio.', bad: true }
               : { text: 'The IC-705 is not plugged in, or the browser no longer allows its port. Plug it in, then tap Connect radio.', bad: true };
           case 'choose':
             return { text: `The browser allows more than one port of this kind. Tap Connect radio and choose ${port}.`, bad: true };
@@ -138,7 +139,7 @@
    * opens the port (Owner's Manual pp. 8, 48). An error once a read found PTT there.
    */
   const micBtnFirst = $derived.by((): { text: string; bad: boolean } | null => {
-    if (!kx2 || connected || settings.cat.kx2MicBtn === 0) return null;
+    if (!digirig || connected || settings.cat.kx2MicBtn === 0) return null;
     return {
       text: 'Set MENU › MIC BTN to OFF on the KX2 before you connect: with PTT there, the Digirig keys the KX2 while the browser opens the port. Until RR73 reads MIC BTN OFF, it opens the port only when you tap Connect radio.',
       bad: settings.cat.kx2MicBtn !== null && (settings.cat.kx2MicBtn & 1) === 1,
@@ -170,6 +171,8 @@
    */
   const KX2_RISK =
     'The KX2 has no transmit time-out. Digirig reports that RF can stop its interface returning to receive. Keyed by CAT, a stuck interface leaves the KX2 transmitting until you unkey it. Keyed by VOX, it stops when the audio stops.';
+
+  const KX2_RISK_CABLE = 'The KX2 has no transmit time-out. Keyed by CAT, it transmits until RR73 or you unkey it. Keyed by VOX, it stops when the audio stops.';
 
   /** RR73's FT8 and FT4 audio runs from 200 to 2800 Hz; Elecraft's SSB filters are 2.7 or 2.8 kHz wide (docs/design/cat.md). */
   const FILTER_MIN_HZ = 2700;
@@ -236,16 +239,16 @@
         out.push({ text: 'The radio does not report itself as a KX2 or KX3, so RR73 does not read MIC BTN. Check MENU › MIC BTN at the radio: OFF.', bad: false });
       if (mic === undefined && m.menu_entry === 82) out.push({ text: 'The KX2 shows its MIC BTN menu entry, as a read cut off by a lost port leaves it. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.', bad: false });
       if (mic === -1) out.push({ text: 'MIC BTN could not be read. Check MENU › MIC BTN at the radio: OFF.', bad: false });
-      if (mic !== undefined && mic >= 0 && mic & 1)
+      if (digirig && mic !== undefined && mic >= 0 && mic & 1)
         out.push({ text: 'MIC BTN reads the mic jack’s ring as PTT, and the Digirig’s KX cable puts its PTT line there: the KX2 transmits while the browser opens the port. Set MENU › MIC BTN to OFF.', bad: true });
-      else if (mic === 4) out.push({ text: 'MIC BTN reads the mic jack’s ring for UP and DN, where the Digirig’s KX cable puts its PTT line: VFO A may move by itself. Set MENU › MIC BTN to OFF.', bad: false });
+      else if (digirig && mic === 4) out.push({ text: 'MIC BTN reads the mic jack’s ring for UP and DN, where the Digirig’s KX cable puts its PTT line: VFO A may move by itself. Set MENU › MIC BTN to OFF.', bad: false });
       if (m.auto_info !== undefined && m.auto_info !== null && m.auto_info > 0)
         out.push({ text: `The KX2 sends its dial and mode by itself (AI${m.auto_info}), set by another program or MENU › AUTO INF, and a change during a band change can read as refused. Turn the KX2 off and on, or set MENU › AUTO INF back to its default.`, bad: false });
       if (m.k2 === 1 || m.k2 === 3)
         out.push({ text: `The KX2 is in K2 command mode ${m.k2}, left by another program: it reports DATA as LSB or USB, so every band change reads as refused. Close that program, turn the KX2 off and on, then connect again.`, bad: true });
       if (m.vox === 0 && !settings.cat.keyPtt && (rig.mode === 'data' || rig.mode === 'data-rev'))
         out.push({ text: 'With VOX off, nothing keys the radio for a transmission. Turn on Key the radio with CAT, or set MENU › VOX MD to ON in DATA A.', bad: true });
-      if (!settings.cat.keyPtt)
+      if (digirig && !settings.cat.keyPtt)
         out.push({ text: 'ERR PTT at power-on turns VOX off in every mode until MENU › VOX MD is set again. The Digirig’s PTT line, held while RTS is asserted, causes it.', bad: false });
       if (m.bandwidth !== undefined && m.bandwidth < FILTER_MIN_HZ)
         out.push({ text: `The receive filter is ${khz(m.bandwidth)} wide, and FT8 and FT4 use 200 to 2800 Hz. Tap FIL on the KX2 and turn AF/MON to widen it to ${khz(FILTER_MIN_HZ)} or more.`, bad: false });
@@ -274,7 +277,7 @@
   });
 
   /** The radio's audio device, for Settings › Radio and audio › Output. */
-  const radioAudio = $derived(radioTraits().audioDevice);
+  const radioAudio = $derived(kx2 && !digirig ? 'the KX2’s audio interface' : radioTraits().audioDevice);
 
   /**
    * Keying by CAT, a transmission goes only to the output chosen in Radio and audio, so the radio
@@ -303,7 +306,7 @@
 
   const radios = [
     { id: 'ic705', title: 'Icom IC-705', sub: 'USB cable' },
-    { id: 'kx2', title: 'Elecraft KX2', sub: 'Digirig' },
+    { id: 'kx2', title: 'Elecraft KX2', sub: 'Digirig or KX2 cable' },
   ] as const;
 </script>
 
@@ -332,6 +335,16 @@
           {#if settings.cat.radio === r.id}<Icon name="check" size={17} class="chk" />{/if}
         </button>
       {/each}
+      {#if kx2}
+        <label class="row">
+          <span class="row-main"><span class="row-title">Connection</span><span class="row-sub">Digirig keys the mic jack</span></span>
+          <select class="select" value={settings.cat.kx2Link} onchange={(e) => void updateSettings({ cat: { ...settings.cat, kx2Link: e.currentTarget.value === 'cable' ? 'cable' : 'digirig' } })}>
+            <option value="digirig">Digirig</option>
+            <option value="cable">KX2 cable</option>
+          </select>
+          <Icon name="updown" size={13} class="row-chevron" />
+        </label>
+      {/if}
       <label class="row">
         <span class="row-title">Baud rate</span>
         {#if kx2}
@@ -427,7 +440,7 @@
     {#if notDataMode}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataMode}</p>{/if}
     {#if offBand}<p class="section-foot err" role="alert" data-testid="rig-band">{offBand}</p>{/if}
     <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
-    {#if kx2}<p class="section-foot" data-testid="rig-risk">{KX2_RISK}</p>{/if}
+    {#if kx2}<p class="section-foot" data-testid="rig-risk">{digirig ? KX2_RISK : KX2_RISK_CABLE}</p>{/if}
   </div>
 
   {#if !kx2}

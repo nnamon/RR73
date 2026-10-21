@@ -161,8 +161,9 @@ async function open(port: SerialPortLike): Promise<boolean> {
   const kx2 = settings.cat.radio === 'kx2';
   const options = kx2 ? kx2Port(settings.cat.kx2Baud) : civPort(settings.cat.ic705Baud);
   // The IC-705's port stays open when the driver refuses to lower the lines, until USB SEND is read
-  // below. The KX2's closes: the Digirig keys it by RTS.
-  const link = new SerialLink(port, options, { keepOpenWithoutLines: !kx2, steps: { signals: () => logStep({ step: 'signals' }) } });
+  // below. A KX2's closes through a Digirig, which keys it by RTS; a KX2 cable has no PTT line.
+  const digirig = kx2 && settings.cat.kx2Link === 'digirig';
+  const link = new SerialLink(port, options, { keepOpenWithoutLines: !digirig, steps: { signals: () => logStep({ step: 'signals' }) } });
   logStep({ step: 'open', options });
   const err = await link.open();
   if (err) {
@@ -187,7 +188,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
   // DTR and RTS stay as Chromium left them, which may be asserted. USB SEND OFF leaves them out of
   // keying (Advanced Manual p. 9-2); on a line, or unread, the port closes. Nothing else goes out
   // first, and the radio's state reaches the app only after, so the attempt connects only then.
-  if (!link.linesLow) {
+  if (!link.linesLow && !kx2) {
     logStep({ step: 'usb-send' });
     const off = await usbSendReadsOff(radio);
     if (current !== me) return false;
@@ -265,7 +266,7 @@ async function usbSendReadsOff(radio: CatRadio): Promise<boolean> {
 function mayOpenByItself(): boolean {
   if (!settings.cat.enabled) return false;
   if (lastAttemptStopped(settings.cat.radio)) return false;
-  return settings.cat.radio !== 'kx2' || settings.cat.kx2MicBtn === 0;
+  return settings.cat.radio !== 'kx2' || settings.cat.kx2Link !== 'digirig' || settings.cat.kx2MicBtn === 0;
 }
 
 /** Starts the connection log of an attempt on `port`, found or chosen. */
