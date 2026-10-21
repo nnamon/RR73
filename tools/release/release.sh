@@ -3,7 +3,7 @@
 #
 #   tools/release/release.sh prepare patch|minor|major|x.y.z
 #       On a branch: dates "## Unreleased" in CHANGELOG.md, bumps Cargo.toml and
-#       web/package.json, and commits "Release x.y.z". Merge it to main once CI is green.
+#       web/package.json, updates both Cargo.lock files, and commits "Release x.y.z". Merge it to main once CI is green.
 #   tools/release/release.sh publish
 #       On main, after a fast-forward merge: checks that a CI run passed on HEAD (the branch's
 #       run counts, since it is the same commit), tags v<version>, pushes the tag (which deploys
@@ -24,9 +24,11 @@ prepare() {
   [ "$(git rev-parse --abbrev-ref HEAD)" != main ] || die "Prepare a release on a branch, then merge it to main."
   version="$(node_run tools/release/version.mjs bump "$level" | tail -n 1)"
   docker compose run --rm -T rust cargo update --workspace --quiet 2>/dev/null
+  # The desktop app's own workspace locks rr73-desktop at the release version too.
+  docker compose run --rm -T rust cargo update --manifest-path desktop/Cargo.toml -p rr73-desktop --quiet 2>/dev/null
   node_run tools/release/version.mjs check
   notes="$(node_run tools/release/version.mjs notes "$version")"
-  git add CHANGELOG.md Cargo.toml Cargo.lock web/package.json web/package-lock.json
+  git add CHANGELOG.md Cargo.toml Cargo.lock desktop/Cargo.lock web/package.json web/package-lock.json
   git commit -q -m "Release $version" -m "$notes"
   echo "Prepared $version. Merge to main once CI is green, then run: tools/release/release.sh publish"
 }
