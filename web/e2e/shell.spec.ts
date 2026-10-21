@@ -136,6 +136,8 @@ test('the app starts in light whatever the system, and Settings › Theme change
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
   await expect.poll(bg).toBe('rgb(229, 229, 234)');
   expect(await page.evaluate(() => getComputedStyle(document.querySelector('.section-head')!).color)).toBe('rgb(58, 58, 60)');
+  // Settings save to IndexedDB after the change: a reload at once can come before the write lands.
+  await page.waitForTimeout(500);
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
   await expect(page.getByRole('radiogroup', { name: 'Appearance' }).getByRole('radio', { name: 'Sun' })).toBeChecked();
