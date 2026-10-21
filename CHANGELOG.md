@@ -4,6 +4,12 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- The radio badge goes amber with FIL2 or FIL3 when the IC-705 is on a narrow filter that cuts most of the FT8 range.
+- An answer from the radio cut short no longer swallows the answer after it.
+- Halt sends no PTT off when RR73 holds none and the radio reads receive, so Halt on the KX2 no longer holds other requests back for 0.6 s.
+
+## 0.24.16 · 2026-10-21
+
 - Settings › Appearance › Font: Automatic uses Apple’s system font on Apple devices and Inter elsewhere, such as Windows. System and Inter fix the choice. Inter comes with the app and works offline.
 - Monospaced text on Windows uses Cascadia Mono or Consolas, where it fell back to Courier New.
 

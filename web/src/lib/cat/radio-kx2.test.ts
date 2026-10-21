@@ -438,6 +438,20 @@ describe('CatRadio with a KX2', () => {
     expect(sim.sets_while_transmitting).toBe(0);
   });
 
+  it('drops a partial answer when its request goes unanswered, so it does not swallow the next', async () => {
+    const { timers, port, radio } = await started();
+    port.silent = true;
+    const lost = radio.request({ type: 'read_frequency' });
+    // Part of an answer arrives, cut short before its semicolon.
+    port.send(bytes('FA0001'));
+    await timers.advance(REPLY_MS + DRAIN_MS + 10);
+    expect(await lost).toMatchObject({ ok: false, why: 'timeout' });
+    port.silent = false;
+    const next = radio.request({ type: 'read_transmit' });
+    await timers.advance(REPLY_MS);
+    expect(await next).toMatchObject({ ok: true, event: { type: 'transmit' } });
+  });
+
   it('never sends a TX held back by a drain once Halt has sent RX', async () => {
     const { timers, sim, port, radio } = await started();
     port.silent = true;

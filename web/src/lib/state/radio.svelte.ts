@@ -209,6 +209,8 @@ export function rigBadge(): RigBadge | null {
       const data = rigInDataMode();
       if (rig.transmitting === true && !rig.keyed && !rig.mayBeKeyed) return { text: 'Transmitting', tone: 'warn', label: `${name} connected, transmitting with no PTT from RR73. ${open}` };
       if (data === false) return { text: rigModeText(), tone: 'warn', label: `${name} connected, in ${rigModeText()}. ${open}` };
+      // The IC-705 on FIL2 or FIL3 (1.2 kHz and 500 Hz by default in USB-D) cuts most of the FT8 range.
+      if (settings.cat.radio === 'ic705' && data === true && rig.filter !== null && rig.filter !== 1) return { text: `FIL${rig.filter}`, tone: 'warn', label: `${name} connected, on FIL${rig.filter}, a narrow filter. ${open}` };
       if (rig.hz !== null && band !== settings.band) return { text: 'Off band', tone: 'warn', label: `${name} connected, ${band === null ? 'outside the bands' : `on ${band}`}. ${open}` };
       // Green only once the mode is read: after a spell without answers it is read again within 5 s.
       if (data === null) return { text: 'Connecting', tone: 'warn', label: `${name} connected, reading its mode. ${open}` };

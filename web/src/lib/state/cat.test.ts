@@ -568,6 +568,10 @@ describe('Operate’s radio badge', () => {
     expect(rigBadge()).toEqual({ text: 'Off band', tone: 'warn', label: 'IC-705 connected, on 40m. Open Rig control' });
     rig.hz = 14_074_000;
     expect(rigBadge()).toEqual({ text: 'Connected', tone: 'ok', label: 'IC-705 connected. Open Rig control' });
+    // A narrow filter cuts most of the FT8 range.
+    rig.filter = 2;
+    expect(rigBadge()).toEqual({ text: 'FIL2', tone: 'warn', label: 'IC-705 connected, on FIL2, a narrow filter. Open Rig control' });
+    rig.filter = 1;
     // RR73's own keying, until a read confirms receive: no amber.
     Object.assign(rig, { transmitting: true, mayBeKeyed: true });
     expect(rigBadge()?.tone).toBe('ok');
@@ -1040,6 +1044,16 @@ describe('keying', () => {
     expect(chosen.ptt.at(-1)).toBe('00');
     expect(chosen.sim.transmit).toBe(false);
     expect(rig.test).toMatchObject({ state: 'done', ok: true });
+  });
+
+  it('Halt sends no PTT off when nothing can be keyed: no PTT held and the radio reads receive', async () => {
+    await connect();
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    await run(1200);
+    expect(rig.transmitting).toBe(false);
+    halt();
+    await run(100);
+    expect(chosen.ptt).toEqual([]);
   });
 
   it('Halt stops Test keying with PTT off at once', async () => {

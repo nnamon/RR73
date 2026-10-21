@@ -829,6 +829,9 @@ export class CatRadio implements Keyer {
     const i = this.inFlight.indexOf(entry);
     if (i < 0) return;
     this.inFlight.splice(i, 1);
+    // A partial answer cut short (a framing error, a lost byte) would join the next one and
+    // swallow it: the parser starts afresh.
+    this.codec.reset();
     this.drain();
     entry.resolve({ ok: false, why: 'timeout' });
     this.lostInRow++;

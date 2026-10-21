@@ -623,7 +623,9 @@ export async function initCat(): Promise<void> {
       rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. PTT off was sent.', atMs: Date.now() };
     }
     const c = current;
-    if (c && (settings.cat.keyPtt || c.radio.holdsPtt)) c.radio.unkeyAll();
+    // PTT off unless nothing can be keyed: RR73 holds no PTT and the radio last read receive. The
+    // KX2 may answer RX in receive with ?;, and every Halt would wait out a drain.
+    if (c && (c.radio.holdsPtt || (settings.cat.keyPtt && c.radio.state.transmitting !== false))) c.radio.unkeyAll();
   });
   api.addEventListener?.('connect', () => {
     if (settings.cat.connect && mayOpenByItself() && !current && rig.status !== 'choosing' && rig.status !== 'connecting') void reconnect(api, 'auto');
