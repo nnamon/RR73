@@ -14,8 +14,8 @@ publish = false
 [workspace]
 
 [lib]
-name = "rr73_desktop_app"
-crate-type = ["staticlib", "cdylib", "rlib"]
+name = "rr73_desktop_app_lib"
+crate-type = ["rlib"]
 
 [build-dependencies]
 tauri-build = { version = "2.7", features = [] }
