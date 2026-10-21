@@ -8,8 +8,7 @@
 //!   `SET auth t=kiwi p=` (empty password on a public receiver).
 //! - The receiver sends binary messages that start with a 3-letter tag. `MSG` carries
 //!   space-separated `name=value` parameters: `audio_rate` and `sample_rate` (12000 on both
-//!   Singapore receivers; 11998.93 on a KiwiSDR in South Australia, which QSP resamples to
-//!   12000), `badp` (1 when the password is refused), `too_busy`, version and configuration.
+//!   Singapore receivers; near 11998.9 on several others, which QSP resamples to 12000), `badp` (1 when the password is refused), `too_busy`, version and configuration.
 //!   `SND` carries audio: a flags byte, a sequence number (u32, little-endian), an S-meter
 //!   value (u16, big-endian), then 16-bit big-endian samples (512 per message at 12 kHz)
 //!   while compression is off.

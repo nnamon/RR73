@@ -123,7 +123,7 @@ The phone uploads straight to WSPRnet: the owner's call on 15 October 2026, once
 - One connection per receiver and dial (`src/upstream.rs`): sessions on the same receiver and dial share it, and `max_sessions` counts connections. A session that retunes keeps its connection when it listens there alone and no connection is on the new dial; otherwise it moves to the connection there, opening it when needed. The last session to leave a connection closes it. Audio only, no waterfall.
 - A connection that streamed and then dropped is opened again after 2, 4, 8, 16 and 30 s; the count starts over once it streams (`kiwi::run`). The receiver's refusals, a full receiver, and a close after one of its notices, such as its time limit, end the session. The first frame after a reconnect, a move or a lag carries the gap flag. The politeness rules of `tools/kiwi` apply.
 - QSP names itself `RR73-QSP/<version> (+https://github.com/nnamon/RR73)` on the status page and the stream.
-- QSP sends audio at 12000 Hz. A receiver whose `sample_rate` sits within 1 % of it, as a KiwiSDR at 11998.93 Hz in South Australia does, is resampled to 12000 Hz in the stream (`crates/rr73-qsp/src/resample.rs`: a 32-tap Kaiser-windowed sinc, error under −60 dB on a 1500 Hz tone); one further off is refused.
+- QSP sends audio at 12000 Hz. A receiver whose `sample_rate` sits within 1 % of it is resampled to 12000 Hz in the stream (`crates/rr73-qsp/src/resample.rs`: a 32-tap Kaiser-windowed sinc, error under −60 dB on a 1500 Hz tone); one further off is refused.
 - The KiwiSDR client is written from scratch for QSP. The kiwiclient package the corpus recorder fetches carries no licence for its core files and is not read or copied.
 
 ## Security

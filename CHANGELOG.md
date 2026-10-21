@@ -4,42 +4,42 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.24.29 · 2026-10-21
 
-- Web SDR keeps streaming from KiwiSDR v1.902 receivers. A stream ended after 10 s with The receiver has no free channel when the receiver said it was not busy.
+- Web SDR streams from KiwiSDR v1.902 receivers past the first 10 s.
 
 ## 0.24.28 · 2026-10-21
 
-- Web SDR connects to KiwiSDR receivers on software v1.902, such as the public ones in the UK, Finland, the USA, Canada, Australia and Brazil. They stayed at Connecting.
+- Web SDR connects to KiwiSDR receivers running software v1.902.
 
 ## 0.24.27 · 2026-10-21
 
-- Web SDR receivers whose audio runs a little off 12000 Hz, such as VK5ARG's at 11998.93 Hz, now connect. The relay resamples them to 12000 Hz.
+- Web SDR connects to receivers whose audio rate is up to 1% off 12000 Hz.
 
 ## 0.24.26 · 2026-10-21
 
-- Turning off Read Wavelog's log keeps the copy already read. Turning it on again reads only the QSOs added since. Remove Wavelog still deletes it.
+- Turning off Read Wavelog's log keeps the copy already read. Turning it on again reads only the QSOs added since.
 
 ## 0.24.25 · 2026-10-21
 
-- WSPR spots show the reported power in watts: 5 W on a phone, 37 dBm (5 W) in the wider table.
-- Settings › Radio and audio › Timing › Correct Tx timing moves each transmission by the clock error measured from decodes, for operating with no network to set the clock. Off by default.
-- A station worked on this band and mode on another day has its right edge in the New call colour, as it can be worked again. It was light grey.
+- WSPR spots show the reported power in watts.
+- Settings › Radio and audio › Timing › Correct Tx timing moves each transmission by the clock error measured from decodes. Off by default.
+- The right edge of a station worked on this band and mode on another day takes the New call colour.
 
 ## 0.24.24 · 2026-10-21
 
-- The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%. 2 stations on the same frequency that failed together now decode.
+- The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%.
 
 ## 0.24.23 · 2026-10-21
 
-- Settings › Appearance › Font › Automatic uses Segoe UI on Windows. Inter remains a choice there.
-- Web SDR plays and decodes when this computer’s clock runs fast. Every frame arrived past its playout time and was dropped.
+- Settings › Appearance › Font › Automatic uses Segoe UI on Windows.
+- Web SDR decodes when this computer’s clock runs fast.
 
 ## 0.24.22 · 2026-10-21
 
-- Settings › Decode colours › Show legend draws each row style in your colours with its meaning: the enabled colours in order, dupes and stations worked on another day, transmissions, faded and dimmed rows, and the Next, Dupe, Lost, country and reference tags.
+- Settings › Decode colours › Show legend shows each row style in your colours with its meaning.
 
 ## 0.24.21 · 2026-10-21
 
-- Decode messages use the interface font by default. Settings › Appearance › Decode messages › Monospace lines them up.
+- Decode messages use the interface font by default.
 
 ## 0.24.20 · 2026-10-21
 

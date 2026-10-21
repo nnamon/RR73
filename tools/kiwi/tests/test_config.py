@@ -35,28 +35,12 @@ def _wrap(to: str) -> str:
 
 
 def test_repository_configuration_has_the_sarts_receiver() -> None:
-    sarts, *others = load_receivers(RECEIVERS_TOML)
+    [sarts] = load_receivers(RECEIVERS_TOML)
     assert (sarts.id, sarts.host, sarts.port, sarts.access) == ("sarts-web888", "167.172.88.10", 80, "club")
     assert (sarts.antenna, sarts.grid, sarts.channels) == ("Wellbrook loop", "OJ11", 13)
     assert sarts.session_s <= 15 * 60 and sarts.break_s >= 5 * 60
     assert sarts.bands_at(datetime(2026, 10, 13, 3, 0, tzinfo=UTC))[0] == "20m"
     assert "40m" in sarts.bands_at(datetime(2026, 10, 13, 21, 0, tzinfo=UTC))
-
-
-def test_repository_public_receivers_keep_the_public_rules() -> None:
-    _, *public = load_receivers(RECEIVERS_TOML)
-    assert [r.id for r in public] == [
-        "wessex-g8jnj",
-        "aprs-kuopio",
-        "k1vl-vermont",
-        "va6ok-coronation",
-        "vk5arg-tarlee-2",
-        "vinhedo-br",
-    ]
-    for r in public:
-        assert r.access == "public" and r.break_s >= 30 * 60 and r.session_s <= 15 * 60
-        # Every hour of the day has bands.
-        assert all(r.bands_at(datetime(2026, 10, 22, h, 30, tzinfo=UTC)) for h in range(24))
 
 
 def test_minimal_receiver_loads(tmp_path: Path) -> None:
