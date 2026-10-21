@@ -4,7 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%. Two stations on the same frequency that failed together now decode.
+- The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%. 2 stations on the same frequency that failed together now decode.
 
 ## 0.24.23 · 2026-10-21
 
