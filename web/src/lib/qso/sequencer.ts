@@ -1062,6 +1062,16 @@ class Machine {
       }
       if (ex) st.lost = null;
       else if (st.phase === 'answering' && !st.paused && this.lostStation(e, sentLastSlot)) return;
+      // Hunt: while the station called has not answered, a station calling us comes first. Working
+      // someone who wants a QSO beats calling one who does not hear us.
+      if (st.hunt && !ex && !more && !p.rcvdRpt && !p.rcvdRRpt && !p.rcvdAck) {
+        this.addCallers(e.slotStartMs, e.decodes, e.nowMs, more);
+        if (this.ordered().some((c) => (this.cfg.workDupes || !c.dupe) && !sameCall(c.call, p.call))) {
+          st.queue = st.queue.filter((c) => !sameCall(c.call, p.call));
+          this.nextCaller(e.nowMs);
+          return;
+        }
+      }
       const r = ex ? this.reply(ex, e.nowMs) : null;
       if (r === 'complete') {
         this.complete(e.nowMs);

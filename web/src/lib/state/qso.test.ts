@@ -170,6 +170,10 @@ describe('the sequencer’s notices', () => {
       vi.setSystemTime(t + 30_100);
       dispatch({ type: 'slotDecoded', slotStartMs: t + 15_000, pass: 'final', decodes: [decode('DV5CEL VK2LAW -05', -8, 1200)], nowMs: Date.now() });
       expect(qso.notice).toMatchObject({ kind: 'lost', text: 'VK2LAW answered DV5CEL' });
+      expect(qso.lostTo).toMatchObject([{ call: 'VK2LAW', other: 'DV5CEL' }]);
+      // The operator calls CQ: VK2LAW is no longer the station called, and its rows lose Lost.
+      dispatch({ type: 'callCq', nowMs: Date.now() });
+      expect(qso.lostTo).toEqual([]);
     } finally {
       vi.useRealTimers();
     }

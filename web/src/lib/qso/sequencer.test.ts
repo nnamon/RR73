@@ -614,6 +614,19 @@ describe('Hunt', () => {
     expect(pick('strongest', [worked('JA1KXM'), worked('K1ABC', { band: '40m' })])).toBe('JA1KXM');
   });
 
+  it('answers a station calling us while the station it called has not answered, unless a dupe', () => {
+    for (const dupe of [false, true]) {
+      const s = new Sim({ huntOrder: 'strongest' });
+      if (dupe) s.send({ type: 'setWorked', worked: [worked('ZL1BB', { day: '20261013' })], nowMs: s.at(0) });
+      s.send({ type: 'hunt', on: true, nowMs: s.at(0, 5) });
+      s.hear(1, cqs);
+      expect(s.st.partner?.call).toBe('JA1KXM');
+      // JA1KXM does not answer; ZL1BB calls us.
+      s.hear(3, [decode('9V1NE ZL1BB RF72', -12, 1400)]);
+      expect(s.st.partner?.call, `dupe ${dupe}`).toBe(dupe ? 'JA1KXM' : 'ZL1BB');
+    }
+  });
+
   it('picks the newest CQ: the station that started calling most recently', () => {
     const s = new Sim({ huntOrder: 'newest' });
     s.hear(1, cqs.slice(0, 2));

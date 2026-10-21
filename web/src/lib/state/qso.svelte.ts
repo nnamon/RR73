@@ -154,6 +154,9 @@ export function dispatch(e: SeqEvent) {
     // A Hound calls above 1000 Hz, away from the Fox: only Rx moves to it.
     void updateSettings(settings.holdTx || r.state.config.hound ? { rxHz: hz } : { rxHz: hz, txHz: hz });
   }
+  // Lost marks belong to the station being called: once Tx calls CQ or another station, rows
+  // from the stations called before read as usual again.
+  if ((p?.call ?? null) !== before && qso.lostTo.length) qso.lostTo = [];
   for (const f of r.effects) {
     switch (f.type) {
       case 'scheduleTx':

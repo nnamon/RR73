@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Hunt answers a station calling you while the station it called has not answered, unless that caller is a dupe with Work dupes off.
+- Rows read Lost only while Tx still calls that station. Calling CQ or another station clears them.
+
 ## 0.24.11 · 2026-10-21
 
 - A station that missed RR73 and sends its R-report again gets RR73 again with Repeat CQ and Hunt on too, up to the usual repeats.
