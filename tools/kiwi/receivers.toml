@@ -32,3 +32,141 @@ bands = ["20m", "17m", "15m", "10m"]
 from = "11:00"
 to = "23:00"
 bands = ["40m", "30m", "20m"]
+
+# Public receivers, one per region, for paths and noise the Singapore receiver does not hear.
+# Chosen on 22 October 2026 from the public list (rx.linkfanel.net, generated from
+# kiwisdr.com/public): GPS timing, 8 channels with at least 5 free, signal-to-noise among the best
+# in the region. Plans are local day (high bands) and night (low bands and 20m), in UTC without
+# daylight saving.
+
+[[receiver]]
+id = "g3sdh-bristol"
+name = "G3SDH, near Bristol, UK"
+host = "g3sdh.com"
+port = 8054
+operator = "G3SDH"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "Wellbrook loop"
+grid = "IO81"
+
+[[receiver.plan]]
+from = "07:00"
+to = "18:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "18:00"
+to = "07:00"
+bands = ["40m", "30m", "20m"]
+
+[[receiver]]
+id = "aprs-kuopio"
+name = "aprs.fi, Kuopio, Finland"
+host = "kiwi-kuo.aprs.fi"
+port = 8073
+operator = "aprs.fi"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "Bonito Megaloop FX"
+grid = "KP33"
+
+[[receiver.plan]]
+from = "05:00"
+to = "16:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "16:00"
+to = "05:00"
+bands = ["40m", "30m", "20m"]
+
+[[receiver]]
+id = "k1vl-vermont"
+name = "K1VL, Shrewsbury, Vermont, USA"
+host = "sdr.k1vl.com"
+port = 8077
+operator = "K1VL"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "82 m centre-fed doublet at 20 m"
+grid = "FN33"
+
+[[receiver.plan]]
+from = "12:00"
+to = "23:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "23:00"
+to = "12:00"
+bands = ["40m", "30m", "20m"]
+
+[[receiver]]
+id = "ve7av-prince-george"
+name = "VE7AV, Prince George, British Columbia, Canada"
+host = "108.180.193.61"
+port = 8073
+operator = "VE7AV"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "80 m horizontal loop at 9 m with a reflector loop"
+grid = "CO83"
+
+[[receiver.plan]]
+from = "15:00"
+to = "02:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "02:00"
+to = "15:00"
+bands = ["40m", "30m", "20m"]
+
+[[receiver]]
+id = "vk5arg-tarlee"
+name = "VK5ARG remote receiver site, near Tarlee, South Australia"
+host = "kiwisdr.areg.org.au"
+port = 8073
+operator = "VK5ARG"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "Broadband monopole (J-Dart)"
+grid = "PF95"
+
+[[receiver.plan]]
+from = "21:00"
+to = "08:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "08:00"
+to = "21:00"
+bands = ["40m", "30m", "20m"]
+
+[[receiver]]
+id = "hj6umr-ricaurte"
+name = "HJ6UMR, Ricaurte, Colombia"
+host = "22706.proxy.kiwisdr.com"
+port = 80
+operator = "HJ6UMR"
+access = "public"
+software = "KiwiSDR v1.902"
+channels = 8
+antenna = "Mosley RB 7"
+grid = "FJ24"
+
+[[receiver.plan]]
+from = "11:00"
+to = "23:00"
+bands = ["20m", "17m", "15m", "10m"]
+
+[[receiver.plan]]
+from = "23:00"
+to = "11:00"
+bands = ["40m", "30m", "20m"]
