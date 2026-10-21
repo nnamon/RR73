@@ -33,6 +33,7 @@ import { txLevel } from './practice.svelte';
 import { dialNow, onRadioNotice, rigGate, txKeyer, txShiftHz } from './radio.svelte';
 import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx } from './station.svelte';
 import type { QsoContext } from '../decode/types';
+import { monitorNode } from '../tx/monitor';
 
 export interface SentRow {
   slotStartMs: number;
@@ -129,7 +130,7 @@ export function setHoundDial(band: BandId, hz: number) {
 const scheduler = new TxScheduler({
   audio: () => {
     const out = audioOut();
-    return out ? webAudioOut(out.ctx, out.mapper) : null;
+    return out ? webAudioOut(out.ctx, out.mapper, () => monitorNode(out.ctx, settings.monitorDeviceId, settings.monitorLevel)) : null;
   },
   encoder: { synthesize: (text, mode, f0, rate) => codec().synthesize(text, mode, f0, rate) },
   gate: () => (audio.status !== 'running' ? STATUS.audioOff : (rigGate() ?? notReady(qso.st))),

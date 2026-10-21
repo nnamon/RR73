@@ -127,6 +127,9 @@ export interface Settings {
   outputDeviceLabel: string;
   /** Tune output level, 0 to 1. */
   outputLevel: number;
+  /** Computers: a second output that also plays Tx audio, at monitorLevel; null for none. */
+  monitorDeviceId: string | null;
+  monitorLevel: number;
   /** Play the start tone (1500 Hz, 0.4 s) through the radio when audio starts. */
   startTone: boolean;
   checklist: Checklist;
@@ -202,6 +205,8 @@ export const DEFAULTS: Settings = {
   outputDeviceId: null,
   outputDeviceLabel: '',
   outputLevel: 0.5,
+  monitorDeviceId: null,
+  monitorLevel: 0.3,
   startTone: true,
   checklist: { focus: false, clicks: false, volume: false, sounds: false, output: false, power: false },
   rxHz: 1500,
@@ -367,6 +372,8 @@ export function validate(raw: unknown): Settings {
   if (typeof r.outputDeviceId === 'string' && r.outputDeviceId) s.outputDeviceId = r.outputDeviceId;
   if (typeof r.outputDeviceLabel === 'string') s.outputDeviceLabel = r.outputDeviceLabel;
   if (typeof r.outputLevel === 'number' && r.outputLevel >= 0 && r.outputLevel <= 1) s.outputLevel = r.outputLevel;
+  if (typeof r.monitorDeviceId === 'string' && r.monitorDeviceId) s.monitorDeviceId = r.monitorDeviceId;
+  if (typeof r.monitorLevel === 'number' && r.monitorLevel >= 0 && r.monitorLevel <= 1) s.monitorLevel = r.monitorLevel;
   if (typeof r.startTone === 'boolean') s.startTone = r.startTone;
   const c = r.checklist as Partial<Checklist> | undefined;
   if (c && typeof c === 'object') for (const k of ['focus', 'clicks', 'volume', 'sounds', 'output', 'power'] as const) if (typeof c[k] === 'boolean') s.checklist[k] = c[k];

@@ -9,7 +9,8 @@ import type { Playing, TxAudio } from './scheduler';
 
 const QUANTUM = 128;
 
-export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper): TxAudio {
+/** `monitor`: the node for the monitor output, if one is chosen (monitor.ts). */
+export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper, monitor?: () => AudioNode | null): TxAudio {
   return {
     get sampleRate() {
       return ctx.sampleRate;
@@ -39,6 +40,9 @@ export function webAudioOut(ctx: AudioContext, mapper: AudioClockMapper): TxAudi
       const gain = ctx.createGain();
       gain.gain.value = Math.max(0, Math.min(1, level));
       src.connect(gain).connect(ctx.destination);
+      // The monitor hears the tones at its own level; stopping the source ends both.
+      const mon = monitor?.() ?? null;
+      if (mon) src.connect(mon);
       src.start(when);
       const playing: Playing = {
         onended: null,

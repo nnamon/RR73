@@ -13,6 +13,7 @@
   import { PALETTES, paletteSpec, stopTokens, type PaletteId } from '../lib/waterfall/colormap';
   import { settings, updateSettings, type Checklist } from '../lib/state/settings.svelte';
   import { outputChoiceSupported } from '../lib/audio/sink';
+  import { monitorSupported } from '../lib/tx/monitor';
   import { audio, band, clockCheck, halt, inputDevices, outputDevices, refindInput, refindOutput, startAudio, startTune, timingSnapshot, tx, useInput, useOutput } from '../lib/state/station.svelte';
   import { catKeys as keysByCat, plannedDialHz, radioTraits, rig, rigConnected, txKeyer } from '../lib/state/radio.svelte';
   import { alcAdvice } from '../lib/radio/alc';
@@ -310,6 +311,32 @@
             {/if}
           </select>
         </label>
+        {#if monitorSupported()}
+          <label class="row">
+            <span class="row-main"><span class="row-title">Monitor</span><span class="row-sub">Also plays Tx audio here</span></span>
+            <select class="select" value={settings.monitorDeviceId ?? ''} onchange={(e) => void updateSettings({ monitorDeviceId: (e.currentTarget as HTMLSelectElement).value || null })}>
+              <option value="">Off</option>
+              {#each outputs as d, i (d.deviceId)}
+                <option value={d.deviceId}>{d.label || `Output ${i + 1}`}</option>
+              {/each}
+            </select>
+          </label>
+          {#if settings.monitorDeviceId}
+            <label class="row">
+              <span class="row-title">Monitor level</span>
+              <input
+                class="slider"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value={Math.round(settings.monitorLevel * 100)}
+                oninput={(e) => void updateSettings({ monitorLevel: Number((e.currentTarget as HTMLInputElement).value) / 100 })}
+              />
+              <span class="row-value pct">{Math.round(settings.monitorLevel * 100)} %</span>
+            </label>
+          {/if}
+        {/if}
       {/if}
       <label class="row">
         <span class="row-title">Output level</span>
