@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.24 · 2026-10-21
 
 - The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%. 2 stations on the same frequency that failed together now decode.
 
