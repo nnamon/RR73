@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.13 · 2026-10-21
 
 - Operate's Sort chip lists each slot's decodes by kind: messages to you, then CQs, then calls, reports and endings, each from the lowest audio frequency. It stays as set. Off keeps the decoder's order.
 - A row of a station calling you names its country, as a CQ row does, where it has no Next, Dupe or Lost tag.
