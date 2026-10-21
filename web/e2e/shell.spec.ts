@@ -123,18 +123,18 @@ test('the app starts in light whatever the system, and Settings › Theme change
   const light = await bg();
   await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('System', { exact: true }).click();
   await expect(page.locator('html')).not.toHaveAttribute('data-theme', /.+/);
-  expect(await bg()).not.toBe(light);
+  await expect.poll(bg).not.toBe(light);
   await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Light', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'light');
   await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Dark', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
-  expect(await bg()).not.toBe(light);
+  await expect.poll(bg).not.toBe(light);
 
   // Sun: light with its own colours, whatever the system, and kept after a reload.
   await page.getByRole('radiogroup', { name: 'Appearance' }).getByText('Sun', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
-  expect(await bg()).toBe('rgb(229, 229, 234)');
+  await expect.poll(bg).toBe('rgb(229, 229, 234)');
   expect(await page.evaluate(() => getComputedStyle(document.querySelector('.section-head')!).color)).toBe('rgb(58, 58, 60)');
   await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'sun');
