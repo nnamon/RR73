@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.21 · 2026-10-21
 
 - Decode messages use the interface font by default. Settings › Appearance › Decode messages › Monospace lines them up.
 
