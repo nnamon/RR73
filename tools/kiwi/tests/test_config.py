@@ -51,7 +51,7 @@ def test_repository_public_receivers_keep_the_public_rules() -> None:
         "k1vl-vermont",
         "ve7av-prince-george",
         "vk5arg-tarlee",
-        "hj6umr-ricaurte",
+        "vinhedo-br",
     ]
     for r in public:
         assert r.access == "public" and r.break_s >= 30 * 60 and r.session_s <= 15 * 60

@@ -49,7 +49,7 @@ The exit status is 0 when the requested sessions were recorded, 3 when a signal 
 | `k1vl-vermont` | Shrewsbury, Vermont, USA | FN33 | 82 m centre-fed doublet at 20 m |
 | `ve7av-prince-george` | Prince George, British Columbia, Canada | CO83 | 80 m horizontal loop at 9 m |
 | `vk5arg-tarlee` | Near Tarlee, South Australia | PF95 | Broadband monopole |
-| `hj6umr-ricaurte` | Ricaurte, Colombia | FJ24 | Mosley RB 7 |
+| `vinhedo-br` | Near Vinhedo, São Paulo, Brazil | GG66 | T3FD at 20 m |
 
 | Field | Meaning |
 | --- | --- |
