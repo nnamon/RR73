@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.25.0 · 2026-10-21
 
 - Desktop app for Windows, macOS and Linux, with rig control over native serial ports and slot and Tx timing corrected by an NTP server.
 
