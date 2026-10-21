@@ -8,6 +8,7 @@
 #   docker compose run --rm e2e npx --prefix web playwright test
 #   docker compose run --rm wsjtx jt9 -8 -d 3 corpus/public/ft8_lib/<file>.wav
 #   docker compose run --rm kiwi record --help
+#   docker compose run --rm desktop sh -c 'cd desktop && npx tauri build --bundles deb,appimage'
 
 
 x-workspace: &workspace
@@ -45,6 +46,18 @@ services:
       # RR73_REVIEW=1 docker compose run ... adds the review projects (docs/testing.md).
       - RR73_REVIEW
 
+  # The desktop app's Linux build and its checks (docs/design/desktop.md).
+  desktop:
+    build: { context: ., dockerfile: docker/desktop.Dockerfile }
+    image: rr73-desktop:1.98.1
+    <<: *workspace
+    volumes:
+      - .:/work
+      - cargo-registry:/usr/local/cargo/registry
+      - cargo-target:/work/target
+      - web-node-modules:/work/web/node_modules
+      - desktop-node-modules:/work/desktop/node_modules
+
   wsjtx:
     build: { context: tools/wsjtx }
     image: rr73-wsjtx:latest
@@ -76,3 +89,4 @@ volumes:
   cargo-registry:
   cargo-target:
   web-node-modules:
+  desktop-node-modules:

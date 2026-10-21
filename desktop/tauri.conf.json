@@ -1,0 +1,39 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "RR73",
+  "version": "../web/package.json",
+  "identifier": "io.github.nnamon.rr73",
+  "build": {
+    "frontendDist": "../web/dist",
+    "devUrl": "http://localhost:7374"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "RR73",
+        "width": 1100,
+        "height": 800,
+        "minWidth": 375,
+        "minHeight": 600
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.icns", "icons/icon.ico"],
+    "category": "Utility",
+    "shortDescription": "FT8, FT4, WSPR and RTTY with rig control",
+    "licenseFile": "../LICENSE-MIT",
+    "linux": {
+      "deb": { "depends": [] }
+    },
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}
