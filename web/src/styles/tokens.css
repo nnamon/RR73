@@ -28,6 +28,24 @@
   src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2");
 }
 
+/* JetBrains Mono and Roboto Mono (SIL Open Font License 1.1, THIRD_PARTY_NOTICES.md), Latin, variable
+   weight: monospace choices in Settings › Appearance › Monospace. */
+@font-face {
+  font-family: "JetBrains Mono Variable";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("./fonts/jetbrains-mono-latin-wght-normal.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Roboto Mono Variable";
+  font-style: normal;
+  font-weight: 100 700;
+  font-display: swap;
+  src: url("./fonts/roboto-mono-latin-wght-normal.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light dark;
 
@@ -402,6 +420,14 @@
 
 :root[data-font='inter'] {
   --rr-sans: "Inter Variable", -apple-system, blinkmacsystemfont, "Segoe UI Variable Text", "Segoe UI", arial, sans-serif;
+}
+
+:root[data-mono='jetbrains'] {
+  --rr-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", menlo, "Cascadia Mono", consolas, monospace;
+}
+
+:root[data-mono='roboto'] {
+  --rr-mono: "Roboto Mono Variable", ui-monospace, "SF Mono", menlo, "Cascadia Mono", consolas, monospace;
 }
 
 :root[data-theme='light'] {

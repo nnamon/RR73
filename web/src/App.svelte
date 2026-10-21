@@ -80,6 +80,13 @@
     else delete root.dataset.font;
   });
 
+  // The monospace font: the system's, or a bundled one.
+  $effect(() => {
+    const root = document.documentElement;
+    if (settings.monoFont === 'system') delete root.dataset.mono;
+    else root.dataset.mono = settings.monoFont;
+  });
+
   // Each screen has its own title; after a change of screen, focus moves to its heading so a
   // screen reader starts there. An update waiting to load is applied at this moment if nothing runs.
   let first = true;

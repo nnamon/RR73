@@ -158,7 +158,7 @@ test('Settings › About › Credits shows each third-party licence in full', as
   await page.goto('./#/settings');
   await page.getByRole('link', { name: 'Credits' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide', 'Inter']);
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide', 'Inter', 'JetBrains Mono', 'Roboto Mono']);
   const text = (await page.locator('main .pane:not([hidden])').innerText()).replace(/\s+/g, ' ');
   // Lucide's ISC licence, word for word.
   const isc = readFileSync(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8').split('```text\nISC License')[1].split('```')[0];

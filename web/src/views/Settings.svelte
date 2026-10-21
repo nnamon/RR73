@@ -5,7 +5,7 @@
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
   import { split } from '../lib/app/layout.svelte';
-  import { NIGHT_AFTER, normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type FontChoice, type Theme } from '../lib/state/settings.svelte';
+  import { NIGHT_AFTER, normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type FontChoice, type MonoChoice, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
   import { busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
@@ -136,6 +136,12 @@
     { id: 'dark', label: 'Dark' },
     { id: 'sun', label: 'Sun' },
     { id: 'system', label: 'System' },
+  ];
+
+  const monos: { id: MonoChoice; label: string }[] = [
+    { id: 'system', label: 'System' },
+    { id: 'jetbrains', label: 'JetBrains' },
+    { id: 'roboto', label: 'Roboto' },
   ];
 
   const fonts: { id: FontChoice; label: string }[] = [
@@ -342,6 +348,17 @@
             <label class="seg-i" class:on={settings.font === f.id}>
               <input class="visually-hidden" type="radio" name="font" value={f.id} checked={settings.font === f.id} onchange={() => void updateSettings({ font: f.id })} />
               {f.label}
+            </label>
+          {/each}
+        </span>
+      </div>
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="mono-choice">Monospace</span><span class="row-sub">Messages, times and callsigns</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="mono-choice">
+          {#each monos as m (m.id)}
+            <label class="seg-i" class:on={settings.monoFont === m.id}>
+              <input class="visually-hidden" type="radio" name="mono" value={m.id} checked={settings.monoFont === m.id} onchange={() => void updateSettings({ monoFont: m.id })} />
+              {m.label}
             </label>
           {/each}
         </span>

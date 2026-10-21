@@ -22,6 +22,8 @@ import { IC705_BAUDS, IC705_DEFAULT_BAUD, KX2_BAUDS, KX2_DEFAULT_BAUD, type Ic70
 export type Theme = 'system' | 'light' | 'dark' | 'sun';
 /** The interface font: Apple's system font where there is one and Inter elsewhere, the system's own, or Inter. */
 export type FontChoice = 'auto' | 'system' | 'inter';
+/** The monospace font for messages, times and callsigns: the system's, or a bundled one. */
+export type MonoChoice = 'system' | 'jetbrains' | 'roboto';
 
 /**
  * The checklist items the operator ticks before transmitting; RR73 cannot read these system
@@ -117,6 +119,7 @@ export interface Settings {
   callsign: string;
   theme: Theme;
   font: FontChoice;
+  monoFont: MonoChoice;
   band: BandId;
   mode: Mode;
   /** Input device, or null for the system default. */
@@ -206,6 +209,7 @@ export const DEFAULTS: Settings = {
   callsign: '',
   theme: 'light',
   font: 'auto',
+  monoFont: 'system',
   band: '20m',
   mode: 'FT8',
   inputDeviceId: null,
@@ -376,6 +380,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.callsign === 'string') s.callsign = normaliseCallsign(r.callsign);
   if (r.theme === 'light' || r.theme === 'dark' || r.theme === 'sun' || r.theme === 'system') s.theme = r.theme;
   if (r.font === 'auto' || r.font === 'system' || r.font === 'inter') s.font = r.font;
+  if (r.monoFont === 'system' || r.monoFont === 'jetbrains' || r.monoFont === 'roboto') s.monoFont = r.monoFont;
   if (isBand(r.band)) s.band = r.band;
   if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';
