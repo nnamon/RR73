@@ -4,6 +4,10 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- On a computer or tablet, Operate's ••• menu opens over the waterfall in full. Its top rows were cut off behind the waterfall.
+
+## 0.24.14 · 2026-10-21
+
 - Worked before greys a decode only for a dupe: a station worked today on this band and mode, in the running activation, the rule Hunt and Repeat CQ use. Hide worked hides only dupes.
 - Decode rows show worked status on their right edge: solid for a dupe, light for a station worked on this band and mode on another day, which can be worked again.
 

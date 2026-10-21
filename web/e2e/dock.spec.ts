@@ -257,3 +257,21 @@ test('Night display: from •••, the clock and the stations heard, a tap or 
   await page.keyboard.press('Shift');
   await expect(night).toBeHidden();
 });
+
+test('the ••• menu draws over the waterfall on a desktop window', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 760 });
+  await page.goto('./');
+  await page.getByRole('button', { name: 'More' }).click();
+  const items = page.getByRole('menu').getByRole('menuitem');
+  await expect(items.first()).toBeVisible();
+  const n = await items.count();
+  for (let i = 0; i < n; i++) {
+    const item = items.nth(i);
+    const box = (await item.boundingBox())!;
+    const onTop = await page.evaluate(([x, y]) => {
+      const el = document.elementFromPoint(x, y);
+      return el?.closest('[role="menuitem"]')?.textContent?.trim() ?? el?.className ?? null;
+    }, [box.x + box.width / 2, box.y + box.height / 2]);
+    expect(onTop, `item ${i}`).toBe((await item.textContent())?.trim());
+  }
+});

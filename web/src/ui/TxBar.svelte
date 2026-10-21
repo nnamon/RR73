@@ -111,6 +111,9 @@
   let menuOpen = $state(false);
   let barEl: HTMLElement;
   let menuEl: HTMLDivElement | undefined = $state();
+  let dockEl: HTMLDivElement | undefined = $state();
+  /** Larger windows: where the menu sits, fixed to the window so the panel's edges cannot clip it. */
+  let menuAt = $state<{ bottom: number; right: number } | null>(null);
 
   const ORDERS: { id: QueueOrder; label: string }[] = [
     { id: 'first', label: 'First' },
@@ -131,6 +134,8 @@
   const huntOrder = $derived(HUNT_ORDERS.find((o) => o.id === settings.huntOrder) ?? HUNT_ORDERS[0]);
 
   async function openMenu() {
+    const r = variant !== 'phone' ? dockEl?.getBoundingClientRect() : undefined;
+    menuAt = r ? { bottom: window.innerHeight - r.top, right: window.innerWidth - r.right } : null;
     menuOpen = true;
     await tick();
     menuEl?.querySelector<HTMLElement>('[role^=menuitem]')?.focus();
@@ -211,12 +216,22 @@
     </div>
     <span class="grow"></span>
   {/if}
-  <div class="dock">
+  <div class="dock" bind:this={dockEl}>
   <BarButtons {buttons} {variant} />
   {#if menuOpen}
     <div class="scrim" aria-hidden="true" onclick={() => closeMenu(false)}></div>
     <!-- svelte-ignore a11y_interactive_supports_focus -->
-    <div class="menu" role="menu" aria-label="More" tabindex="-1" bind:this={menuEl} onkeydown={menuKey}>
+    <div
+      class="menu"
+      class:fixed={menuAt !== null}
+      style:bottom={menuAt ? `calc(${menuAt.bottom}px + var(--rr-space-1))` : null}
+      style:right={menuAt ? `${menuAt.right}px` : null}
+      role="menu"
+      aria-label="More"
+      tabindex="-1"
+      bind:this={menuEl}
+      onkeydown={menuKey}
+    >
       {#if running || st.hunt}
         <button class="mi" role="menuitemcheckbox" aria-checked={st.stopAfter} onclick={() => setStopAfter(!st.stopAfter)}>
           Stop after this QSO{#if st.stopAfter}<Icon name="check" size={18} class="chk" />{/if}
@@ -421,6 +436,11 @@
   .bottom .menu,
   .side .menu {
     right: 0;
+  }
+
+  /* Fixed to the window above the buttons, so it opens over the waterfall unclipped. */
+  .menu.fixed {
+    position: fixed;
   }
 
   .panel .status,
