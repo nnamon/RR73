@@ -100,6 +100,28 @@
     </div>
   </div>
 
+
+  <div class="section">
+    <h2 class="section-head">Decoding</h2>
+    <div class="group">
+      <div class="row">
+        <span class="row-main"><span class="row-title" id="depth">Depth</span><span class="row-sub">Fast skips the later stages</span></span>
+        <span class="seg ack" role="radiogroup" aria-labelledby="depth">
+          {#each [['deep', 'Deep'], ['fast', 'Fast']] as const as [id, label] (id)}
+            <label class="seg-i" class:on={settings.decodeDepth === id}>
+              <input class="visually-hidden" type="radio" name="depth" value={id} checked={settings.decodeDepth === id} onchange={() => void updateSettings({ decodeDepth: id })} />
+              {label}
+            </label>
+          {/each}
+        </span>
+      </div>
+      <label class="row">
+        <span class="row-main"><span class="row-title">A priori decoding</span><span class="row-sub">Tries the replies a QSO expects</span></span>
+        <input class="switch" type="checkbox" role="switch" checked={settings.aPriori} onchange={(e) => void updateSettings({ aPriori: (e.currentTarget as HTMLInputElement).checked })} />
+      </label>
+    </div>
+    <p class="section-foot">Deep finds about 3% more stations, and takes longer on each slot.</p>
+  </div>
 </section>
 
 <style>

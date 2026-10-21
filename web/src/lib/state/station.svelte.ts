@@ -39,6 +39,7 @@ import { DIAL_TIMEOUT_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, pause, t
 import { STATUS } from '../qso/status';
 import { capturesHidden } from '../app/platform';
 import { DecodeTimes } from '../decode/times';
+import { contextFor, laterStages } from '../decode/options';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -333,7 +334,10 @@ function onSlot(slot: AssembledSlot) {
   const t0 = performance.now();
   // The decoder gets a copy: the recorder keeps the slot for Save slot. The QSO under way
   // lets it try weak messages with what it expects.
-  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice(), qso: qsoContext() ?? undefined }, (more) => addDecodes(slot.startUtcMs, more)).then(
+  // Settings › FT8 and FT4: Fast stops after the first stage; A priori off sends no QSO context.
+  const qso = contextFor(settings, qsoContext());
+  const more = laterStages(settings) ? (d: Decode[]) => addDecodes(slot.startUtcMs, d) : undefined;
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples.slice(), qso }, more).then(
     (decodes) => {
       const ms = performance.now() - t0;
       decodeTimes.add(mode, ms);
@@ -359,7 +363,7 @@ function onEarlySlot(slot: EarlySlot) {
   if (slot.mode === 'WSPR' || slot.filled < slot.samples.length / 2 || !decoder.available || transmitted.has(slot.startUtcMs)) return;
   const mode = slot.mode;
   const t0 = performance.now();
-  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples, qso: qsoContext() ?? undefined, partial: true }).then(
+  decoder.decodeSlot({ mode, startUtcMs: slot.startUtcMs, samples: slot.samples, qso: contextFor(settings, qsoContext()), partial: true }).then(
     (decodes) => deliverEarly({ startUtcMs: slot.startUtcMs, mode, decodes, ms: performance.now() - t0, early: true }),
     () => undefined,
   );

@@ -183,6 +183,10 @@ export interface Settings {
   waterfallCalls: boolean;
   /** Sort decodes: each slot lists messages to us, then CQs, then the other kinds, each by frequency. */
   sortDecodes: boolean;
+  /** FT8 and FT4 decoding: deep runs the later stages after the first (decision 0007); fast stops after the first, for a slow device. */
+  decodeDepth: 'deep' | 'fast';
+  /** A priori decoding: the decoder tries the messages the QSO under way expects (decision 0009). */
+  aPriori: boolean;
   /** Minutes without a touch before Operate turns to the night display; 0 never. */
   nightAfterMin: NightAfter;
   wspr: WsprSettings;
@@ -236,6 +240,8 @@ export const DEFAULTS: Settings = {
   waterfallPalette: 'rr73',
   waterfallCalls: false,
   sortDecodes: false,
+  decodeDepth: 'deep',
+  aPriori: true,
   nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',
@@ -419,6 +425,8 @@ export function validate(raw: unknown): Settings {
   if (isPaletteId(r.waterfallPalette)) s.waterfallPalette = r.waterfallPalette;
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
   if (typeof r.sortDecodes === 'boolean') s.sortDecodes = r.sortDecodes;
+  if (r.decodeDepth === 'deep' || r.decodeDepth === 'fast') s.decodeDepth = r.decodeDepth;
+  if (typeof r.aPriori === 'boolean') s.aPriori = r.aPriori;
   if (NIGHT_AFTER.includes(r.nightAfterMin as NightAfter)) s.nightAfterMin = r.nightAfterMin as NightAfter;
   s.wspr = validateWspr(r.wspr);
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);
