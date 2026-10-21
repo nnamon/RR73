@@ -403,10 +403,12 @@
   }
 
   /* The message first, in proportional type; the calling station of a CQ a weight heavier. */
+  /* Messages in the monospace font (Settings › Appearance › Monospace), so calls and reports line up. */
   .c-msg {
     flex: 1;
     min-width: 0;
     overflow: hidden;
+    font-family: var(--rr-mono);
     font-size: var(--rr-text-callout);
     font-weight: var(--rr-weight-semibold);
     line-height: var(--rr-leading-row);

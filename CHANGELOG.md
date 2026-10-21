@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Decode messages use the monospace font, so callsigns, grids and reports line up from row to row.
+
 ## 0.24.19 · 2026-10-21
 
 - Settings › Appearance › Monospace chooses the font for Tx messages, times, the waterfall scale and other monospaced text: System, JetBrains Mono or Roboto Mono. Both come with the app and work offline.
