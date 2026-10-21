@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.23 · 2026-10-21
 
 - Settings › Appearance › Font › Automatic uses Segoe UI on Windows. Inter remains a choice there.
 - Web SDR plays and decodes when this computer’s clock runs fast. Every frame arrived past its playout time and was dropped.
