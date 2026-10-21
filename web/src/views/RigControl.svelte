@@ -393,14 +393,6 @@
             {#if reconnectable}<span class="row-sub">Choose another port</span>{/if}
           </span>
         </button>
-        {#if settings.cat.connect}
-          <button class="row act" onclick={() => void disconnectRadio()}>
-            <span class="row-main">
-              <span class="row-title">Disconnect radio</span>
-              <span class="row-sub">Stops reconnecting when plugged in</span>
-            </span>
-          </button>
-        {/if}
       {/if}
       <button class="row act" onclick={() => void copyLog()}>
         <span class="row-main">

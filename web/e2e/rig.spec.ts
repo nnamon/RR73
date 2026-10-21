@@ -381,7 +381,7 @@ test('Operate’s radio badge shows the connection, turns amber and red, opens R
   expect(await ptt(page)).toEqual([]);
 });
 
-test('plugging the radio in reconnects it until Disconnect radio, which shows while the port is closed', async ({ page }) => {
+test('plugging the radio in reconnects it until Rig control is turned off', async ({ page }) => {
   await installFakeIc705(page);
   await page.goto('./#/settings');
   await page.getByRole('link', { name: /Rig control/ }).click();
@@ -395,16 +395,12 @@ test('plugging the radio in reconnects it until Disconnect radio, which shows wh
   await page.evaluate(() => window.__rig.plug());
   await expect(page.getByTestId('rig-status')).toHaveText('Connected');
 
-  // Out again: Disconnect radio is there with the port closed, and after it plugging in opens nothing.
+  // Out again, and Rig control off: plugging in opens nothing.
   await page.evaluate(() => window.__rig.unplug());
-  await expect(page.getByTestId('rig-status')).toHaveText('Port closed');
-  await page.getByRole('button', { name: /^Disconnect radio/ }).click();
-  await expect(page.getByTestId('rig-status')).toHaveText('Off');
-  await expect(page.getByRole('button', { name: /^Disconnect radio/ })).toHaveCount(0);
+  await page.getByRole('switch', { name: 'Rig control' }).uncheck();
   await page.evaluate(() => window.__rig.plug());
   await page.waitForTimeout(1000);
   expect(await page.evaluate(() => window.__rig.opened)).toBe(false);
-  await expect(page.getByTestId('rig-status')).toHaveText('Off');
   expect(await ptt(page)).toEqual([]);
 });
 

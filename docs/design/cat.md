@@ -69,7 +69,9 @@ On the Windows tablet, before stage 1:
 - `navigator.serial` fires `connect` when an allowed port is plugged in again, and RR73 opens it then.
 - RR73 opens no port by itself (on opening the app, on `connect`, on a new baud rate) when its last attempt on the chosen radio did not reach connected (`lastAttemptStopped` in `lib/cat/connect-log.ts`). On Windows 10, Chrome closed while connecting to the IC-705, and reopening the port on every start would close it again on every start. Connect radio and Reconnect radio still open it when tapped, and an attempt that connects lets RR73 open the port by itself again.
 - A port can close with the cable still in (the driver or the USB link dropping it), and then no `connect` event comes. Rig control then offers Reconnect radio, which opens the port the browser allows (`getPorts()`) without the chooser, by the rule RR73 uses on opening the app: exactly one of the chosen port's USB IDs allowed, or Rig control asks the operator to choose (`reconnectRadio` in `lib/state/cat.svelte.ts`). It shows while the radio the operator connected is not open: the port closed or did not open. Connect radio stays below it, with "Choose another port". The lost link lets the port go before Reconnect radio opens it again. Unverified: whether Chromium on Windows opens a port again after it closed that way, with the cable still in.
-- Disconnect radio closes the port and takes back its permission. Transmissions key by VOX again.
+- Disconnect radio, shown while a radio is connected, closes the port and takes back its permission. Transmissions key by VOX again.
+- Rig control has its own switch, off by default (settings.cat.enabled). Off, RR73 closes the port with PTT off confirmed, opens no port by itself or on a tap, keys transmissions by VOX and shows no radio badge; the permission and Connect radio's choice stay, so turning it on opens that port again by itself. This replaced a Disconnect radio offered while the port was closed (0.24.6), as the operator asked for one switch to go back to VOX operating.
+- A KX2 connects through a Digirig or a KX2 cable (settings.cat.kx2Link, Connection under the KX2). Only the Digirig's KX cable wires RTS to the mic jack, so only through a Digirig does a port that cannot lower its lines close, and only then does RR73 wait for MIC BTN OFF before opening the port by itself.
 - The chooser takes no filter. Icom's documents give no USB vendor ID, so RR73 does not assume one.
 - Revoking the permission in the browser's site settings empties `getPorts()`; Connect radio then shows the chooser again.
 - Where `navigator.serial` is absent (Safari 26.6, measured, and iOS) `serialApi()` returns null and no rig control setting renders.
@@ -81,6 +83,7 @@ The owner reported Chrome on Windows 10 closing when a COM port was chosen for t
 - When the app starts and the last attempt on the chosen radio never reached connected, Rig control says in one line where it stopped: "The last connection stopped at opening the port at 115200 baud. The browser may have closed there." A failure RR73 saw, such as another program holding the port, is named instead.
 - Copy connection log copies the attempt as text, one step a line with its UTC time, with RR73's version and the browser's user agent. Where the browser refuses the clipboard, the text shows for selecting.
 - Such an attempt also stops RR73 opening the port by itself (Permission, above).
+- The log keeps the first 96 bytes written to the port and the first 96 read from it, in hex (`logWire`), so a report shows whether the radio sent anything at all and what.
 
 ### Port settings
 

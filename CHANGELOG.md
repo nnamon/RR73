@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Rig control no longer shows Disconnect radio while the port is closed. Turning off Rig control does that job, and Disconnect radio stays while a radio is connected.
+
 ## 0.24.17 · 2026-10-21
 
 - Settings › Rig control › Connection says how a KX2 connects: a Digirig, or a KX2 cable such as KXUSB. Through a KX2 cable, the Digirig’s MIC BTN rule and advice no longer apply, and the port reopens by itself as for the IC-705.
