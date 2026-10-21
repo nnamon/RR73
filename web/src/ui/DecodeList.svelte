@@ -211,7 +211,7 @@
   {/if}
 {/snippet}
 
-<ul class="list" aria-label={label}>
+<ul class="list" aria-label={label} style:--rr-before-edge={colours.get('newCall') ?? null}>
   {#each items as item (item.id)}
     {#if item.kind === 'header'}
       <li class="slot-bar {item.parity ?? 'quiet'}" data-ms={item.ms}>
@@ -521,8 +521,8 @@
     color: var(--rr-hl-old-ink);
   }
 
-  /* Worked status on the right edge: a dupe (worked today on this band and mode) solid, a station
-     worked on another day light, as it can be worked again. */
+  /* Worked status on the right edge: a dupe (worked today on this band and mode) solid grey, a
+     station worked on another day in the New call colour, as it can be worked again. */
   .dr.dupe:not(.sel) {
     box-shadow: inset -4px 0 0 var(--rr-dupe-edge);
   }

@@ -115,7 +115,7 @@
     {
       key: 'before',
       title: 'Worked on another day',
-      text: 'Worked on this band and mode on another day: a light right edge. It can be worked again.',
+      text: 'Worked on this band and mode on another day: a right edge in the New call colour. It can be worked again.',
       item: row('before', 'CQ JA7XVZ QM09', -13, 1803, { row: { hl: on.has('cq') ? 'cq' : null, before: true } }),
     },
   ]);

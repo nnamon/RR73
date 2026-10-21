@@ -335,6 +335,8 @@ test('Show legend draws each row style with its meaning and stays as set', async
   await expect(worked.locator('li.lg[data-key="dupe"] .dr')).toHaveClass(/\bdupe\b/);
   await expect(worked.locator('li.lg[data-key="dupe"] .dr')).toHaveAttribute('data-ink', 'worked');
   await expect(worked.locator('li.lg[data-key="before"] .dr')).toHaveClass(/\bbefore\b/);
+  // Worked on another day: the right edge takes the New call colour, RR73's #0072B2.
+  expect(await worked.locator('li.lg[data-key="before"] .dr').evaluate((el) => getComputedStyle(el).boxShadow)).toContain('rgb(0, 114, 178)');
 
   const rows = page.getByTestId('legend-rows');
   await expect(rows.locator('li.lg[data-key="next"] .c-tag')).toHaveText('Next · :45');
