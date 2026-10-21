@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.9 · 2026-10-21
 
 - Settings › Rig control › Copy connection log includes the first 96 bytes RR73 sent to the radio and the first 96 it received, in hex.
 
