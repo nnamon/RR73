@@ -80,6 +80,7 @@ export const STATUS = {
   radioMode: (mode: string) => `Radio in ${mode} · set DATA A`,
   /** The IC-705's USB SEND keys on a line of the port: RR73 refuses to transmit until it is OFF. */
   usbSend: 'Set USB SEND to OFF',
+  usbSendUnread: 'USB SEND not read yet',
   /**
    * Keying by CAT, a transmission goes only to the output chosen in Settings › Radio and audio:
    * none is chosen (System default), it is not connected, the browser refused it, or the output is

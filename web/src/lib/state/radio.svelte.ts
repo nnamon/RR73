@@ -144,6 +144,14 @@ export function usbSendOn(): boolean {
   return v !== undefined && v >= 1 && v <= 4;
 }
 
+/**
+ * Keying by CAT on the IC-705, transmissions wait until USB SEND has read OFF: unread or refused,
+ * a line of the port could still key the radio.
+ */
+export function usbSendUnread(): boolean {
+  return catKeys() && settings.cat.radio === 'ic705' && rig.menu.usb_send !== 0;
+}
+
 /** The RR73 band the radio's dial is on; null without a dial or outside RR73's bands. */
 export function rigBand(): BandId | null {
   if (rig.hz === null) return null;
@@ -307,6 +315,7 @@ export function rigGate(): string | null {
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
   if (usbSendOn()) return STATUS.usbSend;
+  if (usbSendUnread()) return STATUS.usbSendUnread;
   const output = outputGate();
   if (output) return output;
   if (rig.hz === null) return null;
@@ -320,7 +329,8 @@ export function tuneGate(): string | null {
   if (catKeys() && settings.cat.connect && !rigConnected()) return STATUS.radioDown;
   if (!rigConnected()) return null;
   if (rig.unkeyFailed) return STATUS.pttUnconfirmed;
-  return usbSendOn() ? STATUS.usbSend : outputGate();
+  if (usbSendOn()) return STATUS.usbSend;
+  return usbSendUnread() ? STATUS.usbSendUnread : outputGate();
 }
 
 type NoticeListener = (text: string, txOff: boolean, always: boolean) => void;

@@ -4,7 +4,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadWasm, type Wasm } from '../../../e2e/wasm';
 import { wasmCodec, type CatWasm } from './protocol';
-import { CatRadio, DRAIN_MS, LOST_LIMIT, POLL_MS, REPLY_MS, UNKEY_ACK_MS, UNKEY_TRIES, type CatTimers, type CatTransport } from './radio';
+import { CatRadio, DRAIN_MS, LOST_LIMIT, OFF_CONFIRM_MS, OFF_SETTLE_MS, POLL_MS, REPLY_MS, UNKEY_ACK_MS, UNKEY_TRIES, type CatTimers, type CatTransport } from './radio';
 import type { LinkEnd } from './serial';
 import { DIAL_TIMEOUT_MS, PTT_TIMEOUT_MS } from '../tx/keyer';
 
@@ -89,6 +89,11 @@ class SimPort implements CatTransport {
   ngPtt = false;
   /** How the radio answers the next frequency sets, in turn: `ng` refuses and keeps the dial, `drop` sets it and loses the OK. */
   dialAnswers: ('ok' | 'ng' | 'drop')[] = [];
+  /** After an OK to PTT off, reads of transmit say transmit for this long, ms: a radio still switching. */
+  txLingerMs = 0;
+  /** The next this many frames go unanswered. */
+  dropReplies = 0;
+  private lingerUntil = 0;
   private lastAt = 0;
   private data = new Set<(b: Uint8Array) => void>();
   private ends = new Set<(e: LinkEnd) => void>();
@@ -100,6 +105,10 @@ class SimPort implements CatTransport {
     this.written.push({ at: this.timers.t, frame: hex(bytes) });
     const ptt = bytes[4] === 0x1c && bytes.length === 8;
     if (this.silent) return;
+    if (this.dropReplies > 0) {
+      this.dropReplies--;
+      return;
+    }
     const dial = bytes[4] === 0x05 ? this.dialAnswers.shift() : undefined;
     if (dial === 'drop') {
       this.sim.receive(bytes);
@@ -111,7 +120,14 @@ class SimPort implements CatTransport {
       return;
     }
     const ng = (ptt && this.ngPtt && bytes[6] === 1) || dial === 'ng';
-    const reply = ng ? Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0xfa, 0xfd]) : this.sim.receive(bytes);
+    if (ptt && bytes[6] === 0) this.lingerUntil = this.timers.t + this.txLingerMs;
+    const readTx = bytes[4] === 0x1c && bytes.length === 7;
+    const lingering = readTx && this.timers.t < this.lingerUntil;
+    const reply = ng
+      ? Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0xfa, 0xfd])
+      : lingering
+        ? Uint8Array.from([0xfe, 0xfe, 0xe0, 0xa4, 0x1c, 0x00, 0x01, 0xfd])
+        : this.sim.receive(bytes);
     const at = Math.max(this.lastAt, this.timers.t + this.delayMs);
     this.lastAt = at;
     this.timers.set(() => this.send(reply), at - this.timers.t);
@@ -440,6 +456,34 @@ describe('CatRadio', () => {
     expect(sim.transmit).toBe(false);
     expect(radio.state.unkeyFailed).toBe(false);
     expect(radio.holdsPtt).toBe(false);
+  });
+
+  it('sends PTT off to a radio left keyed even when the first read after opening goes unanswered', async () => {
+    const { timers, sim, port, radio } = setup();
+    sim.receive(Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x1c, 0x00, 0x01, 0xfd]));
+    expect(sim.transmit).toBe(true);
+    port.dropReplies = 1;
+    radio.start({ recover: true });
+    await timers.advance(3 * REPLY_MS + 500);
+    expect(sim.transmit).toBe(false);
+  });
+
+  it('waits for a radio that still reports transmit just after PTT off, and confirms once it reads receive', async () => {
+    const { timers, port, radio } = setup();
+    radio.start();
+    await timers.advance(400);
+    const k = radio.key(15_000);
+    await timers.advance(50);
+    port.txLingerMs = 250;
+    k.release();
+    await timers.advance(OFF_CONFIRM_MS + REPLY_MS + 200);
+    expect(radio.state.unkeyFailed).toBe(false);
+    expect(radio.holdsPtt).toBe(false);
+    // Reads OFF_SETTLE_MS apart until one says receive.
+    const off = port.sent('1C 00 00').at(-1)!.at;
+    const reads = port.sent('1C 00 FD').filter((r) => r.at >= off);
+    expect(reads.length).toBeGreaterThan(1);
+    expect(reads[1].at - reads[0].at).toBeGreaterThanOrEqual(OFF_SETTLE_MS);
   });
 
   it('says when PTT off is never confirmed, keeps counting the radio as keyed, and clears once a read says receive', async () => {

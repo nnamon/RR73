@@ -2,6 +2,12 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- After PTT off, rig control reads transmit or receive every 100 ms for up to 0.5 s before it says PTT off was not confirmed, so a radio still switching to receive no longer turns Tx off.
+- On reconnecting, the read that finds a radio still transmitting is tried up to 3 times, so a radio RR73 left keyed gets its PTT off even when the first read goes unanswered.
+- Keying the IC-705 by CAT, Tx waits until USB SEND has read OFF. Before, it was allowed while USB SEND was unread.
+
 ## 0.24.9 · 2026-10-21
 
 - Settings › Rig control › Copy connection log includes the first 96 bytes RR73 sent to the radio and the first 96 it received, in hex.

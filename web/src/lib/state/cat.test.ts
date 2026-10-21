@@ -313,6 +313,22 @@ describe('connecting', () => {
     expect(chosen.ptt).toEqual([]);
   });
 
+  it('keying by CAT, refuses Tx until USB SEND has read OFF', async () => {
+    await initCat();
+    const done = connectRadio();
+    await vi.advanceTimersByTimeAsync(0);
+    await run(OPEN_SETTLE_MS + 300);
+    await done;
+    void updateSettings({ cat: { ...settings.cat, keyPtt: true } });
+    rig.menu = { ...rig.menu, usb_send: undefined };
+    expect(rigGate()).toBe('USB SEND not read yet');
+    rig.menu = { ...rig.menu, usb_send: 0 };
+    expect(rigGate()).not.toBe('USB SEND not read yet');
+    void updateSettings({ cat: { ...settings.cat, keyPtt: false } });
+    rig.menu = { ...rig.menu, usb_send: undefined };
+    expect(rigGate()).not.toBe('USB SEND not read yet');
+  });
+
   it('shows a radio already transmitting at connecting, and sends PTT off then only with CAT keying on or RR73 may have left it keyed', async () => {
     const key = wasm.cat_encode('{"type":"set_transmit","on":true}', 0xa4);
     chosen.sim.receive(key);

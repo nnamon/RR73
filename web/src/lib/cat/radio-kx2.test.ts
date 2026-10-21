@@ -5,7 +5,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { loadWasm, type Wasm } from '../../../e2e/wasm';
 import { kx2Codec, type CatWasm } from './protocol';
-import { CatRadio, DRAIN_MS, POLL_MS, PTT_READ_MS, REPLY_MS, UNKEY_ACK_MS, UNKEY_TRIES, type CatTimers, type CatTransport } from './radio';
+import { CatRadio, DRAIN_MS, OFF_CONFIRM_MS, POLL_MS, PTT_READ_MS, REPLY_MS, UNKEY_ACK_MS, UNKEY_TRIES, type CatTimers, type CatTransport } from './radio';
 import { KX2, KX2_BAND_CHANGE_MS } from './radios';
 import type { LinkEnd } from './serial';
 import { PTT_TIMEOUT_MS } from '../tx/keyer';
@@ -421,6 +421,8 @@ describe('CatRadio with a KX2', () => {
     expect(rx).toHaveLength(UNKEY_TRIES);
     // An answer that still says transmit waits out the 100 ms before the next RX.
     for (let i = 1; i < rx.length; i++) expect(rx[i].at - rx[i - 1].at).toBeGreaterThanOrEqual(UNKEY_ACK_MS);
+    // Reads keep checking for receive for OFF_CONFIRM_MS before PTT off counts as unconfirmed.
+    await timers.advance(OFF_CONFIRM_MS);
     expect(await unkeyed).toBe(false);
     expect(radio.state.unkeyFailed).toBe(true);
     expect(radio.holdsPtt).toBe(true);

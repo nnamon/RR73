@@ -80,6 +80,10 @@ export const MODE_EVERY = 5;
 export const UNKEY_TRIES = 4;
 /** How long each PTT off waits for its OK before the next, ms. */
 export const UNKEY_ACK_MS = 100;
+/** Between reads that confirm receive after PTT off's OK, ms: a radio may still report transmit as it switches. */
+export const OFF_SETTLE_MS = 100;
+/** How long reads may keep saying transmit after PTT off's OK before PTT off counts as not confirmed, ms. */
+export const OFF_CONFIRM_MS = 500;
 /** After a request goes unanswered, or the KX2 answers `?;`, answers arriving this long are dropped as late, ms. */
 export const DRAIN_MS = 250;
 /** A KX2 that says receive after TX is read again this often until PTT_TIMEOUT_MS, ms. Unverified on a device. */
@@ -297,12 +301,20 @@ export class CatRadio implements Keyer {
    * the radio was on a Tx dial: the receive dial is set back when the radio still reads the Tx dial.
    */
   start(opts: { recover?: boolean; shifted?: DialShift | null } = {}) {
-    void this.request({ type: 'read_transmit' }).then((r) => {
-      if (opts.recover && r.ok && r.event.type === 'transmit' && r.event.on) {
-        this.setMayBeKeyed(true);
-        this.unkeyAll();
+    // The first read after opening is the likeliest to go unanswered: read again, LOST_LIMIT times
+    // at most, so a radio left keyed still gets its PTT off.
+    void (async () => {
+      for (let n = 0; n < LOST_LIMIT; n++) {
+        const r = await this.request({ type: 'read_transmit' });
+        if (this.over) return;
+        if (!r.ok) continue;
+        if (opts.recover && r.event.type === 'transmit' && r.event.on) {
+          this.setMayBeKeyed(true);
+          this.unkeyAll();
+        }
+        return;
       }
-    });
+    })();
     const shifted = opts.shifted;
     if (shifted) {
       void this.request({ type: 'read_frequency' }).then((r) => {
@@ -688,10 +700,20 @@ export class CatRadio implements Keyer {
         if (this.over || gen !== this.pttGen) return;
       }
     }
-    const read = await this.sendNow({ type: 'read_transmit' }, REPLY_MS);
-    if (this.over || gen !== this.pttGen) return;
-    if (read.ok && read.event.type === 'transmit' && !read.event.on) this.confirmed();
-    else if (this.mayBeKeyed) {
+    const wait = (ms: number) => new Promise<void>((resolve) => this.timers.set(resolve, ms));
+    const until = this.timers.now() + OFF_CONFIRM_MS;
+    for (;;) {
+      if (this.over || gen !== this.pttGen) return;
+      const read = await this.sendNow({ type: 'read_transmit' }, REPLY_MS);
+      if (this.over || gen !== this.pttGen) return;
+      if (read.ok && read.event.type === 'transmit' && !read.event.on) {
+        this.confirmed();
+        return;
+      }
+      if (this.timers.now() >= until) break;
+      await wait(OFF_SETTLE_MS);
+    }
+    if (this.mayBeKeyed) {
       this.patch({ unkeyFailed: true });
       this.settleUnkey(false);
     }
