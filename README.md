@@ -94,12 +94,12 @@ Figures from `rr73-bench`. SNR is in a 2500 Hz bandwidth, and SNR50 is the SNR a
 
 | | First stage | With the later stages |
 | --- | --- | --- |
-| FT8 SNR50, white noise | −21.3 dB | −21.6 dB |
-| FT8 SNR50, Watterson fading | −18.3 dB | −18.9 dB |
+| FT8 SNR50, white noise | −21.4 dB | −21.6 dB |
+| FT8 SNR50, Watterson fading | −18.6 dB | −19.0 dB |
 | FT4 SNR50, white noise | −17.1 dB | −17.6 dB |
-| FT8, reference decodes found in 350 slots recorded on 40m | 93% | 95% |
+| FT8, reference decodes found in 350 slots recorded on 40m | 95% | 96% |
 
-Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.3 to −22.2 dB, with none in 5000 noise-only slots. Method and data sets: `docs/bench.md`, decision records 0007 and 0009 and experiments 0008 and 0011.
+Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.4 to −22.7 dB, with none in 5000 noise-only slots. Method and data sets: `docs/bench.md`, decision records 0007 and 0009 and experiments 0008, 0011 and 0012.
 
 ## Requirements
 

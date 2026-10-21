@@ -410,10 +410,10 @@ fn a_hashed_callsign_resolves_from_a_message_decoded_later_in_the_slot() {
 #[test]
 fn faded_stations_on_one_frequency_decode_with_their_neighbours_removed() {
     // Faded stations within 15 Hz and 0.9 s of each other spoil each other's soft bits, and the
-    // preset decodes none of the 7 in these 3 slots. With the retries of experiment 0012, a
-    // failed candidate is tried again with its neighbours' hard decisions removed from its
-    // baseband; once one decodes, the others are tried with its message removed. Each decode is
-    // reported where its station is.
+    // preset without the retries and weak candidates of experiment 0012 decodes none of the 7 in
+    // these 3 slots. With the retries, a failed candidate is tried again with its neighbours'
+    // hard decisions removed from its baseband; once one decodes, the others are tried with its
+    // message removed. Each decode is reported where its station is.
     let faded = |text: &str, freq_hz: f64, dt_s: f64, snr_db: f64| {
         let mut s = SimSignal::new(text, freq_hz, dt_s, snr_db);
         s.fading = Some(rr73_chansim::Watterson::MODERATE);
@@ -478,8 +478,10 @@ fn faded_stations_on_one_frequency_decode_with_their_neighbours_removed() {
             ],
         ),
     ];
-    let preset = DecoderConfig::preset("subtract-3-osd2").expect("preset");
-    let retries = preset.with_overrides(&["pairs.enabled=true"]).expect("overrides");
+    let retries = DecoderConfig::preset("subtract-3-osd2").expect("preset");
+    let preset = retries
+        .with_overrides(&["pairs.enabled=false", "search.ft8_weak_score_db=null"])
+        .expect("overrides");
     for (seed, signals) in slots {
         let audio = render(signals.clone(), seed);
         let slot = SlotAudio::new(&audio, Mode::Ft8);

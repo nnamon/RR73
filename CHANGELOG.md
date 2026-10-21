@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The first decoding stage finds 95% of the reference decodes in 350 slots recorded on 40m, up from 93%, and all 3 stages 96%, up from 95%. Two stations on the same frequency that failed together now decode.
+
 ## 0.24.23 · 2026-10-21
 
 - Settings › Appearance › Font › Automatic uses Segoe UI on Windows. Inter remains a choice there.

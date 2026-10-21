@@ -709,6 +709,17 @@ impl DecoderConfig {
         self
     }
 
+    /// Failed candidates retried with their overlapping neighbours removed, and FT8 candidates
+    /// scoring 4 to 5 dB admitted when 8 of their 21 sync symbols have their sent tone strongest
+    /// on the search grid and on the refined baseband (experiment 0012).
+    fn with_overlap_retries(mut self) -> Self {
+        self.pairs.enabled = true;
+        self.search.ft8_weak_score_db = Some(4.0);
+        self.demod.ft8_weak_grid_sync = 8;
+        self.demod.ft8_weak_min_sync = 8;
+        self
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
@@ -719,7 +730,8 @@ impl DecoderConfig {
                 .with_block_soft_bits()
                 .with_late_starts()
                 .with_passband_edge()
-                .with_normalised_set()),
+                .with_normalised_set()
+                .with_overlap_retries()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }
@@ -922,6 +934,14 @@ mod tests {
             ),
             (9, 9)
         );
+        // Retries of overlapping candidates and FT8's weak candidates (experiment 0012).
+        assert!(c.pairs.enabled);
+        assert_eq!(
+            (c.score_floor_db(Mode::Ft8), c.score_floor_db(Mode::Ft4)),
+            (4.0, 5.0)
+        );
+        assert_eq!(c.block_min_sync(Mode::Ft8, 4.5), 8);
+        assert_eq!(c.demod.weak_grid_sync(Mode::Ft8), 8);
         // The research reference keeps the ft8_lib method.
         let b = DecoderConfig::baseline();
         assert!(!b.snr.passband && b.spectrogram.freq_max_hz == 3000.0);
