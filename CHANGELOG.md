@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.26 · 2026-10-21
 
 - Turning off Read Wavelog's log keeps the copy already read. Turning it on again reads only the QSOs added since. Remove Wavelog still deletes it.
 
