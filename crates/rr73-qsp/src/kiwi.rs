@@ -140,6 +140,11 @@ pub fn tune_command(dial_hz: u64) -> String {
     )
 }
 
+/// True for a flag the receiver raises: a bare name, or a value other than 0.
+fn set(value: Option<&str>) -> bool {
+    value.is_none_or(|v| v != "0")
+}
+
 /// What a receiver's audio rate needs: nothing at 12000 Hz, a resampler within 1 % of it, or a
 /// refusal with the reason.
 pub fn resampler_for(rate: f64) -> Result<Option<crate::resample::Stream>, String> {
@@ -574,9 +579,10 @@ async fn connection(
                             let v = value.as_deref();
                             match name.as_str() {
                                 "badp" if v != Some("0") => return End::Refused("it wants a password".into()),
-                                "too_busy" => return End::Busy,
-                                "down" => return End::Refused("it is down".into()),
-                                "redirect" => return End::Refused("it redirects listeners elsewhere".into()),
+                                // KiwiSDR v1.902 sends too_busy=0 about 10 s into a stream: 0 is a no.
+                                "too_busy" if set(v) => return End::Busy,
+                                "down" if set(v) => return End::Refused("it is down".into()),
+                                "redirect" if set(v) => return End::Refused("it redirects listeners elsewhere".into()),
                                 "audio_rate" | "sample_rate" if !tuned => {
                                     let r = v.and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
                                     if name == "sample_rate" || rate.is_none() {
@@ -787,6 +793,13 @@ mod tests {
         assert!(is_notice("kicked", None));
         assert!(!is_notice("load_cfg", Some("time_limit")));
         assert!(!is_notice("audio_rate", Some("12000")));
+    }
+
+    #[test]
+    fn a_flag_at_0_is_not_raised() {
+        assert!(!set(Some("0")));
+        assert!(set(Some("1")));
+        assert!(set(None));
     }
 
     #[test]

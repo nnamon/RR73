@@ -90,6 +90,8 @@ async fn stand_in_with(
                         b"MSG audio_rate=12000 sample_rate=12000.000000".to_vec().into(),
                     ))
                     .await;
+                // KiwiSDR v1.902 says it is not busy once a stream runs.
+                let _ = ws.send(Message::Binary(b"MSG too_busy=0".to_vec().into())).await;
                 let mut seq = 0u32;
                 let mut tick = tokio::time::interval(Duration::from_millis(42));
                 loop {
