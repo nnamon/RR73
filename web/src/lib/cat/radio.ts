@@ -617,11 +617,16 @@ export class CatRadio implements Keyer {
    * has confirmed receive. Then reads the dial: after a refusal or no answer, RR73 shows and uses
    * the dial the radio reports, and says so.
    */
-  private restoreDial() {
+  private restoreDial(retry = true) {
     const s = this.shift;
     if (!s || this.over || this.holder || this.mayBeKeyed || this.dialOp) return;
     void this.dialSet(s.rxHz, REPLY_MS, (r) => {
       if (this.over || this.shift !== s) return;
+      // A radio may refuse a dial change just after leaving transmit: once more, OFF_SETTLE_MS later.
+      if (!r.ok && retry) {
+        this.timers.set(() => this.restoreDial(false), OFF_SETTLE_MS);
+        return;
+      }
       this.shift = null;
       void this.readDial();
       this.settleRestore(r.ok);

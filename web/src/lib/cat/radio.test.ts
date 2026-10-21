@@ -931,16 +931,29 @@ describe('CatRadio with a dial shift', () => {
     expect(sim.frequency).toBe(7_074_000);
   });
 
-  it('says when the radio does not take the receive dial back, and then shows the dial it reads', async () => {
+  it('sets the receive dial back on a second try when the radio refuses the first just after transmit', async () => {
     const { timers, sim, port, radio } = await ready();
     const restored: boolean[] = [];
     radio.onRestore((ok) => restored.push(ok));
     port.dialAnswers = ['ok', 'ng'];
     const k = radio.key(15_000, 1000);
     await timers.advance(50);
+    k.release();
+    await timers.advance(400);
+    expect(restored).toEqual([true]);
+    expect(sim.frequency).toBe(14_074_000);
+  });
+
+  it('says when the radio does not take the receive dial back, and then shows the dial it reads', async () => {
+    const { timers, sim, port, radio } = await ready();
+    const restored: boolean[] = [];
+    radio.onRestore((ok) => restored.push(ok));
+    port.dialAnswers = ['ok', 'ng', 'ng'];
+    const k = radio.key(15_000, 1000);
+    await timers.advance(50);
     const waiting = radio.dialRestored();
     k.release();
-    await timers.advance(200);
+    await timers.advance(400);
     expect(restored).toEqual([false]);
     expect(await waiting).toBe(false);
     expect(sim.frequency).toBe(14_075_000);

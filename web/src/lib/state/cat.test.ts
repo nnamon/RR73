@@ -1353,7 +1353,7 @@ describe('Keep Tx audio centred', () => {
     await connect();
     const notices: [string, boolean, boolean][] = [];
     const off = onRadioNotice((t, txOff, always) => notices.push([t, txOff, always]));
-    chosen.dialAnswers = ['ok', 'ng'];
+    chosen.dialAnswers = ['ok', 'ng', 'ng', 'ng'];
     const { done } = cq(2800);
     await run(2200);
     await done;

@@ -4,6 +4,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- After a shifted transmission, a receive dial the IC-705 refuses just after transmit is tried once more, 0.1 s later, before Tx goes off.
+- The IC-705's Split row reads a simplex answer as Off, and rig control ignores answers the radio addresses to another program.
 - After PTT off, rig control reads transmit or receive every 100 ms for up to 0.5 s before it says PTT off was not confirmed, so a radio still switching to receive no longer turns Tx off.
 - On reconnecting, the read that finds a radio still transmitting is tried up to 3 times, so a radio RR73 left keyed gets its PTT off even when the first read goes unanswered.
 - Keying the IC-705 by CAT, Tx waits until USB SEND has read OFF. Before, it was allowed while USB SEND was unread.
