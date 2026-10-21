@@ -40,15 +40,15 @@ The exit status is 0 when the requested sessions were recorded, 3 when a signal 
 
 `receivers.toml` lists the receivers. The first is the SARTS Web-888 in Singapore, `167.172.88.10:80` behind nginx, operated by 9V1YC for SARTS: KiwiSDR software v2026.205, 13 channels, Wellbrook loop, grid OJ11.
 
-6 public receivers follow, one per region, for paths and noise the Singapore receiver does not hear. Each had GPS timing, 8 channels with at least 5 free and one of the better signal-to-noise readings in its region on the public list on 22 October 2026. Each plan records the high bands in local daytime and the low bands and 20m at night.
+6 public receivers follow, one per region, for paths and noise the Singapore receiver does not hear. Each had GPS timing, 8 channels with at least 4 free, one of the better signal-to-noise readings in its region on the public list on 22 October 2026, and kept a 30 s test stream open. Some KiwiSDRs close a program's stream after about 11 s; `ext_api` on their `/status` page is 0 or taken. Each plan records the high bands in local daytime and the low bands and 20m at night.
 
 | ID | Location | Grid | Antenna |
 | --- | --- | --- | --- |
-| `g3sdh-bristol` | Near Bristol, UK | IO81 | Wellbrook loop |
+| `wessex-g8jnj` | South West UK | IO80 | Shared with Wessex KiwiSDR V1 |
 | `aprs-kuopio` | Kuopio, Finland | KP33 | Bonito Megaloop FX |
 | `k1vl-vermont` | Shrewsbury, Vermont, USA | FN33 | 82 m centre-fed doublet at 20 m |
-| `ve7av-prince-george` | Prince George, British Columbia, Canada | CO83 | 80 m horizontal loop at 9 m |
-| `vk5arg-tarlee` | Near Tarlee, South Australia | PF95 | Broadband monopole |
+| `va6ok-coronation` | Coronation, Alberta, Canada | DO42 | 80 m full-wave loop at 1.2 m |
+| `vk5arg-tarlee-2` | Near Tarlee, South Australia | PF95 | Broadband monopole |
 | `vinhedo-br` | Near Vinhedo, São Paulo, Brazil | GG66 | T3FD at 20 m |
 
 | Field | Meaning |

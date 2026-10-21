@@ -46,11 +46,11 @@ def test_repository_configuration_has_the_sarts_receiver() -> None:
 def test_repository_public_receivers_keep_the_public_rules() -> None:
     _, *public = load_receivers(RECEIVERS_TOML)
     assert [r.id for r in public] == [
-        "g3sdh-bristol",
+        "wessex-g8jnj",
         "aprs-kuopio",
         "k1vl-vermont",
-        "ve7av-prince-george",
-        "vk5arg-tarlee",
+        "va6ok-coronation",
+        "vk5arg-tarlee-2",
         "vinhedo-br",
     ]
     for r in public:
