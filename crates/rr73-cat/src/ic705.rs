@@ -273,8 +273,12 @@ impl Split {
         }
     }
 
-    /// The state a byte names, or `None` for a code p. 3 does not list.
+    /// The state a byte names, or `None` for a code p. 3 does not list. `10`, simplex, reads as
+    /// [`Split::Off`]: neither split nor duplex.
     pub fn from_code(code: u8) -> Option<Split> {
+        if code == 0x10 {
+            return Some(Split::Off);
+        }
         Split::ALL.into_iter().find(|s| s.code() == code)
     }
 }
@@ -914,7 +918,12 @@ pub fn parse_frame(frame: &Frame, a: Addresses) -> Event {
             command: frame.command,
         };
     }
-    if frame.from != a.radio {
+    // From the radio, only frames to this controller answer it, and transceive frames to any
+    // controller (`00`) report the dial: an OK or NG to another controller on the same bus is not
+    // an answer to RR73.
+    let transceive = frame.command == CMD_TRANSCEIVE_FREQUENCY || frame.command == CMD_TRANSCEIVE_MODE;
+    let ours = frame.to == a.controller || (transceive && frame.to == 0x00);
+    if frame.from != a.radio || !ours {
         return Event::OtherAddress {
             to: frame.to,
             from: frame.from,
@@ -988,6 +997,31 @@ impl Parser {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn answers_to_another_controller_are_not_ours() {
+        let a = Addresses::default();
+        let ok_to_other = Frame {
+            to: 0xE1,
+            from: a.radio,
+            command: OK,
+            data: vec![],
+        };
+        assert!(matches!(parse_frame(&ok_to_other, a), Event::OtherAddress { .. }));
+        let ok_to_us = Frame {
+            to: a.controller,
+            from: a.radio,
+            command: OK,
+            data: vec![],
+        };
+        assert!(matches!(parse_frame(&ok_to_us, a), Event::Ok));
+    }
+
+    #[test]
+    fn simplex_reads_as_split_off() {
+        assert_eq!(Split::from_code(0x10), Some(Split::Off));
+        assert_eq!(Split::from_code(0x02), None);
+    }
+
     use super::*;
     use crate::bcd::MAX_FREQUENCY_HZ;
 

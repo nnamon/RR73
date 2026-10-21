@@ -300,8 +300,13 @@ fn page_3_split_and_duplex() {
             [Event::Split { split }]
         );
     }
-    // 10 sets simplex and is no answer to a read; neither is a code p. 3 does not list.
-    for code in [0x02, 0x10, 0x13] {
+    // 10 sets simplex. The guide gives it as no answer to a read, but a radio that answers it
+    // reads as split off; a code p. 3 does not list is malformed.
+    assert_eq!(
+        events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x0F, 0x10, 0xFD]),
+        [Event::Split { split: Split::Off }]
+    );
+    for code in [0x02, 0x13] {
         assert_eq!(
             events(&[0xFE, 0xFE, 0xE0, 0xA4, 0x0F, code, 0xFD]),
             [Event::Malformed {
