@@ -4,7 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- Desktop app for Windows, macOS and Linux: rig control over native serial ports, and slots and Tx on NTP-corrected time shown in Settings › Radio and audio › Timing.
+- Desktop app for Windows, macOS and Linux, with rig control over native serial ports and slot and Tx timing corrected by an NTP server.
 
 ## 0.24.29 · 2026-10-21
 

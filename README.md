@@ -142,8 +142,6 @@ The installers are not signed, so Windows and macOS warn before the first start:
 - macOS: the system says the app cannot be opened because Apple cannot check it. Open the `.dmg`, drag RR73 to Applications and open it once. Then, in System Settings › Privacy & Security, select Open Anyway beside the message about RR73 and confirm with Open. On macOS 14 and earlier, Control-click RR73 in Applications, choose Open, and confirm with Open.
 - Linux: make the AppImage executable (`chmod +x RR73_*.AppImage`) and run it, or install the `.deb` with `sudo apt install ./RR73_*.deb`. Rig control needs access to the serial port: add your user to the `dialout` group (`uucp` on Arch Linux) and log in again.
 
-Not tested on a device: microphone capture and rig control in the desktop app have been built and unit-tested only.
-
 Settings › Practice band runs a simulated band for trying RR73 without a radio.
 
 ## Relay
