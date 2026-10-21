@@ -132,6 +132,18 @@ On a Windows computer or tablet, in Chrome or Edge, with an IC-705:
 
 RR73 keeps receiving and transmitting while its window is minimised or behind another one.
 
+### Desktop app
+
+The desktop app for Windows, macOS and Linux is the same app in its own window. It adds rig control on every system through the computer's serial ports, and corrects slot and Tx timing by an NTP server; Settings › Radio and audio › Timing shows the measured offset (`docs/design/desktop.md`). Each release on GitHub carries the installers: `.exe` (NSIS) or `.msi` for Windows, `.dmg` for macOS (Apple silicon and Intel), `.AppImage` or `.deb` for Linux.
+
+The installers are not signed, so Windows and macOS warn before the first start:
+
+- Windows: SmartScreen says Windows protected your PC. Select More info, then Run anyway.
+- macOS: the system says the app cannot be opened because Apple cannot check it. Open the `.dmg`, drag RR73 to Applications and open it once. Then, in System Settings › Privacy & Security, select Open Anyway beside the message about RR73 and confirm with Open. On macOS 14 and earlier, Control-click RR73 in Applications, choose Open, and confirm with Open.
+- Linux: make the AppImage executable (`chmod +x RR73_*.AppImage`) and run it, or install the `.deb` with `sudo apt install ./RR73_*.deb`. Rig control needs access to the serial port: add your user to the `dialout` group (`uucp` on Arch Linux) and log in again.
+
+Not tested on a device: microphone capture and rig control in the desktop app have been built and unit-tested only.
+
 Settings › Practice band runs a simulated band for trying RR73 without a radio.
 
 ## Relay

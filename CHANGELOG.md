@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Desktop app for Windows, macOS and Linux: rig control over native serial ports, and slots and Tx on NTP-corrected time shown in Settings › Radio and audio › Timing.
+
 ## 0.24.29 · 2026-10-21
 
 - Web SDR streams from KiwiSDR v1.902 receivers past the first 10 s.

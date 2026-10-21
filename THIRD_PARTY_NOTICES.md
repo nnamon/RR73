@@ -351,3 +351,40 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 ```
+
+## Tauri
+
+The desktop app (`desktop/`, `docs/design/desktop.md`) runs the web app in a [Tauri](https://tauri.app) 2 window: the `tauri` 2.12 and `tauri-build` 2.7 crates, and `@tauri-apps/api` and `@tauri-apps/cli` 2.12.4. Tauri is under the MIT licence or the Apache License 2.0, at the user's choice; RR73 takes it under the MIT licence:
+
+```text
+MIT License
+
+Copyright (c) 2017 - Present Tauri Apps Contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+## serialport
+
+The desktop app opens serial ports for rig control with the [serialport](https://github.com/serialport/serialport-rs) crate 4.10.1, used unmodified as a library (`desktop/src/system.rs`). It is under the Mozilla Public License 2.0, a file-level licence: its source, with the licence text, is at the address above and on crates.io. On Linux it links the system's libudev to read USB IDs.
+
+```text
+This Source Code Form is subject to the terms of the Mozilla Public License, v. 2.0. If a copy of
+the MPL was not distributed with this file, You can obtain one at https://mozilla.org/MPL/2.0/.
+```

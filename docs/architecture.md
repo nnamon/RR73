@@ -43,7 +43,9 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-wasm` | `wasm-bindgen` bindings used by the app; `rtty` holds the streaming RTTY receiver and the transmitter, `cat` the CI-V requests and the parser of the radio's bytes, `cat_kx2` the same for the KX2's text commands. |
 | `crates/rr73-cat` | Rig control: CI-V frames and the IC-705 commands RR73 uses, and Elecraft's text commands for the KX2, as typed requests and events; a simulated IC-705 and a simulated KX2 behind a Digirig for tests. See `docs/design/cat.md`. |
 | `crates/rr73-qsp` | QSP, the relay: the KiwiSDR client, the clock that stamps each frame with UTC, the HTTP API with `/docs`, and the audio stream over WebSocket. Runs on a server, never in the app. |
+| `crates/rr73-desktop` | The desktop app's native parts without a window: the serial port manager (ports open with DTR and RTS lowered, a reader thread, `lost` once) over a device trait, and the SNTP client. See `docs/design/desktop.md`. |
 | `web/` | The app. |
+| `desktop/` | The desktop app: the web build in a Tauri 2 window, its commands for serial ports and the clock, icons and bundle settings. A Cargo workspace of its own, built by the `desktop` Docker service. |
 | `tools/ft8lib` | ft8_lib built from a pinned commit, used as a test oracle for the codec. |
 | `tools/wsjtx` | WSJT-X command-line tools (`jt9`, `ft8sim`, `wsprd`, `wsprsim`, `wsprcode`) in a container, used as the decoder and codec reference. Never linked or copied. |
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
@@ -182,6 +184,7 @@ The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A
 
 - Safari on iOS 26 is the target. No Web Serial, WebUSB, Web Bluetooth, UDP or background execution.
 - Desktop Chrome and Edge add Web Serial, which rig control uses (`docs/design/cat.md`). The rig control settings show only where it exists.
+- The desktop app (`docs/design/desktop.md`) runs the same build in a Tauri window on Windows, macOS and Linux. Rig control there uses native serial ports behind Web Serial's interfaces (`lib/cat/native.ts`), and slot and transmit timing use the system time corrected by NTP (`lib/clock/utc.ts`).
 - Desktop Chrome and Edge keep capture running in a hidden page: RR73 receives, decodes and transmits there with its window minimised, covered or in a background tab. Elsewhere hiding stops capture and Tx, as on iOS (`docs/decisions/0010-hidden-window.md`).
 - GitHub Pages cannot send cross-origin isolation headers, so workers receive copies of slot audio. Shared memory waits for a measured gain.
 - Every network call has an offline path. The log is the source of truth; destinations get copies.
