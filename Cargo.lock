@@ -802,6 +802,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rr73-desktop"
+version = "0.24.29"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror",
+]
+
+[[package]]
 name = "rr73-dsp"
 version = "0.24.29"
 dependencies = [

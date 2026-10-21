@@ -1,0 +1,18 @@
+[package]
+name = "rr73-desktop"
+description = "The desktop app's native parts without the window: one serial port manager over a device trait, and an SNTP client for the clock offset"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
