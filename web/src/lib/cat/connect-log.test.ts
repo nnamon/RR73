@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { CONNECT_LOG_KEY, beginAttempt, connectLogText, lastAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, restoreAttempt, stoppedText } from './connect-log';
+import { CONNECT_LOG_KEY, WIRE_BYTES, beginAttempt, connectLogText, lastAttempt, lastAttemptStopped, logFailure, logStep, logWire, resetConnectLog, restoreAttempt, stoppedText } from './connect-log';
 
 beforeEach(() => {
   localStorage.clear();
@@ -101,8 +101,24 @@ describe('the connection log', () => {
         '13:14:31.030 UTC  Forgetting 1 other allowed port',
         '13:14:31.040 UTC  Opening at 115200 baud, 8 data bits, parity none, 1 stop bit, flow control none',
         'No further step recorded',
+        'Sent: nothing',
+        'Received: nothing',
       ].join('\n'),
     );
     expect(connectLogText(null, '0.24.3', 'x')).toContain('No connection attempt stored.');
+  });
+});
+
+describe('the bytes on the wire', () => {
+  it('keeps the first bytes sent and received, in hex, up to WIRE_BYTES each, and shows them in the log', () => {
+    beginAttempt('ic705', 'connect', { step: 'chooser' });
+    logWire('sent', Uint8Array.from([0xfe, 0xfe, 0xa4, 0xe0, 0x03, 0xfd]));
+    expect(lastAttempt()?.sent).toBe('FE FE A4 E0 03 FD');
+    expect(connectLogText(lastAttempt(), '0', 'test')).toContain('Received: nothing');
+    logWire('received', new Uint8Array(200).fill(0xab));
+    expect(lastAttempt()?.received?.split(' ')).toHaveLength(WIRE_BYTES);
+    logWire('received', Uint8Array.from([1]));
+    expect(lastAttempt()?.received?.split(' ')).toHaveLength(WIRE_BYTES);
+    expect(connectLogText(lastAttempt(), '0', 'test')).toContain('Sent: FE FE A4 E0 03 FD');
   });
 });

@@ -20,6 +20,8 @@
  */
 
 /** Port settings, as SerialPort.open takes them. */
+import { logWire } from './connect-log';
+
 export interface SerialOptionsLike {
   baudRate: number;
   dataBits?: 7 | 8;
@@ -248,6 +250,7 @@ export class SerialLink {
     const w = this.writer;
     if (this.stateValue !== 'open' || !w) throw new LinkClosedError();
     await w.write(bytes);
+    logWire('sent', bytes);
   }
 
   /** Closes the port once what was written has gone out. Ends the link with `closed`. */
@@ -276,7 +279,10 @@ export class SerialLink {
         for (;;) {
           const { value, done } = await reader.read();
           if (done) break;
-          if (value?.length) this.emitData(value);
+          if (value?.length) {
+            logWire('received', value);
+            this.emitData(value);
+          }
         }
       } catch (e) {
         recoverable = RECOVERABLE.has(errorName(e));

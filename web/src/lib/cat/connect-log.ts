@@ -38,7 +38,13 @@ export interface ConnectAttempt {
   steps: ConnectEntry[];
   /** Why the attempt ended without connecting, when RR73 saw it end; absent after a crash. */
   failed?: string;
+  /** The first bytes written to the port and read from it, in hex, WIRE_BYTES at most each. */
+  sent?: string;
+  received?: string;
 }
+
+/** Bytes kept of each direction: enough for the first few frames, small enough for storage. */
+export const WIRE_BYTES = 96;
 
 function storage(): Storage | null {
   try {
@@ -77,7 +83,14 @@ export function lastAttempt(): ConnectAttempt | null {
     const a = JSON.parse(raw) as Partial<ConnectAttempt>;
     if ((a.radio !== 'ic705' && a.radio !== 'kx2') || !Array.isArray(a.steps) || !a.steps.every(isStep)) return null;
     const via = a.via === 'connect' || a.via === 'reconnect' ? a.via : 'auto';
-    return { radio: a.radio, via, steps: a.steps, ...(typeof a.failed === 'string' ? { failed: a.failed } : {}) };
+    return {
+      radio: a.radio,
+      via,
+      steps: a.steps,
+      ...(typeof a.failed === 'string' ? { failed: a.failed } : {}),
+      ...(typeof a.sent === 'string' ? { sent: a.sent } : {}),
+      ...(typeof a.received === 'string' ? { received: a.received } : {}),
+    };
   } catch {
     return null;
   }
@@ -110,6 +123,20 @@ export function logStep(step: ConnectStep, nowMs = Date.now()) {
   if (!attempt) return;
   if (step.step === 'connected' && reachedConnected(attempt)) return;
   attempt.steps.push({ ...step, atMs: nowMs });
+  save(attempt);
+}
+
+/**
+ * Records the bytes of the attempt in progress as they go to or come from the port, up to
+ * WIRE_BYTES each way: whether the radio sent anything at all, and what.
+ */
+export function logWire(dir: 'sent' | 'received', bytes: Uint8Array) {
+  if (!attempt) return;
+  const had = attempt[dir] ?? '';
+  const count = had ? had.split(' ').length : 0;
+  if (count >= WIRE_BYTES) return;
+  const hex = Array.from(bytes.subarray(0, WIRE_BYTES - count), (b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+  attempt[dir] = had ? `${had} ${hex}` : hex;
   save(attempt);
 }
 
@@ -218,6 +245,7 @@ export function connectLogText(a: ConnectAttempt | null, version: string, browse
   for (const e of a.steps) lines.push(`${new Date(e.atMs).toISOString().slice(11, 23)} UTC  ${stepText(e, a)}`);
   if (a.failed) lines.push(`Failed: ${failureText(a.failed, a.radio)}`);
   else if (!reachedConnected(a)) lines.push('No further step recorded');
+  lines.push(`Sent: ${a.sent ?? 'nothing'}`, `Received: ${a.received ?? 'nothing'}`);
   return lines.join('\n');
 }
 
