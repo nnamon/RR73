@@ -7,19 +7,10 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The radio badge goes amber with FIL2 or FIL3 when the IC-705 is on a narrow filter that cuts most of the FT8 range.
 - An answer from the radio cut short no longer swallows the answer after it.
 - Halt sends no PTT off when RR73 holds none and the radio reads receive, so Halt on the KX2 no longer holds other requests back for 0.6 s.
-
-## 0.24.16 · 2026-10-21
-
 - Settings › Appearance › Font: Automatic uses Apple’s system font on Apple devices and Inter elsewhere, such as Windows. System and Inter fix the choice. Inter comes with the app and works offline.
 - Monospaced text on Windows uses Cascadia Mono or Consolas, where it fell back to Courier New.
-
-## 0.24.15 · 2026-10-21
-
 - When the browser keeps audio paused until a tap, as Chrome can when Web SDR starts with the app, the audio banner says so within 1 s and Resume audio starts it. Audio stayed at starting, with a black waterfall.
 - On a computer or tablet, Operate's ••• menu opens over the waterfall in full. Its top rows were cut off behind the waterfall.
-
-## 0.24.14 · 2026-10-21
-
 - Worked before greys a decode only for a dupe: a station worked today on this band and mode, in the running activation, the rule Hunt and Repeat CQ use. Hide worked hides only dupes.
 - Decode rows show worked status on their right edge: solid for a dupe, light for a station worked on this band and mode on another day, which can be worked again.
 
