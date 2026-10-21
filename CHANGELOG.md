@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings › Rig control › Copy connection log includes the first 96 bytes RR73 sent to the radio and the first 96 it received, in hex.
+
 ## 0.24.8 · 2026-10-16
 
 - New DXCC entity starts off in every decode colour scheme. With a short log nearly every station is a new entity, and its magenta covered most decodes. Turn it on in Settings › Decode colours.
