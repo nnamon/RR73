@@ -18,6 +18,8 @@ docker compose run --rm node npm --prefix web run lint:css   # stylelint
 docker compose run --rm node npm --prefix web test           # vitest
 docker compose run --rm node npm run lint:copy               # style guide lint
 docker compose run --rm e2e npx --prefix web playwright test
+docker compose run --rm desktop sh -c 'cd desktop && cargo test && cargo clippy --all-targets -- -D warnings'
+docker compose run --rm desktop sh -c 'cd desktop && npm ci && npx tauri build --bundles deb,appimage'   # after npm --prefix web run build
 docker compose run --rm wsjtx jt9 -8 -d 3 <file.wav>         # reference decodes
 docker compose run --rm kiwi record --receiver sarts-web888 --band 40m --minutes 4   # record slots
 docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 reference decodes

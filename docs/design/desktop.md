@@ -44,6 +44,12 @@ A new measurement moves the audio clock's mapping by the change in offset. The m
 - macOS: the bundle carries a microphone usage string, so the system asks for the microphone once.
 - Linux: the app turns on WebKitGTK's media streams and Web Audio, and grants the page's microphone requests, which WebKitGTK otherwise refuses.
 
+## Build
+
+- Linux, locally: the `desktop` Docker service carries the Rust toolchain, Node and the GTK and WebKitGTK headers. Build the web app with base `/` (`npm --prefix web run build` in the `node` service), then run `npx tauri build --bundles deb,appimage` in `desktop/` in the `desktop` service (AGENTS.md, Tooling). The bundles land in the `cargo-target` volume under `desktop/release/bundle`.
+- Windows and macOS: CI only. The `desktop-web` job builds the web app once; the `desktop` jobs build the installers on each system and keep them as `installers-Linux`, `installers-Windows` and `installers-macOS` workflow artifacts. On a `v*` tag, `desktop-publish` attaches them to the GitHub release once the tests have passed.
+- The version comes from `web/package.json` (`tauri.conf.json` points at it), so a release needs no extra step.
+
 ## Alternatives rejected
 
 - Electron: bundles Chromium, so Web Serial would work unchanged, but an installer is over 100 MB and every release ships a browser to patch.
