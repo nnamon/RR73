@@ -63,17 +63,28 @@ async fn stand_in_with(
                 None
             };
             tokio::spawn(async move {
+                let kiwi_path = Arc::new(std::sync::atomic::AtomicBool::new(false));
+                let path_seen = kiwi_path.clone();
                 let record =
                     |req: &tokio_tungstenite::tungstenite::handshake::server::Request,
                      res: tokio_tungstenite::tungstenite::handshake::server::Response| {
                         if let Some(ua) = req.headers().get("user-agent").and_then(|v| v.to_str().ok()) {
                             seen.lock().unwrap().push(format!("stream {ua}"));
                         }
+                        path_seen.store(
+                            req.uri().path().starts_with("/kiwi/"),
+                            std::sync::atomic::Ordering::SeqCst,
+                        );
                         Ok(res)
                     };
                 let Ok(mut ws) = tokio_tungstenite::accept_hdr_async(sock, record).await else {
                     return;
                 };
+                // As KiwiSDR v1.902 does, the stand-in sends nothing on a path without /kiwi.
+                if !kiwi_path.load(std::sync::atomic::Ordering::SeqCst) {
+                    tokio::time::sleep(Duration::from_secs(60)).await;
+                    return;
+                }
                 let _ = ws
                     .send(Message::Binary(
                         b"MSG audio_rate=12000 sample_rate=12000.000000".to_vec().into(),

@@ -2,13 +2,16 @@
 //! SARTS Web-888 (KiwiSDR v2026.205). No KiwiSDR client code was read: the kiwiclient package
 //! carries no licence for its core files.
 //!
-//! - WebSocket at `ws://host:port/<seconds since 1970>/SND`; the client starts with
+//! - WebSocket at `ws://host:port/kiwi/<seconds since 1970>/SND`. The Web-888s also answer without
+//!   `/kiwi`, and KiwiSDR v1.902 receivers only with it (checked on 22 October 2026: they keep
+//!   the socket open and send nothing). The client starts with
 //!   `SET auth t=kiwi p=` (empty password on a public receiver).
 //! - The receiver sends binary messages that start with a 3-letter tag. `MSG` carries
 //!   space-separated `name=value` parameters: `audio_rate` and `sample_rate` (12000 on both
-//!   Singapore receivers; 11998.93 on a KiwiSDR in South Australia, which QSP resamples to 12000), `badp` (1 when the password is refused), `too_busy`, version and
-//!   configuration. `SND` carries audio: a flags byte, a sequence number (u32, little-endian), an
-//!   S-meter value (u16, big-endian), then 16-bit big-endian samples (512 per message at 12 kHz)
+//!   Singapore receivers; 11998.93 on a KiwiSDR in South Australia, which QSP resamples to
+//!   12000), `badp` (1 when the password is refused), `too_busy`, version and configuration.
+//!   `SND` carries audio: a flags byte, a sequence number (u32, little-endian), an S-meter
+//!   value (u16, big-endian), then 16-bit big-endian samples (512 per message at 12 kHz)
 //!   while compression is off.
 //! - Once the rate is known the client sets the audio rate, squelch, generator, listener name,
 //!   USB mode with its passband and dial (kHz), AGC and compression, and sends `SET keepalive`
@@ -107,7 +110,7 @@ pub fn parse(bytes: &[u8]) -> Option<Upstream> {
 
 /// The WebSocket address for one listening session.
 pub fn url(host: &str, port: u16, now_s: u64) -> String {
-    format!("ws://{}:{port}/{now_s}/SND", bracketed(host))
+    format!("ws://{}:{port}/kiwi/{now_s}/SND", bracketed(host))
 }
 
 /// How QSP names itself to receivers: the program, its version and where it comes from.
@@ -551,6 +554,9 @@ async fn connection(
     let mut last_notice: Option<String> = None;
     let mut keepalive = tokio::time::interval(KEEPALIVE);
     keepalive.tick().await;
+    // A receiver that gives no rate within TIMEOUT never streams.
+    let silent = tokio::time::sleep(TIMEOUT);
+    tokio::pin!(silent);
     loop {
         tokio::select! {
             msg = ws.next() => {
@@ -633,6 +639,7 @@ async fn connection(
                     return End::Stopped;
                 }
             },
+            () = &mut silent, if !tuned => return End::Error("the receiver sent nothing within 10 s".into()),
             _ = keepalive.tick() => {
                 if ws.send(Message::Text("SET keepalive".into())).await.is_err() {
                     return End::Closed(last_notice);
@@ -694,9 +701,9 @@ mod tests {
         );
         assert_eq!(
             url("167.172.88.10", 80, 1_791_994_254),
-            "ws://167.172.88.10:80/1791994254/SND"
+            "ws://167.172.88.10:80/kiwi/1791994254/SND"
         );
-        assert_eq!(url("2001:db8::1", 8073, 1), "ws://[2001:db8::1]:8073/1/SND");
+        assert_eq!(url("2001:db8::1", 8073, 1), "ws://[2001:db8::1]:8073/kiwi/1/SND");
         assert_eq!(bracketed("kiwi.example.org"), "kiwi.example.org");
     }
 
