@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * One QSO in the log: callsign, destination tags and UTC time, then band, mode, frequency, grid
+   * One QSO in the log: callsign and country, destination tags and UTC time, then band, mode, frequency, grid
    * and reports. Tapping it opens the QSO sheet. A refused or changed QSO shows why, with Fix,
    * Send again or Mark handled.
    */
@@ -9,7 +9,12 @@
   import { qsoLine, rowProblem, rowTags, rowTime } from '../lib/log/view';
   import type { LedgerEntry, Qso } from '../lib/log/types';
 
-  let { qso, onfix, selected = false }: { qso: Qso; onfix: (qso: Qso, entry: LedgerEntry) => void; /** Open in the Log's detail pane. */ selected?: boolean } = $props();
+  let {
+    qso,
+    onfix,
+    selected = false,
+    country = null,
+  }: { qso: Qso; onfix: (qso: Qso, entry: LedgerEntry) => void; /** Open in the Log's detail pane. */ selected?: boolean; /** The station's DXCC entity from the country file, or null. */ country?: string | null } = $props();
 
   const entries = $derived(log.index.get(qso.id));
   const tags = $derived(rowTags(entries, log.facts));
@@ -26,6 +31,7 @@
   <button class="lr-main" aria-current={selected ? 'true' : undefined} onclick={() => openEditor(qso.id)}>
     <span class="lr-1">
       <span class="lr-call mono">{qso.call}</span>
+      {#if country}<span class="lr-country">{country}</span>{/if}
       <span class="lr-r">
         {#if qso.deletedAt !== null}<span class="gone">Deleted</span>{/if}
         {#each tags as t (t.destination)}<StatusTag tag={t} />{/each}
@@ -97,6 +103,17 @@
     font-size: var(--rr-text-body);
     font-weight: var(--rr-weight-bold);
     line-height: var(--rr-leading-body);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .lr-country {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    font-size: var(--rr-text-sub);
+    line-height: var(--rr-leading-sub);
+    color: var(--rr-label2);
     text-overflow: ellipsis;
     white-space: nowrap;
   }

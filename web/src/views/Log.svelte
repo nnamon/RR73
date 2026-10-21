@@ -27,6 +27,8 @@
   import { clock } from '../lib/state/now.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { storageWaiting } from '../lib/state/storage.svelte';
+  import { reference } from '../lib/reference';
+  import { displayName } from '../lib/reference/names';
 
   type View = 'all' | 'todo' | 'activations';
   const PAGE = 100;
@@ -92,6 +94,14 @@
   });
   const opened = $derived(split() && log.editor.open ? log.editor.qsoId : undefined);
   const title = $derived(practice.on ? 'Practice log' : 'Log');
+
+  // Each QSO's country, from the country file by callsign, once it has loaded.
+  let countries = $state.raw(reference.loadedCountries());
+  if (!reference.loadedCountries()) void reference.warm().then(() => (countries = reference.loadedCountries()));
+  function countryOf(call: string): string | null {
+    const r = countries?.lookup(call);
+    return r?.found ? displayName(r.dxccEntity) : null;
+  }
 </script>
 
 {#snippet actions()}
@@ -175,7 +185,7 @@
           <div class="section">
             <h2 class="section-head">{g.label}</h2>
             <ul class="group">
-              {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
+              {#each g.qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} country={countryOf(q.call)} />{/each}
             </ul>
           </div>
         {/each}
@@ -202,7 +212,7 @@
         <div class="section">
           <h2 class="section-head">QSOs</h2>
           <ul class="group">
-            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
+            {#each todo as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} country={countryOf(q.call)} />{/each}
           </ul>
         </div>
       {/if}
@@ -225,7 +235,7 @@
         <div class="group card"><ActivationCard activation={a} /></div>
         {#if qsos.length}
           <ul class="group sub">
-            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} />{/each}
+            {#each qsos as q (q.id)}<QsoRow qso={q} onfix={fix} selected={opened === q.id} country={countryOf(q.call)} />{/each}
           </ul>
         {/if}
       </div>

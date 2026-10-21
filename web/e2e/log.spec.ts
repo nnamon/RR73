@@ -5,6 +5,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { API_KEY, emptySeed, mockupLog, mockWavelog, seed, wavelogOnly, WAVELOG_URL, withFeatures, type MockWavelog } from './log-data';
 import { FIXED_TIME } from './time';
+import { bigCtyFixture } from '../src/lib/reference/testing';
 
 /** Opens a screen with the clock at FIXED_TIME, running, and optionally a seeded log, seeded before the screen opens. */
 async function start(page: Page, path: string, data?: Parameters<typeof seed>[1]) {
@@ -114,6 +115,8 @@ const sendButton = (page: Page) => page.getByRole('button', { name: /^Send \d+ Q
 const posts = (mock: MockWavelog) => mock.requests.filter((r) => r.path === '/api/qso');
 
 test('sets up Wavelog, keeps a new QSO not sent for 30 s, then sends it on Send to Wavelog', async ({ page }) => {
+  const cty = JSON.stringify(bigCtyFixture());
+  await page.route('**/data/cty.json', (route) => route.fulfill({ body: cty, contentType: 'application/json' }));
   const mock = await mockWavelog(page);
   await start(page, '#/settings/logging/wavelog');
   await page.getByRole('textbox', { name: 'Address' }).fill('wavelog.example.test/');
@@ -135,6 +138,8 @@ test('sets up Wavelog, keeps a new QSO not sent for 30 s, then sends it on Send 
 
   await addQso(page, 'VK2ESN');
   await expect(row(page, 'VK2ESN')).toContainText('Wavelog · not sent');
+  // The row names the station's country from the country file.
+  await expect(row(page, 'VK2ESN')).toContainText('Australia');
   await page.clock.fastForward(30_000);
   await page.clock.fastForward(30_000);
   expect(posts(mock)).toHaveLength(0);

@@ -8,7 +8,10 @@ const countries = DxccIndex.fromJson(bigCtyFixture());
 const MY = '9V1NE';
 
 /** The country a decode's row shows, as the list marks it for the operator 9V1NE. */
-const shown = (text: string, sent = false) => cqCountry(markDecode({ text, snr_db: -11, dt_s: 0.1, freq_hz: 763 }, MY, sent), countries);
+const shown = (text: string, sent = false) => {
+  const decode = { text, snr_db: -11, dt_s: 0.1, freq_hz: 763 };
+  return cqCountry({ ...markDecode(decode, MY, sent), decode }, countries);
+};
 
 describe('the country on a CQ row', () => {
   it.each([
@@ -49,6 +52,11 @@ describe('the country on a CQ row', () => {
     expect(shown('CQ <...> QF56')).toBeNull();
   });
 
+  it('shows the caller’s country on a row calling us', () => {
+    expect(shown('9V1NE VK2LAW QF56')).toBe('Australia');
+    expect(shown('9V1NE VK2LAW R-09')).toBe('Australia');
+  });
+
   it('shows none on rows that are not a CQ', () => {
     expect(shown('VK2LAW 9V1NE QF56')).toBeNull();
     expect(shown('JA1XYZ VK2LAW -09')).toBeNull();
@@ -59,6 +67,6 @@ describe('the country on a CQ row', () => {
   });
 
   it('shows none before the country file has loaded', () => {
-    expect(cqCountry(markDecode({ text: 'CQ VK2LAW QF56', snr_db: -11, dt_s: 0.1, freq_hz: 763 }, MY), null)).toBeNull();
+    expect(cqCountry({ ...markDecode({ text: 'CQ VK2LAW QF56', snr_db: -11, dt_s: 0.1, freq_hz: 763 }, MY), decode: { text: 'CQ VK2LAW QF56', snr_db: -11, dt_s: 0.1, freq_hz: 763 } }, null)).toBeNull();
   });
 });
