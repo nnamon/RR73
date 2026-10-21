@@ -25,8 +25,8 @@ describe('parseNotices', () => {
 describe('THIRD_PARTY_NOTICES.md', () => {
   const notices = parseNotices(NOTICES);
 
-  it('holds ft8_lib, Lucide and Inter', () => {
-    expect(notices.map((n) => n.name)).toEqual(['ft8_lib', 'Lucide', 'Inter', 'JetBrains Mono', 'Roboto Mono']);
+  it('holds ft8_lib, Lucide, the fonts and the desktop app’s libraries', () => {
+    expect(notices.map((n) => n.name)).toEqual(['ft8_lib', 'Lucide', 'Inter', 'JetBrains Mono', 'Roboto Mono', 'Tauri', 'serialport']);
   });
 
   it('gives ft8_lib’s MIT licence word for word, as kept beside the crate', () => {
