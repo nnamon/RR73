@@ -8,6 +8,7 @@ pub mod docs;
 pub mod frame;
 pub mod kiwi;
 pub mod pskreporter;
+pub mod resample;
 pub mod upstream;
 
 pub use api::{AppState, router};

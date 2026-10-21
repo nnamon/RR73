@@ -6,7 +6,7 @@
 //!   `SET auth t=kiwi p=` (empty password on a public receiver).
 //! - The receiver sends binary messages that start with a 3-letter tag. `MSG` carries
 //!   space-separated `name=value` parameters: `audio_rate` and `sample_rate` (12000 on both
-//!   Singapore receivers), `badp` (1 when the password is refused), `too_busy`, version and
+//!   Singapore receivers; 11998.93 on a KiwiSDR in South Australia, which QSP resamples to 12000), `badp` (1 when the password is refused), `too_busy`, version and
 //!   configuration. `SND` carries audio: a flags byte, a sequence number (u32, little-endian), an
 //!   S-meter value (u16, big-endian), then 16-bit big-endian samples (512 per message at 12 kHz)
 //!   while compression is off.
@@ -25,8 +25,12 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::handshake::client::Request;
 use tokio_tungstenite::tungstenite::http::{HeaderValue, header};
 
-/// The only audio rate QSP takes from a receiver, Hz.
+/// The audio rate QSP sends, Hz. A receiver within RATE_SPREAD_HZ of it is resampled to it.
 pub const RATE_HZ: u32 = 12_000;
+/// The furthest a receiver's audio rate may sit from RATE_HZ, Hz: 1 %.
+pub const RATE_SPREAD_HZ: f64 = 120.0;
+/// A rate this close to RATE_HZ passes unchanged, Hz.
+const RATE_EXACT_HZ: f64 = 0.5;
 /// Passband for FT8, FT4, WSPR and RTTY at the dial, Hz.
 pub const PASSBAND_HZ: (u32, u32) = (100, 3000);
 /// Time allowed to connect or to read the status page.
@@ -131,6 +135,18 @@ pub fn tune_command(dial_hz: u64) -> String {
         PASSBAND_HZ.1,
         dial_hz as f64 / 1000.0
     )
+}
+
+/// What a receiver's audio rate needs: nothing at 12000 Hz, a resampler within 1 % of it, or a
+/// refusal with the reason.
+pub fn resampler_for(rate: f64) -> Result<Option<crate::resample::Stream>, String> {
+    let off = (rate - f64::from(RATE_HZ)).abs();
+    if !rate.is_finite() || off > RATE_SPREAD_HZ {
+        return Err(format!(
+            "its audio rate is {rate} Hz, more than 1 % from {RATE_HZ} Hz"
+        ));
+    }
+    Ok((off > RATE_EXACT_HZ).then(|| crate::resample::Stream::new(rate, f64::from(RATE_HZ))))
 }
 
 /// The commands sent once the receiver has given its rate. `listener` is the name its other
@@ -529,6 +545,7 @@ async fn connection(
         return End::Error("the receiver closed the connection at once".into());
     }
     let mut tuned = false;
+    let mut resampler: Option<crate::resample::Stream> = None;
     let mut gap_next = after_gap;
     let mut clock = Clock::new(target.latency_s);
     let mut last_notice: Option<String> = None;
@@ -545,6 +562,8 @@ async fn connection(
                 };
                 match parse(&bytes) {
                     Some(Upstream::Msg(params)) => {
+                        // sample_rate is the receiver's true rate; audio_rate its nominal one.
+                        let mut rate: Option<f64> = None;
                         for (name, value) in params {
                             let v = value.as_deref();
                             match name.as_str() {
@@ -553,19 +572,9 @@ async fn connection(
                                 "down" => return End::Refused("it is down".into()),
                                 "redirect" => return End::Refused("it redirects listeners elsewhere".into()),
                                 "audio_rate" | "sample_rate" if !tuned => {
-                                    let rate = v.and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
-                                    if (rate - f64::from(RATE_HZ)).abs() > 0.5 {
-                                        return End::Refused(format!("its audio rate is {rate} Hz, and QSP takes {RATE_HZ} Hz"));
-                                    }
-                                    tuned = true;
-                                    *streamed = true;
-                                    for c in setup_commands(&target.listener, target.dial_hz) {
-                                        if ws.send(Message::Text(c.into())).await.is_err() {
-                                            return End::Closed(last_notice);
-                                        }
-                                    }
-                                    if events.send(Event::Streaming).await.is_err() {
-                                        return End::Stopped;
+                                    let r = v.and_then(|v| v.parse::<f64>().ok()).unwrap_or(0.0);
+                                    if name == "sample_rate" || rate.is_none() {
+                                        rate = Some(r);
                                     }
                                 }
                                 _ if is_notice(&name, v) => {
@@ -578,8 +587,28 @@ async fn connection(
                                 _ => {}
                             }
                         }
+                        if let Some(rate) = rate {
+                            match resampler_for(rate) {
+                                Ok(r) => resampler = r,
+                                Err(why) => return End::Refused(why),
+                            }
+                            tuned = true;
+                            *streamed = true;
+                            for c in setup_commands(&target.listener, target.dial_hz) {
+                                if ws.send(Message::Text(c.into())).await.is_err() {
+                                    return End::Closed(last_notice);
+                                }
+                            }
+                            if events.send(Event::Streaming).await.is_err() {
+                                return End::Stopped;
+                            }
+                        }
                     }
                     Some(Upstream::Snd { seq, samples, .. }) if tuned => {
+                        let samples = match resampler.as_mut() {
+                            Some(r) => r.push(&samples),
+                            None => samples,
+                        };
                         for (utc_us, samples, gap) in clock.push(now_us(), seq, samples) {
                             let after = std::mem::take(&mut gap_next);
                             let gap = gap || after;
@@ -751,5 +780,18 @@ mod tests {
         assert!(is_notice("kicked", None));
         assert!(!is_notice("load_cfg", Some("time_limit")));
         assert!(!is_notice("audio_rate", Some("12000")));
+    }
+
+    #[test]
+    fn a_rate_near_12000_hz_is_resampled_and_one_far_from_it_refused() {
+        assert!(matches!(resampler_for(12_000.0), Ok(None)));
+        assert!(matches!(resampler_for(12_000.3), Ok(None)));
+        assert!(matches!(resampler_for(11_998.927_554), Ok(Some(_))));
+        assert!(matches!(resampler_for(12_001.135), Ok(Some(_))));
+        assert_eq!(
+            resampler_for(20_250.0).err().as_deref(),
+            Some("its audio rate is 20250 Hz, more than 1 % from 12000 Hz")
+        );
+        assert!(resampler_for(0.0).is_err());
     }
 }

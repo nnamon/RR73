@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Web SDR receivers whose audio runs a little off 12000 Hz, such as VK5ARG's at 11998.93 Hz, now connect. The relay resamples them to 12000 Hz.
+
 ## 0.24.26 · 2026-10-21
 
 - Turning off Read Wavelog's log keeps the copy already read. Turning it on again reads only the QSOs added since. Remove Wavelog still deletes it.
