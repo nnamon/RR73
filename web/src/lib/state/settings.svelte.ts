@@ -173,6 +173,8 @@ export interface Settings {
   waterfallPalette: PaletteId;
   /** FT8 and FT4 write the callsigns of their decodes over the signals on the waterfall; off by default. */
   waterfallCalls: boolean;
+  /** Sort decodes: each slot lists messages to us, then CQs, then the other kinds, each by frequency. */
+  sortDecodes: boolean;
   /** Minutes without a touch before Operate turns to the night display; 0 never. */
   nightAfterMin: NightAfter;
   wspr: WsprSettings;
@@ -222,6 +224,7 @@ export const DEFAULTS: Settings = {
   waterfallContrast: 'normal',
   waterfallPalette: 'rr73',
   waterfallCalls: false,
+  sortDecodes: false,
   nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',
@@ -400,6 +403,7 @@ export function validate(raw: unknown): Settings {
   if (r.waterfallContrast === 'low' || r.waterfallContrast === 'normal' || r.waterfallContrast === 'high') s.waterfallContrast = r.waterfallContrast;
   if (isPaletteId(r.waterfallPalette)) s.waterfallPalette = r.waterfallPalette;
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
+  if (typeof r.sortDecodes === 'boolean') s.sortDecodes = r.sortDecodes;
   if (NIGHT_AFTER.includes(r.nightAfterMin as NightAfter)) s.nightAfterMin = r.nightAfterMin as NightAfter;
   s.wspr = validateWspr(r.wspr);
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);

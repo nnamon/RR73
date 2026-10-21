@@ -11,6 +11,7 @@ import { SLOT_MS, parity, type FtMode as Mode, type Parity } from '../clock/slot
 import { toYou } from './focus';
 import type { DecodeHighlight } from './highlight';
 import { markDecode, type DecodeRowData } from './marking';
+import { parseExchange, type ExchangeKind } from '../qso/messages';
 import type { Decode } from './types';
 
 /** The decode colours for a decode; `sent` is true for the operator's own transmissions. */
@@ -69,7 +70,12 @@ export interface ListOptions {
   hideWorked?: boolean;
   /** The decodes' facts, from rowFacts for the same `myCall` and `classify`; worked out afresh without. */
   facts?: Facts;
+  /** Sort decodes: in each slot, messages to us, then CQs, then the other kinds in KIND_ORDER, each by frequency. */
+  sorted?: boolean;
 }
+
+/** The order of message kinds with Sort decodes on: CQs first, then calls, reports and endings. */
+const KIND_ORDER: Record<ExchangeKind, number> = { cq: 0, call: 1, grid: 1, report: 2, rreport: 3, rrr: 4, rr73: 4, '73': 5, other: 6 };
 
 export interface SlotDecodes {
   startUtcMs: number;
@@ -238,7 +244,15 @@ export function buildList(
     const rows = s.decodes.map((d, i) => ({ i, ...facts(d) })).filter(keep);
     if (!rows.length && (filter !== 'all' || rxPane || options.hideWorked)) continue;
     const items: ListItem[] = [rxPane ? countedHeader(s, rows.length) : slotHeader(s)];
-    for (const r of [...rows.filter((x) => x.toYou), ...rows.filter((x) => !x.toYou)]) {
+    const byFreq = (a: (typeof rows)[number], b: (typeof rows)[number]) => a.row.decode.freq_hz - b.row.decode.freq_hz;
+    const kind = (r: (typeof rows)[number]) => KIND_ORDER[parseExchange(r.row.decode.text).kind];
+    const toUs = rows.filter((x) => x.toYou);
+    const rest = rows.filter((x) => !x.toYou);
+    if (options.sorted) {
+      toUs.sort(byFreq);
+      rest.sort((a, b) => kind(a) - kind(b) || byFreq(a, b));
+    }
+    for (const r of [...toUs, ...rest]) {
       const item: RowItem = { kind: 'row', id: `${s.startUtcMs}-${r.i}`, row: r.row, slotStartMs: s.startUtcMs, old: old(s.startUtcMs) };
       items.push(r.toYou ? { ...item, toYou: true } : item);
     }

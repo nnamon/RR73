@@ -325,3 +325,17 @@ describe('rowFacts', () => {
     expect(calls).toBe(5);
   });
 });
+
+describe('Sort decodes', () => {
+  it('lists messages to us, then CQs, then calls, reports and endings, each by frequency', () => {
+    const d = (text: string, freq_hz: number) => ({ text, freq_hz, dt_s: 0.1, snr_db: -10 });
+    const slot: SlotDecodes = { startUtcMs: Date.UTC(2026, 9, 21, 12, 0, 0), mode: 'FT8', ms: 100, decodes: [d('K1ABC JA1KXM -05', 900), d('CQ VK2LAW QF56', 1500), d('9V1NE ZL1BB RF72', 1400), d('DL1AB F5XY RR73', 300), d('CQ JA6BBM PM51', 700), d('9V1NE K1ABC FN42', 600)] };
+    const texts = (sorted: boolean) =>
+      buildList([slot], '9V1NE', 'all', 1500, [], 'FT8', undefined, {}, { sorted })
+        .filter((i) => i.kind === 'row')
+        .map((i) => (i as { row: { decode: { text: string } } }).row.decode.text);
+    expect(texts(true)).toEqual(['9V1NE K1ABC FN42', '9V1NE ZL1BB RF72', 'CQ JA6BBM PM51', 'CQ VK2LAW QF56', 'K1ABC JA1KXM -05', 'DL1AB F5XY RR73']);
+    // Off: messages to us first, the rest in the decoder's order.
+    expect(texts(false)).toEqual(['9V1NE ZL1BB RF72', '9V1NE K1ABC FN42', 'K1ABC JA1KXM -05', 'CQ VK2LAW QF56', 'DL1AB F5XY RR73', 'CQ JA6BBM PM51']);
+  });
+});

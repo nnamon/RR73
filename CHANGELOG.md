@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Operate's Sort chip lists each slot's decodes by kind: messages to you, then CQs, then calls, reports and endings, each from the lowest audio frequency. It stays as set. Off keeps the decoder's order.
 - A row of a station calling you names its country, as a CQ row does, where it has no Next, Dupe or Lost tag.
 - Log names each QSO's country beside the callsign, from the country file.
 

@@ -35,7 +35,7 @@
   import { orderQueue } from '../../lib/qso/sequencer';
   import { STATUS } from '../../lib/qso/status';
   import { clock } from '../../lib/state/now.svelte';
-  import { settings } from '../../lib/state/settings.svelte';
+  import { settings, updateSettings } from '../../lib/state/settings.svelte';
   import { audio, band, recent, type DecodedSlot } from '../../lib/state/station.svelte';
   import { reference } from '../../lib/reference';
   import { device } from '../../lib/app/platform';
@@ -251,7 +251,7 @@
   // Each decode's row, colours and filter facts, worked out once while the callsign and the colours stay.
   const facts = $derived(rowFacts(settings.callsign, classify));
   const items = $derived(
-    applyFocus(buildList(drawn, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar', hideWorked, facts } : { hideWorked, facts }), focus),
+    applyFocus(buildList(drawn, settings.callsign, shownFilter, settings.rxHz, qso.sent, ftMode, classify, outgoing, regular ? { own: 'bar', hideWorked, facts, sorted: settings.sortDecodes } : { hideWorked, facts, sorted: settings.sortDecodes }), focus),
   );
   // Rx frequency has few rows: it takes the whole hour.
   const rxItems = $derived(regular ? applyFocus(buildList(shown, settings.callsign, 'all', settings.rxHz, qso.sent, ftMode, classify, outgoing, { rxPane: true, facts }), focus) : []);
@@ -333,6 +333,9 @@
     </div>
     <button class="chip toggle" class:on={hideWorked} aria-pressed={hideWorked} onclick={() => (hideWorked = !hideWorked)}>
       <span class="pill">{#if hideWorked}<Icon name="check" size={13} />{/if}Hide worked</span>
+    </button>
+    <button class="chip toggle" class:on={settings.sortDecodes} aria-pressed={settings.sortDecodes} onclick={() => void updateSettings({ sortDecodes: !settings.sortDecodes })}>
+      <span class="pill">{#if settings.sortDecodes}<Icon name="check" size={13} />{/if}Sort</span>
     </button>
   </div>
   <button class="save" disabled={!recent.slots.length} aria-label="Save slot" onclick={() => (saveOpen = true)}><Icon name="save" size={22} /></button>
