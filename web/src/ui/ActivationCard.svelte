@@ -9,6 +9,7 @@
   import { log, markFileHandled, markFileSubmitted } from '../lib/log/log.svelte';
   import { activationDirect, activationFiles, directText, fileText, shortDate, type FileRow } from '../lib/log/view';
   import type { Activation } from '../lib/log/types';
+  import { utcNow } from '../lib/clock/utc';
 
   let { activation }: { activation: Activation } = $props();
 
@@ -20,7 +21,7 @@
 
   /** Builds the file from memory and shares it inside the tap, which the share sheet needs. */
   async function share(f: FileRow) {
-    const file = buildPartFile(f.key, log.qsos, activation, { programVersion: __APP_VERSION__, now: Date.now() });
+    const file = buildPartFile(f.key, log.qsos, activation, { programVersion: __APP_VERSION__, now: utcNow() });
     if (!file) return;
     const r = await shareFile(file);
     status = r.kind === 'downloaded' ? `Downloaded ${file.name}` : r.kind === 'shared' ? `Shared ${file.name}` : '';

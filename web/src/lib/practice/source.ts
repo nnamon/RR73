@@ -10,6 +10,7 @@ import type { CaptureReport } from '../audio/report';
 import { SLOT_MS, SLOT_RATE, nextSlotStart, slotStart, type FtMode as Mode } from '../clock/slots';
 import { NOISE_RMS, mixSlot, noise, type Part } from './render';
 import type { SimSignal } from './sim';
+import { utcNow } from '../clock/utc';
 
 export interface SlotFeed {
   /**
@@ -60,7 +61,7 @@ export class PracticeInput implements InputSource {
   private readonly session: () => string | null;
   private readonly stream: StreamFeed | null;
 
-  constructor(feed: SlotFeed, now: () => number = () => Date.now(), session: () => string | null = () => null, stream: StreamFeed | null = null) {
+  constructor(feed: SlotFeed, now: () => number = () => utcNow(), session: () => string | null = () => null, stream: StreamFeed | null = null) {
     this.feed = feed;
     this.now = now;
     this.session = session;

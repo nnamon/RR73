@@ -30,6 +30,7 @@
 import type { SlotMode as Mode } from '../clock/slots';
 import { LATE_S, SHIFT_LIMIT_S } from '../qso/sequencer';
 import { DIAL_TIMEOUT_MS, PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedText, tailMs, type Keyer, type Keying } from './keyer';
+import { utcNow } from '../clock/utc';
 
 /** Where a transmission starts in its slot, s. */
 export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
@@ -155,7 +156,7 @@ export class TxScheduler {
     this.keyer = opts.keyer ?? (() => null);
     this.shift = opts.shift ?? (() => 0);
     this.timer = opts.timer ?? ((fn, ms) => setTimeout(fn, ms));
-    this.now = opts.now ?? (() => Date.now());
+    this.now = opts.now ?? (() => utcNow());
     this.clear = opts.clear ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>));
   }
 
@@ -318,7 +319,7 @@ export class TxScheduler {
     p.handle.stop();
     p.keying?.release();
     if (p.started || this.audible(p)) {
-      if (!p.started) this.report({ type: 'started', slotStartMs: p.slotStartMs, text: p.text, startUtcMs: this.audio()?.toUtcMs(p.when) ?? Date.now(), lateS: 0, skippedS: p.skippedS });
+      if (!p.started) this.report({ type: 'started', slotStartMs: p.slotStartMs, text: p.text, startUtcMs: this.audio()?.toUtcMs(p.when) ?? utcNow(), lateS: 0, skippedS: p.skippedS });
       this.report({ type: 'ended', slotStartMs: p.slotStartMs, text: p.text, complete: false });
     } else this.report({ type: 'missed', slotStartMs: p.slotStartMs, text: p.text, reason: 'late' });
   }

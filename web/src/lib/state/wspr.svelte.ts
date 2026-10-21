@@ -26,6 +26,7 @@ import { settings, updateSettings } from './settings.svelte';
 import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { audio, audioOut, codec, cutTx, markTransmitted, onAudioStatus, onHalt, onWsprDecoded, showTx, txClockFixS, type WsprSlotResult } from './station.svelte';
 import { monitorNode } from '../tx/monitor';
+import { utcNow } from '../clock/utc';
 
 /** One slot's spots, newest slot first in the list. */
 export interface WsprSlot {
@@ -120,7 +121,7 @@ const scheduler = new TxScheduler({
   clear: (h) => wake.clear(h),
 });
 
-function notice(text: string, nowMs = Date.now()) {
+function notice(text: string, nowMs = utcNow()) {
   wspr.notice = { text, atMs: nowMs };
 }
 
@@ -164,7 +165,7 @@ function ready(nowMs: number): boolean {
 }
 
 /** Turns the beacon on or off. Off lets a transmission on air finish; Halt stops it. Call from the tap. */
-export function setBeacon(on: boolean, nowMs = Date.now()) {
+export function setBeacon(on: boolean, nowMs = utcNow()) {
   if (on) {
     unmute();
     if (!ready(nowMs)) return;
@@ -200,7 +201,7 @@ async function checkCall(nowMs: number) {
  * shortest gap after the last transmission, one on air and the beacon's next slot. Call from the
  * tap.
  */
-export function transmitNextSlot(nowMs = Date.now()) {
+export function transmitNextSlot(nowMs = utcNow()) {
   unmute();
   if (!ready(nowMs)) return;
   void checkCall(nowMs);
@@ -211,7 +212,7 @@ export function transmitNextSlot(nowMs = Date.now()) {
 }
 
 /** Sets the Tx percentage; with the beacon on, the next Tx slot is drawn again. */
-export function setTxPct(pct: number, nowMs = Date.now()) {
+export function setTxPct(pct: number, nowMs = utcNow()) {
   void updateSettings({ wspr: { ...settings.wspr, txPct: pct } });
   if (!wspr.beacon.on || wspr.onAir) return;
   const was = beaconSlot;
@@ -226,7 +227,7 @@ export function setTxPct(pct: number, nowMs = Date.now()) {
  * slot is made again with it while more than 1.5 s remain, as for a new Tx frequency; one on air
  * goes out as it is.
  */
-export function setPowerDbm(dbm: number, nowMs = Date.now()) {
+export function setPowerDbm(dbm: number, nowMs = utcNow()) {
   if (dbm === settings.wspr.powerDbm) return;
   void updateSettings({ wspr: { ...settings.wspr, powerDbm: dbm } });
   if (scheduledFor !== null && !wspr.onAir && scheduledFor - nowMs > 1500) withdraw();
@@ -235,7 +236,7 @@ export function setPowerDbm(dbm: number, nowMs = Date.now()) {
 }
 
 /** Steps Stop beacon after to its next value (••• menu). A running beacon counts from when it turned on. */
-export function stepStopAfter(nowMs = Date.now()) {
+export function stepStopAfter(nowMs = utcNow()) {
   const min = nextStopAfter(settings.wspr.stopAfterMin);
   void updateSettings({ wspr: { ...settings.wspr, stopAfterMin: min } });
   if (wspr.beacon.on) wspr.beacon = { ...wspr.beacon, stopsAtMs: stopsAtMs(wspr.beacon.startedAtMs, min) };
@@ -244,7 +245,7 @@ export function stepStopAfter(nowMs = Date.now()) {
 }
 
 /** Steps the spot order (••• menu). */
-export function stepSort(nowMs = Date.now()) {
+export function stepSort(nowMs = utcNow()) {
   const sort = SPOT_SORTS[(SPOT_SORTS.indexOf(settings.wspr.sort) + 1) % SPOT_SORTS.length];
   void updateSettings({ wspr: { ...settings.wspr, sort } });
   notice(STATUS.beaconSort(sort === 'snr' ? 'SNR' : SORT_LABELS[sort].toLowerCase()), nowMs);
@@ -254,9 +255,9 @@ export function stepSort(nowMs = Date.now()) {
 export function setWsprTxHz(hz: number) {
   if (hz === settings.wspr.txHz) return;
   void updateSettings({ wspr: { ...settings.wspr, txHz: hz }, freqPicked: true });
-  if (scheduledFor !== null && !wspr.onAir && scheduledFor - Date.now() > 1500) {
+  if (scheduledFor !== null && !wspr.onAir && scheduledFor - utcNow() > 1500) {
     withdraw();
-    tick(Date.now());
+    tick(utcNow());
   }
 }
 
@@ -279,7 +280,7 @@ export function haltWspr() {
 }
 
 /** The 1 s tick: Stop beacon after, and handing the next transmission to the scheduler. */
-export function tick(nowMs = Date.now()) {
+export function tick(nowMs = utcNow()) {
   const b = wspr.beacon;
   if (b.on && b.stopsAtMs !== null && nowMs >= b.stopsAtMs) {
     const min = Math.round((b.stopsAtMs - b.startedAtMs) / 60_000);
@@ -313,7 +314,7 @@ function afterSlot(slotStartMs: number, nowMs: number, sent: boolean) {
 }
 
 function onReport(r: TxReport) {
-  const now = Date.now();
+  const now = utcNow();
   if (r.type === 'started') {
     const hz = settings.wspr.txHz;
     wspr.onAir = { text: r.text, slotStartMs: r.slotStartMs, startMs: r.startUtcMs, endMs: r.startUtcMs + TX_SECONDS * 1000 };
@@ -353,7 +354,7 @@ export function addSlot(r: WsprSlotResult) {
  * Clear spots from the ••• menu: empties the spot list and its selection, and drops the Sent rows
  * of slots that have ended. The beacon, its Next row and a transmission on air stay.
  */
-export function clearSpots(nowMs = Date.now()) {
+export function clearSpots(nowMs = utcNow()) {
   wspr.slots = [];
   wspr.sent = wspr.sent.filter((s) => s.slotStartMs + WSPR_SLOT_MS > nowMs);
   wspr.selected = null;
@@ -401,7 +402,7 @@ export function startWspr() {
       notice(STATUS.beaconOff);
     }
   });
-  wake.every(() => tick(Date.now()), 1000);
+  wake.every(() => tick(utcNow()), 1000);
   $effect.root(() => {
     // A change of mode stops the beacon; a change of band ends a transmission and keeps it on.
     let mode = settings.mode;

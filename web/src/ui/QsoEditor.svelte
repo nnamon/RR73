@@ -29,6 +29,7 @@
   import Icon from './Icon.svelte';
   import { settings } from '../lib/state/settings.svelte';
   import { device } from '../lib/app/platform';
+  import { utcNow } from '../lib/clock/utc';
 
   let { qsoId, inline = false, onclose }: { qsoId: string | null; inline?: boolean; onclose: () => void } = $props();
 
@@ -103,7 +104,7 @@
     original = q;
     draft = d;
     errors = [];
-    const t = q?.start ?? d?.startMs ?? Date.now();
+    const t = q?.start ?? d?.startMs ?? utcNow();
     call = q?.call ?? d?.call ?? '';
     date = isoDate(t);
     time = isoTime(t);

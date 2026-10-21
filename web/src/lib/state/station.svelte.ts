@@ -40,6 +40,7 @@ import { STATUS } from '../qso/status';
 import { capturesHidden } from '../app/platform';
 import { DecodeTimes } from '../decode/times';
 import { contextFor, laterStages } from '../decode/options';
+import { utcNow } from '../clock/utc';
 
 export interface SlotSummary {
   startUtcMs: number;
@@ -76,9 +77,9 @@ export interface KeyingResult {
 const KEYED_DROP_DB = 10;
 
 function keyingResult(source: KeyingResult['source'], baseline: number | null, during: number | null): KeyingResult {
-  if (baseline === null || during === null) return { atUtcMs: Date.now(), source, passed: null, dropDb: null };
+  if (baseline === null || during === null) return { atUtcMs: utcNow(), source, passed: null, dropDb: null };
   const drop = baseline - during;
-  return { atUtcMs: Date.now(), source, passed: drop >= KEYED_DROP_DB, dropDb: drop };
+  return { atUtcMs: utcNow(), source, passed: drop >= KEYED_DROP_DB, dropDb: drop };
 }
 
 function levelsBetween(fromMs: number, toMs: number): number | null {
@@ -443,7 +444,7 @@ export function noteHeardBack(slotStartUtcMs: number, sent: SentTx, decodes: Dec
 function calibrate(entry: DecodedSlot) {
   // The practice band has no radio path to calibrate, and must not move the radio's correction.
   if (entry.skipped || inputSource) return;
-  calibration.add(entry.startUtcMs, entry.decodes, Date.now());
+  calibration.add(entry.startUtcMs, entry.decodes, utcNow());
   if (engine) engine.mapper.inputOffsetS = calibration.offsetS;
   const clockS = calibration.clockS;
   if (clockS === null) return;
@@ -458,7 +459,7 @@ export function timingSnapshot(): TimingSnapshot {
   const e = engine;
   const running = audio.status === 'running';
   return {
-    atUtcMs: Date.now(),
+    atUtcMs: utcNow(),
     appVersion: `${__APP_VERSION__} (${__APP_BUILD__})`,
     audio: audio.status,
     source: running ? (e?.clockSource ?? null) : null,
@@ -857,7 +858,7 @@ function refuseTune(text: string) {
 
 /** The Tune tone itself, with PTT released when it ends. `toneHz`: the audio played, `hz` less a dial shift. */
 function playTune(ctx: AudioContext, hz: number, keying: Keying | null, toneHz = hz) {
-  const now = Date.now();
+  const now = utcNow();
   markTransmitted(now, now + TUNE.seconds * 1000);
   emitTxWave(toneWave(now, hz, TUNE.seconds));
   const t0 = performance.now();
@@ -869,7 +870,7 @@ function playTune(ctx: AudioContext, hz: number, keying: Keying | null, toneHz =
   void handle.done.then((end: TuneEnd) => {
     keying?.release(end === 'finished' ? tailMs(ctx) : 0);
     tx.tuning = false;
-    cutTx(Date.now());
+    cutTx(utcNow());
     wake?.set(audio.status === 'running');
     const during = median(levelLog.filter(([t]) => t > t0 + 1000).map(([, db]) => db));
     const long = performance.now() - t0 > 3000;

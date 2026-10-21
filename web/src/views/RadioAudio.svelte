@@ -18,6 +18,9 @@
   import { alcAdvice } from '../lib/radio/alc';
   import { advice } from '../lib/app/advice';
   import { Device, device } from '../lib/app/platform';
+  import { isDesktop } from '../lib/app/desktop';
+  import { ntpText } from '../lib/clock/utc';
+  import { ntp } from '../lib/state/desktop.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let outputs = $state<MediaDeviceInfo[]>([]);
@@ -145,6 +148,9 @@
     if (route.path[2] !== 'timing') return;
     void tick().then(() => timingSection?.scrollIntoView({ block: 'start' }));
   });
+  // The desktop app's clock against the time server (lib/state/desktop.svelte.ts).
+  const desktop = isDesktop();
+  const ntpRowText = $derived(ntp.sample ? `${ntpText(ntp.sample)}, corrected` : ntp.failed ? 'No reply, clock not corrected' : 'Measuring');
   const clockRowText = $derived(timing.clockS === null ? 'Waiting for strong decodes' : `${clockText(timing.clockS)} by the decodes`);
   // The clock warning: what it means on the air and how to set the clock.
   const clockFoot = $derived.by(() => {
@@ -404,6 +410,11 @@
       <div class="row">
         <span class="row-main"><span class="row-title">{Device} clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
       </div>
+      {#if desktop}
+        <div class="row">
+          <span class="row-main"><span class="row-title">Time server</span><span class="row-sub" class:off={ntp.failed && !ntp.sample} data-testid="timing-ntp">{ntpRowText}</span></span>
+        </div>
+      {/if}
       <label class="row">
         <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">From the clock error in decodes</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.txClockFix} onchange={(e) => void updateSettings({ txClockFix: e.currentTarget.checked })} />

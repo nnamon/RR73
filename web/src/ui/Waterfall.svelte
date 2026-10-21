@@ -42,6 +42,7 @@
   import { utcHm, utcTime } from '../lib/clock/format';
   import { SLOT_MS, type Mode } from '../lib/clock/slots';
   import { onAudioChunk, onTxWave, recentTxWaves } from '../lib/state/station.svelte';
+  import { utcNow } from '../lib/clock/utc';
 
   let {
     mode,
@@ -246,7 +247,7 @@
 
   /** The quietest Tx frequency in the last slots, Hz, or null with less than 2 slots of audio. */
   export function quietest(): Promise<number | null> {
-    return client ? client.quietest(Date.now(), txHz) : Promise.resolve(null);
+    return client ? client.quietest(utcNow(), txHz) : Promise.resolve(null);
   }
 
   /** A palette's colours, from the tokens. */

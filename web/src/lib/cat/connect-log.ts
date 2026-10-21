@@ -10,6 +10,7 @@
 
 import type { CatRadioId } from './radios';
 import type { SerialOptionsLike } from './serial';
+import { utcNow } from '../clock/utc';
 
 export const CONNECT_LOG_KEY = 'rr73.connectLog';
 
@@ -111,7 +112,7 @@ export function lastAttemptStopped(radio: CatRadioId): boolean {
 }
 
 /** Starts a new attempt, replacing the one stored, with its first step. Returns what it replaced. */
-export function beginAttempt(radio: CatRadioId, via: ConnectVia, first: ConnectStep, nowMs = Date.now()): ConnectAttempt | null {
+export function beginAttempt(radio: CatRadioId, via: ConnectVia, first: ConnectStep, nowMs = utcNow()): ConnectAttempt | null {
   const before = lastAttempt();
   attempt = { radio, via, steps: [{ ...first, atMs: nowMs }] };
   save(attempt);
@@ -119,7 +120,7 @@ export function beginAttempt(radio: CatRadioId, via: ConnectVia, first: ConnectS
 }
 
 /** Writes the next step of the attempt in progress, before it runs. */
-export function logStep(step: ConnectStep, nowMs = Date.now()) {
+export function logStep(step: ConnectStep, nowMs = utcNow()) {
   if (!attempt) return;
   if (step.step === 'connected' && reachedConnected(attempt)) return;
   attempt.steps.push({ ...step, atMs: nowMs });

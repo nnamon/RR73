@@ -43,6 +43,7 @@
   import { stationFacts } from '../../lib/keyboard/station';
   import { clock } from '../../lib/state/now.svelte';
   import type { SaveResult } from '../../lib/slots/share';
+  import { utcNow } from '../../lib/clock/utc';
 
   let { active = true }: PaneProps = $props();
 
@@ -127,7 +128,7 @@
     const f = s.draft.fields;
     openDraft({
       call: f.call,
-      startMs: s.draft.startMs ?? Date.now(),
+      startMs: s.draft.startMs ?? utcNow(),
       band: settings.band,
       mode: 'RTTY',
       freqHz: currentDialHz() + Math.round(keyboard.markHz),

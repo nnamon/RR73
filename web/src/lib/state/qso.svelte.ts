@@ -34,6 +34,7 @@ import { dialNow, onRadioNotice, rigGate, txKeyer, txShiftHz } from './radio.sve
 import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx, txClockFixS } from './station.svelte';
 import type { QsoContext } from '../decode/types';
 import { monitorNode } from '../tx/monitor';
+import { utcNow } from '../clock/utc';
 
 export interface SentRow {
   slotStartMs: number;
@@ -68,7 +69,7 @@ class QsoRuntime {
 export const qso = new QsoRuntime();
 
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
-const sessionStart = Date.now();
+const sessionStart = utcNow();
 
 /** The sequencer's mode: FT8 or FT4. In WSPR the sequencer stays idle (qsoForMode) and keeps FT8. */
 function ftMode(): FtMode {
@@ -190,7 +191,7 @@ export function dispatch(e: SeqEvent) {
 }
 
 function onTxReport(r: TxReport) {
-  const now = Date.now();
+  const now = utcNow();
   if (r.type === 'started') {
     // Hound sets its own frequency for some transmissions; the plan still holds it here.
     const n = qso.st.next;
@@ -220,7 +221,7 @@ function onTxReport(r: TxReport) {
 /** Halt from the dock: stops Tune and any transmission at once, and Tx and Run. */
 export function haltTx() {
   scheduler.halt();
-  dispatch({ type: 'halt', nowMs: Date.now() });
+  dispatch({ type: 'halt', nowMs: utcNow() });
 }
 
 /**
@@ -244,7 +245,7 @@ const RETUNE_MARGIN_MS = 1500;
 function retune() {
   const p = qso.st.next;
   if (!p?.scheduled || qso.onAir) return;
-  if (p.slotStartMs + p.offsetS * 1000 - Date.now() < RETUNE_MARGIN_MS) return;
+  if (p.slotStartMs + p.offsetS * 1000 - utcNow() < RETUNE_MARGIN_MS) return;
   void scheduler.schedule({
     text: p.text,
     mode: qso.st.config.mode,
@@ -275,20 +276,20 @@ function unmute() {
 /** Calls a station. Call from the tap (or double-tap). */
 export function callStation(decode: Decode, slotStartMs: number) {
   unmute();
-  dispatch({ type: 'callStation', decode, slotStartMs, nowMs: Date.now() });
+  dispatch({ type: 'callStation', decode, slotStartMs, nowMs: utcNow() });
   qso.selected = null;
 }
 
 /** Calls CQ. Call from the tap. */
 export function callCq() {
   unmute();
-  dispatch({ type: 'callCq', nowMs: Date.now() });
+  dispatch({ type: 'callCq', nowMs: utcNow() });
 }
 
 /** Turns Tx on or off. Call from the tap. */
 export function setTxEnabled(on: boolean) {
   if (on) unmute();
-  dispatch({ type: 'enableTx', on, nowMs: Date.now() });
+  dispatch({ type: 'enableTx', on, nowMs: utcNow() });
 }
 
 /** Run on or off: what the CQ loop does after a QSO. It starts nothing by itself. */
@@ -299,29 +300,29 @@ export function setRun(on: boolean) {
 /** Turns Hunt on or off. Call from the tap. */
 export function setHunt(on: boolean) {
   if (on) unmute();
-  dispatch({ type: 'hunt', on, nowMs: Date.now() });
+  dispatch({ type: 'hunt', on, nowMs: utcNow() });
 }
 
 export function setStopAfter(on: boolean) {
-  dispatch({ type: 'stopAfterQso', on, nowMs: Date.now() });
+  dispatch({ type: 'stopAfterQso', on, nowMs: utcNow() });
 }
 
 export function chooseNext(tx: TxNum) {
-  dispatch({ type: 'chooseNext', tx, nowMs: Date.now() });
+  dispatch({ type: 'chooseNext', tx, nowMs: utcNow() });
 }
 
 export function editMessage(tx: TxNum, text: string) {
-  dispatch({ type: 'editMessage', tx, text, nowMs: Date.now() });
+  dispatch({ type: 'editMessage', tx, text, nowMs: utcNow() });
 }
 
 /** Log QSO from the audio banner: logs the QSO under way as it stands, once reports have gone both ways. */
 export function logNow() {
-  dispatch({ type: 'logNow', nowMs: Date.now() });
+  dispatch({ type: 'logNow', nowMs: utcNow() });
 }
 
 /** End QSO from the ••• menu: stops Tx and Run and goes back to idle. Nothing is logged. */
 export function endQso() {
-  dispatch({ type: 'endQso', nowMs: Date.now() });
+  dispatch({ type: 'endQso', nowMs: utcNow() });
 }
 
 /**
@@ -329,7 +330,7 @@ export function endQso() {
  * rows of slots that have ended. The sequencer is untouched: a QSO under way, its Next row, a
  * transmission on air and Hunt's candidates stay.
  */
-export function clearDecodeList(nowMs = Date.now()) {
+export function clearDecodeList(nowMs = utcNow()) {
   clearDecodes();
   const slotMs = SLOT_MS[qso.st.config.mode];
   qso.sent = qso.sent.filter((s) => s.slotStartMs + slotMs > nowMs);
@@ -339,11 +340,11 @@ export function clearDecodeList(nowMs = Date.now()) {
 
 /** A notice in the status line, such as the result of Find clear Tx. */
 export function showNotice(text: string) {
-  qso.notice = { kind: 'info', text, atMs: Date.now() };
+  qso.notice = { kind: 'info', text, atMs: utcNow() };
 }
 
 /** When a call to a decode heard in `slotStartMs` would start, and in which parity. */
-export function callStart(slotStartMs: number, nowMs = Date.now()): { startMs: number; parity: Parity; tooLateFor: number | null } {
+export function callStart(slotStartMs: number, nowMs = utcNow()): { startMs: number; parity: Parity; tooLateFor: number | null } {
   const st = qso.st;
   const parity: Parity = parityOf(slotStartMs, st.config.mode) === 'even' ? 'odd' : 'even';
   const s = ourSlot({ ...st, parity }, nowMs);
@@ -442,14 +443,14 @@ export function startQso() {
   started = true;
   provideQsoContext(qsoContextNow);
   onClockWarning((offS) => showNotice(STATUS.clock(clockText(offS))));
-  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, directed: directedFor(decodes), nowMs: Date.now() }));
+  onSlotDecoded((slotStartMs, decodes, pass) => dispatch({ type: 'slotDecoded', slotStartMs, pass, decodes, directed: directedFor(decodes), nowMs: utcNow() }));
   onAudioStatus((s) => {
-    if (s === 'running') dispatch({ type: 'audioResumed', nowMs: Date.now() });
-    else if (s === 'stopped' || s === 'failed') dispatch({ type: 'audioStopped', nowMs: Date.now() });
+    if (s === 'running') dispatch({ type: 'audioResumed', nowMs: utcNow() });
+    else if (s === 'stopped' || s === 'failed') dispatch({ type: 'audioStopped', nowMs: utcNow() });
   });
   onHalt(() => {
     scheduler.halt();
-    dispatch({ type: 'halt', nowMs: Date.now() });
+    dispatch({ type: 'halt', nowMs: utcNow() });
   });
   // The radio's port lost, a fault and PTT off unconfirmed turn Tx off, as audio stopping does;
   // Tune refused says why.
@@ -458,15 +459,15 @@ export function startQso() {
     const on = qso.st.txEnabled || qso.st.hunt || qso.onAir !== null;
     if (txOff) {
       scheduler.halt();
-      dispatch({ type: 'halt', nowMs: Date.now() });
+      dispatch({ type: 'halt', nowMs: utcNow() });
     }
-    if (on || !txOff || always) qso.notice = { kind: 'refused', text, atMs: Date.now() };
+    if (on || !txOff || always) qso.notice = { kind: 'refused', text, atMs: utcNow() };
   });
-  wake.every(() => dispatch({ type: 'tick', nowMs: Date.now() }), 1000);
+  wake.every(() => dispatch({ type: 'tick', nowMs: utcNow() }), 1000);
   // The operator is here: a tap, a click or a keystroke restarts the watchdog, at most once a second.
   let lastTouch = 0;
   const touched = () => {
-    const now = Date.now();
+    const now = utcNow();
     if (now - lastTouch < 1000) return;
     lastTouch = now;
     dispatch({ type: 'touch', nowMs: now });
@@ -482,13 +483,13 @@ export function startQso() {
     });
     $effect(() => {
       const worked = sequencerWorked();
-      untrack(() => dispatch({ type: 'setWorked', worked, nowMs: Date.now() }));
+      untrack(() => dispatch({ type: 'setWorked', worked, nowMs: utcNow() }));
     });
     $effect(() => {
       const patch = configPatch();
       // The dispatch reads and writes the sequencer state; only Settings and the running
       // activation should re-run this.
-      untrack(() => dispatch({ type: 'configure', patch, nowMs: Date.now() }));
+      untrack(() => dispatch({ type: 'configure', patch, nowMs: utcNow() }));
     });
   });
 }

@@ -21,6 +21,7 @@ import { setAudioSession } from './session';
 import { microphoneInput, type InputSource, type OpenedInput, type StartError } from './input';
 import { applySink, type OutputError, type OutputState, type SinkContext } from './sink';
 import { capturesHidden } from '../app/platform';
+import { utcNow } from '../clock/utc';
 
 export type { InputSource, StartError } from './input';
 export type { OutputState } from './sink';
@@ -93,7 +94,7 @@ export function browserDeps(): EngineDeps {
       return new AudioWorkletNode(ctx, CAPTURE_PROCESSOR, { numberOfInputs: 1, numberOfOutputs: 0, channelCountMode: 'max' });
     },
     doc: document,
-    dateNow: () => Date.now(),
+    dateNow: () => utcNow(),
     perfNow: () => performance.now(),
     secure: () => typeof window !== 'undefined' && window.isSecureContext && !!navigator.mediaDevices?.getUserMedia,
     setSession: () => setAudioSession('play-and-record'),
@@ -170,7 +171,7 @@ export class CaptureEngine {
     return this.mapper.ready ? (this.fallbackClock ? 'current-time' : 'output') : null;
   }
 
-  /** UTC the mapping gives the audio clock now minus Date.now(), ms; null without a mapping. */
+  /** UTC the mapping gives the audio clock now minus utcNow(), ms; null without a mapping. */
   mappingOffsetMs(): number | null {
     if (!this.ctx || !this.mapper.ready) return null;
     return this.mapper.toUtcMs(this.ctx.currentTime) - this.deps.dateNow();

@@ -16,7 +16,7 @@ export interface ClockReading {
   performanceTime: number;
   /** performance.now() at the reading, ms. */
   perfNow: number;
-  /** Date.now() at the reading, ms. */
+  /** utcNow() at the reading (lib/clock/utc.ts), ms. */
   dateNow: number;
   /** AudioContext.currentTime at the reading, s. */
   currentTime: number;

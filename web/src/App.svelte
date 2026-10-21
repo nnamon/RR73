@@ -4,6 +4,8 @@
   import QsoSheet from './ui/QsoSheet.svelte';
   import SettingsSplit from './ui/SettingsSplit.svelte';
   import ShortcutsSheet from './ui/ShortcutsSheet.svelte';
+  import PortChooser from './ui/PortChooser.svelte';
+  import { isDesktop } from './lib/app/desktop';
   import StationBar from './ui/StationBar.svelte';
   import StatusNotice from './ui/StatusNotice.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
@@ -279,6 +281,7 @@
 
 <QsoSheet />
 <ShortcutsSheet bind:open={sheets.shortcuts} />
+{#if isDesktop()}<PortChooser />{/if}
 
 <style>
   /* Border-box (base.css): the safe-area padding is inside the 100dvh, so the app is never taller than the screen. */

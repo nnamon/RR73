@@ -24,6 +24,8 @@
 
 import { CatRadio, LOST_LIMIT, type CatTimers, type DialShift, type RadioState } from '../cat/radio';
 import { SerialLink, choosePort, civPort, grantedPorts, kx2Port, serialApi, type Ic705Baud, type Kx2Baud, type SerialApiLike, type SerialPortLike } from '../cat/serial';
+import { isDesktop } from '../app/desktop';
+import { desktopSerialApi } from './desktop-serial.svelte';
 import { beginAttempt, lastAttempt, lastAttemptStopped, logFailure, logStep, resetConnectLog, restoreAttempt, stoppedText, type ConnectVia } from '../cat/connect-log';
 import { kx2Codec, loadCatWasm, wasmCodec, type CatWasm } from '../cat/protocol';
 import { RADIOS, type CatRadioId } from '../cat/radios';
@@ -37,6 +39,7 @@ import { practice } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import { halt, onHalt } from './station.svelte';
 import { plannedDialHz, provideKeyer, radioName, radioNotice, resetRig, rig, rigConnected, rigInDataMode, rigModeText, usbSendOn } from './radio.svelte';
+import { utcNow } from '../clock/utc';
 
 /** Test keying holds PTT on this long, ms. */
 export const TEST_KEY_MS = 1000;
@@ -57,7 +60,8 @@ interface Deps {
   timers?: CatTimers;
 }
 
-let deps: Deps = { api: () => serialApi(), wasm: loadCatWasm };
+// The desktop app's native ports (lib/cat/native.ts) in place of Web Serial, behind the same interface.
+let deps: Deps = { api: () => (isDesktop() ? desktopSerialApi() : serialApi()), wasm: loadCatWasm };
 let current: Link | null = null;
 /** A lost link still letting its port go: the port opens again only after. */
 let releasing: Promise<void> | null = null;
@@ -77,7 +81,7 @@ let lastMayBeKeyed = false;
 /** The menu settings last copied to `rig`: $state proxies cannot be compared with the radio's object. */
 let menuSeen: RadioState['settings'] | null = null;
 
-/** True where the browser has Web Serial: the rig control settings show only there. */
+/** True where the browser has Web Serial, and in the desktop app: the rig control settings show only there. */
 export function catSupported(): boolean {
   return deps.api() !== null;
 }
@@ -219,7 +223,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
     if (current !== me) return;
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: f === 'silent' ? `No reply from the ${radioName()} during the test. PTT off was sent.` : stayedInReceive(), atMs: Date.now() };
+      rig.test = { state: 'done', ok: false, text: f === 'silent' ? `No reply from the ${radioName()} during the test. PTT off was sent.` : stayedInReceive(), atMs: utcNow() };
     }
     radioNotice(f === 'silent' ? STATUS.radioSilent : STATUS.radioReceive, true);
     halt();
@@ -294,7 +298,7 @@ function lost(me: Link) {
   rig.keyed = false;
   if (rig.test?.state === 'running') {
     testGen++;
-    rig.test = { state: 'done', ok: false, text: 'The port closed during the test.', atMs: Date.now() };
+    rig.test = { state: 'done', ok: false, text: 'The port closed during the test.', atMs: utcNow() };
   }
   radioNotice(STATUS.radioLost, true);
   halt();
@@ -442,12 +446,12 @@ export async function setRadioDial(hz: number | null): Promise<void> {
   if (!c || hz === null || !rigConnected()) return;
   const gen = ++tuneGen;
   rig.tuning = { hz, state: 'setting' };
-  const until = Date.now() + TUNE_WAIT_MS;
+  const until = utcNow() + TUNE_WAIT_MS;
   for (;;) {
     const r = await c.radio.tune(hz);
     // A later dial, or another link, replaced this one.
     if (current !== c || gen !== tuneGen) return;
-    if (!r.ok && r.why === 'busy' && Date.now() < until) {
+    if (!r.ok && r.why === 'busy' && utcNow() < until) {
       rig.tuning = { hz, state: 'waiting' };
       await pause(PTT_TIMEOUT_MS);
       continue;
@@ -512,22 +516,22 @@ export async function testKeying(): Promise<void> {
   const c = current;
   if (!c || !rigConnected() || rig.test?.state === 'running') return;
   if (practice.on && !practice.playTx) {
-    rig.test = { state: 'done', ok: false, text: 'Not tested: with the practice band on, the radio keys only with Play Tx audio on. Turn it on in Settings › Practice band.', atMs: Date.now() };
+    rig.test = { state: 'done', ok: false, text: 'Not tested: with the practice band on, the radio keys only with Play Tx audio on. Turn it on in Settings › Practice band.', atMs: utcNow() };
     return;
   }
   if (usbSendOn()) {
-    rig.test = { state: 'done', ok: false, text: 'Not tested: USB SEND keys the radio on a line of the port. Set it to OFF first.', atMs: Date.now() };
+    rig.test = { state: 'done', ok: false, text: 'Not tested: USB SEND keys the radio on a line of the port. Set it to OFF first.', atMs: utcNow() };
     return;
   }
   if (rig.unkeyFailed) {
-    rig.test = { state: 'done', ok: false, text: `Not tested: the last PTT off is not confirmed. Check that the ${radioName()} receives.`, atMs: Date.now() };
+    rig.test = { state: 'done', ok: false, text: `Not tested: the last PTT off is not confirmed. Check that the ${radioName()} receives.`, atMs: utcNow() };
     return;
   }
   halt();
   const gen = ++testGen;
   rig.test = { state: 'running' };
   const done = (ok: boolean, text: string) => {
-    if (gen === testGen) rig.test = { state: 'done', ok, text, atMs: Date.now() };
+    if (gen === testGen) rig.test = { state: 'done', ok, text, atMs: utcNow() };
   };
   const k = c.radio.key(TEST_KEY_MS + 2000);
   const answer = await k.result;
@@ -543,12 +547,12 @@ export async function testKeying(): Promise<void> {
     done(false, confirmed ? testFailed(answer) : answer === 'timeout' ? `No reply from the ${radioName()} to PTT on or off.` : UNKEY_TEST);
     return;
   }
-  const keyedAt = Date.now();
+  const keyedAt = utcNow();
   await pause(TEST_KEY_MS / 2);
   if (gen !== testGen) return;
   const during = await c.radio.request({ type: 'read_transmit' });
   if (gen !== testGen) return;
-  await pause(Math.max(0, keyedAt + TEST_KEY_MS - Date.now()));
+  await pause(Math.max(0, keyedAt + TEST_KEY_MS - utcNow()));
   if (gen !== testGen) return;
   k.release();
   // PTT off, retried until the radio answers OK, and a read that must say receive.
@@ -559,8 +563,8 @@ export async function testKeying(): Promise<void> {
   else if (keyed === false) done(false, stayedInReceive());
   // TX keys the KX2 in any mode: in CW TQ1 may mean armed only (Programmer's Reference p. 27).
   else if (settings.cat.radio === 'kx2' && rigInDataMode() === false)
-    done(false, `Keyed and released at ${utcTime(Date.now())} UTC, in ${rigModeText()}. The KX2 was not in DATA A: choose a band to set it.`);
-  else done(true, `Keyed and released at ${utcTime(Date.now())} UTC.`);
+    done(false, `Keyed and released at ${utcTime(utcNow())} UTC, in ${rigModeText()}. The KX2 was not in DATA A: choose a band to set it.`);
+  else done(true, `Keyed and released at ${utcTime(utcNow())} UTC.`);
 }
 
 /**
@@ -621,7 +625,7 @@ export async function initCat(): Promise<void> {
   offHalt = onHalt(() => {
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. PTT off was sent.', atMs: Date.now() };
+      rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. PTT off was sent.', atMs: utcNow() };
     }
     const c = current;
     // PTT off unless nothing can be keyed: RR73 holds no PTT and the radio last read receive. The

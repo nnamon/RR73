@@ -35,6 +35,7 @@
   import { chooseScenario } from '../lib/practice/runtime.svelte';
   import { SCENARIOS } from '../lib/practice/scenarios';
   import { showNight } from '../lib/state/night.svelte';
+  import { utcNow } from '../lib/clock/utc';
 
   type Variant = 'phone' | 'panel' | 'bottom' | 'side';
   let {
@@ -59,7 +60,7 @@
   const cqOn = $derived(st.phase === 'cq' && !st.hunt);
   const running = $derived(cqOn && st.config.run);
   const stepList = $derived(active(st) && !tx.tuning ? barSteps(st) : []);
-  const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
+  const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - utcNow() + performance.now())) / 1000)));
   const aside = $derived.by(() => {
     if (tx.tuning) return `${tuneLeft} s`;
     const wd = watchdogText(st, clock.ms);

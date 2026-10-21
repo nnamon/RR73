@@ -27,6 +27,7 @@
   import { spaceHz } from '../lib/rtty/settings';
   import { STATUS } from '../lib/qso/status';
   import { layout } from '../lib/app/layout.svelte';
+  import { utcNow } from '../lib/clock/utc';
 
   let {
     onsaved,
@@ -43,7 +44,7 @@
   const notice = $derived(s.notice && clock.ms - s.notice.atMs < 20_000 ? s.notice : null);
   const mark = $derived(Math.round(keyboard.markHz));
   const space = $derived(Math.round(spaceHz(settings.rtty, keyboard.markHz)));
-  const tuneLeft = $derived(Math.max(0, Math.ceil((station.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
+  const tuneLeft = $derived(Math.max(0, Math.ceil((station.endsAtMs - (clock.ms - utcNow() + performance.now())) / 1000)));
 
   const aside = $derived.by(() => {
     if (station.tuning) return `Tune · ${tuneLeft} s`;
@@ -90,7 +91,7 @@
       label: 'Clear text',
       onclick: () => {
         s.clearText();
-        s.notice = { text: STATUS.textCleared, atMs: Date.now() };
+        s.notice = { text: STATUS.textCleared, atMs: utcNow() };
       },
     },
   ]);

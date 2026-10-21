@@ -26,6 +26,7 @@ import { dialNow, onRadioNotice, rigGate, txKeyer } from './radio.svelte';
 import { onAudioChunk, onAudioStatus, onHalt, outputContext } from './station.svelte';
 import { PTT_SETTLE_MS, keyFailedText, pause, tailMs, type Keying } from '../tx/keyer';
 import { wake } from '../clock/wake';
+import { utcNow } from '../clock/utc';
 
 /** Audio kept for Save 2 min of audio, s at 12 kHz. */
 const KEEP_S = 120;
@@ -94,7 +95,7 @@ function config(): SessionConfig {
 }
 
 export const session = new KeyboardSession({
-  now: () => Date.now(),
+  now: () => utcNow(),
   config,
   async startTx(cb) {
     const ctx = outputContext();
@@ -184,7 +185,7 @@ client.onEvents((events) => {
   for (const e of events) {
     if (e.type === 'tones' && e.hz.length) keyboard.markHz = e.hz[0];
     else if (e.type === 'shift' && e.hz !== settings.rtty.shiftHz) {
-      session.notice = { text: STATUS.shiftFound(Math.round(e.hz)), atMs: Date.now() };
+      session.notice = { text: STATUS.shiftFound(Math.round(e.hz)), atMs: utcNow() };
       void updateSettings({ rtty: { ...settings.rtty, shiftHz: Math.round(e.hz), markHz: keyboard.markHz } });
     }
   }
@@ -254,7 +255,7 @@ export function tapToTune(hz: number) {
   const mark = clampMark(r, r.reverse ? hz - r.shiftHz / 2 : hz + r.shiftHz / 2);
   tuneMark(mark);
   client.find(hz, FIND_RANGE_HZ);
-  session.notice = { text: STATUS.tuned(mark), atMs: Date.now() };
+  session.notice = { text: STATUS.tuned(mark), atMs: utcNow() };
   settle();
 }
 
@@ -267,7 +268,7 @@ export function settle() {
 
 export function setRtty(patch: Partial<RttySettings>, notice?: string) {
   void updateSettings({ rtty: { ...settings.rtty, markHz: Math.round(keyboard.markHz), ...patch } });
-  if (notice) session.notice = { text: notice, atMs: Date.now() };
+  if (notice) session.notice = { text: notice, atMs: utcNow() };
 }
 
 /** Rev: the pair stays over the same signal, so the mark moves to the other tone. */
@@ -296,7 +297,7 @@ export function stepMacroSet() {
   const k = settings.keyboard;
   const set = k.set === 'qso' ? 'contest' : 'qso';
   void updateSettings({ keyboard: { ...k, set } });
-  session.notice = { text: STATUS.macroSet(set === 'qso' ? 'QSO' : 'Contest'), atMs: Date.now() };
+  session.notice = { text: STATUS.macroSet(set === 'qso' ? 'QSO' : 'Contest'), atMs: utcNow() };
 }
 
 /** The speed and shift chip: "45.45 · 170". */
@@ -335,12 +336,12 @@ export function startKeyboard() {
     if (!isKeyboard(settings.mode)) return;
     const on = session.tx !== 'off';
     if (txOff && on) session.halt();
-    if (on || !txOff || always) session.notice = { text, atMs: Date.now() };
+    if (on || !txOff || always) session.notice = { text, atMs: utcNow() };
   });
   onAudioStatus((s) => {
     if ((s === 'stopped' || s === 'failed') && session.tx !== 'off') {
       session.halt();
-      session.notice = { text: STATUS.audioStopped, atMs: Date.now() };
+      session.notice = { text: STATUS.audioStopped, atMs: utcNow() };
     }
   });
   // Repeat CQ's start keeps time while the page is hidden (lib/clock/wake.ts).

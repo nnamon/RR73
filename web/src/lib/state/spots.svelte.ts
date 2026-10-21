@@ -23,6 +23,7 @@ import { features } from './features.svelte';
 import { practice } from './practice.svelte';
 import { settings, updateSettings } from './settings.svelte';
 import { tuneRadioToBand } from './cat.svelte';
+import { utcNow } from '../clock/utc';
 
 /** The station Go chases. */
 export interface Chase {
@@ -63,7 +64,7 @@ export function goTarget(s: Spot): { band: BandId; mode: 'FT8' | 'FT4' } | null 
 }
 
 /** Go: chases the spot's station and opens Operate with the band sheet. False when RR73 cannot work the spot. */
-export function goToSpot(s: Spot, nowMs = Date.now()): boolean {
+export function goToSpot(s: Spot, nowMs = utcNow()): boolean {
   const t = goTarget(s);
   if (!t) return false;
   spots.chase = { call: s.activator, band: t.band, refs: s.refs.map(({ programme, ref }) => ({ programme, ref })), atMs: nowMs };

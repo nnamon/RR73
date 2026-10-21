@@ -14,6 +14,7 @@ import { isGrid } from '../qso/messages';
 import { PskQueue, type SendResult } from '../pskreporter/queue';
 import { spotsOf } from '../pskreporter/spots';
 import { QspError, qspErrorText, qspReport } from '../relay/qsp';
+import { utcNow } from '../clock/utc';
 
 export interface PskReporterSettings {
   on: boolean;
@@ -120,7 +121,7 @@ export function initPskReporter() {
   // The final pass carries the early pass's decodes again: they are reported once, with it.
   onSlotDecoded((slotStartMs, decodes, pass) => {
     if (pass === 'early' || pskHold() !== null || !isFt(settings.mode)) return;
-    queue.add(spotsOf(decodes, Date.now(), currentDialHz(), settings.mode), slotStartMs);
+    queue.add(spotsOf(decodes, utcNow(), currentDialHz(), settings.mode), slotStartMs);
     pskStatus.waiting = queue.waiting;
   });
 }

@@ -12,6 +12,7 @@ import type { InputEvents, InputSource, OpenedInput, StartError } from '../audio
 import type { CaptureReport } from '../audio/report';
 import { FLAG_GAP, FRAME_RATE, decodeFrame } from './frame';
 import { QspError, qspErrorText, qspStartSession, qspStop, qspTune, streamUrl, type FetchFn } from './qsp';
+import { utcNow } from '../clock/utc';
 
 /** Delay from a frame's UTC to its playout, s. Absorbs network jitter. */
 export const PLAYOUT_S = 1.5;
@@ -80,7 +81,7 @@ export class WebSdrInput implements InputSource {
 
   constructor(
     private readonly cfg: WebSdrConfig,
-    private readonly now: () => number = () => Date.now(),
+    private readonly now: () => number = () => utcNow(),
     private readonly socket: (url: string) => WebSocket = (url) => new WebSocket(url),
     private readonly fetchFn?: FetchFn,
   ) {}

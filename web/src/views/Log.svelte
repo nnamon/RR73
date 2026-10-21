@@ -29,6 +29,7 @@
   import { storageWaiting } from '../lib/state/storage.svelte';
   import { reference } from '../lib/reference';
   import { displayName } from '../lib/reference/names';
+  import { utcNow } from '../lib/clock/utc';
 
   type View = 'all' | 'todo' | 'activations';
   const PAGE = 100;
@@ -76,7 +77,7 @@
   /** Exports what the current view shows, built before the share sheet opens. */
   async function exportAdif() {
     const list = view === 'todo' ? todo.filter((q) => q.deletedAt === null) : view === 'activations' ? log.live.filter((q) => q.activationId !== null && matches(q, query)) : found;
-    const file = buildExport(list, settings.callsign, { programVersion: __APP_VERSION__, now: Date.now() });
+    const file = buildExport(list, settings.callsign, { programVersion: __APP_VERSION__, now: utcNow() });
     const r = await shareFile(file);
     status = r.kind === 'downloaded' ? `Downloaded ${file.name}` : r.kind === 'shared' ? `Shared ${file.name}` : '';
   }

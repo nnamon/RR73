@@ -10,6 +10,7 @@ import { practice } from './practice.svelte';
 import { settings } from './settings.svelte';
 import { HEARD_KEEP_MS, addHeard, heardTopic, parseHeard, type HeardBy } from '../pskreporter/heard';
 import { openFeed } from '../pskreporter/mqtt';
+import { utcNow } from '../clock/utc';
 
 /** PSK Reporter's MQTT feed over WebSocket and TLS, the port for pages on https. */
 export const FEED_URL = 'wss://mqtt.pskreporter.info:1886';
@@ -73,7 +74,7 @@ export function initHeardYou(socket?: (url: string) => WebSocket) {
             },
             message: (_topic, payload) => {
               const h = parseHeard(payload);
-              if (h) heard.list = addHeard(heard.list, h, Date.now());
+              if (h) heard.list = addHeard(heard.list, h, utcNow());
             },
             closed: (refused) => {
               stop = null;
@@ -89,7 +90,7 @@ export function initHeardYou(socket?: (url: string) => WebSocket) {
       connect();
       // Reports age out of the list while the feed is quiet.
       const prune = setInterval(() => {
-        const now = Date.now();
+        const now = utcNow();
         if (heard.list.some((h) => now - h.atS * 1000 >= HEARD_KEEP_MS)) heard.list = heard.list.filter((h) => now - h.atS * 1000 < HEARD_KEEP_MS);
       }, 60_000);
       return () => {

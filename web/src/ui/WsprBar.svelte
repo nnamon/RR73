@@ -27,13 +27,14 @@
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { showNight } from '../lib/state/night.svelte';
   import { beaconTexts, clearSpots, nextText, setBeacon, setPowerDbm, setTxPct, stepSort, stepStopAfter, transmitNextSlot, wspr } from '../lib/state/wspr.svelte';
+  import { utcNow } from '../lib/clock/utc';
 
   let { onsave, variant = 'phone' }: { onsave: () => void; variant?: 'phone' | 'panel' | 'bottom' | 'side' } = $props();
 
   const w = $derived(settings.wspr);
   const onAir = $derived(wspr.onAir);
   const notice = $derived(wspr.notice && clock.ms - wspr.notice.atMs < 20_000 ? wspr.notice : null);
-  const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
+  const tuneLeft = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - utcNow() + performance.now())) / 1000)));
 
   const line = $derived.by((): { text: string; aside: string } => {
     const msg = beaconTexts();

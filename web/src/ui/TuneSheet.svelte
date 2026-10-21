@@ -9,6 +9,7 @@
   import { clock } from '../lib/state/now.svelte';
   import { halt, tx } from '../lib/state/station.svelte';
   import { settings } from '../lib/state/settings.svelte';
+  import { utcNow } from '../lib/clock/utc';
 
   /** `dialHz`: the radio's dial while rig control reads one, else the band's dial in RR73. */
   let { open = $bindable(false), dialHz }: { open: boolean; dialHz: number | null } = $props();
@@ -18,7 +19,7 @@
   // centred the radio's dial moves for the tone, and the RF stays where these two put it.
   let playingHz = $state(0);
   let playingDialHz = $state<number | null>(null);
-  const left = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - Date.now() + performance.now())) / 1000)));
+  const left = $derived(Math.max(0, Math.ceil((tx.endsAtMs - (clock.ms - utcNow() + performance.now())) / 1000)));
   const shownDialHz = $derived(started ? playingDialHz : dialHz);
   const where = $derived(shownDialHz === null ? 'the dial frequency' : mhz(shownDialHz));
 

@@ -14,6 +14,7 @@ import { initHeardYou, loadHeardYou } from './lib/state/heard.svelte';
 import { initWsprnet, loadWsprnet } from './lib/state/wsprnet.svelte';
 import { initCat } from './lib/state/cat.svelte';
 import { initWavelogWorked } from './lib/log/wavelog-worked.svelte';
+import { isDesktop } from './lib/app/desktop';
 
 // While practice is on, nothing but the app's own files goes over the network.
 installNetworkGuard(() => practice.on);
@@ -24,7 +25,10 @@ linkSpotFeed();
 const SETTINGS_WAIT_MS = 500;
 
 checkUpdated(__APP_VERSION__);
-void registerServiceWorker();
+// The desktop app serves its files from the installed bundle and updates with a new installer: no
+// service worker. It corrects the clock by NTP and halts before the window closes.
+if (isDesktop()) void import('./lib/state/desktop.svelte').then((m) => m.initDesktop()).catch(() => undefined);
+else void registerServiceWorker();
 
 // A lazy chunk, script or stylesheet of this build failed: a newer build may have replaced it.
 window.addEventListener('vite:preloadError', () => void noteLoadFailure());
