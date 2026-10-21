@@ -96,7 +96,7 @@ for (const theme of ['light', 'dark'] as const) {
     await spots(page, 2);
     await expect(list(page).locator('li.slot-bar')).toHaveText([/14:04\s*receiving, spots at 14:06/, /14:02\s*8 spots/, /14:00\s*6 spots/]);
     expect((await calls(page)).slice(0, 8)).toEqual(['ZL2BRG', '4X1RF', 'VK3ZPF', 'JA7TKT', 'VK6XLR', 'VR2XAN', 'DU1IVT', 'YB0MWM']);
-    await expect(list(page).locator('button.sr').first()).toHaveAccessibleName('ZL2BRG, RE78, 8558 km, 23 dBm, −23 dB, drift 0 Hz');
+    await expect(list(page).locator('button.sr').first()).toHaveAccessibleName('ZL2BRG, RE78, 8558 km, 23 dBm (200 mW), −23 dB, drift 0 Hz');
     await expect(list(page).locator('button.sr.old')).toHaveCount(6);
     await checkLayout(page);
     await shot(page, info, SHOTS, `${theme}-listen`);

@@ -2,7 +2,7 @@
   /**
    * WSPR spots under a 22 pt bar per slot (lib/wspr/list.ts). A 32 pt row leads with the callsign
    * in 16 pt semibold and the grid, and ends with distance, reported power, SNR and drift in
-   * aligned 12 pt columns ("8558 km 37 dBm −23 dB 0 Hz"). The audio frequency is in the details,
+   * aligned 12 pt columns ("8558 km 5 W −23 dB 0 Hz"; the regular width table "37 dBm (5 W)"). The audio frequency is in the details,
    * and a tap marks the trace on the waterfall. Spots of slots older than the newest
    * slot with spots fade. A spot of the station's own callsign shows in the My call colour.
    *
@@ -19,6 +19,7 @@
   import { TX_OFFSET_S, TX_SECONDS } from '../lib/wspr/schedule';
   import type { WsprItem } from '../lib/wspr/list';
   import type { Spot } from '../lib/wspr/spots';
+  import { wattsText } from '../lib/wspr/power';
   import { oldInkFor, sunTint } from '../lib/decode/highlight-colour';
 
   let {
@@ -47,7 +48,7 @@
 
   const km = (s: Spot) => (s.km === null ? '' : `${Math.round(s.km)} km`);
   const db = (s: Spot) => `${signed(Math.round(s.snrDb))} dB`;
-  const dbm = (s: Spot) => (s.powerDbm === null ? '' : `${s.powerDbm} dBm`);
+  const dbm = (s: Spot) => (s.powerDbm === null ? '' : `${s.powerDbm} dBm (${wattsText(s.powerDbm)})`);
   const drift = (s: Spot) => {
     const v = Math.round(s.driftHz);
     return `${v > 0 ? '+' : v < 0 ? MINUS : ''}${Math.abs(v)} Hz`;
@@ -161,7 +162,7 @@
           <span class="call" aria-hidden="true">{s.call ?? '<...>'}</span>
           <span class="grid" aria-hidden="true">{s.grid ?? ''}</span>
           <span class="n km" aria-hidden="true">{km(s)}</span>
-          <span class="n pw" aria-hidden="true">{dbm(s)}</span>
+          <span class="n pw" aria-hidden="true">{#if s.powerDbm !== null}<span class="pw-dbm">{s.powerDbm} dBm (</span>{wattsText(s.powerDbm)}<span class="pw-dbm">)</span>{/if}</span>
           <span class="n db" aria-hidden="true">{db(s)}</span>
           <span class="n dr" aria-hidden="true">{drift(s)}</span>
         </button>
@@ -330,6 +331,15 @@
 
   .pw {
     min-width: 3.9em;
+  }
+
+  /* Compact width shows the power in watts only, so the callsign keeps its room; the table adds dBm. */
+  .pw-dbm {
+    display: none;
+  }
+
+  .table .pw-dbm {
+    display: inline;
   }
 
   /* Regular width: six columns, named in a header row that stays at the top of the list. */
