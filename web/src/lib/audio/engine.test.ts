@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { CaptureEngine, type EngineDeps, type InputSource } from './engine';
+import { CaptureEngine, RESUME_WAIT_MS, type EngineDeps, type InputSource } from './engine';
 import { practiceReport } from '../practice/source';
 import type { CaptureMessage } from './messages';
 import recorded from '../../../../fixtures/clock/output-timestamps.json';
@@ -162,6 +162,19 @@ describe('CaptureEngine', () => {
       expect.objectContaining({ audio: expect.objectContaining({ echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 1 }) }),
     );
     expect(engine.captureReport).toMatchObject({ inputLabel: 'Headset Microphone', contextRate: 48000, echoCancellation: false, audioSession: 'play-and-record' });
+  });
+
+  it('shows as suspended when the browser leaves resume pending, as Chrome does without a tap', async () => {
+    vi.useFakeTimers();
+    try {
+      const { engine, ctx } = setup();
+      ctx.resume = vi.fn(() => new Promise<void>(() => undefined));
+      const started = engine.start();
+      await vi.advanceTimersByTimeAsync(RESUME_WAIT_MS + 10);
+      expect((await started)).toMatchObject({ status: 'stopped', reason: 'suspended' });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('stamps chunks with UTC through the output timestamp', async () => {

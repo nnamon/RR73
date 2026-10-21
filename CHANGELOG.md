@@ -4,6 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- When the browser keeps audio paused until a tap, as Chrome can when Web SDR starts with the app, the audio banner says so within 1 s and Resume audio starts it. Audio stayed at starting, with a black waterfall.
 - On a computer or tablet, Operate's ••• menu opens over the waterfall in full. Its top rows were cut off behind the waterfall.
 
 ## 0.24.14 · 2026-10-21

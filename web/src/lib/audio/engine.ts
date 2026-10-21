@@ -28,6 +28,9 @@ export type { OutputState } from './sink';
 export type AudioStatus = 'off' | 'starting' | 'running' | 'stopped' | 'failed';
 
 /** Why capture stopped. */
+/** How long a start waits for the context to run before it shows as suspended, ms. */
+export const RESUME_WAIT_MS = 1000;
+
 export type StopReason = 'interrupted' | 'suspended' | 'input-ended' | 'input-muted' | 'hidden';
 
 export interface EngineState {
@@ -280,7 +283,11 @@ export class CaptureEngine {
     // An output switch suspends the context for a moment; let it finish before the check below.
     if (this.sinkSwitch) await this.sinkSwitch;
     try {
-      if (ctx.state !== 'running') await ctx.resume();
+      // Chrome leaves resume() pending, neither resolving nor rejecting, until a tap when the
+      // page may not play audio yet: a start that did not come from a tap, such as a web SDR
+      // turned on before the page reloaded. Waiting RESUME_WAIT_MS at most, it shows as
+      // suspended, and the audio banner offers a tap that resumes it.
+      if (ctx.state !== 'running') await Promise.race([ctx.resume(), new Promise((resolve) => setTimeout(resolve, RESUME_WAIT_MS))]);
     } catch {
       // A context that will not run shows as a stop below.
     }
