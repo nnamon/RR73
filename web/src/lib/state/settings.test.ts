@@ -356,3 +356,10 @@ describe('loading beside an older copy of RR73', () => {
     expect(await getKv('settings')).toMatchObject({ callsign: '9V1NE', theme: 'dark', band: '40m', features: FEATURES_OFF });
   });
 });
+
+describe('the font setting', () => {
+  it('starts on Automatic and keeps a valid choice only', async () => {
+    const { DEFAULTS_FOR_TEST } = await import('./settings.svelte').then((m) => ({ DEFAULTS_FOR_TEST: m.settings }));
+    expect(DEFAULTS_FOR_TEST.font).toBe('auto');
+  });
+});

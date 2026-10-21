@@ -60,6 +60,15 @@
     else root.dataset.theme = settings.theme;
   });
 
+  // The font: Automatic uses Apple's system font on Apple devices and Inter elsewhere.
+  const apple = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform || navigator.userAgent);
+  $effect(() => {
+    const root = document.documentElement;
+    const inter = settings.font === 'inter' || (settings.font === 'auto' && !apple);
+    if (inter) root.dataset.font = 'inter';
+    else delete root.dataset.font;
+  });
+
   // Each screen has its own title; after a change of screen, focus moves to its heading so a
   // screen reader starts there. An update waiting to load is applied at this moment if nothing runs.
   let first = true;

@@ -11,6 +11,7 @@
   const USES: Record<string, string> = {
     ft8_lib: 'Parts of the FT8 and FT4 codec are ported from ft8_lib by Kārlis Goba.',
     Lucide: 'The reset arrow in the band sheet is an icon from Lucide.',
+    Inter: 'The Inter typeface is the interface font where Apple’s is missing, or when chosen in Appearance.',
   };
 </script>
 

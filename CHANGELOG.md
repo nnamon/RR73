@@ -4,6 +4,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Settings › Appearance › Font: Automatic uses Apple’s system font on Apple devices and Inter elsewhere, such as Windows; System and Inter fix the choice. Inter comes with the app and works offline.
+- Monospaced text on Windows uses Cascadia Mono or Consolas, where it fell back to Courier New.
+
+## 0.24.15 · 2026-10-21
+
 - When the browser keeps audio paused until a tap, as Chrome can when Web SDR starts with the app, the audio banner says so within 1 s and Resume audio starts it. Audio stayed at starting, with a black waterfall.
 - On a computer or tablet, Operate's ••• menu opens over the waterfall in full. Its top rows were cut off behind the waterfall.
 

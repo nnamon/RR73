@@ -18,6 +18,16 @@
  * lib/decode/highlight-colour.ts).
  */
 
+/* Inter (SIL Open Font License 1.1, THIRD_PARTY_NOTICES.md), Latin, variable weight: the
+   interface font where Apple's is missing, or by choice (Settings › Appearance › Font). */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2");
+}
+
 :root {
   color-scheme: light dark;
 
@@ -26,7 +36,7 @@
    * Windows 11's and Windows 10's UI fonts for Chrome and Edge on Windows.
    */
   --rr-sans: -apple-system, blinkmacsystemfont, "SF Pro Text", "Helvetica Neue", "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI", arial, sans-serif;
-  --rr-mono: ui-monospace, "SF Mono", menlo, "Roboto Mono", monospace;
+  --rr-mono: ui-monospace, "SF Mono", menlo, "Cascadia Mono", consolas, "Roboto Mono", monospace;
   --rr-text-large-title: 34px;
   --rr-text-title: 22px;
   --rr-text-clock: 20px;
@@ -388,6 +398,10 @@
 
 .rr-ink {
   --rr-hl-ink: light-dark(var(--rr-ink-light), var(--rr-ink-dark));
+}
+
+:root[data-font='inter'] {
+  --rr-sans: "Inter Variable", -apple-system, blinkmacsystemfont, "Segoe UI Variable Text", "Segoe UI", arial, sans-serif;
 }
 
 :root[data-theme='light'] {

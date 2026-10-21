@@ -25,8 +25,8 @@ describe('parseNotices', () => {
 describe('THIRD_PARTY_NOTICES.md', () => {
   const notices = parseNotices(NOTICES);
 
-  it('holds ft8_lib and Lucide', () => {
-    expect(notices.map((n) => n.name)).toEqual(['ft8_lib', 'Lucide']);
+  it('holds ft8_lib, Lucide and Inter', () => {
+    expect(notices.map((n) => n.name)).toEqual(['ft8_lib', 'Lucide', 'Inter']);
   });
 
   it('gives ft8_lib’s MIT licence word for word, as kept beside the crate', () => {

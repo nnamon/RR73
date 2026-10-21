@@ -5,7 +5,7 @@
   import type { LocateResult } from '../lib/location/locate';
   import { href } from '../lib/app/router.svelte';
   import { split } from '../lib/app/layout.svelte';
-  import { NIGHT_AFTER, normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type Theme } from '../lib/state/settings.svelte';
+  import { NIGHT_AFTER, normaliseCallsign, normaliseGrid, normaliseText, settings, updateSettings, type FontChoice, type Theme } from '../lib/state/settings.svelte';
   import { isGrid } from '../lib/qso/messages';
   import { busy } from '../lib/state/station.svelte';
   import { clearCacheAndReload, reloadApp } from '../lib/app/update.svelte';
@@ -136,6 +136,12 @@
     { id: 'dark', label: 'Dark' },
     { id: 'sun', label: 'Sun' },
     { id: 'system', label: 'System' },
+  ];
+
+  const fonts: { id: FontChoice; label: string }[] = [
+    { id: 'auto', label: 'Automatic' },
+    { id: 'system', label: 'System' },
+    { id: 'inter', label: 'Inter' },
   ];
 </script>
 
@@ -329,6 +335,17 @@
       {/each}
     </div>
     <div class="group night">
+      <div class="row stack">
+        <span class="row-main"><span class="row-title" id="font-choice">Font</span><span class="row-sub">Automatic: Apple's font, else Inter</span></span>
+        <span class="seg" role="radiogroup" aria-labelledby="font-choice">
+          {#each fonts as f (f.id)}
+            <label class="seg-i" class:on={settings.font === f.id}>
+              <input class="visually-hidden" type="radio" name="font" value={f.id} checked={settings.font === f.id} onchange={() => void updateSettings({ font: f.id })} />
+              {f.label}
+            </label>
+          {/each}
+        </span>
+      </div>
       <div class="row stack">
         <span class="row-main"><span class="row-title" id="night-after">Night display</span><span class="row-sub">After Operate sits untouched</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="night-after">
