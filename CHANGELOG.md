@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.10 · 2026-10-21
 
 - After a shifted transmission, a receive dial the IC-705 refuses just after transmit is tried once more, 0.1 s later, before Tx goes off.
 - The IC-705's Split row reads a simplex answer as Off, and rig control ignores answers the radio addresses to another program.
