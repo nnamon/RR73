@@ -513,6 +513,14 @@ jobs:
             target/desktop
           key: desktop-${{ matrix.os }}-${{ hashFiles('desktop/Cargo.lock', 'rust-toolchain.toml') }}
           restore-keys: desktop-${{ matrix.os }}-
+      # The system backend's tests open a pseudo-terminal as the radio (desktop/src/system.rs).
+      - name: Test and lint
+        if: matrix.os == 'Linux'
+        working-directory: desktop
+        run: |
+          cargo fmt --check
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo test --locked
       - name: Install the Tauri command line
         run: npm --prefix desktop ci --no-audit --no-fund
       - name: Build

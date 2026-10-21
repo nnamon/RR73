@@ -109,3 +109,71 @@ impl Backend for SystemPorts {
             })
     }
 }
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use rr73_desktop::serial::{Event, Ports};
+    use std::sync::Mutex;
+    use std::sync::mpsc;
+
+    const SETTINGS: PortSettings = PortSettings {
+        baud_rate: 115_200,
+        data_bits: 8,
+        stop_bits: 1,
+        parity: Parity::None,
+        hardware_flow: false,
+    };
+
+    /// A pseudo-terminal pair stands in for the radio: RR73 opens the slave by name, as it opens a
+    /// port the system lists, and the test plays the radio on the master.
+    #[test]
+    fn a_pty_carries_bytes_both_ways_and_reports_its_loss() {
+        let (mut master, slave) = serialport::TTYPort::pair().expect("a pty pair");
+        let name = slave.name().expect("the slave has a name");
+        let (tx, rx) = mpsc::channel();
+        let tx = Mutex::new(tx);
+        let ports = Ports::new(SystemPorts);
+        let opened = ports
+            .open(
+                &name,
+                &SETTINGS,
+                Box::new(move |e| drop(tx.lock().map(|t| t.send(e)))),
+            )
+            .expect("the slave opens");
+        master
+            .write_all(&[0xfe, 0xfe, 0xe0, 0xfd])
+            .expect("the radio writes");
+        let mut got = Vec::new();
+        while got.len() < 4 {
+            match rx.recv_timeout(Duration::from_secs(2)).expect("data within 2 s") {
+                Event::Data { bytes } => got.extend(bytes),
+                Event::Lost => panic!("lost before the data"),
+            }
+        }
+        assert_eq!(got, [0xfe, 0xfe, 0xe0, 0xfd]);
+        ports.write(opened.id, b"FA;").expect("RR73 writes");
+        let mut buf = [0u8; 3];
+        master.read_exact(&mut buf).expect("the radio reads");
+        assert_eq!(&buf, b"FA;");
+        // The radio goes away: the slave's reads fail.
+        drop(master);
+        drop(slave);
+        let mut lost = false;
+        while let Ok(e) = rx.recv_timeout(Duration::from_secs(2)) {
+            if e == Event::Lost {
+                lost = true;
+                break;
+            }
+        }
+        assert!(lost, "no lost event after the pty closed");
+        ports.close(opened.id);
+    }
+
+    #[test]
+    fn a_missing_port_fails_to_open() {
+        let ports = Ports::new(SystemPorts);
+        let r = ports.open("/dev/rr73-no-such-port", &SETTINGS, Box::new(|_| {}));
+        assert!(matches!(r, Err(OpenError::Failed(_))), "{r:?}");
+    }
+}
