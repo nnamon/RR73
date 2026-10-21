@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { settings, updateSettings } from '../lib/state/settings.svelte';
   /**
    * Settings › Logging › Wavelog: the address and API key, Test connection, the default station
    * location, sending on or off, Read Wavelog's log with Refresh from Wavelog, and
@@ -156,6 +157,18 @@
     </div>
   </div>
 
+  {#if (w.url && w.apiKey) || settings.wavelogRadio}
+    <div class="section">
+      <h2 class="section-head">Radio status</h2>
+      <div class="group">
+        <label class="row">
+          <span class="row-main"><span class="row-title">Send radio status</span><span class="row-sub">Dial and mode, for hand logging</span></span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.wavelogRadio} onchange={(e) => void updateSettings({ wavelogRadio: (e.currentTarget as HTMLInputElement).checked })} />
+        </label>
+      </div>
+      <p class="section-foot">Wavelog shows RR73 as a radio with its dial and mode, sent on each change.</p>
+    </div>
+  {/if}
   <!-- With the switch on and the address or key gone, the section stays, so it can be turned off. -->
   {#if (w.url && w.apiKey) || w.readWorked}
     <div class="section">

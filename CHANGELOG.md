@@ -4,10 +4,8 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
+- Settings › Logging › Wavelog › Send radio status sends the dial and mode to Wavelog on each change and every 2 minutes, for logging by hand there. Off by default.
 - Settings › FT8 and FT4 › Decoding: Depth Fast runs the first decoding stage only, for a slow device, and A priori decoding can be turned off. Deep and a priori on stay the defaults.
-
-## 0.24.18 · 2026-10-21
-
 - Settings › Rig control no longer shows Disconnect radio while the port is closed. Turning off Rig control does that job, and Disconnect radio stays while a radio is connected.
 
 ## 0.24.17 · 2026-10-21

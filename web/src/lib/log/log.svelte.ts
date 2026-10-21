@@ -22,7 +22,7 @@ import { buildBackup, importText, planImport, type ImportPlan, type ImportResult
 import type { ExportFile } from './files';
 import { byQso, reportsText } from './view';
 import { wavelogAdapter } from './destinations';
-import { testConnection, type FetchLike, type TestResult } from './wavelog';
+import { testConnection, wavelogClient, type FetchLike, type TestResult } from './wavelog';
 import { advice } from '../app/advice';
 import type {
   Activation,
@@ -773,4 +773,22 @@ export async function chooseStation(stationId: string, activationId: string | nu
 
 export function qsoById(id: string): Qso | undefined {
   return byId.get(id);
+}
+
+/** How often the radio status goes again while the dial and mode stay the same, ms: Wavelog shows how old it is. */
+export const RADIO_STATUS_REPEAT_MS = 120_000;
+let lastRadio: { key: string; atMs: number } | null = null;
+
+/**
+ * Settings › Logging › Wavelog › Send radio status: the dial and mode go to Wavelog when they
+ * change, and again every RADIO_STATUS_REPEAT_MS. Failures are left alone: the next change or
+ * repeat tries again. Nothing goes while the switch is off or Wavelog is not set up.
+ */
+export function sendRadioStatus(on: boolean, frequencyHz: number | null, mode: string, nowMs = now()): boolean {
+  if (!on || frequencyHz === null || !wavelogReady(log.wavelog)) return false;
+  const key = `${frequencyHz} ${mode}`;
+  if (lastRadio && lastRadio.key === key && nowMs - lastRadio.atMs < RADIO_STATUS_REPEAT_MS) return false;
+  lastRadio = { key, atMs: nowMs };
+  void wavelogClient(log.wavelog.url, log.wavelog.apiKey, fetchFn).radio(frequencyHz, mode).catch(() => undefined);
+  return true;
 }

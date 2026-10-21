@@ -30,3 +30,25 @@ describe('a QSO logged again', () => {
     expect(log.live).toHaveLength(4);
   });
 });
+
+describe('the radio status', () => {
+  it('goes to Wavelog on a change and again after 2 minutes, and not while off', async () => {
+    const { sendRadioStatus, RADIO_STATUS_REPEAT_MS, setFetch } = await import('./log.svelte');
+    const posts: { url: string; body: Record<string, unknown> }[] = [];
+    setFetch(async (url, init) => {
+      posts.push({ url: String(url), body: JSON.parse(String(init?.body ?? '{}')) });
+      return new Response('{"status":"success"}', { status: 200 });
+    });
+    log.wavelog = { ...log.wavelog, enabled: true, url: 'https://wavelog.example.test', apiKey: 'KEY', stationId: '1' };
+    expect(sendRadioStatus(false, 14_074_000, 'FT8', 0)).toBe(false);
+    expect(sendRadioStatus(true, 14_074_000, 'FT8', 0)).toBe(true);
+    // The same dial and mode within 2 minutes: nothing; a change, or 2 minutes on: again.
+    expect(sendRadioStatus(true, 14_074_000, 'FT8', 1000)).toBe(false);
+    expect(sendRadioStatus(true, 7_074_000, 'FT8', 2000)).toBe(true);
+    expect(sendRadioStatus(true, 7_074_000, 'FT8', 2000 + RADIO_STATUS_REPEAT_MS)).toBe(true);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(posts[0]).toEqual({ url: 'https://wavelog.example.test/api/radio', body: { key: 'KEY', radio: 'RR73', frequency: 14_074_000, mode: 'FT8' } });
+    expect(posts).toHaveLength(3);
+    setFetch(null);
+  });
+});

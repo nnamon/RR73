@@ -41,11 +41,22 @@
   import { callCq, qso, setHunt, setTxEnabled, startQso } from './lib/state/qso.svelte';
   import { startNightTimer } from './lib/state/night.svelte';
   import { setBeacon, startWspr, wspr } from './lib/state/wspr.svelte';
+  import { plannedDialHz, rig } from './lib/state/radio.svelte';
+  import { RADIO_STATUS_REPEAT_MS, sendRadioStatus } from './lib/log/log.svelte';
 
   const tab = $derived(tabOf(route.path));
   const sub = $derived(route.path[1] ?? null);
 
   // With Spots hidden, its paths (and Activate from earlier versions) open Settings › Optional features.
+  // Settings › Logging › Wavelog › Send radio status: the dial and mode, on a change and every 2 min.
+  $effect(() => {
+    const on = settings.wavelogRadio;
+    sendRadioStatus(on, rig.hz ?? plannedDialHz(settings.band, settings.mode), settings.mode);
+    if (!on) return;
+    const t = setInterval(() => sendRadioStatus(settings.wavelogRadio, rig.hz ?? plannedDialHz(settings.band, settings.mode), settings.mode), RADIO_STATUS_REPEAT_MS);
+    return () => clearInterval(t);
+  });
+
   $effect(() => {
     const to = settingsStatus.loaded ? redirectOf(route.path, spotsShown()) : null;
     if (to) replace(...to);

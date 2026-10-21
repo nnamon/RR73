@@ -187,6 +187,8 @@ export interface Settings {
   decodeDepth: 'deep' | 'fast';
   /** A priori decoding: the decoder tries the messages the QSO under way expects (decision 0009). */
   aPriori: boolean;
+  /** Sends the dial and mode to Wavelog's radio status, for logging by hand in Wavelog. */
+  wavelogRadio: boolean;
   /** Minutes without a touch before Operate turns to the night display; 0 never. */
   nightAfterMin: NightAfter;
   wspr: WsprSettings;
@@ -242,6 +244,7 @@ export const DEFAULTS: Settings = {
   sortDecodes: false,
   decodeDepth: 'deep',
   aPriori: true,
+  wavelogRadio: false,
   nightAfterMin: 0,
   wspr: { ...WSPR_DEFAULTS },
   myName: '',
@@ -427,6 +430,7 @@ export function validate(raw: unknown): Settings {
   if (typeof r.sortDecodes === 'boolean') s.sortDecodes = r.sortDecodes;
   if (r.decodeDepth === 'deep' || r.decodeDepth === 'fast') s.decodeDepth = r.decodeDepth;
   if (typeof r.aPriori === 'boolean') s.aPriori = r.aPriori;
+  if (typeof r.wavelogRadio === 'boolean') s.wavelogRadio = r.wavelogRadio;
   if (NIGHT_AFTER.includes(r.nightAfterMin as NightAfter)) s.nightAfterMin = r.nightAfterMin as NightAfter;
   s.wspr = validateWspr(r.wspr);
   for (const k of ['myName', 'myQth'] as const) if (typeof r[k] === 'string') s[k] = normaliseText(r[k]);

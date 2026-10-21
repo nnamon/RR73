@@ -235,6 +235,8 @@ export interface WavelogClient {
   stations(): Promise<{ ok: true; stations: WavelogStation[] } | { ok: false; message: string }>;
   postAdif(stationId: string, adif: string, dryRun: boolean, timeoutMs?: number): Promise<Http>;
   version(): Promise<string | null>;
+  /** Wavelog's radio status (/api/radio): the dial, Hz, and the mode, shown for logging by hand. */
+  radio(frequencyHz: number, mode: string): Promise<Http>;
 }
 
 export function wavelogClient(url: string, apiKey: string, fetchFn: FetchLike, timeoutMs = TEST_TIMEOUT_MS): WavelogClient {
@@ -256,6 +258,9 @@ export function wavelogClient(url: string, apiKey: string, fetchFn: FetchLike, t
     },
     postAdif(stationId, adif, dryRun, t = timeoutMs) {
       return post(dryRun ? '/api/qso/true' : '/api/qso', { key: apiKey.trim(), station_profile_id: stationId, type: 'adif', string: adif }, t);
+    },
+    radio(frequencyHz, mode) {
+      return post('/api/radio', { key: apiKey.trim(), radio: 'RR73', frequency: Math.round(frequencyHz), mode });
     },
     async version() {
       const http = await post('/api/version', { key: apiKey.trim() });
