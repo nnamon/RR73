@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.28 · 2026-10-21
 
 - Web SDR connects to KiwiSDR receivers on software v1.902, such as the public ones in the UK, Finland, the USA, Canada, Australia and Brazil. They stayed at Connecting.
 
