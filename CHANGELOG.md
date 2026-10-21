@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.24.16 · 2026-10-21
 
 - On a computer, Settings › Radio and audio › Monitor plays Tx audio on a second output, such as the speakers, at its own level, while the signal goes to the radio.
 
