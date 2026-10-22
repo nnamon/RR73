@@ -2,7 +2,7 @@
 
 RR73 also ships as a desktop app for Windows, macOS and Linux. It is the same web build in a Tauri 2 window, with two native parts the browser cannot give: serial ports for rig control on every desktop system, and the computer's clock measured against an NTP server. The PWA and its GitHub Pages deploy are unchanged.
 
-Phase 1 (this document) covers the shell, the serial ports, the clock and unsigned installers built by CI.
+Phase 1 covers the shell, the serial ports, the clock and unsigned installers built by CI.
 
 ## Decision
 
