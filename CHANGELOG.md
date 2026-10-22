@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.25.1 · 2026-10-22
 
 - Selecting a decode moves Rx to its frequency. Shift-click on the waterfall sets Rx.
 
