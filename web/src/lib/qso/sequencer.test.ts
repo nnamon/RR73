@@ -1382,3 +1382,166 @@ describe('messages and planning', () => {
     expect(JSON.stringify(s.st)).toBe(before);
   });
 });
+
+describe('Custom exchange', () => {
+  const fd = { exchange: '6A WI' };
+
+  it('answers CQ FD with the exchange at once, RR73 after theirs, and logs both exchanges', () => {
+    const s = new Sim(fd);
+    s.call(1, 'CQ FD K1ABC FN42');
+    s.run(2, 4, { 3: ['9V1NE K1ABC R 2B EMA'] });
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE 6A WI', '4:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.logged()[0]).toMatchObject({ call: 'K1ABC', reportSent: '', reportRcvd: '', stx: '6A WI', srx: '2B EMA' });
+    expect(s.st.phase).toBe('idle');
+  });
+
+  it('answers CQ RU with a report and the state', () => {
+    const s = new Sim(fd);
+    s.call(1, decode('CQ RU K1ABC FN42', -10));
+    s.run(2, 4, { 3: [decode('9V1NE K1ABC R 559 MA', -10)] });
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE 579 WI', '4:K1ABC 9V1NE RR73']);
+    expect(s.logged()[0]).toMatchObject({ reportSent: '579', reportRcvd: '559', stx: 'WI', srx: 'MA' });
+  });
+
+  it('answers any other CQ with standard messages until the reply shows a format', () => {
+    const s = new Sim(fd);
+    s.call(1, 'CQ TEST K1ABC FN42');
+    s.run(2, 6, { 3: ['9V1NE K1ABC 2B EMA'], 5: ['9V1NE K1ABC RR73'] });
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE OJ11', '4:K1ABC 9V1NE R 6A WI', '6:K1ABC 9V1NE 73']);
+    expect(s.logged()[0]).toMatchObject({ stx: '6A WI', srx: '2B EMA' });
+  });
+
+  it('keeps standard QSOs standard with the exchange set', () => {
+    const s = new Sim(fd);
+    s.call(1, 'CQ K1ABC FN42');
+    s.run(2, 6, { 3: ['9V1NE K1ABC -09'], 5: ['9V1NE K1ABC RR73'] });
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE OJ11', '4:K1ABC 9V1NE R-10', '6:K1ABC 9V1NE 73']);
+    expect(s.logged()[0]).toMatchObject({ reportSent: '-10', reportRcvd: '-09' });
+    expect('stx' in s.logged()[0]).toBe(false);
+  });
+
+  it('answers callers to our CQ in the format each one sends', () => {
+    const s = new Sim({ ...fd, run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 10, {
+      1: ['9V1NE K1ABC 2B EMA'],
+      3: ['9V1NE K1ABC RR73'],
+      5: ['9V1NE W9XYZ EN37'],
+      7: ['9V1NE W9XYZ R-12'],
+    });
+    expect(texts(s)).toEqual([
+      '0:CQ 9V1NE OJ11',
+      '2:K1ABC 9V1NE R 6A WI',
+      '4:K1ABC 9V1NE 73',
+      '6:W9XYZ 9V1NE -10',
+      '8:W9XYZ 9V1NE RR73',
+      '10:CQ 9V1NE OJ11',
+    ]);
+    expect(s.logged().map((r) => [r.call, r.stx ?? null, r.srx ?? null])).toEqual([
+      ['K1ABC', '6A WI', '2B EMA'],
+      ['W9XYZ', null, null],
+    ]);
+  });
+
+  it('sends serial numbers that count up with each QSO logged', () => {
+    const s = new Sim({ exchange: '#', serial: 12, run: true });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 8, {
+      1: [decode('9V1NE K1ABC 579 MA', -10)],
+      3: ['9V1NE K1ABC RR73'],
+      5: [decode('9V1NE W9XYZ 559 0044', -10)],
+      7: ['9V1NE W9XYZ RR73'],
+    });
+    expect(texts(s)).toEqual(['0:CQ 9V1NE OJ11', '2:K1ABC 9V1NE R 579 0012', '4:K1ABC 9V1NE 73', '6:W9XYZ 9V1NE R 579 0013', '8:W9XYZ 9V1NE 73']);
+    expect(s.logged().map((r) => [r.stx, r.srx, r.reportRcvd])).toEqual([
+      ['0012', 'MA', '579'],
+      ['0013', '0044', '559'],
+    ]);
+    expect(s.effects.filter((f) => f.type === 'serialUsed')).toEqual([
+      { type: 'serialUsed', next: 13 },
+      { type: 'serialUsed', next: 14 },
+    ]);
+    expect(s.st.config.serial).toBe(14);
+  });
+
+  it('keeps the serial number of a QSO that is not logged for the next one', () => {
+    const s = new Sim({ exchange: '#', serial: 5 });
+    s.call(1, 'CQ RU K1ABC FN42');
+    s.run(2, 2);
+    s.send({ type: 'endQso', nowMs: s.at(3, 1) });
+    s.call(3, 'CQ RU W9XYZ EN37');
+    s.run(4, 4);
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE 579 0005', '4:W9XYZ 9V1NE 579 0005']);
+    expect(s.effects.some((f) => f.type === 'serialUsed')).toBe(false);
+  });
+
+  it('answers a hashed-callsign exchange with report, serial number and the 6-character grid', () => {
+    const s = new Sim({ exchange: '#', serial: 3, myGrid: 'OJ11ab' });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 4, { 1: [decode('<9V1NE> <G4ABC> 590007 IO91WM', -10)], 3: ['<9V1NE> <G4ABC> RR73'] });
+    expect(texts(s)).toEqual(['0:CQ 9V1NE OJ11', '2:<G4ABC> <9V1NE> R 570003 OJ11AB', '4:G4ABC 9V1NE 73']);
+    expect(s.logged()[0]).toMatchObject({ call: 'G4ABC', grid: 'IO91WM', reportSent: '57', reportRcvd: '59', stx: '0003 OJ11AB', srx: '0007 IO91WM' });
+  });
+
+  it('sends nothing and says what is missing when the exchange lacks a part', () => {
+    const s = new Sim({ exchange: 'WI' });
+    s.call(1, 'CQ FD K1ABC FN42');
+    s.run(2, 4);
+    expect(texts(s)).toEqual([]);
+    expect(notReady(s.st)).toBe('Exchange needs a class');
+    s.send({ type: 'configure', patch: { exchange: '6A WI' }, nowMs: s.at(4, 1) });
+    expect(notReady(s.st)).toBeNull();
+    // Planned at once, late in the slot under way.
+    s.run(4, 4);
+    expect(texts(s)).toEqual(['4:K1ABC 9V1NE 6A WI']);
+  });
+
+  it('names each missing part', () => {
+    const missing = (over: Partial<SeqState['config']>, cq: string) => {
+      const s = new Sim(over);
+      s.call(1, cq);
+      return notReady(s.st);
+    };
+    expect(missing({ exchange: '6A' }, 'CQ FD K1ABC FN42')).toBe('Exchange needs a section');
+    expect(missing({ exchange: '#' }, 'CQ FD K1ABC FN42')).toBe('Exchange needs class and section');
+    expect(missing({ exchange: 'EMA' }, 'CQ RU K1ABC FN42')).toBe('Exchange needs a state or serial');
+    expect(missing({ exchange: '#', serial: 8000 }, 'CQ RU K1ABC FN42')).toBe('Serial number out of range');
+    expect(missing({ exchange: '#' }, '9V1NE G4ABC 590001 IO91WM')).toBe('Exchange needs a 6-character grid');
+  });
+
+  it('repeats the exchange like any message and pauses after the retries', () => {
+    const s = new Sim(fd);
+    s.call(1, 'CQ FD K1ABC FN42');
+    s.run(2, 10);
+    expect(texts(s)).toEqual(['2:K1ABC 9V1NE 6A WI', '4:K1ABC 9V1NE 6A WI', '6:K1ABC 9V1NE 6A WI', '8:K1ABC 9V1NE 6A WI']);
+    expect(s.st).toMatchObject({ paused: true, current: 2 });
+  });
+
+  it('repeats RR73 to a station that repeats its exchange with R', () => {
+    const s = new Sim(fd);
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 6, { 1: ['9V1NE K1ABC R 2B EMA'], 3: ['9V1NE K1ABC R 2B EMA'] });
+    expect(texts(s)).toEqual(['0:CQ 9V1NE OJ11', '2:K1ABC 9V1NE RR73', '4:K1ABC 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+  });
+
+  it('treats an exchange to another station as a lost station', () => {
+    const s = new Sim({ ...fd, tailEnd: false });
+    s.call(1, 'CQ FD K1ABC FN42');
+    s.run(2, 3, { 3: ['W9XYZ K1ABC R 2B EMA'] });
+    expect(s.notices().at(-1)).toMatchObject({ kind: 'lost', text: 'K1ABC answered W9XYZ' });
+  });
+
+  it('with Custom exchange empty, behaves as before: CQ FD gets Tx1 and exchanges go unanswered', () => {
+    const a = new Sim();
+    a.call(1, 'CQ FD K1ABC FN42');
+    a.run(2, 2);
+    expect(texts(a)).toEqual(['2:K1ABC 9V1NE OJ11']);
+
+    const b = new Sim({ exchange: '  ' });
+    b.send({ type: 'callCq', nowMs: b.at(0, 0.1) });
+    b.run(0, 4, { 1: ['9V1NE K1ABC 2B EMA'], 3: ['9V1NE W9XYZ 579 MA'] });
+    expect(texts(b)).toEqual(['0:CQ 9V1NE OJ11', '2:CQ 9V1NE OJ11', '4:CQ 9V1NE OJ11']);
+  });
+});

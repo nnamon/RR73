@@ -26,6 +26,48 @@ describe('parseExchange', () => {
   });
 });
 
+describe('parseExchange with the exchange formats', () => {
+  it('reads each format as a report, with R as an R-report', () => {
+    expect(parseExchange('9V1NE K1ABC 2B EMA', true)).toMatchObject({ to: '9V1NE', from: 'K1ABC', kind: 'report', report: null, format: 'fd', rcvd: { rst: '', srx: '2B EMA' } });
+    expect(parseExchange('9V1NE K1ABC R 17B EMA', true)).toMatchObject({ kind: 'rreport', format: 'fd', rcvd: { srx: '17B EMA' } });
+    expect(parseExchange('9V1NE K1ABC 579 PEI', true)).toMatchObject({ kind: 'report', format: 'ru', rcvd: { rst: '579', srx: 'PEI' } });
+    expect(parseExchange('TU; 9V1NE K1ABC R 559 0013', true)).toMatchObject({ to: '9V1NE', from: 'K1ABC', kind: 'rreport', format: 'ru', rcvd: { rst: '559', srx: '0013' } });
+    expect(parseExchange('<9V1NE> <G4ABC> R 570007 JO22DB', true)).toMatchObject({ to: '<9V1NE>', from: '<G4ABC>', kind: 'rreport', format: 'vhf', grid: 'JO22DB', rcvd: { rst: '57', srx: '0007 JO22DB' } });
+  });
+
+  it('reads standard messages as before and leaves the formats out without the flag', () => {
+    expect(parseExchange('9V1NE K1ABC -09', true)).toMatchObject({ kind: 'report', report: -9 });
+    expect(parseExchange('9V1NE K1ABC -09', true).format).toBeUndefined();
+    for (const t of ['9V1NE K1ABC 2B EMA', '9V1NE K1ABC 579 0013', '<9V1NE> <G4ABC> 570007 JO22DB']) expect(parseExchange(t).kind, t).toBe('other');
+    for (const t of ['9V1NE K1ABC X 2B EMA', '9V1NE K1ABC 2B EMA WI', 'CQ FD K1ABC FN42 X']) expect(parseExchange(t, true).kind, t).toBe('other');
+  });
+});
+
+describe('buildMessages with an exchange format', () => {
+  const base = { dx: 'K1ABC', me: '9V1NE', grid: 'OJ11ab', report: -10, ack: 'RR73' as const, cqModifier: null };
+
+  it('puts the exchange in Tx2 and Tx3 and keeps the others standard', () => {
+    expect(buildMessages({ ...base, exchange: { format: 'fd', text: '6A WI' } })).toEqual({
+      1: 'K1ABC 9V1NE OJ11',
+      2: 'K1ABC 9V1NE 6A WI',
+      3: 'K1ABC 9V1NE R 6A WI',
+      4: 'K1ABC 9V1NE RR73',
+      5: 'K1ABC 9V1NE 73',
+      6: 'CQ 9V1NE OJ11',
+    });
+  });
+
+  it('sends both callsigns as hashes in the format with a 6-character grid', () => {
+    const m = buildMessages({ ...base, dx: '<G4ABC>', exchange: { format: 'vhf', text: '570003 OJ11AB' } });
+    expect([m[2], m[3], m[4]]).toEqual(['<G4ABC> <9V1NE> 570003 OJ11AB', '<G4ABC> <9V1NE> R 570003 OJ11AB', 'G4ABC 9V1NE RR73']);
+  });
+
+  it('leaves Tx2 and Tx3 empty when the exchange lacks a part', () => {
+    const m = buildMessages({ ...base, exchange: { format: 'ru', text: '' } });
+    expect([m[2], m[3], m[4]]).toEqual(['', '', 'K1ABC 9V1NE RR73']);
+  });
+});
+
 describe('formatReport', () => {
   it('rounds, clamps and signs reports as sent on air', () => {
     expect(formatReport(-9.4)).toBe('-09');

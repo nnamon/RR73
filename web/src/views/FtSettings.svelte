@@ -2,7 +2,7 @@
   /** Settings › FT8 and FT4: the sequencer's settings (ADR 0006). */
   import BackLink from '../ui/BackLink.svelte';
   import { href } from '../lib/app/router.svelte';
-  import { normaliseMinutes, settings, updateSettings } from '../lib/state/settings.svelte';
+  import { normaliseExchange, normaliseMinutes, settings, updateSettings } from '../lib/state/settings.svelte';
   import { features } from '../lib/state/features.svelte';
 
   let watchdogMin = $state(String(settings.watchdogMin));
@@ -14,6 +14,29 @@
   $effect(() => {
     huntCalls = String(settings.huntCalls);
   });
+
+  let exchange = $state(settings.exchange);
+  $effect(() => {
+    exchange = settings.exchange;
+  });
+
+  let serial = $state(String(settings.exchangeSerial));
+  $effect(() => {
+    serial = String(settings.exchangeSerial);
+  });
+
+  function saveExchange() {
+    const v = normaliseExchange(exchange);
+    exchange = v;
+    if (v !== settings.exchange) void updateSettings({ exchange: v });
+  }
+
+  /** A whole number from 0 to 9999; anything else puts back the stored value. */
+  function saveSerial() {
+    const n = Number(serial);
+    if (serial.trim() && Number.isInteger(n) && n >= 0 && n <= 9999) void updateSettings({ exchangeSerial: n });
+    else serial = String(settings.exchangeSerial);
+  }
 
   /** A whole number of calls from 1 to 99; anything else puts back the stored value. */
   function saveHuntCalls() {
@@ -102,6 +125,43 @@
 
 
   <div class="section">
+    <div class="group">
+      <label class="row">
+        <span class="row-title">Custom exchange</span>
+        <input
+          class="field mono exch"
+          type="text"
+          bind:value={exchange}
+          onblur={saveExchange}
+          onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+          autocapitalize="characters"
+          autocomplete="off"
+          spellcheck="false"
+          maxlength="20"
+          placeholder="Optional"
+          aria-label="Custom exchange"
+        />
+      </label>
+      {#if settings.exchange}
+        <label class="row">
+          <span class="row-title">Next serial number</span>
+          <input
+            class="field num"
+            type="text"
+            inputmode="numeric"
+            bind:value={serial}
+            onblur={saveSerial}
+            onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+            autocomplete="off"
+            aria-label="Next serial number"
+          />
+        </label>
+      {/if}
+    </div>
+    <p class="section-foot">As said on air: class and section, state or province, or # for serial numbers.</p>
+  </div>
+
+  <div class="section">
     <h2 class="section-head">Decoding</h2>
     <div class="group">
       <div class="row">
@@ -151,6 +211,10 @@
   .field.count {
     flex: none;
     width: 3em;
+  }
+
+  .exch {
+    text-transform: uppercase;
   }
 
   .unit {

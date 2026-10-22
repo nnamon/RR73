@@ -48,6 +48,26 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 
 **Tail-end.** A setting, on by default. After a lost station sends RR73, RRR or 73 to the other station, or calls CQ, the sequencer calls it once more in the next slot of the opposite parity, with the late start allowed. One unanswered call ends the attempt. Nothing goes out while the station is in its QSO, Tx on included. Waiting ends after 8 slots. With tail-end off, the call pauses at once. Hunt never tail-ends: it moves on to the next CQ as soon as the station it calls answers another, whatever the setting, because another CQ is a quicker QSO than waiting out theirs.
 
+## Exchange formats
+
+Custom exchange, in Settings › FT8 and FT4, is the operator's exchange as said on the air: `6A WI`, `WI`, `#` for a serial number. Empty, the default, the sequencer reads and sends standard messages only, as before. Set, each QSO runs in the format the other station uses, with the codec's message types (`lib/qso/exchange.ts`):
+
+| Format | Type | Tx2 | From Custom exchange |
+| --- | --- | --- | --- |
+| Class and section | 0.3, 0.4 | `K1ABC 9V1NE 6A WI` | Class (1 to 32, A to H) and an ARRL or RAC section. |
+| Report with state or serial | 3 | `K1ABC 9V1NE 579 WI`, `K1ABC 9V1NE 579 0013` | A state or province, else `#`: serial numbers 1 to 7999. |
+| Report, serial and grid | 5 | `<G4ABC> <9V1NE> 570013 OJ11AB` | Always the serial number (0 to 2047), and the 6-character grid from Settings. |
+
+- Replies follow the format of the station's last report or R-report; a grid moves the QSO back to standard messages. A CQ whose modifier names a format (`CQ FD`, `CQ RU`) gets the exchange as the first message, as stations in those formats expect; any other CQ gets Tx1 until the reply shows a format. Our CQ stays as typed in Tx6; callers set the format.
+- Tx3 is `R` and the exchange. Tx4 and Tx5 are standard RR73, RRR and 73, with the callsigns in full. Retries, RR73 repeats, the lost station and logging work as in standard QSOs: an exchange counts as a report.
+- The report digit of types 3 and 5 comes from the SNR: 4 dB a step, 7 at −10 dB, 2 to 9.
+- Our exchange is fixed once it first goes into a message, as the report is. The serial number counts up when a QSO that sent one is logged (`serialUsed`), and persists in Settings, where Next serial number changes it. A QSO not logged leaves the number for the next.
+- When Custom exchange lacks a part the format needs, Tx2 and Tx3 stay empty, nothing transmits, and the status line names the part: "Exchange needs a section". Once the part is typed in, the message goes out.
+- The log stores the exchanges sent and received without the report (`STX`, `SRX`, log.md), the report as on air in `RST_SENT` and `RST_RCVD` (`579`, `57`, empty for class and section), and a type 5 grid as their grid.
+- Type 5 carries both callsigns as hashes. The decoder learns the operator's and the partner's callsigns from the QSO context, so those messages show them.
+- Rejected: a contest mode with a list of contests. The formats come from the messages on the air, and scoring, dupe rules and Cabrillo stay out.
+- Unverified: interworking with other programs in these formats on the air. Not tested on a device.
+
 ## Dupes
 
 A dupe is a station the phone's log holds a QSO with on the same band, in the same mode (FT8 or FT4), on the same UTC day and in the same activation. A QSO belongs to the activation running when it was logged, or to the one Edit QSO moved it into. QSOs logged outside an activation, or while Activations is off, belong to none and count only against each other. A new activation starts with no dupes: a station worked at the first park of the day can be worked again at the second.
@@ -125,7 +145,7 @@ events:  slotDecoded(slotStart, parity, pass, decodes) | callStation(decode) | c
          | endQso | configure(band, mode, dialHz, ...) | setWorked(worked) | touch(t) | tick(t)
          | editMessage(slot, text)
 effects: scheduleTx(text, slotStart, startOffsetS, freqHz) | cancelTx | logQso(record)
-         | notice(kind, text) | queueChanged(callers)
+         | notice(kind, text) | queueChanged(callers) | serialUsed(next)
 ```
 
 `state` holds the phase (idle, answering, calling CQ), Hunt and its tally, the current partner and their last decodes, a lost station's state, the Tx1 to Tx6 texts, the queue, the plain CQs of the last 4 slots, the stations that ignored Hunt, the retry count, the watchdog counter and the parity. Run, tail-end, Work dupes, Hunt's order, Hound, the watchdog limit and the running activation's id come in through `configure`; the log's FT8 and FT4 QSOs, each with its activation, come in through `setWorked`. `freqHz` is null except where Hound sets the Tx frequency. The UI renders from state; the audio layer executes effects.

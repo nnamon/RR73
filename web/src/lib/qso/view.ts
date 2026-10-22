@@ -6,7 +6,7 @@
 import { MINUS, signed as signedNum, utcTime } from '../clock/format';
 import { parity as parityOf } from '../clock/slots';
 import { formatReport, bare } from './messages';
-import { messages, type SeqState } from './sequencer';
+import { messages, partnerFormat, type SeqState } from './sequencer';
 import { PAUSED, STATUS } from './status';
 
 export type StepState = 'done' | 'now' | 'next' | 'todo';
@@ -30,23 +30,29 @@ export function steps(st: SeqState): Step[] {
   const p = st.partner;
   if (!p) return [];
   const rpt = (v: number | null) => (v === null ? null : signed(formatReport(v)));
-  const sent = rpt(p.reportSent);
-  const rcvd = rpt(p.reportRcvd);
+  // In an exchange format the steps show the exchange without the report; with a grid, the serial only.
+  const format = partnerFormat(st);
+  const exch = (x: string | undefined) => (x ? (format === 'vhf' ? x.split(' ')[0] : x) : null);
+  const sent = format ? exch(p.exch?.stx) : rpt(p.reportSent);
+  const rcvd = format ? exch(p.rcvd?.srx) : rpt(p.reportRcvd);
+  const r = (x: string) => (format ? `R ${x}` : `R${x}`);
+  const report = format ? 'Exchange' : 'Report';
+  const rReport = format ? 'R exchange' : 'R-report';
   // Answering: our grid, their report, our R-report, their RR73, our 73.
   // Called by them (CQ): their grid, our report, their R-report, our RR73, logged.
   const calling = st.phase === 'cq';
   const list: [string, boolean][] = calling
     ? [
         [p.grid ?? 'Call', true],
-        [sent ?? 'Report', p.sentRpt],
-        [rcvd ? `R${rcvd}` : 'R-report', p.rcvdRRpt],
+        [sent ?? report, p.sentRpt],
+        [rcvd ? r(rcvd) : rReport, p.rcvdRRpt],
         [st.config.ack, p.sentAck],
         ['Logged', p.logged],
       ]
     : [
         [sentGrid(st), p.startMs !== null || p.rcvdRpt],
-        [rcvd ?? 'Report', p.rcvdRpt],
-        [sent ? `R${sent}` : 'R-report', p.sentRRpt],
+        [rcvd ?? report, p.rcvdRpt],
+        [sent ? r(sent) : rReport, p.sentRRpt],
         [st.config.ack, p.rcvdAck],
         // A Hound logs on the Fox's RR73 and sends no 73.
         st.config.hound ? ['Logged', p.logged] : ['73', p.logged && !st.onAir && st.current !== 5],

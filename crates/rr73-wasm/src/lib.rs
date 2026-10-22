@@ -24,6 +24,7 @@ use std::cell::RefCell;
 
 use rr73_decode::wspr::{WsprConfig, WsprContext, decode_wspr as run_wspr};
 use rr73_decode::{Decode, DecodeContext, DecodeSession, DecoderConfig, SlotAudio, Stage, decode};
+use rr73_ft8::message::Callsign;
 use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
@@ -100,6 +101,9 @@ impl<'a> AppDecode<'a> {
 /// callsign, and the other station's callsign and audio frequency (tone 0, Hz) during a QSO.
 /// An empty `my_call` turns a priori decoding off; an empty `dx_call` or a `dx_hz` that is not
 /// a positive number leaves those out.
+///
+/// Both callsigns also go into the decoder's hash table, so a message that carries them only
+/// as hashes (type 5, `<9V1NE> <G4ABC> 570007 JO22DB`) shows them.
 #[wasm_bindgen]
 pub fn set_qso_context(my_call: &str, dx_call: &str, dx_hz: f32) {
     let ap = (!my_call.trim().is_empty()).then(|| rr73_decode::ApContext {
@@ -107,7 +111,15 @@ pub fn set_qso_context(my_call: &str, dx_call: &str, dx_hz: f32) {
         dx_call: (!dx_call.trim().is_empty()).then(|| dx_call.trim().to_string()),
         dx_hz: (dx_hz.is_finite() && dx_hz > 0.0).then_some(dx_hz),
     });
-    CONTEXT.with(|c| c.borrow_mut().ap = ap);
+    CONTEXT.with(|c| {
+        let mut ctx = c.borrow_mut();
+        for call in [my_call, dx_call] {
+            if let Ok(call) = Callsign::new(call.trim()) {
+                ctx.hashes.insert(&call);
+            }
+        }
+        ctx.ap = ap;
+    });
 }
 
 fn decodes_json(decodes: &[Decode]) -> Result<String, String> {
@@ -616,6 +628,44 @@ mod tests {
         assert!(synthesize_wspr_samples("K1ABC FN42 31", 1500.0, 48_000).is_err());
         assert!(decode_wspr_json(&[], "baseline").is_err());
         assert_eq!(decode_wspr_json(&[], "wspr").as_deref(), Ok("[]"));
+    }
+
+    #[test]
+    fn packs_the_exchange_formats() {
+        for (text, i3n3) in [
+            ("K1ABC W9XYZ 6A WI", "0.3"),
+            ("K1ABC W9XYZ R 17B EMA", "0.4"),
+            ("K1ABC W9XYZ 579 WI", "3.0"),
+            ("K1ABC W9XYZ R 559 0013", "3.0"),
+            ("<G4ABC> <PA9XYZ> 570007 JO22DB", "5.0"),
+            ("<G4ABC> <PA9XYZ> R 520123 JO22DB", "5.0"),
+        ] {
+            let p = pack(text, "FT8");
+            assert!(p.ok, "{text}: {:?}", p.error);
+            assert_eq!((p.text.as_str(), p.i3n3.as_str()), (text, i3n3));
+        }
+    }
+
+    /// Type 5 carries both callsigns as hashes: the QSO context teaches the decoder both.
+    #[test]
+    fn qso_context_resolves_hashed_callsigns() {
+        let text = "<G4ABC> <PA9XYZ> R 570007 JO22DB";
+        let signal = synthesize_samples(text, "FT8", 1200.0, 12_000).expect("signal");
+        let mut slot = vec![0.0f32; 15 * 12_000];
+        for (i, x) in signal.iter().enumerate() {
+            slot[6_000 + i] = 0.1 * x;
+        }
+        set_qso_context("G4ABC", "PA9XYZ", 1200.0);
+        let json = decode_slot_json(&slot, "FT8", "baseline").expect("decode");
+        set_qso_context("", "", 0.0);
+        let decodes: serde_json::Value = serde_json::from_str(&json).expect("json");
+        let texts: Vec<&str> = decodes
+            .as_array()
+            .expect("array")
+            .iter()
+            .filter_map(|d| d["text"].as_str())
+            .collect();
+        assert_eq!(texts, [text]);
     }
 
     #[test]

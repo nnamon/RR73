@@ -2,10 +2,12 @@
  * Reads decoded FT8 and FT4 messages for the sequencer, and builds Tx1 to Tx6
  * (docs/design/sequencer.md). Only the standard exchange is read: CQ, grid, report, R-report,
  * RRR, RR73 and 73, and the Fox's multi-call message of FT8 DXpedition mode (parseParts).
- * Anything else is 'other'.
+ * With `formats`, the exchange formats too (lib/qso/exchange.ts): their exchange reads as a
+ * report, with R as an R-report. Anything else is 'other'.
  */
 
 import { baseCall, looksLikeCall } from '../decode/marking';
+import type { Format, ReceivedExchange } from './exchange';
 
 export type TxNum = 1 | 2 | 3 | 4 | 5 | 6;
 export const TX_NUMS: readonly TxNum[] = [1, 2, 3, 4, 5, 6];
@@ -26,6 +28,9 @@ export interface Exchange {
   modifier: string | null;
   /** One of the two parts of a Fox's multi-call message (parseParts). */
   multi?: boolean;
+  /** The format of a report or R-report: standard, or an exchange format with what it carried. */
+  format?: Format;
+  rcvd?: ReceivedExchange;
 }
 
 const GRID = /^[A-R]{2}\d{2}$/;
@@ -42,8 +47,24 @@ export function sameCall(a: string | null, b: string | null): boolean {
   return !!a && !!b && baseCall(bare(a)) === baseCall(bare(b));
 }
 
-export function parseExchange(text: string): Exchange {
-  const t = text.trim().toUpperCase().split(/\s+/);
+/**
+ * An exchange format's message, its words after the callsigns: class and section ("17B EMA"),
+ * report with state, province or serial ("579 MA", "579 0013"), report and serial with a
+ * 6-character grid ("570007 JO22DB"). Text as the codec shows it.
+ */
+function readFormat(w: string[]): { format: Format; rcvd: ReceivedExchange; grid: string | null } | null {
+  if (w.length !== 2) return null;
+  const [a, b] = w;
+  if (/^\d{1,2}[A-H]$/.test(a) && /^[A-Z]{2,3}$/.test(b)) return { format: 'fd', rcvd: { rst: '', srx: `${a} ${b}` }, grid: null };
+  if (/^5\d9$/.test(a) && /^(\d{4}|[A-Z]{2,3})$/.test(b)) return { format: 'ru', rcvd: { rst: a, srx: b }, grid: null };
+  if (/^5\d{5}$/.test(a) && /^[A-R]{2}\d{2}[A-X]{2}$/.test(b)) return { format: 'vhf', rcvd: { rst: a.slice(0, 2), srx: `${a.slice(2)} ${b}` }, grid: b };
+  return null;
+}
+
+export function parseExchange(text: string, formats = false): Exchange {
+  let t = text.trim().toUpperCase().split(/\s+/);
+  // "TU; W9XYZ K1ABC 579 MA": the sender ends its QSO before and sends its exchange to W9XYZ.
+  if (formats && t[0] === 'TU;') t = t.slice(1);
   const none: Exchange = { to: null, from: null, kind: 'other', grid: null, report: null, modifier: null };
   if (t[0] === 'CQ') {
     const rest = t.slice(1);
@@ -55,6 +76,11 @@ export function parseExchange(text: string): Exchange {
     const grid = after && GRID.test(after) && after !== 'RR73' ? after : null;
     if (after && !grid) return none;
     return { to: null, from: rest[i], kind: 'cq', grid, report: null, modifier };
+  }
+  if (formats && t.length >= 4 && t.length <= 5 && looksLikeCall(t[0]) && looksLikeCall(t[1])) {
+    const ack = t.length === 5 && t[2] === 'R';
+    const f = (t.length === 4 || ack) && readFormat(t.slice(-2));
+    if (f) return { to: t[0], from: t[1], kind: ack ? 'rreport' : 'report', grid: f.grid, report: null, modifier: null, format: f.format, rcvd: f.rcvd };
   }
   if (t.length < 2 || t.length > 3 || !looksLikeCall(t[0]) || !looksLikeCall(t[1])) return none;
   const base = { to: t[0], from: t[1], grid: null, report: null, modifier: null };
@@ -76,11 +102,12 @@ const MULTI = /^(\S+) RR73; (\S+) (<[^>]+>) ([+-]\d{2})$/;
  * The parts of a decoded message. A Fox's multi-call message (FT8 DXpedition mode,
  * "K1ABC RR73; W9XYZ <KH1/KH7Z> -08") gives two, both from the Fox: RR73 to the first station
  * and a report to the second. The Fox's callsign shows as <...> until the decoder has heard it
- * in full. Any other message gives one part, as parseExchange reads it.
+ * in full. Any other message gives one part, as parseExchange reads it (with `formats`, the
+ * exchange formats too).
  */
-export function parseParts(text: string): Exchange[] {
+export function parseParts(text: string, formats = false): Exchange[] {
   const m = MULTI.exec(text.trim().toUpperCase().replace(/\s+/g, ' '));
-  if (!m || !looksLikeCall(m[1]) || !looksLikeCall(m[2])) return [parseExchange(text)];
+  if (!m || !looksLikeCall(m[1]) || !looksLikeCall(m[2])) return [parseExchange(text, formats)];
   const part = { from: m[3], grid: null, modifier: null, multi: true };
   return [
     { ...part, to: m[1], kind: 'rr73', report: null },
@@ -120,6 +147,11 @@ export interface MessageParts {
   ack: 'RR73' | 'RRR';
   /** CQ modifier for Tx6, such as POTA. */
   cqModifier: string | null;
+  /**
+   * Tx2 and Tx3 in an exchange format: its words after the callsigns, or '' when Custom exchange
+   * lacks a part, which leaves both empty. Absent or null: standard reports.
+   */
+  exchange?: { format: Exclude<Format, 'standard'>; text: string } | null;
 }
 
 /** Tx1 to Tx6 for the current partner; messages that need a partner or report are empty without one. */
@@ -129,6 +161,21 @@ export function buildMessages(p: MessageParts): Record<TxNum, string> {
   const dx = p.dx ? p.dx.toUpperCase() : null;
   const rpt = p.report === null ? null : formatReport(p.report);
   const cq = ['CQ', p.cqModifier?.trim().toUpperCase() || null, me, grid4].filter(Boolean).join(' ');
+  const x = p.exchange;
+  if (x && dx) {
+    // Type 5 carries both callsigns as hashes,
+    // and the other messages send them in full where the codec can, as type 1 or 4 decides.
+    const call = bare(dx);
+    const pair = x.format === 'vhf' ? `<${call}> <${bare(me)}>` : `${call} ${me}`;
+    return {
+      1: `${call} ${me} ${grid4}`,
+      2: x.text ? `${pair} ${x.text}` : '',
+      3: x.text ? `${pair} R ${x.text}` : '',
+      4: `${call} ${me} ${p.ack}`,
+      5: `${call} ${me} 73`,
+      6: cq,
+    };
+  }
   return {
     1: dx ? `${dx} ${me} ${grid4}` : '',
     2: dx && rpt ? `${dx} ${me} ${rpt}` : '',

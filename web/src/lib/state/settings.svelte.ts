@@ -171,6 +171,13 @@ export interface Settings {
   watchdogRefresh: boolean;
   /** Hunt moves on after this many calls without an answer: 1 to 99. */
   huntCalls: number;
+  /**
+   * Custom exchange, upper case, as said on the air ("6A WI", "WI", "#" for the serial number).
+   * Empty: standard messages only (lib/qso/exchange.ts).
+   */
+  exchange: string;
+  /** The serial number the next exchange sends, from 0; it counts up with each QSO logged with one. */
+  exchangeSerial: number;
   /** Bands where FT8 runs in Hound mode (FT8 DXpedition mode). */
   houndBands: BandId[];
   /** The DXpedition's dial frequency entered for Hound mode, Hz, by band. */
@@ -244,6 +251,8 @@ export const DEFAULTS: Settings = {
   watchdogMin: 6,
   watchdogRefresh: false,
   huntCalls: 4,
+  exchange: '',
+  exchangeSerial: 1,
   houndBands: [],
   houndDialHz: {},
   ftDialHz: { FT8: {}, FT4: {} },
@@ -343,6 +352,11 @@ export function normaliseGrid(s: string): string {
   return g.slice(0, 4).toUpperCase() + g.slice(4, 6).toLowerCase();
 }
 
+/** Custom exchange as stored: upper case, single spaces, at most 20 characters. */
+export function normaliseExchange(s: string): string {
+  return s.toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 20);
+}
+
 /** Name and QTH as sent in keyboard modes: upper case, single spaces, at most 40 characters. */
 export function normaliseText(s: string): string {
   return s.toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 40);
@@ -414,6 +428,8 @@ export function validate(raw: unknown): Settings {
   for (const k of ['run', 'tailEnd', 'watchdog', 'watchdogRefresh'] as const) if (typeof r[k] === 'boolean') s[k] = r[k];
   if (HUNT_ORDERS.includes(r.huntOrder as HuntOrder)) s.huntOrder = r.huntOrder as HuntOrder;
   if (typeof r.huntCalls === 'number' && Number.isInteger(r.huntCalls) && r.huntCalls >= 1 && r.huntCalls <= 99) s.huntCalls = r.huntCalls;
+  if (typeof r.exchange === 'string') s.exchange = normaliseExchange(r.exchange);
+  if (typeof r.exchangeSerial === 'number' && Number.isInteger(r.exchangeSerial) && r.exchangeSerial >= 0 && r.exchangeSerial <= 9999) s.exchangeSerial = r.exchangeSerial;
   if (typeof r.watchdogMin === 'number') {
     const m = normaliseMinutes(r.watchdogMin);
     if (m !== null) s.watchdogMin = m;

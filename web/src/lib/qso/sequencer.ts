@@ -17,6 +17,7 @@ import type { Decode } from '../decode/types';
 import { gridPath } from '../reference/grid';
 import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
+import { cqFormat, exchangeOn, readExchange, sentExchange, type Format, type ReceivedExchange, type SentExchange } from './exchange';
 
 /** Order Repeat CQ answers callers in: first heard, strongest, weakest, farthest, or never worked first. Ties go to the first heard. */
 export type QueueOrder = 'first' | 'strongest' | 'weakest' | 'farthest' | 'new';
@@ -112,6 +113,13 @@ export interface SeqConfig {
    * R-report at the frequency the Fox sent our report on, logged on the Fox's RR73.
    */
   hound: boolean;
+  /**
+   * Custom exchange, as the operator says it on the air ("6A WI", "WI", "#"). Empty or absent:
+   * standard messages only, whatever other stations send.
+   */
+  exchange?: string;
+  /** The serial number the next exchange sends; it counts up with each QSO logged with one. Defaults to 1. */
+  serial?: number;
 }
 
 export interface Worked {
@@ -141,6 +149,9 @@ export interface Caller {
   /** Not worked before on any band. */
   isNew: boolean;
   distanceKm: number | null;
+  /** The format of their message, and the exchange it carried in an exchange format. */
+  format?: Format;
+  rcvd?: ReceivedExchange;
 }
 
 /** A plain CQ heard, for Hunt. */
@@ -187,6 +198,12 @@ export interface Partner {
   logged: boolean;
   /** Hound: the frequency the Fox sent our report on, where our R-report goes, Hz. */
   foxHz: number | null;
+  /** The format the QSO runs in: what the station sent last, or what its CQ named. */
+  format?: Format;
+  /** Our exchange in that format, fixed once it first goes into a message. */
+  exch?: SentExchange | null;
+  /** Their exchange in that format. */
+  rcvd?: ReceivedExchange | null;
 }
 
 /** True once a QSO under way can be logged by hand: their report received, ours sent, not logged yet. */
@@ -309,7 +326,9 @@ export type SeqEffect =
   | { type: 'notice'; kind: NoticeKind; text: string }
   | { type: 'queueChanged'; callers: Caller[] }
   /** The station we call answered another station, first seen in the slot at slotStartMs: its rows there read Lost. */
-  | { type: 'lostTo'; call: string; other: string; slotStartMs: number };
+  | { type: 'lostTo'; call: string; other: string; slotStartMs: number }
+  /** A QSO logged with a serial number sent: the next exchange sends `next`, stored by the app. */
+  | { type: 'serialUsed'; next: number };
 
 export interface SeqResult {
   state: SeqState;
@@ -373,7 +392,28 @@ export function notReady(st: SeqState): string | null {
   const c = st.config;
   if (!c.myCall.trim() || !isGrid(c.myGrid)) return STATUS.setUp;
   if (!st.audioOk) return STATUS.audioOff;
+  // Tx2 and Tx3 in an exchange format stay empty while Custom exchange lacks a part.
+  const x = ourExchange(st);
+  if (x && 'missing' in x && (st.current === 2 || st.current === 3)) return x.missing;
   return null;
+}
+
+/** The exchange format the QSO with the partner runs in, or null for standard messages. */
+export function partnerFormat(st: SeqState): Exclude<Format, 'standard'> | null {
+  const f = st.partner?.format;
+  return f && f !== 'standard' && exchangeOn(st.config.exchange) ? f : null;
+}
+
+/**
+ * Our exchange for the partner in the QSO's exchange format: as first sent, else from Custom
+ * exchange, or what it lacks. Null for standard messages.
+ */
+export function ourExchange(st: SeqState): { ok: SentExchange } | { missing: string } | null {
+  const f = partnerFormat(st);
+  const p = st.partner;
+  if (!f || !p) return null;
+  if (p.exch) return { ok: p.exch };
+  return sentExchange(f, readExchange(st.config.exchange ?? ''), { serial: st.config.serial ?? 1, snrDb: p.snrDb, grid: st.config.myGrid });
 }
 
 export function messages(st: SeqState): Record<TxNum, string> {
@@ -386,12 +426,20 @@ export function messages(st: SeqState): Record<TxNum, string> {
     report: p ? (p.reportSent ?? p.snrDb) : null,
     ack: st.config.ack,
     cqModifier: st.config.cqModifier,
+    exchange: exchangeFor(st),
   });
   for (const k of Object.keys(st.edits) as unknown as TxNum[]) {
     const e = st.edits[k];
     if (e) generated[k] = e;
   }
   return generated;
+}
+
+function exchangeFor(st: SeqState): { format: Exclude<Format, 'standard'>; text: string } | null {
+  const format = partnerFormat(st);
+  const x = ourExchange(st);
+  if (!format || !x) return null;
+  return { format, text: 'ok' in x ? x.ok.text : '' };
 }
 
 /** The slot of our parity for a transmission decided at `nowMs`, with the start offset. */
@@ -468,6 +516,19 @@ class Machine {
 
   get len() {
     return SLOT_MS[this.cfg.mode];
+  }
+
+  /** Reads a decoded message: with Custom exchange set, the exchange formats too. */
+  read(text: string): Exchange {
+    return parseExchange(text, exchangeOn(this.cfg.exchange));
+  }
+
+  /** The QSO runs in `format` from now on; our exchange is fixed again in it. */
+  setFormat(format: Format) {
+    const p = this.st.partner;
+    if (!p || (p.format ?? 'standard') === format) return;
+    p.format = format;
+    p.exch = null;
   }
 
   notice(kind: NoticeKind, text: string) {
@@ -683,6 +744,14 @@ class Machine {
       stationCallsign: c.myCall,
       myGridsquare: c.myGrid,
     };
+    if (partnerFormat(st)) {
+      // The report and exchange as on air: STX and SRX hold the exchange without the report.
+      Object.assign(record, { reportSent: p.exch?.rst ?? '', reportRcvd: p.rcvd?.rst ?? '', stx: p.exch?.stx ?? '', srx: p.rcvd?.srx ?? '' });
+      if (p.exch?.serial != null) {
+        c.serial = p.exch.serial + 1;
+        this.fx.push({ type: 'serialUsed', next: c.serial });
+      }
+    }
     st.worked.push({ call: record.call, band: c.band, mode: c.mode, day: dayOf(nowMs), grid: p.grid, activationId: c.activationId });
     st.completed++;
     if (st.hunt) st.huntQsos++;
@@ -693,19 +762,26 @@ class Machine {
   /** The message that answers the partner's last message, or null when there is none. */
   reply(ex: Exchange, nowMs: number): TxNum | 'complete' | 'incomplete' | 'done' | null {
     const p = this.st.partner!;
+    // Replies go in the format the station sends.
+    const took = () => {
+      this.setFormat(ex.format ?? 'standard');
+      if (ex.rcvd) p.rcvd = ex.rcvd;
+      else p.reportRcvd = ex.report;
+      if (ex.grid) p.grid = ex.grid;
+      p.rcvdRpt = true;
+    };
     switch (ex.kind) {
       case 'grid':
+        this.setFormat('standard');
         if (ex.grid) p.grid = ex.grid;
         return 2;
       case 'call':
         return 2;
       case 'report':
-        p.reportRcvd = ex.report;
-        p.rcvdRpt = true;
+        took();
         return 3;
       case 'rreport':
-        p.reportRcvd = ex.report;
-        p.rcvdRpt = true;
+        took();
         p.rcvdRRpt = true;
         return 4;
       case 'rr73':
@@ -731,6 +807,10 @@ class Machine {
   fixReport(tx: TxNum) {
     const p = this.st.partner;
     if (p && (tx === 2 || tx === 3) && p.reportSent === null) p.reportSent = Math.max(-50, Math.min(49, Math.round(p.snrDb)));
+    if (p && (tx === 2 || tx === 3) && !p.exch) {
+      const x = ourExchange(this.st);
+      if (x && 'ok' in x) p.exch = x.ok;
+    }
   }
 
   goTo(tx: TxNum, nowMs: number) {
@@ -804,7 +884,7 @@ class Machine {
     this.fx.push({ type: 'queueChanged', callers: this.ordered() });
     this.newPartner(pick.call, pick);
     st.parity = opposite(parityOf(pick.heardMs, this.cfg.mode));
-    const tx = this.reply({ to: this.cfg.myCall, from: pick.call, kind: pick.kind, grid: pick.grid, report: pick.report, modifier: null }, nowMs);
+    const tx = this.reply({ to: this.cfg.myCall, from: pick.call, kind: pick.kind, grid: pick.grid, report: pick.report, modifier: null, format: pick.format, rcvd: pick.rcvd }, nowMs);
     const t: TxNum = typeof tx === 'number' ? tx : 2;
     this.fixReport(t);
     st.retries = 0;
@@ -843,7 +923,7 @@ class Machine {
       st.queue = [];
     }
     for (const d of decodes) {
-      const ex = parseExchange(d.text);
+      const ex = this.read(d.text);
       if (!sameCall(ex.to, me) || !ex.from || sameCall(ex.from, me)) continue;
       if (!['grid', 'call', 'report', 'rreport'].includes(ex.kind)) continue;
       if (st.partner && sameCall(st.partner.call, ex.from)) continue;
@@ -862,6 +942,8 @@ class Machine {
         dupe: this.isDupe(ex.from, nowMs),
         isNew: !st.worked.some((w) => sameCall(w.call, ex.from)),
         distanceKm: grid ? (gridPath(this.cfg.myGrid, grid)?.km ?? null) : null,
+        format: ex.format,
+        rcvd: ex.rcvd,
       };
       if (found) Object.assign(found, entry);
       else st.queue.push(entry);
@@ -882,7 +964,7 @@ class Machine {
     const busy: string[] = [];
     const cqs = st.cqs.filter((q) => slotStartMs - q.heardMs <= STALE_SLOTS * this.len);
     for (const d of decodes) {
-      const ex = parseExchange(d.text);
+      const ex = this.read(d.text);
       if (!ex.from || sameCall(ex.from, me)) continue;
       if (ex.kind !== 'cq') {
         busy.push(ex.from);
@@ -932,7 +1014,7 @@ class Machine {
     const p = st.partner!;
     if (p.rcvdRpt || p.rcvdAck || p.logged) return false;
     const me = this.cfg.myCall;
-    const theirs = e.decodes.map((d) => parseExchange(d.text)).filter((x) => sameCall(x.from, p.call));
+    const theirs = e.decodes.map((d) => this.read(d.text)).filter((x) => sameCall(x.from, p.call));
     const toOther = theirs.filter((x) => x.to && !sameCall(x.to, me) && TO_OTHER.includes(x.kind)).at(-1);
     const call = bare(p.call);
     const lost = st.lost;
@@ -1012,7 +1094,7 @@ class Machine {
     } else if (e.pass === 'final') st.decided = { slotStartMs: e.slotStartMs, texts: e.decodes.map((d) => d.text) };
     // Keep the partner's latest signal for the report and the log.
     if (st.partner) {
-      const heard = e.decodes.filter((d) => parseParts(d.text).some((x) => sameCall(x.from, st.partner!.call)));
+      const heard = e.decodes.filter((d) => parseParts(d.text, exchangeOn(this.cfg.exchange)).some((x) => sameCall(x.from, st.partner!.call)));
       const last = heard[heard.length - 1];
       if (last) Object.assign(st.partner, { snrDb: last.snr_db, dtS: last.dt_s, freqHz: last.freq_hz });
     }
@@ -1048,7 +1130,7 @@ class Machine {
 
     if (st.partner) {
       const p = st.partner;
-      const replies = e.decodes.map((d) => parseExchange(d.text)).filter((x) => sameCall(x.to, me) && sameCall(x.from, p.call));
+      const replies = e.decodes.map((d) => this.read(d.text)).filter((x) => sameCall(x.to, me) && sameCall(x.from, p.call));
       const ex = replies[replies.length - 1];
       if (p.logged) {
         // After RR73: the QSO is in the log. A station that missed our RR73 and repeats its
@@ -1157,7 +1239,7 @@ class Machine {
   callStation(e: Extract<SeqEvent, { type: 'callStation' }>) {
     const st = this.st;
     const me = this.cfg.myCall;
-    const parts = parseParts(e.decode.text);
+    const parts = parseParts(e.decode.text, exchangeOn(this.cfg.exchange));
     const ex = parts.find((x) => sameCall(x.to, me)) ?? parts[0];
     let dx: string | null;
     if (ex.kind === 'cq') dx = ex.from;
@@ -1192,6 +1274,9 @@ class Machine {
     st.phase = 'answering';
     st.txEnabled = true;
     st.lastSent = null;
+    // With Custom exchange set, a CQ that names a format (CQ FD, CQ RU) or a station sending one
+    // gets our exchange at once.
+    if (exchangeOn(this.cfg.exchange)) this.setFormat(ex.kind === 'cq' ? cqFormat(ex.modifier) : (ex.format ?? st.partner!.format ?? 'standard'));
     const addressed = sameCall(ex.to, me) ? this.reply(ex, e.nowMs) : null;
     if (this.cfg.hound && st.partner && (addressed === 3 || addressed === 4)) st.partner.foxHz = Math.round(e.decode.freq_hz);
     if (addressed === 'complete') {
@@ -1199,7 +1284,7 @@ class Machine {
       this.goTo(5, e.nowMs);
       return;
     }
-    const tx: TxNum = typeof addressed === 'number' ? addressed : 1;
+    const tx: TxNum = typeof addressed === 'number' ? addressed : partnerFormat(st) ? 2 : 1;
     this.fixReport(tx);
     this.plan(tx, e.nowMs);
     const why = notReady(st);
@@ -1455,7 +1540,9 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       if (changed('order') || changed('workDupes') || changed('activationId')) m.fx.push({ type: 'queueChanged', callers: m.ordered() });
       // Only a change to the message text plans the transmission again; Settings sends every
       // value whenever one changes, and a new plan would replace a transmission about to start.
-      if (st.next && !st.onAir && st.current && (changed('myCall') || changed('myGrid') || changed('ack') || changed('cqModifier'))) m.plan(st.current, e.nowMs);
+      if (st.next && !st.onAir && st.current && (changed('myCall') || changed('myGrid') || changed('ack') || changed('cqModifier') || changed('exchange'))) m.plan(st.current, e.nowMs);
+      // A message left empty for want of a Custom exchange part goes out once the part is there.
+      else if (!st.next && !st.onAir && st.current && st.txEnabled && !st.paused && st.partner && (changed('exchange') || changed('myGrid') || changed('serial'))) m.plan(st.current, e.nowMs);
       m.flush();
       break;
     }

@@ -20,6 +20,13 @@ export const STATUS = {
   watchdog: (min: number) => `Watchdog stopped Tx after ${min} min`,
   watchdogLast: 'Watchdog ends Tx after this QSO',
   encode: 'Message cannot be encoded',
+  /** Custom exchange lacks a part the format of the QSO needs: Tx2 and Tx3 do not go out. */
+  exchangeClass: 'Exchange needs a class',
+  exchangeSection: 'Exchange needs a section',
+  exchangeClassSection: 'Exchange needs class and section',
+  exchangeState: 'Exchange needs a state or serial',
+  exchangeGrid: 'Exchange needs a 6-character grid',
+  serialRange: 'Serial number out of range',
   txSet: (hz: number) => `Tx set to ${hz} Hz`,
   noClear: 'Not enough audio yet',
   decodesCleared: 'Decodes cleared',

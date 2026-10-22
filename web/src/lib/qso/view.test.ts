@@ -109,3 +109,20 @@ describe('bottom bar view', () => {
     expect(runTally({ total: 3, hour: 18 })).toBe('3 QSOs · 18/h');
   });
 });
+
+describe('steps in an exchange format', () => {
+  it('show the exchanges in place of the reports', () => {
+    const s = new Sim({ exchange: '6A WI' });
+    s.call(1, 'CQ K1ABC FN42');
+    s.run(2, 2, { 2: [] });
+    s.hear(3, ['9V1NE K1ABC 2B EMA']);
+    expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['OJ11:done', '2B EMA:done', 'R 6A WI:now', 'RR73:todo', '73:todo']);
+  });
+
+  it('show the serial number of an exchange with a grid', () => {
+    const s = new Sim({ exchange: '#', serial: 3, myGrid: 'OJ11ab' });
+    s.send({ type: 'callCq', nowMs: s.at(0, 0.1) });
+    s.run(0, 2, { 1: ['<9V1NE> <G4ABC> 590007 IO91WM'] });
+    expect(steps(s.st).map((x) => x.label)).toEqual(['IO91WM', '0003', 'R 0007', 'RR73', 'Logged']);
+  });
+});

@@ -93,6 +93,28 @@ describe('QSO to ADIF', () => {
   });
 });
 
+describe('the exchange of an FT8 or FT4 QSO', () => {
+  const exch = (stx: string, srx: string, rst: [string, string]) =>
+    createQso({ call: 'K1ABC', mode: 'FT8', band: '20m', dialHz: 14_074_000, audioHz: 1500, startUtcMs: T - 30_000, endUtcMs: T, reportSent: rst[0], reportRcvd: rst[1], stx, srx }, { id: 'x', now: T, activation: null, callsign: '9V1NE' });
+
+  it('writes text to STX_STRING and SRX_STRING, serial numbers to STX and SRX, and both for a serial with a grid', () => {
+    expect(qsoToRecord(exch('6A WI', '2B EMA', ['', '']))).toMatchObject({ STX_STRING: '6A WI', SRX_STRING: '2B EMA' });
+    expect(qsoToRecord(exch('6A WI', '2B EMA', ['', '']))).not.toHaveProperty('STX');
+    const ru = qsoToRecord(exch('0012', 'MA', ['579', '559']));
+    expect(ru).toMatchObject({ STX: '12', SRX_STRING: 'MA', RST_SENT: '579', RST_RCVD: '559' });
+    expect(ru).not.toHaveProperty('STX_STRING');
+    expect(qsoToRecord(exch('0003 OJ11AB', '0007 IO91WM', ['57', '59']))).toMatchObject({ STX: '3', STX_STRING: '0003 OJ11AB', SRX: '7', SRX_STRING: '0007 IO91WM' });
+  });
+
+  it('reads the exchange text back from an ADIF file', () => {
+    for (const [stx, srx] of [['6A WI', '2B EMA'], ['0012', 'MA'], ['0003 OJ11AB', '0007 IO91WM']]) {
+      const text = writeAdif([qsoToRecord(exch(stx, srx, ['', '']))], { programVersion: '0.5.0', createdAt: T });
+      const r = recordToQso(parseAdif(text).records[0], ctx);
+      expect(r.ok && [r.qso.stx, r.qso.srx], stx).toEqual([stx === '0012' ? '12' : stx, srx]);
+    }
+  });
+});
+
 describe('ADIF from other loggers to QSOs', () => {
   it('reads a WSJT-X record, legacy MODE FT4 and HHMM times', () => {
     const f = parseAdif(

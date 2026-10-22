@@ -33,13 +33,15 @@ export interface RecordOptions {
 
 /**
  * STX and SRX are ADIF integers: a serial number goes there without its leading zeros ("042"
- * gives 42), and anything else goes to STX_STRING or SRX_STRING.
+ * gives 42), and anything else goes to STX_STRING or SRX_STRING. An exchange that starts with a
+ * serial number ("0007 JO22DB") goes to both: the number to STX or SRX, the text to the string.
  */
 function serial(field: 'STX' | 'SRX', v: string): Record<string, string> {
   const t = v.trim();
   if (!t) return {};
   if (/^\d{1,9}$/.test(t)) return { [field]: String(Number(t)) };
-  return { [`${field}_STRING`]: t };
+  const lead = /^(\d{1,9}) /.exec(t);
+  return { ...(lead ? { [field]: String(Number(lead[1])) } : {}), [`${field}_STRING`]: t };
 }
 
 /** The ADIF record for a QSO, in a stable field order. Empty fields are left out by the writer. */
@@ -183,8 +185,8 @@ export function recordToQso(rec: AdifRecord, ctx: ReadContext): ReadResult {
       comment: get('COMMENT'),
       name: get('NAME'),
       qth: get('QTH'),
-      stx: get('STX') || get('STX_STRING'),
-      srx: get('SRX') || get('SRX_STRING'),
+      stx: get('STX_STRING') || get('STX'),
+      srx: get('SRX_STRING') || get('SRX'),
       contestId: get('CONTEST_ID').toUpperCase(),
       extra,
       id,

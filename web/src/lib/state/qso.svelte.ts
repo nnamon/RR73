@@ -106,6 +106,8 @@ export function configNow() {
     cqModifier: null,
     preset: PRESET,
     hound: houndOn(),
+    exchange: settings.exchange,
+    serial: settings.exchangeSerial,
   };
 }
 
@@ -182,6 +184,9 @@ export function dispatch(e: SeqEvent) {
         qso.notice = { kind: f.kind, text: f.text, atMs: e.nowMs };
         break;
       case 'queueChanged':
+        break;
+      case 'serialUsed':
+        void updateSettings({ exchangeSerial: f.next });
         break;
       case 'lostTo':
         qso.lostTo = [...qso.lostTo, { call: f.call, other: f.other, slotStartMs: f.slotStartMs }].slice(-20);
@@ -408,6 +413,8 @@ export function configPatch(): Partial<SeqConfig> {
     watchdogRefresh: c.watchdogRefresh,
     huntCalls: c.huntCalls,
     hound: c.hound,
+    exchange: c.exchange,
+    serial: c.serial,
   };
 }
 

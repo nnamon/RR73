@@ -159,3 +159,41 @@ fn display_writes_exactly_what_unpack_returns() {
     };
     assert_eq!(m.to_string(), "QRZ <PJ4/K1ABC>");
 }
+
+/// The exchange messages the app's sequencer builds from Custom exchange pack and unpack back
+/// to the same text, with the callsigns resolved from the packing station's hash table.
+#[test]
+fn custom_exchange_messages_round_trip() {
+    use rr73_ft8::CallsignHashes;
+    use rr73_ft8::message::{pack, unpack};
+    for (text, i3n3) in [
+        ("K1ABC 9V1NE 1A DX", (0, 3)),
+        ("K1ABC 9V1NE R 32H WI", (0, 4)),
+        ("K1ABC 9V1NE 579 PEI", (3, 0)),
+        ("K1ABC 9V1NE R 529 0001", (3, 0)),
+        ("K1ABC 9V1NE 599 7999", (3, 0)),
+        ("<K1ABC> <9V1NE> 570000 OJ11AB", (5, 0)),
+        ("<K1ABC> <9V1NE> R 592047 RR99XX", (5, 0)),
+    ] {
+        let message = Message::parse(text).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(message.i3_n3(), i3n3, "{text}");
+        let mut hashes = CallsignHashes::new();
+        let payload = pack(&message, &mut hashes).unwrap_or_else(|e| panic!("{text}: {e}"));
+        let back = unpack(&payload, &hashes).unwrap_or_else(|e| panic!("{text}: {e}"));
+        assert_eq!(back.to_string(), text);
+    }
+    // Values beyond the fields are refused, so the app never sends them.
+    for text in [
+        "K1ABC 9V1NE 599 8000",
+        "<K1ABC> <9V1NE> 572048 OJ11AB",
+        "K1ABC 9V1NE 33A WI",
+    ] {
+        assert!(
+            !matches!(
+                Message::parse(text),
+                Ok(Message::RttyRoundup { .. } | Message::EuVhf { .. } | Message::FieldDay { .. })
+            ),
+            "{text}"
+        );
+    }
+}

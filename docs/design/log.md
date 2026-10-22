@@ -18,6 +18,7 @@ Each QSO is an ADIF record plus RR73 fields.
 | Activation | `MY_SIG`, `MY_SIG_INFO`, `MY_POTA_REF`, `MY_SOTA_REF`, `MY_WWFF_REF`, `MY_IOTA` | POTA's own docs use `MY_SIG`; both are written. |
 | Their reference | `SIG`, `SIG_INFO`, `POTA_REF`, `SOTA_REF`, `WWFF_REF`, `IOTA` | Park to park and summit to summit. |
 | Comment | `COMMENT` | |
+| Exchange | `STX`, `SRX`, `STX_STRING`, `SRX_STRING` | FT8 and FT4 QSOs in an exchange format (sequencer.md, Exchange formats) store the exchange without the report, as on air. A serial number alone goes to `STX` and `SRX`, text to the `_STRING` fields, and a serial number with a grid (`0007 JO22DB`) to both. |
 
 RR73 fields: `id` (UUID), `createdAt`, `updatedAt`, `activationId`, `deletedAt` (Undo and delete keep a tombstone so destinations can be told), `source` (sequencer or manual) and the decode provenance (preset, SNR, DT, audio frequency).
 
