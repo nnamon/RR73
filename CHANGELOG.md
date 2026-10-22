@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.27.1 · 2026-10-22
 
 - In the desktop app, Settings › Radio and audio › Timing chooses the time server and can turn the clock correction off.
 
