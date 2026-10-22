@@ -1,7 +1,7 @@
 {
   "format": "rr73-bench-results/1",
   "created_utc": "2026-10-21T13:05:27Z",
-  "git_sha": "unknown",
+  "git_sha": "efbfbb78e424",
   "preset": "subtract-3-osd2",
   "overrides": [],
   "config": {

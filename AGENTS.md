@@ -11,6 +11,7 @@ docker compose run --rm rust cargo test --workspace          # Rust unit and int
 docker compose run --rm rust cargo clippy --workspace --all-targets -- -D warnings
 docker compose run --rm rust cargo fmt --all --check
 docker compose run --rm rust rr73-bench run --preset baseline corpus/synthetic/smoke
+tools/bench/run.sh run --preset baseline corpus/synthetic/smoke     # the same, recording the commit (gate files)
 docker compose run --rm rust wasm-pack build crates/rr73-wasm --target web --out-dir ../../web/src/wasm/pkg
 docker compose run --rm node npm --prefix web ci
 docker compose run --rm node npm --prefix web run check      # svelte-check

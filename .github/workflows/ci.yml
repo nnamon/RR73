@@ -34,6 +34,13 @@ jobs:
         run: npm run lint:copy
       - name: Versions and changelog
         run: npm run check:version
+      # A gate file names the commit that recorded it (tools/bench/run.sh, docs/bench.md).
+      - name: Benchmark files name their commit
+        run: |
+          if grep -l '"git_sha": "unknown"' bench/*.json; then
+            echo "Record these again with tools/bench/run.sh, which passes the commit into the container."
+            exit 1
+          fi
       - name: Lint commit messages
         shell: bash
         run: |

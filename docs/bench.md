@@ -5,8 +5,7 @@
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh             # public test files
 docker compose run --rm rust rr73-bench synth --set smoke --set noise-ci  # synthetic sets
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) \
-  rust rr73-bench run --preset baseline corpus/public corpus/synthetic
+tools/bench/run.sh run --preset baseline corpus/public corpus/synthetic
 docker compose run --rm rust rr73-bench compare results/a.json results/b.json
 docker compose run --rm rust rr73-bench gate results/ci.json --baseline bench/baseline.json
 ```
@@ -63,7 +62,7 @@ Signals are random standard QSO messages (CQ with a grid, call pairs with a grid
 - `--carry-callsigns` decodes each directory's slots in name order, which is time order for recordings, with one decoder context, so the callsigns a slot teaches resolve hashed callsigns in the slots after it, as in the app. Directories still decode in parallel. Without it every slot starts with no callsigns, as `jt9` does on one file.
 - A WSPR preset (`wspr`, `wspr-deep`) decodes WSPR slots; an FT8 preset decodes FT8 and FT4 slots. A slot of the other family counts as an error.
 - Writes `results/<git-sha>-<preset>.json`; with overrides the name gains `-<hash>` of the override list. `--out` names the file instead.
-- The commit comes from `RR73_GIT_SHA` when set, else from `git` (with `-dirty` for uncommitted changes to tracked files), else `unknown`. Inside the container a worktree's git metadata is outside the mount, so pass the variable.
+- The commit comes from `RR73_GIT_SHA` when set, else from `git` (with `-dirty` for uncommitted changes to tracked files), else `unknown`. Inside the container a worktree's git metadata is outside the mount, so record gate files with `tools/bench/run.sh`, which passes the host's commit. CI refuses a gate file that says `unknown`.
 
 ### Scoring
 
@@ -187,7 +186,7 @@ The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesi
 A priori decoding (decision 0009) has a gate of its own: `subtract-3-osd2` on `ap-sweep` with `--per-step 10 --noise-count 300`, rendered in memory, against `bench/subtract-3-osd2-ap.json` with the thresholds in `bench/gate-ap.toml`. To record it again:
 
 ```sh
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+tools/bench/run.sh run \
   --preset subtract-3-osd2 --synth ap-sweep --per-step 10 --noise-count 300 --out results/ci-ap.json
 docker compose run --rm rust rr73-bench slim results/ci-ap.json --out bench/subtract-3-osd2-ap.json
 ```
@@ -195,10 +194,10 @@ docker compose run --rm rust rr73-bench slim results/ci-ap.json --out bench/subt
 The early pass (experiment 0006) has two gates: `subtract-3-osd2 --audio-s 13.5` on the CI sets against `bench/subtract-3-osd2-early.json` with `bench/gate.toml`, and `subtract-3-osd2 --audio-s 6` on `ft4-sweep` with `--per-step 5 --crowded-count 5 --noise-count 300`, rendered in memory, against `bench/subtract-3-osd2-ft4-early.json` with `bench/gate-ft4.toml`. The preset check includes the cut, so a whole-slot run fails against them. To record them again:
 
 ```sh
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+tools/bench/run.sh run \
   --preset subtract-3-osd2 --audio-s 13.5 --out results/ci-early.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
 docker compose run --rm rust rr73-bench slim results/ci-early.json --out bench/subtract-3-osd2-early.json
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+tools/bench/run.sh run \
   --preset subtract-3-osd2 --audio-s 6 --synth ft4-sweep --per-step 5 --crowded-count 5 --noise-count 300 --out results/ci-ft4-early.json
 docker compose run --rm rust rr73-bench slim results/ci-ft4-early.json --out bench/subtract-3-osd2-ft4-early.json
 ```
@@ -206,7 +205,7 @@ docker compose run --rm rust rr73-bench slim results/ci-ft4-early.json --out ben
 A further gate covers WSPR: the `wspr` preset on `wspr-smoke` (25 slots, 51 signals) and 50 `wspr-noise` slots, rendered in memory with `--synth`, against `bench/wspr.json` with the thresholds in `bench/gate-wspr.toml`. To record it again:
 
 ```sh
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+tools/bench/run.sh run \
   --preset wspr --synth wspr-smoke --synth wspr-noise --noise-count 50 --out results/ci-wspr.json
 docker compose run --rm rust rr73-bench slim results/ci-wspr.json --out bench/wspr.json
 ```
@@ -220,7 +219,7 @@ Each recorded file is a slim results file (summaries and per-slot counts) of its
 ```sh
 docker compose run --rm rust sh tools/corpus/fetch-ft8lib.sh
 docker compose run --rm rust rr73-bench synth --set smoke --set noise-ci
-docker compose run --rm -e RR73_GIT_SHA=$(git rev-parse --short=12 HEAD) rust rr73-bench run \
+tools/bench/run.sh run \
   --preset subtract-3-osd2 --out results/ci-subtract-3-osd2.json corpus/public corpus/synthetic/smoke corpus/synthetic/noise-ci
 docker compose run --rm rust rr73-bench slim results/ci-subtract-3-osd2.json --out bench/subtract-3-osd2.json
 ```
