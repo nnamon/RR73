@@ -523,6 +523,9 @@ jobs:
           cargo test --locked
       - name: Install the Tauri command line
         run: npm --prefix desktop ci --no-audit --no-fund
+      # The restored cache can hold earlier versions' installers: only this build's are kept.
+      - name: Clear earlier installers
+        run: find target/desktop -type d -path '*/release/bundle' -prune -exec rm -rf {} + 2>/dev/null || true
       - name: Build
         working-directory: desktop
         run: npx tauri build --ci --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
@@ -536,7 +539,8 @@ jobs:
       - name: Collect the installers
         run: |
           mkdir -p dist
-          find target/desktop -path '*/release/bundle/*' -type f \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \) -exec cp {} dist/ \;
+          version=$(node -p "require('./web/package.json').version")
+          find target/desktop -path '*/release/bundle/*' -type f -name "RR73_${version}_*" \( -name '*.deb' -o -name '*.AppImage' -o -name '*.msi' -o -name '*-setup.exe' -o -name '*.dmg' \) -exec cp {} dist/ \;
           ls -l dist
           test -n "$(ls dist)"
       - uses: actions/upload-artifact@v4
