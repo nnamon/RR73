@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.26.3 · 2026-10-22
 
 - Custom exchange in Settings › FT8 and FT4 is now Contest exchange.
 
