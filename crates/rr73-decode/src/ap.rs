@@ -51,6 +51,8 @@ pub enum ApKind {
     Rr73,
     /// `MY DX 73`.
     SeventyThree,
+    /// `CQ` as the first word, without a QSO context.
+    Cq,
 }
 
 /// One hypothesis: the code bits it fixes, and whether it needs the station's frequency.
@@ -133,6 +135,18 @@ pub fn hypotheses(mode: Mode, ctx: &ApContext) -> Vec<Hypothesis> {
     out
 }
 
+/// `CQ` as the first word of a message of type 1: the first callsign field and its flag (bits
+/// 0 to 28) and the message type (74 to 76), as `jt9` tries without a QSO context.
+pub fn cq_hypothesis(mode: Mode) -> Option<Hypothesis> {
+    let cw = codeword(mode, "CQ K1ABC FN42")?;
+    Some(Hypothesis {
+        kind: ApKind::Cq,
+        bits: bits_of(&cw, (0..29).chain(74..77)),
+        whole: false,
+        near_dx: false,
+    })
+}
+
 /// Code bits where the channel's hard decision (`llr` > 0 reads as 1) differs from `codeword`.
 pub fn hard_errors(llr: &[f32; CODEWORD_BITS], codeword: &[u8; CODEWORD_BITS]) -> u32 {
     llr.iter()
@@ -168,9 +182,12 @@ pub(crate) fn try_hypotheses(
     validator: &dyn Validator,
     mode: Mode,
     hashes: &mut CallsignHashes,
+    attempts: &mut u32,
 ) -> Option<(Validated, LdpcOutcome, ApKind)> {
     let applies = |h: &Hypothesis| {
-        if h.near_dx {
+        if h.kind == ApKind::Cq {
+            params.cq
+        } else if h.near_dx {
             near
         } else {
             near || params.my_anywhere
@@ -206,7 +223,9 @@ pub(crate) fn try_hypotheses(
     }
     for h in hyps.iter().rev().filter(|h| !h.whole && applies(h)) {
         apply(h, llr, params.strength, ap_llr);
-        let bp_only = h.kind == ApKind::My && !near && params.my_anywhere_bp_only;
+        *attempts += 1;
+        let bp_only = (h.kind == ApKind::My && !near && params.my_anywhere_bp_only)
+            || (h.kind == ApKind::Cq && params.cq_bp_only);
         let mut outcome = if bp_only {
             SumProduct {
                 max_iterations: bp_iterations,
@@ -219,16 +238,21 @@ pub(crate) fn try_hypotheses(
             continue;
         }
         let errors = hard_errors(llr, codeword);
-        let limit = if h.kind == ApKind::My {
-            params.my_max_hard_errors
-        } else {
-            params.my_dx_max_hard_errors
+        let limit = match h.kind {
+            ApKind::My => params.my_max_hard_errors,
+            ApKind::Cq => params.cq_max_hard_errors,
+            _ => params.my_dx_max_hard_errors,
         };
         if errors > limit {
             continue;
         }
         outcome.hard_errors = errors;
-        if let Ok(v) = validator.validate(mode, codeword, &outcome, hashes) {
+        // A CQ decode knows no callsign, so its message is held to the OSD rule.
+        let checked = LdpcOutcome {
+            osd: outcome.osd || h.kind == ApKind::Cq,
+            ..outcome
+        };
+        if let Ok(v) = validator.validate(mode, codeword, &checked, hashes) {
             return Some((v, outcome, h.kind));
         }
     }

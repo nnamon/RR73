@@ -163,6 +163,25 @@ pub struct ApParams {
     pub strength: f32,
     /// Lowest SNR an AP decode may report, in dB.
     pub min_snr_db: f32,
+    /// Try `CQ` as the first word on every candidate that fails, with or without a QSO
+    /// context (experiment 0013). Its decodes pass the OSD message rule.
+    #[serde(default)]
+    pub cq: bool,
+    /// `cq` uses belief propagation only, without ordered-statistics decoding.
+    #[serde(default = "default_true")]
+    pub cq_bp_only: bool,
+    /// Most code bits where the channel's hard decision may differ from the codeword of a
+    /// `cq` decode.
+    #[serde(default = "default_cq_max_hard_errors")]
+    pub cq_max_hard_errors: u32,
+}
+
+fn default_true() -> bool {
+    true
+}
+
+fn default_cq_max_hard_errors() -> u32 {
+    36
 }
 
 impl Default for ApParams {
@@ -177,6 +196,9 @@ impl Default for ApParams {
             whole_max_hard_errors: 50,
             strength: 30.0,
             min_snr_db: -30.0,
+            cq: false,
+            cq_bp_only: true,
+            cq_max_hard_errors: 36,
         }
     }
 }
@@ -505,6 +527,9 @@ pub enum OsdMessages {
     Standard,
     /// As `standard`, and at least one callsign already known from other decodes.
     StandardKnown,
+    /// As `standard`, without `R` before a locator, a form of VHF contests that HF traffic
+    /// does not send. About half of random type 1 and 2 payloads carry it (experiment 0013).
+    StandardHf,
 }
 
 /// Subtractor implementations.
@@ -720,6 +745,14 @@ impl DecoderConfig {
         self
     }
 
+    /// OSD messages without `R` before a locator, and `CQ` tried a priori with belief
+    /// propagation on every FT8 and FT4 candidate that fails (experiment 0013).
+    fn with_hf_rules(mut self) -> Self {
+        self.validate.osd_messages = OsdMessages::StandardHf;
+        self.ap.cq = true;
+        self
+    }
+
     /// The preset called `name`.
     pub fn preset(name: &str) -> Result<Self, ConfigError> {
         match name {
@@ -731,7 +764,8 @@ impl DecoderConfig {
                 .with_late_starts()
                 .with_passband_edge()
                 .with_normalised_set()
-                .with_overlap_retries()),
+                .with_overlap_retries()
+                .with_hf_rules()),
             other => Err(ConfigError::UnknownPreset(other.to_string())),
         }
     }

@@ -348,11 +348,11 @@ impl DecodeSession {
         residual.clear();
         residual.extend_from_slice(audio.samples);
         let count = stages.len();
-        let hyps = ctx
-            .ap
-            .as_ref()
-            .map(|c| ap::hypotheses(audio.mode, c))
-            .unwrap_or_default();
+        // The CQ hypothesis comes first, so it is tried last; each stage's `ap.cq` turns it on.
+        let mut hyps: Vec<Hypothesis> = ap::cq_hypothesis(audio.mode).into_iter().collect();
+        if let Some(c) = ctx.ap.as_ref() {
+            hyps.extend(ap::hypotheses(audio.mode, c));
+        }
         Self {
             layout,
             graph,
@@ -962,6 +962,7 @@ impl DecodeSession {
                     pipeline.validator.as_ref(),
                     self.layout.mode,
                     hashes,
+                    &mut stats.ap_attempts,
                 ) {
                     valid = Some(v);
                     outcome = o;

@@ -1,6 +1,6 @@
 //! Validation of LDPC codewords: CRC, payload checks, message unpacking and duplicates.
 
-use rr73_ft8::message::{self, Addressee, Message, Station, UnpackError};
+use rr73_ft8::message::{self, Addressee, Exchange, Message, Station, UnpackError};
 use rr73_ft8::{CallHash, Callsign, CallsignHashes, HashWidth, Mode, Payload, crc, ldpc};
 
 use crate::config::OsdMessages;
@@ -97,7 +97,7 @@ pub fn plausible(message: &Message, rule: OsdMessages, hashes: &CallsignHashes) 
     if rule == OsdMessages::Any {
         return true;
     }
-    let Message::Standard { to, de, .. } = message else {
+    let Message::Standard { to, de, exchange } = message else {
         return false;
     };
     let Station::Call(de) = de else { return false };
@@ -111,6 +111,7 @@ pub fn plausible(message: &Message, rule: OsdMessages, hashes: &CallsignHashes) 
     }
     match rule {
         OsdMessages::StandardKnown => known(de, hashes) || to.is_some_and(|c| known(c, hashes)),
+        OsdMessages::StandardHf => !matches!(exchange, Exchange::Grid { ack: true, .. }),
         _ => true,
     }
 }
@@ -166,6 +167,24 @@ mod tests {
         }
         for bad in ["Q1ABC", "QA1XYZ", "0S1A", "1B1AB", "1Z9A", "0A1BC"] {
             assert!(!plausible_callsign(&call(bad)), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_hf_rule_rejects_r_before_a_locator() {
+        let hashes = CallsignHashes::new();
+        let check = |text: &str, rule| plausible(&Message::parse(text).expect(text), rule, &hashes);
+        for ok in [
+            "CQ K1ABC FN42",
+            "K1ABC W9XYZ R-15",
+            "G4ABC/P PA9XYZ JO22",
+            "K1ABC W9XYZ/R EN61",
+        ] {
+            assert!(check(ok, OsdMessages::StandardHf), "{ok}");
+        }
+        for bad in ["K1ABC W9XYZ R EN61", "G4ABC/P PA9XYZ R JO22"] {
+            assert!(check(bad, OsdMessages::Standard), "{bad}");
+            assert!(!check(bad, OsdMessages::StandardHf), "{bad}");
         }
     }
 }
