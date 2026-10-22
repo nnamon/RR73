@@ -4,6 +4,7 @@
   import { href } from '../lib/app/router.svelte';
   import { normaliseExchange, normaliseMinutes, settings, updateSettings } from '../lib/state/settings.svelte';
   import { features } from '../lib/state/features.svelte';
+  import { readExchange, sentExchange } from '../lib/qso/exchange';
 
   let watchdogMin = $state(String(settings.watchdogMin));
   $effect(() => {
@@ -23,6 +24,20 @@
   let serial = $state(String(settings.exchangeSerial));
   $effect(() => {
     serial = String(settings.exchangeSerial);
+  });
+
+  // What the exchange sends in each format, as on air, for a station heard at −10 dB.
+  const FORMATS = [
+    ['fd', 'Class and section'],
+    ['ru', 'Report and state or serial'],
+    ['vhf', 'Report, serial and grid'],
+  ] as const;
+  const preview = $derived.by(() => {
+    const parts = readExchange(exchange);
+    return FORMATS.map(([f, label]) => {
+      const r = sentExchange(f, parts, { serial: settings.exchangeSerial, snrDb: -10, grid: settings.grid });
+      return { f, label, text: 'ok' in r ? r.ok.text : r.missing, ok: 'ok' in r };
+    });
   });
 
   function saveExchange() {
@@ -138,10 +153,18 @@
           autocomplete="off"
           spellcheck="false"
           maxlength="20"
-          placeholder="Optional"
+          placeholder="Class section, state or #"
           aria-label="Custom exchange"
         />
       </label>
+      {#if exchange.trim()}
+        {#each preview as p (p.f)}
+          <div class="row" data-testid="exchange-{p.f}">
+            <span class="row-main"><span class="row-title">{p.label}</span></span>
+            <span class="row-value mono" class:missing={!p.ok}>{p.text}</span>
+          </div>
+        {/each}
+      {/if}
       {#if settings.exchange}
         <label class="row">
           <span class="row-title">Next serial number</span>
@@ -158,7 +181,7 @@
         </label>
       {/if}
     </div>
-    <p class="section-foot">As said on air: class and section, state or province, or # for serial numbers.</p>
+    <p class="section-foot">Used when a station sends an exchange or calls CQ FD or CQ RU.</p>
   </div>
 
   <div class="section">
@@ -185,6 +208,11 @@
 </section>
 
 <style>
+  /* A format the exchange cannot fill yet: what it lacks, in the warning colour. */
+  .row-value.missing {
+    color: var(--rr-warn);
+  }
+
   .sub {
     padding-top: var(--rr-safe-top);
   }

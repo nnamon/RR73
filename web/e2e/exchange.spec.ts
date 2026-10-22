@@ -20,6 +20,10 @@ test('Custom exchange answers CQ FD with the exchange, sends RR73 after theirs a
   await field.fill('6a wi');
   await field.press('Enter');
   await expect(field).toHaveValue('6A WI');
+  // The preview shows what goes on air in each format, for a station at −10 dB.
+  await expect(page.getByTestId('exchange-fd')).toContainText('6A WI');
+  await expect(page.getByTestId('exchange-ru')).toContainText('579 WI');
+  await expect(page.getByTestId('exchange-vhf')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Next serial number' })).toHaveValue('1');
   await page.getByRole('link', { name: 'Settings' }).click();
   await page.getByRole('link', { name: 'Operate' }).click();
