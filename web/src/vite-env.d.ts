@@ -18,3 +18,9 @@ declare module 'virtual:notices' {
   const text: string;
   export default text;
 }
+
+declare module 'virtual:guide' {
+  /** docs/guide: each page's file name without `.md`, to its Markdown. Empty when the directory is missing. */
+  const pages: Record<string, string>;
+  export default pages;
+}

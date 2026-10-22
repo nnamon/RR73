@@ -90,6 +90,7 @@ test('screen files are interface sources and the changelog', () => {
   assert.equal(isScreenFile('web/src/views/Settings.svelte'), true);
   assert.equal(isScreenFile('web/src/lib/log/wavelog.ts'), true);
   assert.equal(isScreenFile('web/src/lib/log/wavelog.test.ts'), false);
+  assert.equal(isScreenFile('docs/guide/making-qsos.md'), true);
   assert.equal(isScreenFile('docs/bench.md'), false);
   assert.equal(isScreenFile('AGENTS.md'), false);
 });

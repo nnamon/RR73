@@ -49,9 +49,9 @@ const ERROR_RULES = [
 ];
 
 /**
- * Errors for text that reaches the screen: interface strings in web/src, and CHANGELOG.md, which
- * the app shows as Version history. Documents may name components and quote measurements as tools
- * print them; the screen may not.
+ * Errors for text that reaches the screen: interface strings in web/src, CHANGELOG.md, which
+ * the app shows as Version history, and docs/guide, which it shows as the Guide. Documents may
+ * name components and quote measurements as tools print them; the screen may not.
  */
 const SCREEN_RULES = [
   {
@@ -451,9 +451,9 @@ export function stripQuoted(line) {
   return line.replace(/"[^"\n]*"|\u201c[^\u201d\n]*\u201d/g, (m) => ' '.repeat(m.length));
 }
 
-/** True for files whose text reaches the screen. */
+/** True for files whose text reaches the screen: the changelog (Version history), the guide (Settings › Guide) and the interface sources. */
 export function isScreenFile(rel) {
-  return rel === 'CHANGELOG.md' || (/^web\/src\/.*\.(svelte|ts)$/.test(rel) && !rel.endsWith('.test.ts'));
+  return rel === 'CHANGELOG.md' || /^docs\/guide\/[^/]+\.md$/.test(rel) || (/^web\/src\/.*\.(svelte|ts)$/.test(rel) && !rel.endsWith('.test.ts'));
 }
 
 export function lintText(prose, file, { screen = false, source = false } = {}) {

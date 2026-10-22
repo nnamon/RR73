@@ -1,7 +1,7 @@
 import { defineConfig, type Plugin } from 'vite';
 import { svelte } from '@sveltejs/vite-plugin-svelte';
 import { VitePWA } from 'vite-plugin-pwa';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string };
@@ -32,6 +32,33 @@ function repoText(id: string, path: string): Plugin {
   };
 }
 
+/**
+ * Serves the Markdown files of a repository directory as the module `id`: an object from each
+ * file's name without `.md` to its text, read on every load. docs/guide becomes the Guide in
+ * Settings, bundled so it reads offline.
+ */
+function repoDir(id: string, path: string): Plugin {
+  const resolved = `\0${id}`;
+  const dir = fileURLToPath(new URL(`../${path}`, import.meta.url));
+  return {
+    name: `rr73-${id.replace('virtual:', '')}`,
+    resolveId: (source) => (source === id ? resolved : null),
+    load(source) {
+      if (source !== resolved) return null;
+      const pages: Record<string, string> = {};
+      if (existsSync(dir)) {
+        this.addWatchFile(dir);
+        for (const name of readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) {
+          const file = `${dir}/${name}`;
+          this.addWatchFile(file);
+          pages[name.slice(0, -3)] = readFileSync(file, 'utf8');
+        }
+      }
+      return `export default ${JSON.stringify(pages)};`;
+    },
+  };
+}
+
 export default defineConfig({
   base,
   define: {
@@ -42,6 +69,7 @@ export default defineConfig({
     svelte(),
     repoText('virtual:changelog', 'CHANGELOG.md'),
     repoText('virtual:notices', 'THIRD_PARTY_NOTICES.md'),
+    repoDir('virtual:guide', 'docs/guide'),
     VitePWA({
       // A new version installs and waits; the app lets it take over at a safe moment and reloads
       // (src/lib/app/update.svelte.ts registers the worker). Taking over at once (autoUpdate)

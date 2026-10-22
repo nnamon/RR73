@@ -425,6 +425,10 @@
   <div class="section">
     {#if !one}<h2 class="section-head">About</h2>{/if}
     <div class="group">
+      <a class="row link" href={href('settings', 'guide')}>
+        <span class="row-main"><span class="row-title">Guide</span></span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
       <a class="row link" href={href('settings', 'versions')}>
         <span class="row-main"><span class="row-title">Version history</span></span>
         <span class="row-value">{__APP_VERSION__}</span>

@@ -28,6 +28,8 @@
   import Spots from './views/Spots.svelte';
   import VersionHistory from './views/VersionHistory.svelte';
   import Credits from './views/Credits.svelte';
+  import Guide from './views/Guide.svelte';
+  import GuidePage from './views/GuidePage.svelte';
   import WavelogSettings from './views/WavelogSettings.svelte';
   import { go, redirectOf, replace, route, tabOf } from './lib/app/router.svelte';
   import { layout, split } from './lib/app/layout.svelte';
@@ -103,7 +105,7 @@
       document.title = `${h1?.textContent?.trim() || TITLES[tab]} · RR73`;
       if (initial) return;
       if (reloadIfIdle(busy())) return;
-      if (h1 instanceof HTMLElement && !path.startsWith('settings/versions/')) {
+      if (h1 instanceof HTMLElement && !path.startsWith('settings/versions/') && !/^settings\/guide\/[^/]+\/./.test(path)) {
         h1.setAttribute('tabindex', '-1');
         h1.focus({ preventScroll: true });
       }
@@ -111,8 +113,8 @@
   });
 
   // A screen opened from another starts at the top, as on iOS. Going back returns to where the
-  // earlier screen was. Settings › Optional features and a version opened from the update notice
-  // scroll to their own place, as does Radio and audio opened at Timing by the Clock badge.
+  // earlier screen was. Settings › Optional features, a version opened from the update notice and a
+  // section of a guide page scroll to their own place, as does Radio and audio opened at Timing by the Clock badge.
   const scrolls = new Map<string, number>();
   let scrollNow = 0;
   let shownPath = route.path.join('/');
@@ -123,7 +125,8 @@
     shownPath = path;
     scrolls.set(prev, scrollNow);
     const back = prev.startsWith(`${path}/`);
-    const own = path === 'settings/features' || path === 'settings/radio/timing' || (path.startsWith('settings/versions/') && path !== 'settings/versions');
+    const own =
+      path === 'settings/features' || path === 'settings/radio/timing' || (path.startsWith('settings/versions/') && path !== 'settings/versions') || /^settings\/guide\/[^/]+\/./.test(path);
     // Effects run after the DOM update and before paint, so the new screen never shows at the old
     // offset and anything measuring it afterwards sees the final position.
     const pane = document.querySelector<HTMLElement>('main .pane.scroll');
@@ -243,6 +246,10 @@
     <VersionHistory focus={route.path[2] ?? null} />
   {:else if sub === 'credits'}
     <Credits />
+  {:else if sub === 'guide' && route.path[2]}
+    <GuidePage slug={route.path[2]} focus={route.path[3] ?? null} />
+  {:else if sub === 'guide'}
+    <Guide />
   {:else}
     <Settings section={sub} />
   {/if}

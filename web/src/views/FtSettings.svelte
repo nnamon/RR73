@@ -1,6 +1,7 @@
 <script lang="ts">
   /** Settings › FT8 and FT4: the sequencer's settings (ADR 0006). */
   import BackLink from '../ui/BackLink.svelte';
+  import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
   import { normaliseExchange, normaliseMinutes, settings, updateSettings } from '../lib/state/settings.svelte';
   import { features } from '../lib/state/features.svelte';
@@ -201,6 +202,10 @@
           <span class="row-value mono">{g.example}</span>
         </div>
       {/each}
+      <a class="row link" href={href('settings', 'guide', 'contest-exchange')}>
+        <span class="row-main"><span class="row-title">How it works</span></span>
+        <Icon name="chevright" size={13} class="row-chevron" />
+      </a>
     </div>
   </div>
 
@@ -228,6 +233,10 @@
 </section>
 
 <style>
+  .link {
+    color: var(--rr-label);
+  }
+
   /* A format the exchange cannot fill yet: what it lacks, in the warning colour. */
   .row-value.missing {
     color: var(--rr-warn);
