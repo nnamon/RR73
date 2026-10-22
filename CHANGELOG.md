@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- In the desktop app, Settings › Radio and audio › Timing chooses the time server and can turn the clock correction off.
+
 ## 0.27.0 · 2026-10-22
 
 - Settings › About › Guide has 13 pages on using RR73, readable offline. Contest exchange in Settings › FT8 and FT4 links to its page.

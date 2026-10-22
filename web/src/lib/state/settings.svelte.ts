@@ -197,6 +197,10 @@ export interface Settings {
   sortDecodes: boolean;
   /** Moves each transmission by the clock error measured from decodes (calibration.ts clockS). */
   txClockFix: boolean;
+  /** Desktop app: measure the clock against a time server and correct slot and Tx timing by it. */
+  ntpOn: boolean;
+  /** Desktop app: the NTP server; empty for the public pool (desktop/src/lib.rs NTP_SERVER). */
+  ntpServer: string;
   /** Settings › Decode colours shows the legend in place of the Highlight and Text lists. */
   colourLegend: boolean;
   /** FT8 and FT4 decoding: deep runs the later stages after the first (decision 0007); fast stops after the first, for a slow device. */
@@ -263,6 +267,8 @@ export const DEFAULTS: Settings = {
   waterfallCalls: false,
   sortDecodes: false,
   txClockFix: false,
+  ntpOn: true,
+  ntpServer: '',
   colourLegend: false,
   decodeDepth: 'deep',
   aPriori: true,
@@ -460,6 +466,8 @@ export function validate(raw: unknown): Settings {
   if (typeof r.waterfallCalls === 'boolean') s.waterfallCalls = r.waterfallCalls;
   if (typeof r.sortDecodes === 'boolean') s.sortDecodes = r.sortDecodes;
   if (typeof r.txClockFix === 'boolean') s.txClockFix = r.txClockFix;
+  if (typeof r.ntpOn === 'boolean') s.ntpOn = r.ntpOn;
+  if (typeof r.ntpServer === 'string') s.ntpServer = r.ntpServer.trim().slice(0, 253);
   if (typeof r.colourLegend === 'boolean') s.colourLegend = r.colourLegend;
   if (r.decodeDepth === 'deep' || r.decodeDepth === 'fast') s.decodeDepth = r.decodeDepth;
   if (typeof r.aPriori === 'boolean') s.aPriori = r.aPriori;

@@ -30,7 +30,7 @@ Settings › Radio and audio › Timing shows:
 - Decode time: how long the last slot took to decode, and the time 95% of slots decode within.
 - Slots not decoded: slots skipped while the decoder was busy.
 - Phone clock, or Computer clock: how far off the clock is by the decodes.
-- Time server, in the desktop app: the clock against the time server.
+- Correct with time server and Time server, in the desktop app: the clock against the time server.
 - Correct Tx timing.
 - Median DT of the strong decodes.
 - Input offset on receive audio.
@@ -41,6 +41,9 @@ Copy timing report copies all of it as text.
 
 ## The desktop app's time server
 
-The desktop app measures the computer's clock against the public NTP pool at start and every 10 min. A good measurement corrects the time RR73 uses. Time server, in Timing, shows how far off the computer's clock is and that it is corrected. With no reply it reads No reply, clock not corrected, and the system time stands.
+The desktop app measures the computer's clock against a time server at start and every 10 min. A good measurement corrects the time RR73 uses. Correct with time server, in Timing, shows how far off the computer's clock is and that it is corrected. With no reply it reads No reply, clock not corrected, and the system time stands.
+
+- Time server takes the address of an NTP server, such as a club's or your network's. Empty, RR73 uses the public NTP pool.
+- Turn Correct with time server off to use the computer's clock as it is. RR73 then contacts no time server.
 
 The Clock badge and Correct Tx timing work on the corrected time.

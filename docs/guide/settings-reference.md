@@ -47,6 +47,7 @@ Every setting, by the screen it is on. Defaults are given where a setting has on
 - Start chime: a tone when audio starts, which keys the radio by VOX. On by default.
 - Before you transmit: a checklist to tick as you set up the device. [Your radio](your-radio.md#iphone-and-vox)
 - Correct Tx timing: moves each transmission by the clock error in the decodes. Off by default. [Timing](timing.md#correct-tx-timing)
+- Correct with time server and Time server: in the desktop app, the clock against an NTP server, the public pool when empty. On by default. [Time server](timing.md#the-desktop-app-s-time-server)
 
 ## Rig control
 

@@ -20,7 +20,7 @@
   import { Device, device } from '../lib/app/platform';
   import { isDesktop } from '../lib/app/desktop';
   import { ntpText } from '../lib/clock/utc';
-  import { ntp } from '../lib/state/desktop.svelte';
+  import { ntp, restartClock } from '../lib/state/desktop.svelte';
 
   let devices = $state<MediaDeviceInfo[]>([]);
   let outputs = $state<MediaDeviceInfo[]>([]);
@@ -150,6 +150,12 @@
   });
   // The desktop app's clock against the time server (lib/state/desktop.svelte.ts).
   const desktop = isDesktop();
+  let ntpServer = $state(settings.ntpServer);
+  function saveNtpServer() {
+    const v = ntpServer.trim();
+    ntpServer = v;
+    if (v !== settings.ntpServer) void updateSettings({ ntpServer: v }).then(restartClock);
+  }
   const ntpRowText = $derived(ntp.sample ? `${ntpText(ntp.sample)}, corrected` : ntp.failed ? 'No reply, clock not corrected' : 'Measuring');
   const clockRowText = $derived(timing.clockS === null ? 'Waiting for strong decodes' : `${clockText(timing.clockS)} by the decodes`);
   // The clock warning: what it means on the air and how to set the clock.
@@ -411,9 +417,28 @@
         <span class="row-main"><span class="row-title">{Device} clock</span><span class="row-sub" class:off={clockFoot !== null} data-testid="timing-clock">{clockRowText}</span></span>
       </div>
       {#if desktop}
-        <div class="row">
-          <span class="row-main"><span class="row-title">Time server</span><span class="row-sub" class:off={ntp.failed && !ntp.sample} data-testid="timing-ntp">{ntpRowText}</span></span>
-        </div>
+        <label class="row">
+          <span class="row-main"><span class="row-title">Correct with time server</span>{#if settings.ntpOn}<span class="row-sub" class:off={ntp.failed && !ntp.sample} data-testid="timing-ntp">{ntpRowText}</span>{/if}</span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.ntpOn} onchange={(e) => void updateSettings({ ntpOn: e.currentTarget.checked }).then(restartClock)} />
+        </label>
+        {#if settings.ntpOn}
+          <label class="row">
+            <span class="row-title">Time server</span>
+            <input
+              class="field"
+              type="text"
+              bind:value={ntpServer}
+              onblur={saveNtpServer}
+              onkeydown={(e) => e.key === 'Enter' && (e.currentTarget as HTMLInputElement).blur()}
+              autocapitalize="none"
+              autocomplete="off"
+              spellcheck="false"
+              inputmode="url"
+              placeholder="Public pool"
+              aria-label="Time server"
+            />
+          </label>
+        {/if}
       {/if}
       <label class="row">
         <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">From the clock error in decodes</span></span>

@@ -67,12 +67,11 @@ A new measurement moves the audio clock's mapping by the change in offset. The m
 - Port loss when a cable is pulled is Unverified on each system: the reader expects a failed read or end of file. On Linux a test opens a pseudo-terminal as the radio through the same code (`desktop/src/system.rs`): bytes go both ways, and closing the other end gives `lost`.
 - Fetches from the app's origin (`tauri://localhost` on macOS and Linux, `http://tauri.localhost` on Windows) meet the same CORS rules as the PWA's origin, with a different origin. Services that allow only the PWA's origin refuse them. Unverified for Wavelog, PSK Reporter and the relay.
 - The Linux build links the system's GTK and WebKitGTK (LGPL) and, through `serialport`, libudev (LGPL), all dynamically. The AppImage bundles GTK and WebKitGTK. No LGPL code is read or copied into the repository.
-- The NTP server sees the computer's address every 10 minutes. There is no setting to turn the clock measurement off or to choose the server yet.
+- The NTP server sees the computer's address every 10 minutes. Settings › Radio and audio › Timing chooses the server (the public pool when empty) and turns the measurement off.
 - macOS and Windows builds come from CI only; they have not been opened on a device. The Linux arm64 build was started under Xvfb in Docker: Operate and Settings render, Time server showed a measured offset, and Connect radio listed the container's serial ports in the port chooser.
 
 ## Phase 2
 
-- A setting for the NTP server, and one to turn the measurement off.
 - Updates: the Tauri updater with a signing key, or a notice of a newer release.
 - Signing and notarisation once certificates exist.
 - Playwright runs against the desktop build, and a device check on each system with an IC-705 and a KX2.
