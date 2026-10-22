@@ -236,7 +236,7 @@
     const l = live;
     live = null;
     if (p.g === 'drag' && l) set(l.which, l.hz);
-    else if (p.g === 'pending' && isTap(e.clientX - p.x0, e.clientY - p.y0, e.timeStamp - p.t0)) set('tx', dragHz(at(e), width, mode));
+    else if (p.g === 'pending' && isTap(e.clientX - p.x0, e.clientY - p.y0, e.timeStamp - p.t0)) set(e.shiftKey && rxHz !== null ? 'rx' : 'tx', dragHz(at(e), width, mode));
   }
 
   function cancel(e: PointerEvent) {

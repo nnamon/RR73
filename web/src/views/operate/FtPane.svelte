@@ -52,9 +52,12 @@
 
   type RowItem = Extract<ListItem, { kind: 'row' }>;
   const asSelected = (i: RowItem): Selected => ({ decode: i.row.decode, slotStartMs: i.slotStartMs, id: i.id });
-  // Our own rows say what we sent; selecting one selects the station we sent it to.
+  // Our own rows say what we sent; selecting one selects the station we sent it to. Selecting a
+  // received decode moves Rx to its frequency; clearing the selection leaves Rx where it is.
   function onselect(i: RowItem) {
+    const clearing = qso.selected?.id === i.id;
     tapRow(asSelected(i));
+    if (!clearing && !i.out && i.row.mark !== 'sent') setFrequencies({ rxHz: i.row.decode.freq_hz });
   }
   function oncall(i: RowItem) {
     callStation(i.row.decode, i.slotStartMs);

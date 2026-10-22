@@ -1,6 +1,7 @@
 /**
  * Moving Tx and Rx on the waterfall by touch: which marker a press takes, when a press becomes a
- * drag, a tap or a page scroll, and the frequency under the finger.
+ * drag, a tap or a page scroll, and the frequency under the finger. A tap sets Tx; with Shift
+ * held, a click sets Rx (Waterfall.svelte).
  */
 
 import type { Mode } from '../clock/slots';

@@ -101,6 +101,37 @@ test('a tap sets Tx where it lands, and a drag from the green line moves Rx', as
   await expect(slider(page, 'Transmit')).toHaveValue(String(tap.hz));
   const rx = (await page.getByTestId('rx-marker').boundingBox())!;
   expect(Math.abs(rx.x + 1 - (b.x + (b.width * to.hz) / 3000))).toBeLessThanOrEqual(1.5);
+
+  // Shift-click sets Rx where it lands and leaves Tx.
+  const shift = at(b, 2500);
+  await page.keyboard.down('Shift');
+  await page.mouse.click(shift.x, y);
+  await page.keyboard.up('Shift');
+  await expect(slider(page, 'Receive')).toHaveValue(String(shift.hz));
+  await expect(slider(page, 'Transmit')).toHaveValue(String(tap.hz));
+});
+
+test('selecting a decode moves Rx to its frequency and leaves Tx', async ({ page }) => {
+  await page.goto('./#/settings');
+  const field = page.getByRole('textbox', { name: 'Callsign' });
+  await field.fill('9V1NE');
+  await field.press('Enter');
+  await page.goto('./#/operate');
+  await page.waitForFunction(() => !!window.__rr73);
+  await page.evaluate(() => {
+    const slot = Math.floor(Date.now() / 15_000) * 15_000 - 15_000;
+    window.__rr73!.decoded(slot, [{ text: 'CQ JA1KXM PM95', freq_hz: 2210, dt_s: 0.1, snr_db: -8 }]);
+  });
+  const row = page.getByTestId('decode-list').locator('button.dr', { hasText: 'CQ JA1KXM PM95' }).first();
+  const tx = await slider(page, 'Transmit').inputValue();
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed', 'true');
+  await expect(slider(page, 'Receive')).toHaveValue('2210');
+  await expect(slider(page, 'Transmit')).toHaveValue(tx);
+  // A second click clears the selection; Rx stays where the selection put it.
+  await row.click();
+  await expect(row).toHaveAttribute('aria-pressed', 'false');
+  await expect(slider(page, 'Receive')).toHaveValue('2210');
 });
 
 test('a vertical movement and a cancelled drag change nothing', async ({ page }) => {
