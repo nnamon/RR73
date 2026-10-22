@@ -1383,7 +1383,7 @@ describe('messages and planning', () => {
   });
 });
 
-describe('Custom exchange', () => {
+describe('Contest exchange', () => {
   const fd = { exchange: '6A WI' };
 
   it('answers CQ FD with the exchange at once, RR73 after theirs, and logs both exchanges', () => {
@@ -1533,7 +1533,7 @@ describe('Custom exchange', () => {
     expect(s.notices().at(-1)).toMatchObject({ kind: 'lost', text: 'K1ABC answered W9XYZ' });
   });
 
-  it('with Custom exchange empty, behaves as before: CQ FD gets Tx1 and exchanges go unanswered', () => {
+  it('with Contest exchange empty, behaves as before: CQ FD gets Tx1 and exchanges go unanswered', () => {
     const a = new Sim();
     a.call(1, 'CQ FD K1ABC FN42');
     a.run(2, 2);

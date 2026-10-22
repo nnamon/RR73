@@ -114,7 +114,7 @@ export interface SeqConfig {
    */
   hound: boolean;
   /**
-   * Custom exchange, as the operator says it on the air ("6A WI", "WI", "#"). Empty or absent:
+   * Contest exchange, as the operator says it on the air ("6A WI", "WI", "#"). Empty or absent:
    * standard messages only, whatever other stations send.
    */
   exchange?: string;
@@ -392,7 +392,7 @@ export function notReady(st: SeqState): string | null {
   const c = st.config;
   if (!c.myCall.trim() || !isGrid(c.myGrid)) return STATUS.setUp;
   if (!st.audioOk) return STATUS.audioOff;
-  // Tx2 and Tx3 in an exchange format stay empty while Custom exchange lacks a part.
+  // Tx2 and Tx3 in an exchange format stay empty while Contest exchange lacks a part.
   const x = ourExchange(st);
   if (x && 'missing' in x && (st.current === 2 || st.current === 3)) return x.missing;
   return null;
@@ -518,7 +518,7 @@ class Machine {
     return SLOT_MS[this.cfg.mode];
   }
 
-  /** Reads a decoded message: with Custom exchange set, the exchange formats too. */
+  /** Reads a decoded message: with Contest exchange set, the exchange formats too. */
   read(text: string): Exchange {
     return parseExchange(text, exchangeOn(this.cfg.exchange));
   }
@@ -1274,7 +1274,7 @@ class Machine {
     st.phase = 'answering';
     st.txEnabled = true;
     st.lastSent = null;
-    // With Custom exchange set, a CQ that names a format (CQ FD, CQ RU) or a station sending one
+    // With Contest exchange set, a CQ that names a format (CQ FD, CQ RU) or a station sending one
     // gets our exchange at once.
     if (exchangeOn(this.cfg.exchange)) this.setFormat(ex.kind === 'cq' ? cqFormat(ex.modifier) : (ex.format ?? st.partner!.format ?? 'standard'));
     const addressed = sameCall(ex.to, me) ? this.reply(ex, e.nowMs) : null;
@@ -1541,7 +1541,7 @@ export function reduce(state: SeqState, e: SeqEvent): SeqResult {
       // Only a change to the message text plans the transmission again; Settings sends every
       // value whenever one changes, and a new plan would replace a transmission about to start.
       if (st.next && !st.onAir && st.current && (changed('myCall') || changed('myGrid') || changed('ack') || changed('cqModifier') || changed('exchange'))) m.plan(st.current, e.nowMs);
-      // A message left empty for want of a Custom exchange part goes out once the part is there.
+      // A message left empty for want of a Contest exchange part goes out once the part is there.
       else if (!st.next && !st.onAir && st.current && st.txEnabled && !st.paused && st.partner && (changed('exchange') || changed('myGrid') || changed('serial'))) m.plan(st.current, e.nowMs);
       m.flush();
       break;

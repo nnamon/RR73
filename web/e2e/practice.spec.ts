@@ -303,10 +303,10 @@ test('Worked stations seeds the practice log only: its dupes take the dupe edge,
   expect(await callsInLog(page, 'rr73')).toEqual(['VK2ESN']);
 });
 
-test('Contest exchanges: Custom exchange answers a CQ FD on the band, and the QSO is logged with both exchanges', async ({ page }) => {
+test('Contest exchanges: Contest exchange answers a CQ FD on the band, and the QSO is logged with both exchanges', async ({ page }) => {
   test.setTimeout(200_000);
   await page.goto('./#/settings/ft8');
-  const field = page.getByRole('textbox', { name: 'Custom exchange' });
+  const field = page.getByRole('textbox', { name: 'Contest exchange' });
   await field.fill('6A WI');
   await field.press('Enter');
   await expect(field).toHaveValue('6A WI');

@@ -148,7 +148,7 @@ export interface MessageParts {
   /** CQ modifier for Tx6, such as POTA. */
   cqModifier: string | null;
   /**
-   * Tx2 and Tx3 in an exchange format: its words after the callsigns, or '' when Custom exchange
+   * Tx2 and Tx3 in an exchange format: its words after the callsigns, or '' when Contest exchange
    * lacks a part, which leaves both empty. Absent or null: standard reports.
    */
   exchange?: { format: Exclude<Format, 'standard'>; text: string } | null;

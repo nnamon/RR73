@@ -1,5 +1,5 @@
 /**
- * Custom exchange (Settings › FT8 and FT4): the text the operator would say on the air, such as
+ * Contest exchange (Settings › FT8 and FT4): the text the operator would say on the air, such as
  * "6A WI", "WI" or "#" for a serial number, read into the parts each FT8 and FT4 exchange format
  * needs (docs/design/sequencer.md, Exchange formats). The formats are the codec's message types:
  * 0.3 and 0.4 (class and section), 3 (report with state, province or serial number) and 5
@@ -35,7 +35,7 @@ export const STATES: readonly string[] = [
 /** Highest serial number of type 3 (the codec's RoundupExchange::MAX_SERIAL) and of type 5. */
 export const MAX_SERIAL: Record<'ru' | 'vhf', number> = { ru: 7999, vhf: 2047 };
 
-/** The parts found in the Custom exchange text. */
+/** The parts found in the Contest exchange text. */
 export interface ExchangeParts {
   /** Transmitters and class, such as "6A": 1 to 32 and A to H. */
   fdClass: string | null;
@@ -49,7 +49,7 @@ export interface ExchangeParts {
 
 const CLASS = /^(\d{1,2})([A-H])$/;
 
-/** Reads the Custom exchange text. Words that fit no part are ignored. */
+/** Reads the Contest exchange text. Words that fit no part are ignored. */
 export function readExchange(text: string): ExchangeParts {
   const words = text.trim().toUpperCase().split(/\s+/).filter(Boolean);
   const cls = words.find((w) => {
@@ -65,7 +65,7 @@ export function readExchange(text: string): ExchangeParts {
   };
 }
 
-/** True when the Custom exchange holds anything: the formats are on. */
+/** True when the Contest exchange holds anything: the formats are on. */
 export function exchangeOn(text: string | undefined | null): boolean {
   return !!text && text.trim().length > 0;
 }

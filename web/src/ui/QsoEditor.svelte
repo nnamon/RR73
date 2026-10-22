@@ -384,7 +384,7 @@
         </label>
       {/if}
       {#if numberRows}
-        <!-- RTTY's contest set sends serial numbers; FT8 and FT4 store the exchange as sent and received (Custom exchange). -->
+        <!-- RTTY's contest set sends serial numbers; FT8 and FT4 store the exchange as sent and received (Contest exchange). -->
         <label class="row">
           <span class="row-title">{numbers ? 'Number sent' : 'Exchange sent'}</span>
           <input class="row-field mono up" bind:value={stx} inputmode={numbers ? 'numeric' : 'text'} autocapitalize="characters" autocomplete="off" spellcheck="false" maxlength={numbers ? 6 : 20} placeholder="Optional" />

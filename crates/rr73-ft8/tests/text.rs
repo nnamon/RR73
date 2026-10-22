@@ -160,7 +160,7 @@ fn display_writes_exactly_what_unpack_returns() {
     assert_eq!(m.to_string(), "QRZ <PJ4/K1ABC>");
 }
 
-/// The exchange messages the app's sequencer builds from Custom exchange pack and unpack back
+/// The exchange messages the app's sequencer builds from Contest exchange pack and unpack back
 /// to the same text, with the callsigns resolved from the packing station's hash table.
 #[test]
 fn custom_exchange_messages_round_trip() {

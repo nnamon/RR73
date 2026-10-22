@@ -142,7 +142,7 @@
   <div class="section">
     <div class="group">
       <label class="row">
-        <span class="row-title">Custom exchange</span>
+        <span class="row-title">Contest exchange</span>
         <input
           class="field mono exch"
           type="text"
@@ -154,7 +154,7 @@
           spellcheck="false"
           maxlength="20"
           placeholder="Class section, state or #"
-          aria-label="Custom exchange"
+          aria-label="Contest exchange"
         />
       </label>
       {#if exchange.trim()}

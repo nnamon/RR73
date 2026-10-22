@@ -1,4 +1,4 @@
-// A QSO in an exchange format end to end in Chromium, with Custom exchange set in Settings ›
+// A QSO in an exchange format end to end in Chromium, with Contest exchange set in Settings ›
 // FT8 and FT4. The other station's CQ FD and its exchange arrive through the test hooks
 // (src/lib/testing/e2e-hooks.ts); the app's output is recorded in the page (tap.ts) and decoded
 // in Node with the app's own decoder. The QSO lands in the Log with both exchanges and goes to a
@@ -9,13 +9,13 @@ import { loadWasm } from './wasm';
 import { mockWavelog, seed, wavelogOnly } from './log-data';
 import { prepare, waitForSlotPhase, waitForTransmissions } from './txhelp';
 
-test('Custom exchange answers CQ FD with the exchange, sends RR73 after theirs and logs both', async ({ page }) => {
+test('Contest exchange answers CQ FD with the exchange, sends RR73 after theirs and logs both', async ({ page }) => {
   test.setTimeout(150_000);
   const wavelog = await mockWavelog(page);
   const dock = await prepare(page, (p) => seed(p, wavelogOnly({ sendAutomatically: false })));
 
   await page.goto('./#/settings/ft8');
-  const field = page.getByRole('textbox', { name: 'Custom exchange' });
+  const field = page.getByRole('textbox', { name: 'Contest exchange' });
   await expect(field).toHaveValue('');
   await field.fill('6a wi');
   await field.press('Enter');

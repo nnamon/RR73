@@ -172,7 +172,7 @@ export interface Settings {
   /** Hunt moves on after this many calls without an answer: 1 to 99. */
   huntCalls: number;
   /**
-   * Custom exchange, upper case, as said on the air ("6A WI", "WI", "#" for the serial number).
+   * Contest exchange, upper case, as said on the air ("6A WI", "WI", "#" for the serial number).
    * Empty: standard messages only (lib/qso/exchange.ts).
    */
   exchange: string;
@@ -352,7 +352,7 @@ export function normaliseGrid(s: string): string {
   return g.slice(0, 4).toUpperCase() + g.slice(4, 6).toLowerCase();
 }
 
-/** Custom exchange as stored: upper case, single spaces, at most 20 characters. */
+/** Contest exchange as stored: upper case, single spaces, at most 20 characters. */
 export function normaliseExchange(s: string): string {
   return s.toUpperCase().replace(/\s+/g, ' ').trim().slice(0, 20);
 }

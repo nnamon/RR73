@@ -20,7 +20,7 @@ export const STATUS = {
   watchdog: (min: number) => `Watchdog stopped Tx after ${min} min`,
   watchdogLast: 'Watchdog ends Tx after this QSO',
   encode: 'Message cannot be encoded',
-  /** Custom exchange lacks a part the format of the QSO needs: Tx2 and Tx3 do not go out. */
+  /** Contest exchange lacks a part the format of the QSO needs: Tx2 and Tx3 do not go out. */
   exchangeClass: 'Exchange needs a class',
   exchangeSection: 'Exchange needs a section',
   exchangeClassSection: 'Exchange needs class and section',

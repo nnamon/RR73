@@ -640,7 +640,7 @@ describe('Contest exchanges', () => {
     expect([...seen].sort()).toEqual(['fd', 'grid', 'ru', 'vhf']);
   });
 
-  it('Custom exchange missing a part: nothing goes out to a caller, who keeps sending its exchange', () => {
+  it('Contest exchange missing a part: nothing goes out to a caller, who keeps sending its exchange', () => {
     const s = contest(13, '6A', { cqModifier: 'FD' });
     callCq(s);
     s.run(0, 12);
@@ -651,7 +651,7 @@ describe('Contest exchanges', () => {
     expect(s.sim.logged()).toEqual([]);
   });
 
-  it('without Custom exchange, a CQ FD station gets the grid, answers with its exchange, and nothing is logged', () => {
+  it('without Contest exchange, a CQ FD station gets the grid, answers with its exchange, and nothing is logged', () => {
     const s = contest(14, '');
     s.run(0, 0);
     const cq = cqOf(s, 0, 'FD');

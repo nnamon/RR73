@@ -50,9 +50,9 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 
 ## Exchange formats
 
-Custom exchange, in Settings › FT8 and FT4, is the operator's exchange as said on the air: `6A WI`, `WI`, `#` for a serial number. Empty, the default, the sequencer reads and sends standard messages only, as before. Set, each QSO runs in the format the other station uses, with the codec's message types (`lib/qso/exchange.ts`):
+Contest exchange, in Settings › FT8 and FT4, is the operator's exchange as said on the air: `6A WI`, `WI`, `#` for a serial number. Empty, the default, the sequencer reads and sends standard messages only, as before. Set, each QSO runs in the format the other station uses, with the codec's message types (`lib/qso/exchange.ts`):
 
-| Format | Type | Tx2 | From Custom exchange |
+| Format | Type | Tx2 | From Contest exchange |
 | --- | --- | --- | --- |
 | Class and section | 0.3, 0.4 | `K1ABC 9V1NE 6A WI` | Class (1 to 32, A to H) and an ARRL or RAC section. |
 | Report with state or serial | 3 | `K1ABC 9V1NE 579 WI`, `K1ABC 9V1NE 579 0013` | A state or province, else `#`: serial numbers 1 to 7999. |
@@ -62,7 +62,7 @@ Custom exchange, in Settings › FT8 and FT4, is the operator's exchange as said
 - Tx3 is `R` and the exchange. Tx4 and Tx5 are standard RR73, RRR and 73, with the callsigns in full. Retries, RR73 repeats, the lost station and logging work as in standard QSOs: an exchange counts as a report.
 - The report digit of types 3 and 5 comes from the SNR: 4 dB a step, 7 at −10 dB, 2 to 9.
 - Our exchange is fixed once it first goes into a message, as the report is. The serial number counts up when a QSO that sent one is logged (`serialUsed`), and persists in Settings, where Next serial number changes it. A QSO not logged leaves the number for the next.
-- When Custom exchange lacks a part the format needs, Tx2 and Tx3 stay empty, nothing transmits, and the status line names the part: "Exchange needs a section". Once the part is typed in, the message goes out.
+- When Contest exchange lacks a part the format needs, Tx2 and Tx3 stay empty, nothing transmits, and the status line names the part: "Exchange needs a section". Once the part is typed in, the message goes out.
 - The log stores the exchanges sent and received without the report (`STX`, `SRX`, log.md), the report as on air in `RST_SENT` and `RST_RCVD` (`579`, `57`, empty for class and section), and a type 5 grid as their grid.
 - Type 5 carries both callsigns as hashes. The decoder learns the operator's and the partner's callsigns from the QSO context, so those messages show them.
 - Rejected: a contest mode with a list of contests. The formats come from the messages on the air, and scoring, dupe rules and Cabrillo stay out.
