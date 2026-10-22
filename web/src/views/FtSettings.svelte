@@ -26,6 +26,13 @@
     serial = String(settings.exchangeSerial);
   });
 
+  // What to type for the contests that use FT8 and FT4's exchange formats.
+  const GUIDE = [
+    { title: 'Field Day', sub: 'Class and ARRL section', example: '1D WI' },
+    { title: 'RTTY and FT Roundup', sub: 'State or province, # elsewhere', example: 'WI' },
+    { title: 'European VHF contests', sub: 'Serial number, grid from Station', example: '#' },
+  ];
+
   // What the exchange sends in each format, as on air, for a station heard at −10 dB.
   const FORMATS = [
     ['fd', 'Class and section'],
@@ -140,9 +147,10 @@
 
 
   <div class="section">
+    <h2 class="section-head" id="exchange-head">Contest exchange</h2>
     <div class="group">
       <label class="row">
-        <span class="row-title">Contest exchange</span>
+        <span class="row-title">Exchange</span>
         <input
           class="field mono exch"
           type="text"
@@ -153,7 +161,7 @@
           autocomplete="off"
           spellcheck="false"
           maxlength="20"
-          placeholder="Class section, state or #"
+          placeholder="Empty outside contests"
           aria-label="Contest exchange"
         />
       </label>
@@ -181,7 +189,19 @@
         </label>
       {/if}
     </div>
-    <p class="section-foot">Used when a station sends an exchange or calls CQ FD or CQ RU.</p>
+    <p class="section-foot">Used when a station calls CQ FD or CQ RU, or sends an exchange.</p>
+  </div>
+
+  <div class="section">
+    <h2 class="section-head" id="exchange-guide">What to type</h2>
+    <div class="group" aria-labelledby="exchange-guide">
+      {#each GUIDE as g (g.title)}
+        <div class="row">
+          <span class="row-main"><span class="row-title">{g.title}</span><span class="row-sub">{g.sub}</span></span>
+          <span class="row-value mono">{g.example}</span>
+        </div>
+      {/each}
+    </div>
   </div>
 
   <div class="section">
@@ -243,6 +263,12 @@
 
   .exch {
     text-transform: uppercase;
+  }
+
+  /* The placeholder reads as a hint in the interface font, not as typed exchange. */
+  .exch::placeholder {
+    font-family: var(--rr-sans);
+    text-transform: none;
   }
 
   .unit {
