@@ -4,7 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- FT8 finds 0.7 % more messages on busy bands, measured against WSJT-X on 6 receivers: CQ calls are tried a priori, the last stage tries one more set of soft bits, and false decodes in the VHF contest form `R <locator>` are dropped.
+- FT8 finds 0.7 % more messages on busy bands: CQ calls are tried a priori, the last stage tries one more set of soft bits, and false decodes in the VHF contest form `R <locator>` are dropped.
 
 ## 0.27.1 · 2026-10-22
 
