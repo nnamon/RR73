@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- FT8 finds 0.7 % more messages on busy bands, measured against WSJT-X on 6 receivers: CQ calls are tried a priori, the last stage tries one more set of soft bits, and false decodes in the VHF contest form `R <locator>` are dropped.
+
 ## 0.27.1 · 2026-10-22
 
 - In the desktop app, Settings › Radio and audio › Timing chooses the time server and can turn the clock correction off.

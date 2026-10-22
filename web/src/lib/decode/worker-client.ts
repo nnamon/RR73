@@ -64,6 +64,9 @@ export const PRESET = 'subtract-3-osd2';
  * (docs/experiments/0010-search-refine-subtract.md). It also keeps its tones below 3000 Hz,
  * where the preset searches to 3200 Hz: past a receiver's passband edge its 400 places fill
  * with noise and push weak signals off the list (docs/experiments/0011-band-edge-and-crowding.md).
+ * In FT8 the second also tries soft bits of 1 symbol scored normalised after the preset's 3-symbol
+ * set: 153 more decodes on 1648 recorded slots. In every stage it would add 6 more and 8 more
+ * decodes with unknown callsigns (docs/experiments/0013-multi-site-recordings.md).
  * CI gates them against
  * bench/subtract-3-osd2-deep.json; docs/decisions/0007-deeper-ft8-stages.md has the
  * measurements and the budget.
@@ -71,7 +74,7 @@ export const PRESET = 'subtract-3-osd2';
 export const DEEP: DeepStages = {
   plan: [
     'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ap.my_anywhere=false',
-    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null spectrogram.freq_max_hz=3000',
+    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null spectrogram.freq_max_hz=3000 demod.ft8_extra_sets=[[3,"normalised"],[1,"normalised"]]',
   ].join('; '),
   budgetMs: 2000,
 };
