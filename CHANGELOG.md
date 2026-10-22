@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.26.2 · 2026-10-22
 
 - The practice band has stations off in time and frequency, overlapping stations, multipath fading, changing noise, band openings, compound callsigns and tail-enders.
 - 8 new practice scenarios in •••. Worked stations and New ones add QSOs to the practice log only.
