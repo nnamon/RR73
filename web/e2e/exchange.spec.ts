@@ -52,6 +52,10 @@ test('Contest exchange answers CQ FD with the exchange, sends RR73 after theirs 
   expect(decodeCaptured(wasm, second).map((d) => d.text)).toEqual(['K1ABC 9V1NE RR73']);
   expect(slotOf(second) - slotOf(first)).toBe(2 * SLOT_MS);
   await expect(page.getByTestId('log-notice')).toContainText('Logged K1ABC', { timeout: 20_000 });
+  // Tx waits for their next slot in case they missed RR73; nothing from them ends the QSO.
+  const after = slotOf(second) + SLOT_MS;
+  await page.waitForFunction((end) => Date.now() > end, after + SLOT_MS);
+  await page.evaluate((s) => window.__rr73!.decoded(s, []), after);
   await expect(dock.getByRole('button', { name: 'Tx off' })).toBeVisible();
 
   // Log details show both exchanges.

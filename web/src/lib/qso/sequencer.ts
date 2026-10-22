@@ -1382,8 +1382,9 @@ class Machine {
       p.sentAck = true;
       if (p.rcvdRRpt) {
         this.complete(e.nowMs);
-        // Calling CQ, the next decode decides: a repeated R-report, the next caller or the end.
-        if (st.phase === 'answering' || st.stopAfter || st.watchdogEnding) this.afterQso(e.nowMs, true);
+        // The next decode decides, whether we called CQ or the station: a repeated R-report gets
+        // RR73 again, anything else ends the QSO. Stop after QSO and the watchdog end it now.
+        if (st.stopAfter || st.watchdogEnding) this.afterQso(e.nowMs, true);
       }
     }
     if (sent.tx === 5) this.afterQso(e.nowMs, true);

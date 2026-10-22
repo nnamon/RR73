@@ -52,7 +52,30 @@ describe('answering a CQ', () => {
     expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE RR73']);
     expect(s.logged()).toHaveLength(1);
     expect(s.logged()[0]).toMatchObject({ reportRcvd: '-05', reportSent: '-10' });
+    // Tx stays on for their next slot, in case they missed RR73; with nothing from them it ends.
+    expect(s.st.txEnabled).toBe(true);
+    s.run(5, 5, {});
     expect(s.st.phase).toBe('idle');
+    expect(s.st.txEnabled).toBe(false);
+  });
+
+  it('sends RR73 again on a manual call when the station repeats its R-report, and logs once', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 7, { 3: ['9V1NE JA1KXM R-05'], 5: ['9V1NE JA1KXM R-05'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE RR73', '6:JA1KXM 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st.phase).toBe('idle');
+  });
+
+  it('ends a manual call on their 73 after our RR73', () => {
+    const s = new Sim();
+    s.call(1, 'CQ JA1KXM PM95');
+    s.run(2, 5, { 3: ['9V1NE JA1KXM R-05'], 5: ['9V1NE JA1KXM 73'] });
+    expect(texts(s)).toEqual(['2:JA1KXM 9V1NE OJ11', '4:JA1KXM 9V1NE RR73']);
+    expect(s.logged()).toHaveLength(1);
+    expect(s.st.phase).toBe('idle');
+    expect(s.st.txEnabled).toBe(false);
   });
 
   it('accepts RRR in place of RR73 and sends 73', () => {
@@ -1389,7 +1412,7 @@ describe('Contest exchange', () => {
   it('answers CQ FD with the exchange at once, RR73 after theirs, and logs both exchanges', () => {
     const s = new Sim(fd);
     s.call(1, 'CQ FD K1ABC FN42');
-    s.run(2, 4, { 3: ['9V1NE K1ABC R 2B EMA'] });
+    s.run(2, 5, { 3: ['9V1NE K1ABC R 2B EMA'] });
     expect(texts(s)).toEqual(['2:K1ABC 9V1NE 6A WI', '4:K1ABC 9V1NE RR73']);
     expect(s.logged()).toHaveLength(1);
     expect(s.logged()[0]).toMatchObject({ call: 'K1ABC', reportSent: '', reportRcvd: '', stx: '6A WI', srx: '2B EMA' });

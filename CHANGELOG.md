@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- After RR73 on a station you called, Tx stays on for their next slot. A repeated R-report gets RR73 again, and 73 or nothing turns Tx off.
+
 ## 0.26.4 · 2026-10-22
 
 - Settings › FT8 and FT4 › Contest exchange lists what to type for each kind of contest.
