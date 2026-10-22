@@ -94,6 +94,27 @@ const COUNTRIES: readonly Country[] = [
   { entity: 'Indonesia', prefixes: ['YB'], digit: false, continent: 'OC', fields: ['OI', 'NI'], weight: 1 },
 ];
 
+/**
+ * Entities the band leaves out, for the New ones scenario: CQs from DXCC entities, zones and
+ * grids the practice log does not hold.
+ */
+const RARE: readonly Country[] = [
+  { entity: 'Iceland', prefixes: ['TF'], digit: false, continent: 'EU', fields: ['HP', 'IP'], weight: 1 },
+  { entity: 'Faroe Islands', prefixes: ['OY'], digit: false, continent: 'EU', fields: ['IP'], weight: 1 },
+  { entity: 'Malta', prefixes: ['9H'], digit: false, continent: 'EU', fields: ['JM'], weight: 1 },
+  { entity: 'Cyprus', prefixes: ['5B'], digit: false, continent: 'AS', fields: ['KM'], weight: 1 },
+  { entity: 'Mongolia', prefixes: ['JT'], digit: false, continent: 'AS', fields: ['ON', 'OO'], weight: 1 },
+  { entity: 'Nepal', prefixes: ['9N'], digit: false, continent: 'AS', fields: ['NL'], weight: 1 },
+  { entity: 'Sri Lanka', prefixes: ['4S'], digit: false, continent: 'AS', fields: ['MJ'], weight: 1 },
+  { entity: 'Kenya', prefixes: ['5Z'], digit: false, continent: 'AF', fields: ['KJ'], weight: 1 },
+  { entity: 'Madagascar', prefixes: ['5R'], digit: false, continent: 'AF', fields: ['LH'], weight: 1 },
+  { entity: 'Namibia', prefixes: ['V5'], digit: false, continent: 'AF', fields: ['JG'], weight: 1 },
+  { entity: 'Tonga', prefixes: ['A3'], digit: false, continent: 'OC', fields: ['AG'], weight: 1 },
+  { entity: 'Bolivia', prefixes: ['CP'], digit: false, continent: 'SA', fields: ['FH'], weight: 1 },
+  { entity: 'Greenland', prefixes: ['OX'], digit: false, continent: 'NA', fields: ['GP', 'HP'], weight: 1 },
+  { entity: 'Jamaica', prefixes: ['6Y'], digit: false, continent: 'NA', fields: ['FK'], weight: 1 },
+];
+
 /** Prefixes not issued to practice stations, for reading the operator's continent. */
 const OTHER_PREFIXES: readonly [string, Continent][] = [
   ['9V', 'AS'],
@@ -167,6 +188,117 @@ export function newCallsign(rng: Rng, taken: ReadonlySet<string>, only: (c: Cont
   }
 }
 
+/** The entities the band draws its stations from, as the country file names them. */
+export const BAND_ENTITIES: readonly string[] = COUNTRIES.map((c) => c.entity);
+
+/** The entities of the New ones scenario, which the band otherwise leaves out. */
+export const RARE_ENTITIES: readonly string[] = RARE.map((c) => c.entity);
+
+function callOf(rng: Rng, c: Country, taken: ReadonlySet<string>): Callsign {
+  for (;;) {
+    const prefix = rng.pick(c.prefixes);
+    let call = `${prefix}${areaAndSuffix(rng, c, prefix)}`;
+    for (const again = new Rng(hash(call)); c.avoid?.test(call); ) call = `${prefix}${areaAndSuffix(again, c, prefix)}`;
+    if (taken.has(call)) continue;
+    return { call, grid: `${rng.pick(c.fields)}${rng.int(0, 9)}${rng.int(0, 9)}`, continent: c.continent, entity: c.entity };
+  }
+}
+
+/** A station in the entity `entity` of the band's countries or the New ones list. */
+export function callsignIn(rng: Rng, entity: string, taken: ReadonlySet<string>): Callsign {
+  const c = [...COUNTRIES, ...RARE].find((k) => k.entity === entity) ?? COUNTRIES[0];
+  return callOf(rng, c, taken);
+}
+
+/** A station from an entity of the New ones list that `skip` does not hold. */
+export function rareCallsign(rng: Rng, taken: ReadonlySet<string>, skip: ReadonlySet<string>): Callsign {
+  const pool = RARE.filter((c) => !skip.has(c.entity));
+  return callOf(rng, rng.pick(pool.length ? pool : RARE), taken);
+}
+
+/**
+ * Portable prefixes a station of each continent signs from abroad: "F/G4XYZ". Each is the prefix
+ * of an entity on the same continent, so directed CQs treat the station as before.
+ */
+const ABROAD: Record<Continent, readonly string[]> = {
+  EU: ['F', 'DL', 'EA', 'I', 'OH', 'SM', 'OK', 'PA'],
+  NA: ['VE3', 'VE7', 'XE2'],
+  AS: ['HL', 'JA'],
+  OC: ['ZL', 'VK2'],
+  SA: ['PY', 'LU'],
+  AF: ['ZS'],
+};
+
+/**
+ * A compound form of a station's callsign: /P or /M after it, or a portable prefix before it.
+ * /P packs as a standard callsign; /M and a prefix do not, so those stations call CQ without a
+ * grid and send their reports with their callsign hashed.
+ */
+export function compoundOf(rng: Rng, c: Callsign): string {
+  const x = rng.next();
+  if (x < 0.4) return `${c.call}/P`;
+  if (x < 0.6) return `${c.call}/M`;
+  const abroad = ABROAD[c.continent].filter((p) => !c.call.startsWith(p));
+  return abroad.length ? `${rng.pick(abroad)}/${c.call}` : `${c.call}/P`;
+}
+
+/** True for a callsign the standard messages cannot carry in full: a portable prefix, /M. /P and /R pack as standard. */
+export function nonstandard(call: string): boolean {
+  const c = call.replace(/[<>]/g, '');
+  return c.includes('/') && !/^[A-Z0-9]+\/[PR]$/.test(c);
+}
+
+/** ARRL and RAC sections by US call area digit, and by Canadian prefix. */
+const US_SECTIONS: Record<string, readonly string[]> = {
+  '1': ['CT', 'EMA', 'ME', 'NH', 'RI', 'VT', 'WMA'],
+  '2': ['ENY', 'NLI', 'NNJ', 'NNY', 'SNJ', 'WNY'],
+  '3': ['DE', 'EPA', 'MDC', 'WPA'],
+  '4': ['AL', 'GA', 'KY', 'NC', 'NFL', 'SC', 'SFL', 'TN', 'VA', 'WCF'],
+  '5': ['AR', 'LA', 'MS', 'NM', 'NTX', 'OK', 'STX', 'WTX'],
+  '6': ['EB', 'LAX', 'ORG', 'PAC', 'SB', 'SCV', 'SDG', 'SF', 'SJV', 'SV'],
+  '7': ['AZ', 'EWA', 'ID', 'MT', 'NV', 'OR', 'UT', 'WWA', 'WY'],
+  '8': ['MI', 'OH', 'WV'],
+  '9': ['IL', 'IN', 'WI'],
+  '0': ['CO', 'IA', 'KS', 'MN', 'MO', 'ND', 'NE', 'SD'],
+};
+const US_STATES: Record<string, readonly string[]> = {
+  '1': ['CT', 'MA', 'ME', 'NH', 'RI', 'VT'],
+  '2': ['NJ', 'NY'],
+  '3': ['DE', 'MD', 'PA'],
+  '4': ['AL', 'FL', 'GA', 'KY', 'NC', 'SC', 'TN', 'VA'],
+  '5': ['AR', 'LA', 'MS', 'NM', 'OK', 'TX'],
+  '6': ['CA'],
+  '7': ['AZ', 'ID', 'MT', 'NV', 'OR', 'UT', 'WA', 'WY'],
+  '8': ['MI', 'OH', 'WV'],
+  '9': ['IL', 'IN', 'WI'],
+  '0': ['CO', 'IA', 'KS', 'MN', 'MO', 'ND', 'NE', 'SD'],
+};
+const VE: Record<string, { sections: readonly string[]; states: readonly string[] }> = {
+  '1': { sections: ['NB', 'NS', 'PE'], states: ['NB', 'NS'] },
+  '2': { sections: ['QC'], states: ['QC'] },
+  '3': { sections: ['GH', 'ONE', 'ONN', 'ONS'], states: ['ON'] },
+  '4': { sections: ['MB'], states: ['MB'] },
+  '5': { sections: ['SK'], states: ['SK'] },
+  '6': { sections: ['AB'], states: ['AB'] },
+  '7': { sections: ['BC'], states: ['BC'] },
+};
+
+/**
+ * Where a station in the US or Canada is, as the contest exchanges send it: its ARRL or RAC
+ * section and its state or province, from the call area. Null for other stations, which send DX
+ * as their section and a serial number in place of a state.
+ */
+export function contestPlace(rng: Rng, call: string): { section: string; state: string } | null {
+  const m = /^(VE|VA)(\d)/.exec(call);
+  if (m) {
+    const v = VE[m[2]] ?? VE['3'];
+    return { section: rng.pick(v.sections), state: rng.pick(v.states) };
+  }
+  const us = /^([KWN][A-Z]?|A[A-L])(\d)/.exec(call);
+  if (!us) return null;
+  return { section: rng.pick(US_SECTIONS[us[2]]), state: rng.pick(US_STATES[us[2]]) };
+}
+
 /** The continent of a callsign from its prefix, or null when RR73 does not know it. */
 export function continentOf(call: string): Continent | null {
   const c = call.toUpperCase().split('/').sort((a, b) => b.length - a.length)[0] ?? '';
@@ -174,7 +306,7 @@ export function continentOf(call: string): Continent | null {
   if (/^([KWN][A-Z]?|A[A-L])\d/.test(c) && !/^KH6|^KL7/.test(c)) return 'NA';
   // A prefix matches when the call goes on with a digit, or when the prefix ends in one (KH6).
   const matches = (p: string) => c.startsWith(p) && (/\d$/.test(p) || /^\d/.test(c.slice(p.length)));
-  const all: [string, Continent][] = [...COUNTRIES.flatMap((k) => k.prefixes.map((p): [string, Continent] => [p, k.continent])), ...OTHER_PREFIXES];
+  const all: [string, Continent][] = [...[...COUNTRIES, ...RARE].flatMap((k) => k.prefixes.map((p): [string, Continent] => [p, k.continent])), ...OTHER_PREFIXES];
   const best = all.filter(([p]) => matches(p)).sort((a, b) => b[0].length - a[0].length)[0];
   return best?.[1] ?? null;
 }

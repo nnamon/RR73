@@ -142,6 +142,11 @@ export async function takePracticeRecords(): Promise<PracticeRecords> {
   return { qsos, ledger, activations };
 }
 
+/** Every QSO in the practice log, deleted ones included. */
+export async function practiceQsos(): Promise<Qso[]> {
+  return (await openPractice()).getAll('qsos');
+}
+
 /** Puts back what takePracticeRecords took. */
 export async function restorePracticeRecords(r: PracticeRecords): Promise<void> {
   const tx = (await openPractice()).transaction([...PRACTICE_STORES], 'readwrite');

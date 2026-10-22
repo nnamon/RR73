@@ -251,3 +251,81 @@ test('RTTY on the practice band: JA1XYZ calls CQ, a tap on the call and Answer, 
   await expect(page.getByTestId('strip-qth')).toHaveValue('YOKOHAMA');
   await expect(page.getByTestId('strip-rcvd')).toHaveValue('579');
 });
+
+/** The practice log's QSOs as stored: callsign, band, mode and UTC day. */
+async function practiceSeeds(page: Page): Promise<{ call: string; band: string; mode: string; today: boolean }[]> {
+  return page.evaluate(async () => {
+    const d = await new Promise<IDBDatabase>((resolve, reject) => {
+      const r = indexedDB.open('rr73-practice');
+      r.onsuccess = () => resolve(r.result);
+      r.onerror = () => reject(r.error);
+    });
+    const all = await new Promise<{ call: string; band: string; mode: string; submode: string; start: number; deletedAt: number | null }[]>((resolve) => {
+      const g = d.transaction('qsos').objectStore('qsos').getAll();
+      g.onsuccess = () => resolve(g.result as never);
+    });
+    d.close();
+    const day = Math.floor(Date.now() / 86_400_000);
+    return all.filter((q) => q.deletedAt === null).map((q) => ({ call: q.call, band: q.band, mode: q.submode || q.mode, today: Math.floor(q.start / 86_400_000) === day }));
+  });
+}
+
+test('Worked stations seeds the practice log only: its dupes take the dupe edge, earlier QSOs the worked-before edge, and Hide worked hides the dupes', async ({ page }) => {
+  test.setTimeout(150_000);
+  await page.goto('./');
+  await page.waitForFunction(() => !!window.__rr73);
+  await page.evaluate((r) => window.__rr73!.logged(r), record('VK2ESN', 30));
+  await practiceOn(page);
+  await scenario(page, 'Worked stations');
+  await expect.poll(async () => (await practiceSeeds(page)).length, { timeout: 30_000 }).toBe(6);
+  const seeds = await practiceSeeds(page);
+  const here = seeds.filter((q) => q.band === '20m' && q.mode === 'FT8');
+  const dupes = here.filter((q) => q.today).map((q) => q.call);
+  const before = here.filter((q) => !q.today).map((q) => q.call);
+  expect(dupes).toHaveLength(2);
+  expect(before).toHaveLength(2);
+  expect(await callsInLog(page, 'rr73')).toEqual(['VK2ESN']);
+
+  const cq = (call: string) => row(page, new RegExp(`^CQ ${call} [A-R]{2}\\d{2}$`)).first();
+  // Each parity carries one dupe and one station from an earlier day.
+  for (const call of [...dupes, ...before]) await expect(cq(call)).toBeVisible({ timeout: 60_000 });
+  for (const call of dupes) await expect(cq(call)).toHaveClass(/\bdupe\b/);
+  for (const call of before) {
+    await expect(cq(call)).toHaveClass(/\bbefore\b/);
+    await expect(cq(call)).not.toHaveClass(/\bdupe\b/);
+  }
+  const hide = page.getByRole('button', { name: 'Hide worked' });
+  await hide.click();
+  await expect(hide).toHaveAttribute('aria-pressed', 'true');
+  for (const call of dupes) await expect(row(page, new RegExp(`^CQ ${call} `))).toHaveCount(0);
+  for (const call of before) await expect(cq(call)).toBeVisible();
+  await hide.click();
+  expect(await callsInLog(page, 'rr73')).toEqual(['VK2ESN']);
+});
+
+test('Contest exchanges: Custom exchange answers a CQ FD on the band, and the QSO is logged with both exchanges', async ({ page }) => {
+  test.setTimeout(200_000);
+  await page.goto('./#/settings/ft8');
+  const field = page.getByRole('textbox', { name: 'Custom exchange' });
+  await field.fill('6A WI');
+  await field.press('Enter');
+  await expect(field).toHaveValue('6A WI');
+  await practiceOn(page);
+  await scenario(page, 'Contest exchanges');
+  const cq = row(page, /^CQ FD [A-Z0-9]+ [A-R]{2}\d{2}$/).first();
+  await expect(cq).toBeVisible({ timeout: 60_000 });
+  const call = (await cq.locator('.c-msg').textContent())!.split(' ')[2];
+  await cq.dblclick();
+  const bar = page.getByRole('region', { name: 'Transmit' });
+  await expect(bar.getByText(new RegExp(`${call} ${ME} 6A WI`))).toBeVisible();
+  // Their R and exchange, then our RR73 logs the QSO.
+  await expect(row(page, new RegExp(`^${ME} ${call} R \\d{1,2}[A-H] [A-Z]{2,3}$`)).first()).toBeVisible({ timeout: 90_000 });
+  await expect(page.getByTestId('log-notice')).toContainText(`Logged ${call}`, { timeout: 40_000 });
+
+  await page.getByRole('navigation', { name: 'Screens' }).getByRole('link', { name: 'Log' }).click();
+  const entry = page.locator('li.lr', { has: page.getByText(call, { exact: true }) });
+  await entry.click();
+  const edit = page.getByRole('dialog', { name: 'Edit QSO' });
+  await expect(edit.getByRole('textbox', { name: 'Exchange sent' })).toHaveValue('6A WI');
+  await expect(edit.getByRole('textbox', { name: 'Exchange received' })).toHaveValue(/^\d{1,2}[A-H] [A-Z]{2,3}$/);
+});

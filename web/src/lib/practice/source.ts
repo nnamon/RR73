@@ -8,7 +8,7 @@
 import type { InputSource, OpenedInput } from '../audio/input';
 import type { CaptureReport } from '../audio/report';
 import { SLOT_MS, SLOT_RATE, nextSlotStart, slotStart, type FtMode as Mode } from '../clock/slots';
-import { NOISE_RMS, mixSlot, noise, type Part } from './render';
+import { NOISE_RMS, mixSlot, mixStartS, noise, type Part, type SlotConditions } from './render';
 import type { SimSignal } from './sim';
 import { utcNow } from '../clock/utc';
 
@@ -22,14 +22,20 @@ export interface SlotFeed {
   mode(): Mode;
   /** The transmissions of the slot starting at `slotStartMs`, UTC ms. Called once per slot, in order. */
   signals(slotStartMs: number): SimSignal[];
+  /** What the band adds to the slot: noise, crashes, carriers. Called after signals(). */
+  conditions?(slotStartMs: number): SlotConditions | null;
   /** A transmission at 12 kHz, peak 1. */
   synth(text: string, mode: Mode, f0Hz: number): Promise<Float32Array>;
 }
 
 /** The noise loop: 9.7 s, so its repeats never line up with the slots. */
 const NOISE_S = 9.7;
-/** A slot is rendered this long before it starts, ms. Later than the operator's start in the slot before. */
-const LEAD_MS: Record<Mode, number> = { FT8: 1500, FT4: 1000 };
+/**
+ * A slot is rendered this long before it starts, ms: later than the operator's latest start in
+ * the slot before (4.5 s into an FT8 slot, 1.75 s into an FT4 one), and early enough for a
+ * station 1.5 s early to start on time.
+ */
+const LEAD_MS: Record<Mode, number> = { FT8: 2500, FT4: 2000 };
 const TICK_MS = 200;
 
 export function practiceReport(contextRate: number, audioSession: string | null): CaptureReport {
@@ -172,6 +178,7 @@ export class SlotRunner {
     this.done.add(startMs);
     for (const s of this.done) if (s < startMs - 4 * SLOT_MS[mode]) this.done.delete(s);
     const signals = this.feed.signals(startMs);
+    const conditions = this.feed.conditions?.(startMs) ?? null;
     const parts: Part[] = [];
     await Promise.all(
       signals.map(async (signal) => {
@@ -184,9 +191,10 @@ export class SlotRunner {
     );
     // The band may have left the slot modes while the slot rendered.
     if (!this.timer || this.ctx.state !== 'running' || !this.feed.active()) return;
-    this.schedule(startMs, mixSlot(mode, parts));
+    this.schedule(startMs + mixStartS(parts) * 1000, mixSlot(mode, parts, NOISE_RMS, conditions));
   }
 
+  /** Plays `samples` from `startMs` (UTC ms), less what has gone by. */
   private schedule(startMs: number, samples: Float32Array) {
     const src = this.ctx.createBufferSource();
     src.buffer = bufferOf(this.ctx, samples);

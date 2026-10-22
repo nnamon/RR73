@@ -21,6 +21,7 @@ import { settings } from '../state/settings.svelte';
 import { codec, halt, setInputSource, startAudio } from '../state/station.svelte';
 import { webSdrInput } from '../state/relay.svelte';
 import { STATUS } from '../qso/status';
+import { utcNow } from '../clock/utc';
 import { scenarioOf, type ScenarioId } from './scenarios';
 import { PracticeBand, type OperatorTx } from './sim';
 import { PracticeInput, type SlotFeed, type StreamFeed } from './source';
@@ -28,6 +29,7 @@ import { RttyStations } from './rtty';
 import { amplitudeFor } from './render';
 import { client as keyboardClient, keyboard, session as keyboardSession } from '../state/keyboard.svelte';
 import { STAND_IN_URL, standInConfig, wavelogStandIn } from './wavelog-stand-in';
+import { seedPracticeLog } from './seed-log';
 
 let band: PracticeBand | null = null;
 let bandKey = '';
@@ -51,7 +53,26 @@ function currentBand(): PracticeBand {
     bandKey = key;
   }
   band.configure({ scenario: practice.scenario, crowded: practice.crowded });
+  void seedLog(band);
   return band;
+}
+
+/** The band and scenario whose QSOs went into the practice log last. */
+let seededKey = '';
+
+/**
+ * Worked stations and New ones: the band's QSOs go into the practice log, once for each band
+ * and scenario. The write goes to the practice database only (seed-log.ts).
+ */
+async function seedLog(b: PracticeBand) {
+  const key = `${bandKey}|${b.options.scenario}`;
+  if (key === seededKey || !practice.on) return;
+  seededKey = key;
+  const seeds = b.logSeed();
+  if (!seeds.length) return;
+  const c = myStation();
+  const added = await seedPracticeLog(seeds, { nowMs: utcNow(), band: settings.band, mode: ftMode(), myCall: c.callsign, myGrid: c.grid, scenario: scenarioOf(b.options.scenario).name });
+  if (added && practice.on && log.practice) await reloadLog();
 }
 
 /** What the sequencer transmitted in the slot starting at `slotStartMs`. */
@@ -69,6 +90,7 @@ const feed: SlotFeed = {
   active: () => isFt(settings.mode),
   mode: ftMode,
   signals: (startMs) => (isFt(settings.mode) ? currentBand().slot(startMs, operatorTx(startMs - SLOT_MS[ftMode()])) : []),
+  conditions: (startMs) => (isFt(settings.mode) ? currentBand().conditions(startMs) : null),
   synth: (text, mode, f0Hz) => codec().synthesize(text, mode, f0Hz, SLOT_RATE),
 };
 
@@ -133,6 +155,9 @@ export function setPracticeOn(on: boolean): Promise<void> {
 /** Chooses a scenario from the ••• menu. The stations on the band follow it from the next slot. */
 export function chooseScenario(id: ScenarioId) {
   void updatePractice({ scenario: id });
+  // Chosen again, Worked stations and New ones put back any of their QSOs cleared from the practice log.
+  seededKey = '';
+  if (band && practice.on && isFt(settings.mode)) currentBand();
   const s = scenarioOf(id);
   showNotice(STATUS.practice(s.name));
 }
