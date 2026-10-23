@@ -1,6 +1,6 @@
 # Night display
 
-For long sessions at night, such as a WSPR beacon for hours or a run of FT8 from a tent. iOS stops the microphone when a home-screen app goes to the background or the phone locks, so RR73 keeps the screen on; the night display keeps it dark. Code: `web/src/lib/display/night.ts` (content), `web/src/lib/state/night.svelte.ts` (on, off and the idle timer), `web/src/ui/NightDisplay.svelte`.
+The night display keeps the screen dark during long sessions at night, such as a WSPR beacon for hours or a run of FT8 from a tent. iOS stops the microphone when a home-screen app goes to the background or the phone locks, so RR73 keeps the screen on. Code: `web/src/lib/display/night.ts` (content), `web/src/lib/state/night.svelte.ts` (on, off and the idle timer), `web/src/ui/NightDisplay.svelte`.
 
 ## Decision
 

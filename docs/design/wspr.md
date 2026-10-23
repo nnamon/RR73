@@ -2,7 +2,7 @@
 
 Status: accepted 2026-10-14 with the owner's decisions at the end. Operate in WSPR, the beacon and Settings › WSPR are built on `feat/wspr-app` for 0.12.0 (As built, below). Uploads to WSPRnet shipped in 0.19.0, from the phone (docs/design/qsp.md, WSPRnet). WSPRnet is the WSPR history: the owner dropped the history on the phone on 15 October 2026 (Spots and logging).
 
-WSPR is the second mode family (ADR 0006). This doc covers mode switching, Operate in WSPR, the beacon schedule, settings, where spots are stored, and what the app needs from the WSPR codec and decoder, which are being written in Rust alongside it.
+WSPR is the second mode family (ADR 0006). The WSPR codec and decoder were written in Rust alongside the app.
 
 ## Facts the design uses
 
@@ -61,7 +61,7 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006). `views/Operate
 - Colours: a spot carrying the station's own callsign shows as My call. No other decode-colour category applies, because each compares against QSOs.
 - Bottom bar: a status line with the message and Tx frequency ("9V1NE OJ11 37 · 1500 Hz") and, on the right, "Beacon off", "Stops at 16:05" or the time left on air. Below it: Beacon, the Tx percentage, ••• and Halt.
 - Beacon button: "Beacon" with a grey dot when off; "Tx at :06" in the accent tint while waiting, as Tx on is in FT8; "On air", solid red with a blinking dot, while transmitting. The mockup's pale red fill sat beside an outlined Halt; since 0.10.5 Halt is itself a pale red tint, so a waiting beacon in red would read as a second Halt.
-- The Tx percentage button ("20%" with chevrons) opens a menu of percentages, 5 to 100%. A choice applies at once and redraws the next Tx slot.
+- The Tx percentage button ("20%" with chevrons) opens a menu of percentages, 5 to 100 %. A choice applies at once and redraws the next Tx slot.
 - ••• menu: Transmit next slot (once, with Beacon on or off), Tune for 10 s, Save slot (2 min of audio), Clear spots, Power, Sort by and Stop beacon after. Power shows the level in use ("27 dBm") and opens a menu of the 19 levels with their watts ("27 dBm · 500 mW"), the one in use ticked; a choice applies at once and the status line says "Power set to 27 dBm". A transmission waiting for its slot is made again with it while more than 1.5 s remain, as for a new Tx frequency, in the menu and in Settings › WSPR alike. Added in 0.14.1 because the owner changes power often. Sort by and Stop beacon after step through their values on each tap, as FT8's menu items do; Stop beacon after steps through Off, 30 min, 1 h, 2 h, 4 h, 8 h and 12 h, and Settings › WSPR takes any number of minutes. Clear spots empties the spot list and the Sent rows of slots that have ended. The beacon, its Next row and a transmission on air stay.
 - Halt ends the transmission and turns the beacon off in one tap. It has FT8's look (a red tint since 0.10.5) and is always visible.
 - Beacon off lets a transmission on air finish, as Tx off does in FT8; Halt stops it.
@@ -69,13 +69,13 @@ The frame stays: top bar, waterfall, list, bottom bar (ADR 0006). `views/Operate
 
 ## Beacon schedule
 
-- Beacon on: the first Tx is drawn from the next slot that starts at least 10 s later, the time needed to build and queue 110.6 s of audio, and keeps the shortest gap after the last transmission. A transmission Halt cut short counts, so Halt and Beacon on again never sends in the next slot at 50% and below.
-- Each later gap is m + x slots, where n = 100 ÷ Tx percentage, m is the shortest gap and x is drawn uniformly from 0 to 2(n − m), then rounded up or down at random in proportion to its fraction. The mean gap is n slots. m is 2 at 50% and below, so at least one receive slot separates transmissions; above 50% it is 1, since the beacon has to transmit in consecutive slots. At 20%: gaps of 2 to 8 slots, mean 5. At 50%: every other slot.
-- Transmit next slot takes the next slot at least 10 s away and, at 50% and below, no sooner than the shortest gap after the last transmission, one on air or the beacon's next slot. The owner's radio heats up over one slot of transmitting and needs the slot after it to cool. A beacon slot it leaves closer than the shortest gap is drawn again from it.
+- Beacon on: the first Tx is drawn from the next slot that starts at least 10 s later, the time needed to build and queue 110.6 s of audio, and keeps the shortest gap after the last transmission. A transmission Halt cut short counts, so Halt and Beacon on again never sends in the next slot at 50 % and below.
+- Each later gap is m + x slots, where n = 100 ÷ Tx percentage, m is the shortest gap and x is drawn uniformly from 0 to 2(n − m), then rounded up or down at random in proportion to its fraction. The mean gap is n slots. m is 2 at 50 % and below, so at least one receive slot separates transmissions; above 50 % it is 1, since the beacon has to transmit in consecutive slots. At 20 %: gaps of 2 to 8 slots, mean 5. At 50 %: every other slot.
+- Transmit next slot takes the next slot at least 10 s away and, at 50 % and below, no sooner than the shortest gap after the last transmission, one on air or the beacon's next slot. The owner's radio heats up over one slot of transmitting and needs the slot after it to cool. A beacon slot it leaves closer than the shortest gap is drawn again from it.
 - The next Tx slot is drawn when a transmission ends, when Beacon turns on and when the percentage changes, so the button can show it.
 - Reason: a known next slot lets the button say "Tx at :06", and a bounded gap keeps spots arriving at a steady rate. Random gaps stop two beacons on one frequency from colliding every time.
 - Stop beacon after: 1 h by default, set to any duration or Off. It counts from Beacon on. When it fires, it stops a transmission on air too, as FT8's watchdog does, and the status line says "Beacon stopped after 1 h". Changing the setting while the beacon runs moves its stop time, still counted from Beacon on.
-- A transmission goes to the transmit scheduler 8 s before its slot; synthesis of 110.6 s at 48 kHz takes well under that. After a transmission the next one may be the very next slot (100%), 8.4 s away, so the 10 s lead applies only when Beacon turns on or the percentage changes.
+- A transmission goes to the transmit scheduler 8 s before its slot; synthesis of 110.6 s at 48 kHz takes well under that. After a transmission the next one may be the next slot (100 %), 8.4 s away, so the 10 s lead applies only when Beacon turns on or the percentage changes.
 - A transmission that cannot start (audio stopped) turns the beacon off with the reason in the status line. One that would start more than 1 s late is skipped, and the beacon draws its next slot.
 - Halt, a change of mode, audio stopping and the page hiding stop the beacon at once, as they stop FT8.
 
@@ -85,7 +85,7 @@ Per ADR 0006. Station, Radio and audio, Logging, Optional features and Appearanc
 
 | WSPR setting | Default | Range |
 | --- | --- | --- |
-| Tx percentage | 20% | 5 to 100% in steps of 5, with a stepper. Also set from the bottom bar. |
+| Tx percentage | 20 % | 5 to 100 % in steps of 5, with a stepper. Also set from the bottom bar. |
 | Reported power | 37 dBm (5 W) | WSPR's power values, each shown with its power in W. The radio's output is set on the radio. |
 | Tx frequency | 1500 Hz | 1410 to 1590 Hz. Also set on the waterfall. |
 | Stop beacon after | 1 h | Off, 30 min, 1 h, 2 h, 4 h, 8 h, 12 h, or Other: any whole number of minutes up to 7 days. |
@@ -244,7 +244,7 @@ pub fn synthesize_wspr(symbols: &[u8; 162], f0_hz: f32, sample_rate: u32) -> Vec
 - A filter bar in WSPR: it costs 36 pt, one row more of spots, and Sort by in ••• covers the need.
 - DT in the row: it is close to 0 for most stations, so it goes to touch and hold.
 - A coin flip per slot: gaps have no upper bound and the next Tx slot is unknown until it starts.
-- Gaps from 1 slot at every percentage (0.12.0 to 0.15.0): at 20% about 1 gap in 16 put two transmissions back to back, with no slot to hear other stations between them. Changed on 14 October 2026 at the owner's report.
+- Gaps from 1 slot at every percentage (0.12.0 to 0.15.0): at 20 % about 1 gap in 16 put two transmissions back to back, with no slot to hear other stations between them. Changed on 14 October 2026 at the owner's report.
 - Fixed spacing between transmissions: it repeats collisions with a station on the same spacing.
 - Modes as its own screen under Settings: one more tap.
 - Band hopping: RR73 has no CAT control of the radio, so a hop would need the operator to retune by hand.

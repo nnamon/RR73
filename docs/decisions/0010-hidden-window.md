@@ -53,7 +53,7 @@ Receive while hidden: every slot RR73 did not transmit in was decoded and none w
 
 - Not tested on a device: Chrome and Edge on Windows. The measurements ran in headless Chromium on Linux.
 - Chromium's documentation puts the once-a-minute throttling after 5 minutes hidden; Chromium's source sets 1 minute for a loaded page. Neither showed with capture running. The wake timers do not depend on it.
-- Chrome documents that Energy Saver does not freeze a page using the microphone. Edge's sleeping tabs are unverified.
+- Chrome documents that Energy Saver does not freeze a page using the microphone. Edge's sleeping tabs are Unverified.
 - The screen wake lock is released while the page is hidden (W3C Screen Wake Lock, "Handling document loss of visibility"), so Windows' sleep timeout applies: Radio and audio's checklist asks for Sleep set to Never.
 - Rig control's own timers (request timeouts, PTT on's confirmation, PTT off after the audio's tail and its retries, the drain, the keying's limit, the polls) and the waits around a keying run on the wake timers too (`docs/design/cat.md`, The link). They were measured against a fake wake clock only (`web/src/lib/cat/radio-wake.test.ts`). Not measured in a hidden page.
 - Halt is out of sight while the window is hidden. The watchdog runs on a wake timer, as visible.

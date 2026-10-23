@@ -11,7 +11,7 @@ Spots lists stations spotted on POTA and the DX cluster, so a hunter can find an
 
 SOTA has no source of its own: RR73 does not use SOTA's API, so `lib/spots/sota.ts` holds its place and makes no requests. SOTA references in cluster comments still reach the list.
 
-Requests carry no credentials and skip the HTTP cache. Each module header in `lib/spots` records the live format it was checked against, on 13 October 2026, and `fixtures/spots` holds trimmed recordings of both.
+Requests carry no credentials and skip the HTTP cache. Each module header in `lib/spots` records the live format it was checked against on 13 October 2026. `fixtures/spots` holds trimmed recordings of both.
 
 ## Load on the services
 
