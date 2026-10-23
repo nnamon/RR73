@@ -19,6 +19,7 @@
   import type { PaneProps } from './panes';
   import { callStation, clearDecodeList, qso, select, setFrequencies, showNotice, tapRow, type Selected } from '../../lib/state/qso.svelte';
   import { layout } from '../../lib/app/layout.svelte';
+  import { href } from '../../lib/app/router.svelte';
   import { setListKeys, stepSelection } from '../../lib/app/shortcuts';
   import type { ListItem } from '../../lib/decode/list';
   import { EARLY_S, SLOT_MS, isFt } from '../../lib/clock/slots';
@@ -370,6 +371,10 @@
             <h2>No decodes yet</h2>
             <p>Decodes appear here {earlySeconds} s into each {slotSeconds} s slot, while audio runs.</p>
           {/if}
+          {#if !settings.callsign && band.decoder.state !== 'loading'}
+            <!-- First start: the station is not set up yet. -->
+            <a class="guide" href={href('settings', 'guide', 'getting-started')}>Read Getting started</a>
+          {/if}
         </div>
       {/if}
     </div>
@@ -593,6 +598,15 @@
 
   .empty {
     margin-top: var(--rr-space-6);
+  }
+
+  .guide {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--rr-tap);
+    padding: 0 var(--rr-space-2);
+    font-size: var(--rr-text-sub);
+    color: var(--rr-accent);
   }
 
   /* Regular width: Band activity and Rx frequency side by side, each with a 44 pt header. */

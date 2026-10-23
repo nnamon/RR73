@@ -23,4 +23,6 @@ declare module 'virtual:guide' {
   /** docs/guide: each page's file name without `.md`, to its Markdown. Empty when the directory is missing. */
   const pages: Record<string, string>;
   export default pages;
+  /** docs/guide/img: "img/name.webp" to the bundled file's URL. */
+  export const images: Record<string, string>;
 }

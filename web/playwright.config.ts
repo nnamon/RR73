@@ -83,6 +83,18 @@ const reviewProjects = REVIEW
     ]
   : [];
 
+/**
+ * RR73_GUIDE_SHOTS=1 adds guide-shots, which writes the guide's annotated screenshots to
+ * docs/guide/img (e2e/guide-shots.spec.ts, docs/testing.md), and guide-review, which saves the
+ * guide's pages as the app shows them to test-results/screens/guide. Neither runs in CI.
+ */
+const guideProjects = process.env.RR73_GUIDE_SHOTS
+  ? [
+      { name: 'guide-shots', testMatch: /guide-shots\.spec/, use: iphone(393, 852, 2) },
+      { name: 'guide-review', testMatch: /guide-review\.spec/, use: iphone(393, 852, 3) },
+    ]
+  : [];
+
 /** Projects that finish before the transmit projects start. */
 const quietProjects = [
   { name: 'mic', testMatch: /(audio|start-tone|timing)\.spec/, use: { ...desktop, ...fakeMic } },
@@ -104,6 +116,7 @@ const quietProjects = [
   { name: 'webkit-852x393', testMatch: LARGE, grep: /@ci-compact-height/, use: iphone(852, 393, 3) },
   { name: 'chromium-1440x900', testMatch: LARGE, grep: /@ci-keys/, use: desk('chromium') },
   ...reviewProjects,
+  ...guideProjects,
 ];
 
 /**
