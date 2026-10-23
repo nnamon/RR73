@@ -4,7 +4,7 @@ Status: accepted, 2026-10-16
 
 ## Context
 
-iOS stops the microphone when RR73 leaves the screen. Up to 0.24.0 RR73 applied that rule everywhere: hiding the page stopped capture and turned Tx off, and Resume audio needed a tap. Chrome and Edge on a desktop keep a page's microphone and AudioContext running while it is hidden: in a background tab, or with the window minimised or covered. On a Windows tablet an operator who switches to another window, such as to spot on POTA, lost receive and the QSO under way.
+iOS stops the microphone when RR73 leaves the screen. Up to 0.24.0 RR73 applied that rule everywhere: hiding the page stopped capture and turned Tx off, and Resume audio needed a tap. Chrome and Edge on a desktop keep a page's microphone and AudioContext running while it is hidden: in a background tab, or with the window minimised or covered. On a Windows tablet, an operator who switched to another window, such as to spot on POTA, lost receive and the QSO under way.
 
 Chromium throttles a hidden page's timers. Chrome's documentation ("Heavy throttling of chained JS timers beginning in Chrome 88") lists timers checked once per second in a hidden page that has been silent for 30 s, and once per minute for chained timers after 5 minutes hidden. RR73 starts transmissions from timers: each transmit scheduler waits with a timeout until 0.5 s before the start (the pre-roll), and the 1 s ticks of the sequencer, the WSPR beacon and the keyboard modes hand transmissions over and run the watchdog. The audio itself plays on the audio clock, so a timer that fires late costs nothing up to about 0.48 s and makes a late start beyond that.
 

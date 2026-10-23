@@ -30,7 +30,7 @@ The 60 public files and the 343 SARTS slots with at least one reference decode (
 
 Of the 651 failed candidates after three stages, the genie position on the residual decodes 7, and 3 decode on the original audio only. The other 641 do not decode with max-log LLRs at any grid position: their best positions carry 20 to 40 hard errors (501 of 651). By reference SNR they spread evenly: 185 below -20 dB, 113 from -20 to -16, 128 from -16 to -12, 114 from -12 to -6 and 111 at -6 dB and above. 147 have another reference decode within 10 Hz and 280 within 25 Hz. Most misses are signals that RR73 finds and cannot demodulate cleanly: weak ones, and strong ones in crowded spectrum where neighbours and their subtraction residue corrupt the LLRs. Search misses are 6 % of the misses after three stages.
 
-## Why the changes should help
+## Rationale
 
 - Symbol levels at the refined time and frequency. Stage 1 reads each symbol from a spectrogram cell on a grid of half a symbol and half a tone spacing, through a 2-symbol Hann window. A signal between grid points loses up to 1.4 dB to the frequency offset and timing (experiment 0003), and the Hann window over 2 symbols captures 0.5 dB less than a 1-symbol window aligned on the symbol, while picking up the neighbouring symbols. The later stages owe most of their gain to finer grids (0003: 4 frames per symbol alone added 198 matches on SARTS). Refining each candidate's start and frequency from its Costas arrays, then reading the symbols with a 1-symbol window at that position from a complex baseband of the candidate's band, should give the fine grid's gain in stage 1 and add to the later stages. The QEX paper on FT4 and FT8 describes this downconversion and fine synchronisation for WSJT-X. The genie measures it directly: misses whose LLRs at the refined position decode.
 - Candidate list. ft8_lib's search keeps every grid point that scores, so a strong signal fills several of the 140 places with its neighbouring time and frequency positions, each costing an LDPC attempt. Keeping only local maxima of the sync score frees places for weaker signals and LDPC time.
@@ -119,7 +119,7 @@ Unmatched decodes: of the 64 that refinement adds in stage 1, 50 carry only call
 | Decoded as another message | 7 | 7 | 6 | 5 |
 | Candidates there, none decoded | 1058 | 612 | 651 | 501 |
 
-After the three refined stages, 471 of the 501 failed candidates decode at no genie position (preset grid, fine grid or refined, original audio or residual), and 30 do at one. By reference SNR the 501 spread as before: 156 below -20 dB, 95 from -20 to -16, 97 from -16 to -12, 82 from -12 to -6 and 71 at -6 dB and above; 194 have another reference decode within 25 Hz. These are for the demodulator: the levels at the right position do not carry the message through max-log LLRs.
+After the three refined stages, 471 of the 501 failed candidates decode at no genie position (preset grid, fine grid or refined, original audio or residual), and 30 do at one. By reference SNR the 501 spread as before: 156 below -20 dB, 95 from -20 to -16, 97 from -16 to -12, 82 from -12 to -6 and 71 at -6 dB and above; 194 have another reference decode within 25 Hz. These are demodulator losses: the levels at the right position do not carry the message through max-log LLRs.
 
 Of the 40 search misses, 15 are at -6 dB or above and 13 of those are one station, 9A7W, at 2996 Hz, from +10 to +26 dB: its tones reach 3040 Hz, above the 3000 Hz limit of the search (`spectrogram.freq_max_hz`), and `jt9` decodes it in all 13 slots. At their genie positions all 40 score under 5 dB on the preset's grid (18 under 2 dB), the 13 because their top tones lie outside the spectrogram, and 25 of the other 27 are under -6 dB.
 
@@ -255,7 +255,7 @@ In the preset the late-start search costs nothing: the partial threshold also re
 | Decoded as another message | 5 | 3 |
 | Candidates there, none decoded | 273 | 215 |
 
-The block soft bits leave a quarter of the preset's failures of 0.21.8 (273 of 1058). Search misses are now 22 % of the preset's misses and 12 % through three stages. In the preset 89 of them score under 5 dB at their genie position (72 from 2 to 5 dB), under the preset's threshold; stage 3's 2 dB threshold finds most. Through three stages 14 of the 34 are at -6 dB or above, 13 of them 9A7W above 3000 Hz. Of the 215 failed candidates through three stages, 37 are at -6 dB or above and 78 have another reference decode within 25 Hz: crowded spectrum and subtraction residue are what remain for this experiment's stages, the rest is weak signals (95 below -16 dB).
+The block soft bits leave a quarter of the preset's failures of 0.21.8 (273 of 1058). Search misses are now 22 % of the preset's misses and 12 % through three stages. In the preset 89 of them score under 5 dB at their genie position (72 from 2 to 5 dB), under the preset's threshold; stage 3's 2 dB threshold finds most. Through three stages 14 of the 34 are at -6 dB or above, 13 of them 9A7W above 3000 Hz. Of the 215 failed candidates through three stages, 37 are at -6 dB or above and 78 have another reference decode within 25 Hz. Crowded spectrum and subtraction residue account for what remains in this experiment's stages, and weak signals for the rest (95 below -16 dB).
 
 ## Decision and open risks
 

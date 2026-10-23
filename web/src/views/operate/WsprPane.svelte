@@ -108,13 +108,13 @@
         <div class="empty">
           {#if band.decoder.state === 'loading'}
             <h2>Loading the decoder</h2>
-            <p>Spots appear here after each 2-minute slot ends, on even minutes.</p>
+            <p>Spots appear here after each 2 min slot ends, on even minutes.</p>
           {:else if live}
             <h2>No spots yet</h2>
-            <p>Spots appear here after each 2-minute slot ends, on even minutes.</p>
+            <p>Spots appear here after each 2 min slot ends, on even minutes.</p>
           {:else}
             <h2>No spots yet</h2>
-            <p>Spots appear here after each 2-minute slot ends, while audio runs.</p>
+            <p>Spots appear here after each 2 min slot ends, while audio runs.</p>
           {/if}
         </div>
       {/if}

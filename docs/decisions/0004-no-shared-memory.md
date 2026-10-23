@@ -12,4 +12,4 @@ Workers receive copies of slot audio (about 720 KB per FT8 slot) through `postMe
 
 ## Consequences
 
-- Simple deployment. Revisit only if the bench on an iPhone shows a measurable gain from shared memory.
+- GitHub Pages serves the app with no extra headers. Revisit only if the bench on an iPhone shows a measurable gain from shared memory.

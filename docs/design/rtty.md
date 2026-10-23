@@ -2,7 +2,7 @@
 
 Status: approved 2026-10-14, with every recommendation below accepted. Built on `feat/rtty-app`; "As built" at the end lists where the build departs from this doc.
 
-RTTY is the third mode family and the first keyboard mode (ADR 0006). This doc covers Operate in RTTY, the keyboard engine that PSK31, Olivia, MFSK, DominoEX, THOR, Contestia, Hellschreiber, MT63 and JS8Call will share, logging a keyboard QSO, Settings › RTTY and Settings › Macros, RTTY dial frequencies, and what the app takes from the RTTY receiver and transmitter in `rr73-rtty` (experiment 0005, branch `feat/rtty-core`). It builds on WSPR's Operate frame: one frame, a pane per mode family (`docs/design/wspr.md` on `feat/wspr-app`, 0.12.0).
+RTTY is the third mode family and the first keyboard mode (ADR 0006). Its keyboard engine is the one PSK31, Olivia, MFSK, DominoEX, THOR, Contestia, Hellschreiber, MT63 and JS8Call will share. The receiver and transmitter come from `rr73-rtty` (experiment 0005, branch `feat/rtty-core`). Operate in RTTY uses WSPR's frame: one frame, a pane per mode family (`docs/design/wspr.md` on `feat/wspr-app`, 0.12.0).
 
 ## Facts the design uses
 
@@ -21,8 +21,8 @@ RTTY is the third mode family and the first keyboard mode (ADR 0006). This doc c
 
 ### Conventions
 
-- An RTTY station's frequency is quoted as its mark frequency, in spots and in contest logs. Unverified: no written standard was found for this doc.
-- Classic AFSK puts the radio in LSB with mark at 2125 Hz and space at 2295 Hz audio. LSB inverts the audio, so mark lands 2125 Hz below the dial and space 2295 Hz below: mark is the higher radio frequency, as it should be. Radios with an RTTY (FSK) mode show the mark frequency on the dial.
+- An RTTY station's frequency is quoted as its mark frequency, in spots and in contest logs. Unverified: no written standard was found.
+- Classic AFSK puts the radio in LSB with mark at 2125 Hz and space at 2295 Hz audio. LSB inverts the audio, so mark lands 2125 Hz below the dial and space 2295 Hz below, and mark is the higher radio frequency. Radios with an RTTY (FSK) mode show the mark frequency on the dial.
 - RR73 uses USB, as in FT8 and WSPR, with the pair centred on 1500 Hz: mark at 1585 Hz, space at 1415 Hz. In USB mark is the higher audio tone, which the crate calls normal polarity. Mark frequency = USB dial + mark audio. 14.0830 MHz USB with the default pair gives mark 14.084585 MHz.
 - Reason: the KX2 and IC-705 stay in the setup FT8 already uses (USB, VOX, the same audio levels), the pair sits in the middle of the SSB filter, and the waterfall keeps FT8's 0 to 3000 Hz. A radio left in LSB shows every RTTY signal reversed: Rev in Operate fixes it.
 
@@ -172,7 +172,7 @@ Approved 14 October 2026 from screenshots of a prototype (owner: "Looks good to 
 
 ### Transmitting with VOX
 
-- A transmission is a stream: the transmitter renders 100 ms blocks in the keyboard worker and posts them to the output worklet. The app keeps at most 0.4 s of text in the transmitter (`queued_s`) and holds the rest in its own queue, which is what makes backspace and the sent and queued display possible. The crate's `push_text` cannot take characters back.
+- A transmission is a stream: the transmitter renders 100 ms blocks in the keyboard worker and posts them to the output worklet. The app keeps at most 0.4 s of text in the transmitter (`queued_s`) and holds the rest in its own queue, so backspace and the sent and queued display can work. The crate's `push_text` cannot take characters back.
 - Key-down to first character: the mark lead and the preamble, 3 LTRS by default (0.5 s at 45.45 baud), give the radio's VOX time to key. The preamble is settable in seconds. "Start each Tx with a new line" (on) sends CR LF after the preamble, so the other station's text starts on a fresh line.
 - While the queue is empty the transmitter sends the diddle, which keeps VOX keyed and the other station's receiver in step. Idle can be set to steady mark.
 - End: `finish()` sends the queue, the tail (1 LTRS by default) and the ramp. The radio stays keyed for its own VOX delay.

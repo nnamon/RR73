@@ -58,7 +58,7 @@ RR73's colours are the Okabe–Ito palette, designed to stay apart with colour b
 - The editor schemes take the same search over their own accents. Their closest pairs come to 2.8 (Dracula) to 4.7 (Solarized, Nord); they make no claim for colour blindness.
 - Place categories. The palette has no colour left, so the search ran again for one more category over 5832 colours (18 levels per channel), with the 6 colours above fixed. The colours that keep the closest pair at 5.9 are dark olives, greens, browns and reds; a red reads as the solid red edge of a message to the operator. New DXCC takes WSJT-X's magenta, #FF00FF, which DXers know: it sits 8.3 from every other category (New call, deuteranopia, dark), so the scheme's closest pair stays 5.9, and 27 or more under normal vision in every scheme. Its "on this band" form, #FF99FF, falls to 4.3 from Sent (protanopia, dark), and the continent and zone categories, in WSJT-X's colours, to 1.4 (New grid on this band and New CQ zone on this band, tritanopia, dark), so RR73's scheme leaves them off. An operator who turns them on gets WSJT-X's colours.
 - `highlight-cvd.test.ts` holds RR73's scheme, over the categories it turns on, to 5.5 between categories and 10 from a plain row, and above every other scheme's closest pair.
-- Rejected: black for Sent, the search's first pick between categories. Tinted at 30% over the dark theme's background it matched a plain row.
+- Rejected: black for Sent, the search's first pick between categories. Tinted at 30 % over the dark theme's background it matched a plain row.
 
 ## Earlier defaults
 
@@ -66,32 +66,31 @@ RR73's colours are the Okabe–Ito palette, designed to stay apart with colour b
 
 ## Colours in both themes
 
-- A tint is the colour mixed in sRGB with #FFF at 45% in light and with #0B0D10 at 30% in dark (`--rr-hl-tint-light`, `--rr-hl-tint-dark` in `tokens.css`). Every channel stays at 140 or more in light and 88 or less in dark, so the row's text (#0E1116, #ECEEF2) keeps 5.6:1 and 6.1:1 or more on any colour, including custom ones. On a tint, every column of the row takes the label colour.
+- A tint is the colour mixed in sRGB with #FFF at 45 % in light and with #0B0D10 at 30 % in dark (`--rr-hl-tint-light`, `--rr-hl-tint-dark` in `tokens.css`). Every channel stays at 140 or more in light and 88 or less in dark, so the row's text (#0E1116, #ECEEF2) keeps 5.6:1 and 6.1:1 or more on any colour, including custom ones. On a tint, every column of the row takes the label colour.
 - Worked-before text is the chosen colour, darkened toward black in light and lightened toward white in dark, as little as 4.5:1 needs against the tint or the plain row under it.
-- 30% in dark leaves room for grey text over a tint: on the CQ tint the default grey stays 1.5:1 or more apart from the row text.
+- 30 % in dark leaves room for grey text over a tint: on the CQ tint the default grey stays 1.5:1 or more apart from the row text.
 - `highlight-contrast.test.ts` checks every default and palette colour, and a sweep of 4096 colours, in both themes.
 
 ## Colours in Sun
 
 Sun, the theme for direct sunlight (Settings › Appearance), asks 7:1 of text and stronger tints.
 
-- A tint is the colour mixed with #FFF at the most share, up to 60%, that keeps its luminance at 0.4 (`sunTint` in `highlight-colour.ts`, set on the row in `--rr-hl-sun`). Black row text keeps 9:1 on any colour; RR73's colours take 50% to 60%, against 45% in light; black takes 34%. A fixed share stronger than light's cannot keep 7:1 for every colour: at 60%, black text on a tint of black falls to 3.7:1.
+- A tint is the colour mixed with #FFF at the most share, up to 60 %, that keeps its luminance at 0.4 (`sunTint` in `highlight-colour.ts`, set on the row in `--rr-hl-sun`). Black row text keeps 9:1 on any colour; RR73's colours take 50 % to 60 %, against 45 % in light; black takes 34 %. A fixed share stronger than light's cannot keep 7:1 for every colour: at 60 %, black text on a tint of black falls to 3.7:1.
 - Worked-before text keeps 7:1 on a plain row and 4.5:1 on a tint. At 7:1 on a tint it would be near black, as dark as the row text; at 4.5:1 it stays 1.9:1 or more apart from it on every tint of RR73's scheme.
-- Rows of older slots take 30% of their colour, and their grey text keeps 7:1.
+- Rows of older slots take 30 % of their colour, and their grey text keeps 7:1.
 - The closest pair of RR73's categories, over every vision, is 8.6 ΔE apart in Sun, against 6.4 in light, and the closest to a plain row 13.7, against 10.2 (`highlight-cvd.test.ts`).
 
 ## Alternatives rejected
 
 - Worked before as the last category in the order. With every category on, CQ in the message and Ending a QSO take every message it could match, so it never showed.
 - Colouring every message's sender for new call and new grid. Most rows on a busy band would be coloured, against the guide's CQ rule.
-- One alpha for any tint over any colour, with text colours fixed in CSS. Grey text over a tint cannot keep 4.5:1 for every tint; the text colour has to depend on the tint, so it is worked out per row.
+- One alpha for any tint over any colour, with text colours fixed in CSS. Grey text over a tint cannot keep 4.5:1 for every tint, so the app works out the text colour per row from its tint.
 - Exact callsign comparison for new call and worked before. A station worked portable would show as new.
 - Every place category on in RR73's scheme, in colours from the search. The best 4 of 512 colours brought the closest pair to 3.8, with pure blue, two browns and a dark teal.
 
 ## Open risks
 
 - The country file places a callsign by its prefix. A station in an entity that spans zones (W, VE, UA, VK, BY) counts in its prefix's zone wherever it is, so New CQ zone and New ITU zone can be wrong for it.
-
-- The dark tint at 30% is fainter than the light one. Not tested on a device.
+- The dark tint at 30 % is fainter than the light one. Not tested on a device.
 - Worked-before grey over a bright tint in dark comes out close to the row text, 1.5:1 apart on the CQ tint.
 - The colour blindness figures come from a simulation. Not tested with operators who have colour blindness.

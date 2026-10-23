@@ -571,7 +571,7 @@ describe('keying a KX2', () => {
     expect(rig.test).toMatchObject({
       state: 'done',
       ok: false,
-      text: 'The KX2 did not key on TX. PTT off was sent and confirmed. It ignores TX in FSK D and PSK D: choose a band to set DATA A.',
+      text: 'The KX2 did not key on TX. RR73 sent PTT off and the radio confirmed it. It ignores TX in FSK D and PSK D: choose a band to set DATA A.',
     });
     expect(chosen.ptt).toEqual(['TX', 'RX']);
   });

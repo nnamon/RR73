@@ -190,7 +190,7 @@
         </label>
       {/if}
     </div>
-    <p class="section-foot">Used when a station calls CQ FD or CQ RU, or sends an exchange.</p>
+    <p class="section-foot">Goes out when a station calls CQ FD or CQ RU, or sends an exchange.</p>
   </div>
 
   <div class="section">

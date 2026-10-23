@@ -1066,7 +1066,7 @@ describe('keying', () => {
     expect(chosen.ptt.at(-1)).toBe('00');
     await run(100);
     expect(chosen.sim.transmit).toBe(false);
-    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Stopped by Halt. PTT off was sent.' });
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Stopped by Halt. RR73 sent PTT off.' });
     await run(2000);
     await t;
     expect(chosen.ptt).toEqual(['01', '00']);
@@ -1112,7 +1112,7 @@ describe('keying', () => {
     const t = testKeying();
     await run(2000);
     await t;
-    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'No reply to PTT from the IC-705 within 0.3 s. PTT off was sent and confirmed.' });
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'No reply to PTT from the IC-705 within 0.3 s. RR73 sent PTT off and the radio confirmed it.' });
     expect(chosen.ptt[0]).toBe('01');
     expect(chosen.ptt.slice(1).every((p) => p === '00')).toBe(true);
     // The read after PTT off said receive.

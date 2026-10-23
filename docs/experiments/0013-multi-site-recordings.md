@@ -10,10 +10,10 @@ Experiments 0008 to 0012 measured the decoder on one receiver in Singapore (350 
 2. Which of the largest miss classes on the new data can the decoder recover without false decodes and within its time budget?
 3. Does a second normalised set of soft bits in stage 3 only (experiment 0012, item 5) earn its time on the larger corpus?
 
-## Why the new sites may differ
+## Expected differences between sites
 
 - Europe and North America on 40 m and 20 m in the evening carry more signals per slot than the Singapore loop hears. More signals give more overlapping pairs (0012's retries), more candidates competing for the 140 places of stage 1 and more decodes for the passes to subtract.
-- A larger antenna hears more weak signals near `jt9`'s floor, where the failed class lives.
+- A larger antenna hears more weak signals near `jt9`'s floor, where most failed misses sit.
 - Receivers differ in passband shape and audio level. Experiment 0011 measured one passband edge (3000 Hz, sharp); others may fall off lower or have a soft skirt.
 - Impulsive noise (local QRN, power line noise) lifts the soft bits' variance estimate, a case the synthetic sets do not hold.
 - KiwiSDR timing over NTP: each slot's correction is under 20 ms, so DT should not limit matching.
@@ -133,7 +133,7 @@ Native, single-threaded (`--threads 1`), every fourth recorded slot (500 FT8 slo
 
 The preset costs 5 % more at the mean, the three stages 19 % (stage 3 alone 31 %). Experiment 0012 measured WebKit at about 1.13 times native for the three stages' 95th percentile, and experiment 0009 an A13 at 2.2 times WebKit: on that scale the three stages end within about 1.3 s at the 95th percentile and 1.75 s for the slowest slot, against 1.07 s and 1.42 s for base. Not measured in WebKit; not tested on a device.
 
-## Against the expectations
+## Expected and measured
 
 | Measure | Expected | Measured |
 | --- | --- | --- |

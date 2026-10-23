@@ -6,7 +6,7 @@ Status: accepted 2026-10-13. Hypothesis recorded before implementation (commit 2
 
 Does subtracting each decoded signal from the slot audio and decoding the residual again find signals that the `baseline` preset misses in busy bands, without new false decodes and within the time budget?
 
-## Why it should help
+## Rationale
 
 The `baseline` preset (the ft8_lib method) decodes once. Two effects hide weaker signals in a busy slot:
 

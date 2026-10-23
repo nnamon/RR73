@@ -31,7 +31,7 @@ The SARTS edge is the recorder's own: `rr73-kiwi` asks the KiwiSDR for a 100 to 
 
 The radios' documents give the filter's width and leave its place in the audio unstated. The IC-705 Basic Manual (A7560D-1EX-9, p. 4-5) gives USB-D's FIL1 as 3.0 kHz, FIL2 1.2 kHz and FIL3 500 Hz, each adjustable from 50 Hz to 3.6 kHz; its selectivity for SSB with the 2.4 kHz filter is more than 2.4 kHz at -6 dB and less than 3.4 kHz at -40 dB (p. 11-2). No IC-705 document gives the receive passband's low or high edge in Hz; the only edges in Hz are for transmit, 300 to 2700 Hz in SSB-D (p. 4-8). The KX2 Owner's Manual (rev. B2) gives no width or centre for USB or DATA A. By that width, an IC-705 at its default USB-D setting delivers audio to about 3.0 kHz above its filter's lower edge, and its skirt passes a strong station some hundreds of hertz further; with FIL1 widened to 3.6 kHz it delivers more. Unverified on a device.
 
-## Why the changes should help
+## Rationale
 
 ### The band edge
 
@@ -83,7 +83,7 @@ Measured 2026-10-16 on 0.23.1 (whose decoder is 0.22.4's) with the commits of th
 
 ### The SNR estimate at the band edge
 
-`snr.passband=true` (`crates/rr73-decode/src/passband.rs`, `snr.rs`, described under Why above). On the `band-edge` set, with the search to 3200 Hz, the reported SNR of matched decodes minus the true SNR at the antenna, median by base tone:
+`snr.passband=true` (`crates/rr73-decode/src/passband.rs`, `snr.rs`, described under Rationale above). On the `band-edge` set, with the search to 3200 Hz, the reported SNR of matched decodes minus the true SNR at the antenna, median by base tone:
 
 | Subset, base tone | Flat estimate | With the floor |
 | --- | --- | --- |
@@ -129,7 +129,7 @@ The SARTS gains are 9A7W's 12 decodes at 2997 Hz, `YO3GK JE6EFG PM53` at 2962 Hz
 
 - Subtraction residue and order limit few of them: subtracting the run's own decodes strongest first gains 4 over the order found, and leaving out the run's unmatched decodes gains nothing.
 - Neighbours the run never decodes limit many: with those subtracted as well, 38 of the 141 failures within 50 Hz decode at their position, and 51 decode through the three stages. They come in groups that fail together. Of the 53 misses the oracle recovers (all classes), 20 have every neighbour within 50 Hz decoded by the run, 17 only weaker neighbours missed and 16 a stronger neighbour missed; `YO3GK JA2KGH PM84` (+0 dB) and `DF1BN JH6XOD PM52` (-9 dB) share 1406 Hz, 0.4 s apart, and the run decodes neither.
-- The neighbour's energy in the block demodulator's tones is: at the reference positions on the run's residual, soft bits scored normalised (each bit's difference of magnitudes over the larger, `demod.block_score=normalised`) decode 28 (1 symbol) and 29 (3 symbols) of the 214, against 5 and 8 for the amplitude scores the preset uses, and 16 for the power of 3-symbol blocks. Of the 34 misses of any class that only a normalised set decodes there, 28 have no other reference within 25 Hz and 28 are at -16 dB or above: strong signals whose symbols a neighbour, a fading peak or an impulse dominates. Every normalised win has 9 or more of its 21 sync symbols on the sent tone.
+- The neighbour's energy in the block demodulator's tones is a limit too. At the reference positions on the run's residual, soft bits scored normalised (each bit's difference of magnitudes over the larger, `demod.block_score=normalised`) decode 28 (1 symbol) and 29 (3 symbols) of the 214, against 5 and 8 for the amplitude scores the preset uses, and 16 for the power of 3-symbol blocks. Of the 34 misses of any class that only a normalised set decodes there, 28 have no other reference within 25 Hz and 28 are at -16 dB or above: strong signals whose symbols a neighbour, a fading peak or an impulse dominates. Every normalised win has 9 or more of its 21 sync symbols on the sent tone.
 - Candidate lists: the failed class has candidates by definition. The one effect of a full list measured here is stage 3's at 3200 Hz, above.
 
 ### Normalised soft bits as a further set
@@ -227,7 +227,7 @@ WebKit 26.6 (Playwright, `tools/wasm-cost/ab.mjs`), a dedicated module worker, e
 
 The preset costs 7 % more time on average natively (p50 unchanged, p95 +16 %) and 10 % more in WebKit at the mean; the three stages 11 % natively and 17 % in WebKit at the mean, 25 % at the 95th percentile. With experiment 0009's factors for an iPhone (1.1 for an A18 Pro to 2.2 for an A13), the WebKit 95th percentile of the three stages is 400 to 800 ms and the slowest slot 670 to 1340 ms, inside the 2 s budget. Not tested on a device. The floor and the wider band cost under 2 %; the normalised set is the rest, one more LDPC attempt for each candidate past 9 sync symbols that the block sets do not decode (140 to 168 attempts per recorded slot in the preset, 834 to 1011 through three stages).
 
-## Against the expectations
+## Expected and measured
 
 | Measure | Expected | Measured |
 | --- | --- | --- |

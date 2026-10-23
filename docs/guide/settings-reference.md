@@ -1,13 +1,12 @@
 # Settings reference
 
-Every setting, by the screen it is on. Defaults are given where a setting has one.
+Every setting, by the screen it is on, with its default where it has one.
 
 ## Station
 
-- Callsign: your callsign. Needed to transmit. [Getting started](getting-started.md#callsign-and-grid)
-- Grid: your grid, 4 or 6 characters. Needed to transmit. Tap Use GPS to fill it in.
-- Name: optional. RTTY macros send it as `{MYNAME}`.
-- QTH: optional. RTTY macros send it as `{MYQTH}`.
+- Callsign: needed to transmit. [Getting started](getting-started.md#callsign-and-grid)
+- Grid: 4 or 6 characters, needed to transmit. Use GPS fills it in.
+- Name and QTH: optional, sent by the RTTY macros `{MYNAME}` and `{MYQTH}`.
 
 ## FT8 and FT4
 
@@ -16,12 +15,12 @@ Every setting, by the screen it is on. Defaults are given where a setting has on
 - Tail-end: call a station once more after it ends a QSO with another. On by default. [Making QSOs](making-qsos.md#a-station-that-answers-someone-else)
 - Hunt calls: calls to a silent station before Hunt moves on, 1 to 99. 4 by default. [Hunt](making-qsos.md#hunt)
 - Watchdog: stops Tx after a time with no touch. On by default. [Watchdog](making-qsos.md#watchdog)
-- Stop Tx after: the watchdog's limit in minutes. 6 by default.
+- Stop Tx after: the watchdog's limit, 6 min by default.
 - Responses refresh watchdog: each new message restarts the watchdog. Off by default.
 - Hold Tx frequency: calling a station moves Rx only. On by default. [Operate](operate.md#selecting-and-calling)
 - Exchange: your contest exchange. Empty by default. [Contest exchange](contest-exchange.md)
 - Next serial number: the serial number the exchange sends next. 1 by default. [Serial numbers](contest-exchange.md#serial-numbers)
-- Depth: Deep runs every decoding stage, Fast the first only. Fast decodes about 3% fewer stations. Deep by default.
+- Depth: Deep, the default, runs every decoding stage. Fast runs the first only and decodes about 3% fewer stations.
 - A priori decoding: during a QSO, tries the messages expected next on weak signals near the station. On by default.
 
 ## WSPR
@@ -95,7 +94,7 @@ Shows in Chrome and Edge on a computer, and in the desktop app. [Rig control](yo
 - Decode messages: Interface font, the default, or Monospace.
 - Waterfall colours: RR73, Fire or Grey. RR73 by default.
 - Callsigns on the waterfall: writes each FT8 and FT4 decode's callsign over its signal. Off by default.
-- Night display: shows Operate in dim red on black after 2, 5 or 10 min untouched. Off by default. Night display in ••• turns it on at once, and a tap wakes Operate.
+- Night display: dims Operate to red on black after 2, 5 or 10 min untouched. Off by default. Night display in ••• turns it on at once, and a tap wakes Operate.
 - Decode colours: the colour of each kind of decode, a preset, and the legend. [Colours](operate.md#colours)
 
 ## About

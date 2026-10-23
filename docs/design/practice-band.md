@@ -62,11 +62,11 @@ Nothing from practice reaches the log, Wavelog or the network.
 - `practice/render.test.ts` checks SNR calibration, timing and fading, drift by zero crossings, the two-path fading's mean power and depth, the risen floor, crashes and a carrier's phase across slots, and decodes rendered slots with the wasm decoder, early, late, drifting, fading and compound signals among them.
 - `practice/practice-log.test.ts` logs and sends in practice on fake IndexedDB and checks that the log, its Wavelog settings and the page's fetch are untouched.
 - `practice/guard.test.ts` covers the guard for strings, URLs and Request objects.
-- `e2e/practice.spec.ts` (project `practice`) turns practice on in Chromium with no microphone and checks the tag and decodes, a CQ QSO logged to the practice log, an answered CQ, the station who works another, the log untouched afterwards, the guard, the Wavelog stand-in Clear practice log with Undo, Worked stations (the dupe and worked-before edges and Hide worked, the log untouched) and Contest exchanges (a CQ FD answered with Contest exchange and logged with both exchanges). Every test fails if a request leaves for another origin or with a method other than GET or HEAD.
+- `e2e/practice.spec.ts` (project `practice`) turns practice on in Chromium with no microphone and checks the tag and decodes, a CQ QSO logged to the practice log, an answered CQ, the station who works another, the log untouched afterwards, the guard, the Wavelog stand-in, Clear practice log with Undo, Worked stations (the dupe and worked-before edges and Hide worked, the log untouched) and Contest exchanges (a CQ FD answered with Contest exchange and logged with both exchanges). Every test fails if a request leaves for another origin or with a method other than GET or HEAD.
 
 ## Alternatives rejected
 
-- **Decodes without audio.** Injecting decode results would skip the waterfall, the slot assembler, timing and the decoder, which are what practice should exercise.
+- **Decodes without audio.** Injected decode results would skip the waterfall, the slot assembler, timing and the decoder, the code practice exists to exercise.
 - **Rendering in a worker of its own.** Synthesis goes through the decoder worker's encoder, which is idle when a slot is rendered (1.5 s before the slot, after the previous decode). Mixing 15 signals takes a few ms on the main thread.
 - **A namespaced store in `rr73`.** Adding stores needs a database version change, which waits for every other open copy of RR73 to close (ADR 0003). A second database needs no upgrade.
 - **Practice state in the settings record.** Another change bumps the settings schema; a key of its own avoids two migrations meeting.

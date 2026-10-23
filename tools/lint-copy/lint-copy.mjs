@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Copy lint for the style guide in AGENTS.md.
+// Copy lint for docs/writing-style.md and the interface rules in AGENTS.md.
 //
 // Scans prose: Markdown outside code, string literals and markup text in web/src, and commit
 // messages. Interface sources also get the length limits and the subject rule from the copy
@@ -13,6 +13,16 @@ import { join, extname, relative } from 'node:path';
 
 const ERROR_RULES = [
   { id: 'em-dash', re: /—/g, message: 'em dash; use a full stop, comma, colon or brackets' },
+  {
+    id: 'spaced-hyphen',
+    re: /(?<=[^\s|]) [-\u2013] (?=[^\s|])/g,
+    message: 'spaced hyphen or en dash used as a dash; end the sentence or use a comma, colon or brackets',
+  },
+  {
+    id: 'heading-punctuation',
+    re: /^#{1,6}\s.*[.?]\s*$/g,
+    message: 'heading ends in a full stop or question mark; name the section as a plain noun phrase',
+  },
   { id: 'exclamation', re: /[A-Za-z)][!](?=\s|$|["'”’])/g, message: 'exclamation mark' },
   { id: 'emoji', re: /\p{Extended_Pictographic}/gu, message: 'emoji' },
   {
@@ -22,8 +32,23 @@ const ERROR_RULES = [
   },
   {
     id: 'corporate',
-    re: /\b(leverag\w*|unlock(?:s|ed|ing)? (?:the|your|new|more|real|its|their) (?:power|potential|value|possibilit\w+|growth|insights?|opportunit\w+)|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
+    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
     message: 'corporate verb; name the specific action',
+  },
+  {
+    id: 'plain-words',
+    re: /\b(delv(?:e|es|ed|ing)|navigat(?:e|es|ed|ing)|landscapes?|realms?|tapestr(?:y|ies)|journeys?|utili[sz](?:e|es|ed|ing))\b/gi,
+    message: 'inflated word; use the plain one or name the thing',
+  },
+  {
+    id: 'idiom',
+    re: /\b(under the hood|footguns?|gotchas?|secret sauce|the real killer)\b/gi,
+    message: 'idiom in place of the mechanism; say what fails, when and how',
+  },
+  {
+    id: 'residue',
+    re: /\b(you're right|you are right|good catch|fair point|to be clear|the short answer|key takeaways?)\b/gi,
+    message: 'conversational residue; state the fact',
   },
   {
     id: 'filler',
@@ -32,7 +57,7 @@ const ERROR_RULES = [
   },
   {
     id: 'meta',
-    re: /\b(let's|let us|here's|here is how|this (?:section|document|page|screen) (?:describes|explains|shows|covers)|in this (?:section|document|guide)|it's worth|it is worth|worth noting|importantly|in summary|in conclusion|to summari[sz]e)\b/gi,
+    re: /\b(let's|let us|here's|here is how|this (?:section|document|page|screen) (?:describes|explains|shows|covers)|in this (?:section|document|guide)|it's worth|it is worth|worth noting|importantly|in summary|in conclusion|to summari[sz]e)\b|(?:^|[.?]\s+)overall,/gi,
     message: 'meta narration or throat-clearing; start with the content',
   },
   {
@@ -59,7 +84,6 @@ const SCREEN_RULES = [
     re: /\b(top bar|bottom bar|BackLink|feature flags?|calling card|dock)\b/gi,
     message: 'internal name on screen; name what the operator sees',
   },
-  { id: 'semicolon', re: /(?<!&#?\w+);/g, message: 'semicolon; one idea per sentence, so split it' },
   {
     id: 'other-program',
     re: /\b(?:WSJT-X|JTDX|MSHV|iFTx|JS8Call|fldigi|GridTracker)\b/gi,
@@ -76,6 +100,12 @@ const SCREEN_RULES = [
     message: 'hyphen-minus in a dB value; write \u2212 (U+2212)',
   },
 ];
+
+/**
+ * A semicolon on screen. The changelog is exempt: its entries give the reason after a semicolon,
+ * as docs/writing-style.md asks.
+ */
+const SEMICOLON_RULE = { id: 'semicolon', re: /(?<!&#?\w+);/g, message: 'semicolon; one idea per sentence, so split it' };
 
 /** Errors for interface strings in web/src only; the changelog may record what earlier versions said. */
 const SOURCE_RULES = [
@@ -101,14 +131,14 @@ export const SUBTITLE_MAX_WORDS = 6;
 const RR73_SUBJECT = /(?:^\s*|[.?!:]\s+)RR73(?=\s+(?!or\b|and\b)[a-z]|[\u2019']s\b)/g;
 
 const WARN_RULES = [
-  { id: 'unlock', re: /\bunlock\w*/gi, message: '"unlock"; fine as the iOS audio term, not as marketing' },
   { id: 'x-not-y', re: /, not\b/gi, message: '", not" contrast; check it is factual, not rhetorical' },
   { id: 'rather-than', re: /\brather than\b/gi, message: '"rather than"; check it is needed' },
   { id: 'instead-of', re: /\binstead of\b/gi, message: '"instead of"; check it is needed' },
 ];
 
 const SKIP_DIRS = new Set(['node_modules', 'target', 'dist', '.git', 'corpus', 'results', 'pkg', 'vendor', 'src-ft8lib']);
-const SKIP_PATHS = [/^tools\/ft8lib\/src\//, /^web\/src\/wasm\/pkg\//, /^LICENSE/];
+/** The style guide quotes what not to write, so the lint skips it. */
+const SKIP_PATHS = [/^docs\/writing-style\.md$/, /^tools\/ft8lib\/src\//, /^web\/src\/wasm\/pkg\//, /^LICENSE/];
 
 function walk(dir, root, out) {
   for (const name of readdirSync(dir)) {
@@ -247,8 +277,28 @@ export function sourcePieces(text, ext) {
   }
   const at = lineOf(code);
   const literal = /(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
-  while ((m = literal.exec(code))) if (isProse(m[2])) pieces.push({ line: at(m.index), text: m[2] });
+  while ((m = literal.exec(code))) {
+    const text = m[1] === '`' ? withValues(m[2]) : m[2];
+    if (isProse(text)) pieces.push({ line: at(m.index), text });
+  }
   return pieces;
+}
+
+/**
+ * A template literal's text with each interpolation read as one word, a value, plus the
+ * literals inside it. The code in an interpolation, such as `a - b`, is not copy.
+ */
+export function withValues(t) {
+  let out = '';
+  let i = 0;
+  while (i < t.length) {
+    const j = t.indexOf('${', i);
+    if (j < 0) return out + t.slice(i);
+    const end = closeBrace(t, j + 1);
+    out += t.slice(i, j) + ['N', ...literalsIn(t.slice(j + 2, end - 1))].join(' ');
+    i = end;
+  }
+  return out;
 }
 
 /** Returns prose from Svelte or TypeScript source: string literals and markup text, on their original lines. */
@@ -456,10 +506,10 @@ export function isScreenFile(rel) {
   return rel === 'CHANGELOG.md' || /^docs\/guide\/[^/]+\.md$/.test(rel) || (/^web\/src\/.*\.(svelte|ts)$/.test(rel) && !rel.endsWith('.test.ts'));
 }
 
-export function lintText(prose, file, { screen = false, source = false } = {}) {
+export function lintText(prose, file, { screen = false, source = false, changelog = false } = {}) {
   const findings = [];
   const lines = prose.split('\n').map(stripQuoted);
-  const errors = [...ERROR_RULES, ...(screen ? SCREEN_RULES : []), ...(source ? SOURCE_RULES : [])];
+  const errors = [...ERROR_RULES, ...(screen ? SCREEN_RULES : []), ...(screen && !changelog ? [SEMICOLON_RULE] : []), ...(source ? SOURCE_RULES : [])];
   const sets = [['error', errors], ['warning', WARN_RULES]];
   lines.forEach((line, i) => {
     for (const [level, rules] of sets) {
@@ -479,7 +529,7 @@ export function lintFile(root, rel) {
   const ext = extname(rel);
   const text = readFileSync(join(root, rel), 'utf8');
   const screen = isScreenFile(rel);
-  if (ext === '.md') return lintText(markdownProse(text), rel, { screen });
+  if (ext === '.md') return lintText(markdownProse(text), rel, { screen, changelog: rel === 'CHANGELOG.md' });
   if (!screen) return [];
   return [
     ...lintText(sourceProse(text, ext), rel, { screen, source: true }),

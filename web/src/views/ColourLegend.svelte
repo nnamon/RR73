@@ -115,7 +115,7 @@
     {
       key: 'before',
       title: 'Worked on another day',
-      text: 'Worked on this band and mode on another day: a right edge in the New call colour. It can be worked again.',
+      text: 'Worked on this band and mode on another day: a right edge in the New call colour. You can work it again.',
       item: row('before', 'CQ JA7XVZ QM09', -13, 1803, { row: { hl: on.has('cq') ? 'cq' : null, before: true } }),
     },
   ]);
@@ -162,14 +162,14 @@
     {
       key: 'queue',
       title: 'Next, 2nd, 3rd',
-      text: 'With Repeat CQ on, the order in which waiting callers are answered.',
+      text: 'With Repeat CQ on, the order Repeat CQ answers waiting callers in.',
       item: row('queue', '{me} W1AW FN31', -10, 1650, { item: { toYou: true } }),
       queue: [{ call: 'W1AW', slotStartMs: SLOT, tag: 'Next' }],
     },
     {
       key: 'queue-dupe',
       title: 'Dupe',
-      text: 'With Repeat CQ on, a waiting caller that is a dupe. It is skipped with Work dupes off.',
+      text: 'With Repeat CQ on, a waiting caller that is a dupe. Repeat CQ skips it while Work dupes is off.',
       item: row('queue-dupe', '{me} K2LE FN13', -15, 1720, { item: { toYou: true } }),
       queue: [{ call: 'K2LE', slotStartMs: SLOT, tag: 'Dupe' }],
     },

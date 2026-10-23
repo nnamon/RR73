@@ -2,7 +2,7 @@
 
 RR73 is an FT8, FT4, WSPR and RTTY app for amateur radio operators, made for the iPhone. It runs in Safari and connects to the radio through an audio cable, keying the transmitter by VOX.
 
-The app is at https://nnamon.github.io/RR73/. Once added to the home screen it opens and decodes without a network connection.
+The app is at https://nnamon.github.io/RR73/. Added to the Home Screen, it opens and decodes with no network connection.
 
 <table>
 <tr>
@@ -18,34 +18,34 @@ Every upload and optional feature is off until turned on in Settings.
 
 ### Operating
 
-- Double-tap a decode to work the station. Each message goes out in its slot with the report filled in, and the QSO is logged when it completes.
+- Double-tap a decode to work the station. Each message goes out in its slot with the report filled in, and RR73 logs the QSO when it completes.
 - Repeat CQ keeps calling CQ after each QSO and answers callers from a queue, in the order chosen.
 - Hunt answers CQs one after another until stopped, unworked stations first.
 - Hound mode works FT8 DXpeditions running Fox and Hound, reading the report out of the Fox's multi-call messages.
-- Halt is always on screen. The watchdog stops Tx after 6 min without a touch, adjustable in Settings.
-- Decode colours mark messages to your call, CQs, new DXCC entities, continents, zones, grids and calls, and stations already worked. One colour scheme stays distinguishable with colour blindness.
+- Halt is always on screen. The watchdog stops Tx after 6 min without a touch. Settings sets the limit.
+- Decode colours mark messages to your call, CQs, new DXCC entities, continents, zones, grids and calls, and stations already worked. One colour scheme is designed for colour blindness.
 - Chips filter the list to CQ, New, To me or Rx freq. Hide worked drops stations already logged on the band and mode.
 - A Clock badge shows when the phone's clock is 1 s or more off.
 
 ### Decoding
 
 - The FT8, FT4, WSPR and RTTY decoders are RR73's own, written in Rust and compiled to WebAssembly. They run on the phone.
-- Up to 3 passes per FT8 or FT4 slot, each decoded signal subtracted before the next. Ordered-statistics decoding (OSD) takes the candidates belief propagation fails on.
+- The decoder runs up to 3 passes per FT8 or FT4 slot and subtracts each decoded signal before the next. Ordered-statistics decoding (OSD) takes the candidates belief propagation fails on.
 - After the slot, 2 later stages search finer time and frequency grids for up to 2 s.
 - First decodes appear 13.5 s into an FT8 slot (6 s into FT4).
 - During a QSO, a priori decoding tests weak signals near the other station against the messages expected next.
 
 ### Logging and activations
 
-- The log is stored on the phone and works offline.
+- The log is kept on the phone and works offline.
 - QSOs go to Wavelog on request or automatically. A refused QSO shows the reason and a Fix button.
 - Read Wavelog's log counts the QSOs in Wavelog, logged from any station, for decode colours, New and Hide worked. Dupes, Hunt and Repeat CQ count the phone's log only.
-- ADIF export and import, and a backup of the whole log to one file.
-- POTA, SOTA, WWFF and IOTA activations, with progress toward each programme's goal and the time left in the UTC day.
+- ADIF export and import, and a backup of the whole log in one file.
+- POTA, SOTA, WWFF and IOTA activations, with progress towards each programme's target and the time left in the UTC day.
 - Park and summit suggestions by name, or from the phone's GPS position.
 - POTA, SOTA and WWFF upload files for each activation.
 - Spots lists POTA activators and DX cluster spots.
-- Decodes can be reported to PSK Reporter through a relay. Heard you lists the stations that heard your signal in the last 30 min.
+- A relay can report decodes to PSK Reporter. Heard you lists the stations that heard your signal in the last 30 min.
 
 <table>
 <tr>
@@ -59,7 +59,7 @@ Every upload and optional feature is off until turned on in Settings.
 
 - WSPR decodes each 2-minute slot and lists the spots farthest first.
 - The WSPR beacon transmits in a set share of slots, 20% by default.
-- WSPR spots can be uploaded to WSPRnet.
+- RR73 can upload WSPR spots to WSPRnet.
 - RTTY runs at 45.45 baud and 170 Hz shift by default, with other speeds and shifts as presets.
 - Tap a callsign in the RTTY text to start a QSO. Name, QTH and report fill in from what that station sent.
 - RTTY macros, including a contest set that numbers each QSO.
@@ -74,13 +74,13 @@ Every upload and optional feature is off until turned on in Settings.
 
 ### Receiving without a radio
 
-- A KiwiSDR web SDR can stand in for the radio's receive audio through a QSP relay. Tx still goes to the radio.
+- A web SDR, reached through a QSP relay, can stand in for the radio's receive audio. Tx still goes to the radio.
 - The practice band simulates a busy band with CQs, callers, RTTY stations and a DXpedition. Its QSOs go to a separate log.
 - Tx audio still plays in practice and can key a connected radio. Play Tx audio in Settings › Practice band turns it off.
 
 ### Display
 
-- Light and dark themes, and a night display in dim red on black.
+- Light, Dark and Sun themes, and a night display in dim red on black.
 - On an iPad or a desktop, Band activity, Rx frequency and the transmit panel sit side by side.
 - On a keyboard, Esc halts and ? lists the other shortcuts.
 
@@ -107,7 +107,7 @@ Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A 
 - A cable between the phone's headset audio and the radio's audio in and out, through the headset jack or a USB-C or Lightning headset adapter.
 - The radio in USB, keyed by VOX.
 
-On the iPhone there is no CAT control: set the band on the radio and in the band sheet. In Chrome and Edge on a computer, Settings › Rig control reads and sets an Icom IC-705 over its USB cable or an Elecraft KX2 through a Digirig, and keys it once Key the radio with CAT is on (`docs/design/cat.md`).
+The iPhone has no CAT control, so set the band on the radio and in Change band. In Chrome and Edge on a computer, Settings › Rig control reads and sets an Icom IC-705 over its USB cable or an Elecraft KX2 through a Digirig, and keys it once Key the radio with CAT is on (`docs/design/cat.md`).
 
 ## Getting started
 
@@ -117,7 +117,7 @@ On the iPhone:
 2. Connect the cable. Set the radio to USB with VOX on.
 3. In Settings, enter the callsign and grid. Use GPS fills in the grid.
 4. Set the input and output levels in Settings › Radio and audio.
-5. In Operate, choose the band and tap Start audio. A short chime keys the radio through VOX.
+5. In Operate, choose the band and tap Start audio. The start chime keys the radio through VOX.
 
 On a Windows computer or tablet, in Chrome or Edge, with an IC-705:
 
@@ -134,9 +134,9 @@ RR73 keeps receiving and transmitting while its window is minimised or behind an
 
 ### Desktop app
 
-The desktop app for Windows, macOS and Linux is the same app in its own window. It adds rig control on every system through the computer's serial ports, and corrects slot and Tx timing by an NTP server; Settings › Radio and audio › Timing shows the measured offset (`docs/design/desktop.md`). Each release on GitHub carries the installers: `.exe` (NSIS) or `.msi` for Windows, `.dmg` for macOS (Apple silicon and Intel), `.AppImage` or `.deb` for Linux.
+The desktop app for Windows, macOS and Linux is the same app in its own window. It adds rig control on every system through the computer's serial ports, and corrects slot and Tx timing against an NTP server. Settings › Radio and audio › Timing shows the measured offset (`docs/design/desktop.md`). Each release on GitHub carries the installers: `.exe` (NSIS) or `.msi` for Windows, `.dmg` for macOS (Apple silicon and Intel), `.AppImage` or `.deb` for Linux.
 
-The installers are not signed, so Windows and macOS warn before the first start:
+The installers are not signed, so Windows and macOS show a warning before the first start.
 
 - Windows: SmartScreen says Windows protected your PC. Select More info, then Run anyway.
 - macOS: the system says the app cannot be opened because Apple cannot check it. Open the `.dmg`, drag RR73 to Applications and open it once. Then, in System Settings › Privacy & Security, select Open Anyway beside the message about RR73 and confirm with Open. On macOS 14 and earlier, Control-click RR73 in Applications, choose Open, and confirm with Open.
@@ -146,7 +146,7 @@ Settings › Practice band runs a simulated band for trying RR73 without a radio
 
 ## Relay
 
-QSP, in `crates/rr73-qsp`, is an optional relay server. It carries KiwiSDR audio, which a page in Safari cannot open over plain `ws://`, and PSK Reporter reports, which travel over UDP. The app ships with no relay set up. Relays are added in Settings › Relay.
+QSP, in `crates/rr73-qsp`, is an optional relay server. It carries web SDR audio, which a page in Safari cannot open over plain `ws://`, and PSK Reporter reports, which travel over UDP. The app ships with no relay set up. Add relays in Settings › Relay.
 
 Anyone can run a relay. Each release includes QSP binaries for x86-64 and ARM64 Linux and the image `ghcr.io/nnamon/rr73-qsp`. Setup is in `crates/rr73-qsp/README.md`.
 
@@ -156,7 +156,7 @@ Anyone can run a relay. Each release includes QSP binaries for x86-64 and ARM64 
 | --- | --- |
 | `crates/` | Rust: FT8, FT4, WSPR and RTTY codecs, DSP, decoders, channel simulator, corpus format, bench, WebAssembly bindings, and QSP. |
 | `web/` | The app: Svelte 5, TypeScript, Vite. |
-| `tools/` | FT8 codec test oracle, reference decoder tools, KiwiSDR corpus recorder, reference data build, copy lint, release scripts. |
+| `tools/` | FT8 codec test oracle, reference decoder tools, web SDR corpus recorder, reference data build, copy lint, release scripts. |
 | `docs/` | Architecture, design documents, decision records, experiments, testing. |
 
 ## Development
@@ -176,4 +176,4 @@ Dual licensed under the MIT licence or the Apache License 2.0, at your option. S
 
 Portions of `rr73-ft8` are ported from [ft8_lib](https://github.com/kgoba/ft8_lib) by Kārlis Goba (MIT). The FT8 and FT4 protocols are described in Franke, Somerville and Taylor, "The FT4 and FT8 Communication Protocols", QEX, July/August 2020.
 
-The reset glyph in the band sheet is the `rotate-ccw` icon from [Lucide](https://lucide.dev) (ISC). Both licences are in `THIRD_PARTY_NOTICES.md`, and the app shows them in Settings › About › Credits.
+The reset arrow in Change band is the `rotate-ccw` icon from [Lucide](https://lucide.dev) (ISC). Both licences are in `THIRD_PARTY_NOTICES.md`, and the app shows them in Settings › About › Credits.

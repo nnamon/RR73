@@ -92,7 +92,9 @@ export const DISPLAY_NAMES: Readonly<Record<string, string>> = {
   'St. Peter & St. Paul': 'St. Peter/Paul',
   'St. Pierre & Miquelon': 'St. Pierre',
   'Temotu Province': 'Temotu',
+  // lint-copy: off (the name as the country file spells it)
   'Timor - Leste': 'Timor-Leste',
+  // lint-copy: on
   'Tokelau Islands': 'Tokelau',
   'Trindade & Martim Vaz': 'Trindade',
   'Trinidad & Tobago': 'Trinidad',

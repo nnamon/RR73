@@ -10,7 +10,7 @@
   /** What each work gives RR73, by its heading in the notices. */
   const USES: Record<string, string> = {
     ft8_lib: 'Parts of the FT8 and FT4 codec are ported from ft8_lib by Kārlis Goba.',
-    Lucide: 'The reset arrow in the band sheet is an icon from Lucide.',
+    Lucide: 'The reset arrow in Change band is an icon from Lucide.',
     Inter: 'The Inter typeface is the interface font on Linux and Android, or when chosen in Appearance.',
     'JetBrains Mono': 'The JetBrains Mono typeface is a monospace choice in Appearance.',
     'Roboto Mono': 'The Roboto Mono typeface is a monospace choice in Appearance.',

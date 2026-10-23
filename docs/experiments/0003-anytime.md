@@ -9,7 +9,7 @@ Two separate questions about when decoding happens:
 1. Early decoding: how many of the shipped preset's full-slot decodes does it already find in a partial slot (the first 11.8 s or 13.5 s of audio), at what cost in false decodes and time? The app could show them before the slot ends and the sequencer could prepare its reply earlier.
 2. Deeper passes after the deadline: once the shipped preset has run at slot end, do further stages that spend more compute on the residual and on more candidates find more true decodes, without false ones, within the time left before the next slot's early pass?
 
-## Why it should work
+## Rationale
 
 An FT8 transmission at DT 0 runs from 0.5 s to 13.14 s. At 11.8 s it lacks its last 9 symbols: 2 data symbols (6 of 174 code bits) and the third Costas array. Missing symbols become zero LLRs (erasures), which the LDPC code fills in when the rest is clean, and the first two Costas arrays still give the sync score. Late starters lose more: at 11.8 s a signal at DT +0.5 s lacks its last 12 symbols, 5 of them data symbols (15 code bits). WSJT-X reports about 85 % of its decodes at its 11.8 s pass.
 
@@ -118,7 +118,7 @@ The chain of `time_osr=4`, `freq_osr=4`, `window_symbols=2` (stage 2) and the de
 
 `spectrogram.window_symbols=2` keeps the 2-symbol Hann window and zero-pads it to the 4-symbol FFT, so `freq_osr=4` gives bins a quarter of a tone spacing apart without smearing symbols together (new option; `None` keeps the ft8_lib layout).
 
-What the numbers say so far: the finer search grid gives most of the gain, as expected; extra passes, more candidates and more BP iterations give least. Time oversampling matters more than frequency oversampling, and the two add. On SARTS the deepest stage measured adds 0.100 recall, twice the top of the expected 0.02 to 0.05. No stage made a false decode on the 5000 noise slots or on `crowded`. On the recordings the unmatched decodes grow with depth (65 for the deepest stage, 43 of them OSD). Of the 34 unmatched decodes of the `time_osr=4`, `freq_osr=4` stage, 28 carry only callsigns that appear in some reference list or stage 1 decode; the other 6 are standard messages, 2 of them with a grid that fits the callsign's prefix (`CQ SM5MNB JO89`, `DF6WZ SV2OIT KN10`). That check is not yet done for the deeper stages.
+The finer search grid gives most of the gain, as expected; extra passes, more candidates and more BP iterations give least. Time oversampling matters more than frequency oversampling, and the two add. On SARTS the deepest stage measured adds 0.100 recall, twice the top of the expected 0.02 to 0.05. No stage made a false decode on the 5000 noise slots or on `crowded`. On the recordings the unmatched decodes grow with depth (65 for the deepest stage, 43 of them OSD). Of the 34 unmatched decodes of the `time_osr=4`, `freq_osr=4` stage, 28 carry only callsigns that appear in some reference list or stage 1 decode; the other 6 are standard messages, 2 of them with a grid that fits the callsign's prefix (`CQ SM5MNB JO89`, `DF6WZ SV2OIT KN10`). That check is not yet done for the deeper stages.
 
 The times printed by these runs (10 threads, host load average 15 to 16) are not usable for the budget. Steps of the session now compute at most 32 spectrogram frames and subtract at most 2 earlier decodes each; the longest step has not been measured on a quiet host.
 

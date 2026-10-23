@@ -8,7 +8,7 @@ Settings › FT8 and FT4 holds Confirm with, Work dupes in Run and Hold Tx frequ
 
 ## Decision
 
-- Settings split by scope. Station, Radio and audio, Logging, Optional features and Appearance apply to every mode.
+- Settings are split by scope. Station, Radio and audio, Logging, Optional features and Appearance apply to every mode.
 - Mode settings live per family under Settings › Modes:
   - FT8 and FT4, the WSJT-X sequencer: confirm with, work dupes, hold Tx, CQ slot, answer order, and Rx and Tx Hz per mode.
   - WSPR: Tx percentage, power in dBm and band hopping.

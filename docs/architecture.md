@@ -1,6 +1,6 @@
 # Architecture
 
-RR73 has two halves that share one signal-processing core:
+RR73 has three parts. The app and the bench share one signal-processing core.
 
 - **The app** (`web/`): a Svelte single-page app installed to the iPhone home screen. It captures radio audio from the headset microphone contact, shows the band, decodes, sequences QSOs, transmits through the headphone contact and keeps the log.
 - **The research bench** (`crates/rr73-bench`, `tools/`): measures decoder builds against a corpus of recorded and synthetic slots, with WSJT-X's `jt9` as the reference.
@@ -51,7 +51,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/kiwi` | `rr73-kiwi`, the KiwiSDR corpus recorder. |
 | `tools/minimodem` | minimodem in a container, the reference RTTY decoder for `rr73-bench rtty`. Never linked or copied. |
 | `tools/wasm-cost` | Cost of the WebAssembly exports per second of audio in headless Chromium and WebKit. |
-| `tools/lint-copy` | Copy lint for the style guide in `AGENTS.md`. |
+| `tools/lint-copy` | Copy lint for the style guide in `docs/writing-style.md`. |
 | `tools/refdata` | Build-time conversion of the country file and download and conversion of the POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
 | `refdata/bigcty` | The Big CTY release the app ships as its country file (MIT licence). |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
@@ -166,7 +166,7 @@ WSPR has its own pipeline in `rr73_decode::wspr`, with stage traits of the same 
 | `lib/state` | Settings, optional features and persistent stores in IndexedDB. |
 | `ui/`, `views/` | Components and screens, styled only through `styles/tokens.css`. Operate keeps one frame for every mode; each mode family brings its middle and bottom bar as a pane (`views/operate/panes.ts`), as two parts the frame places by size class: FT8 and FT4, WSPR, and the keyboard modes (`KeyboardPane`, with RTTY's tuning row). |
 
-The display spectrum and the decoder's spectrogram are separate on purpose: the display favours smooth scrolling at 60 fps, the decoder favours resolution chosen per experiment.
+The display spectrum and the decoder's spectrogram are separate (decision 0005): the display scrolls at 60 fps, and the decoder's resolution is chosen per experiment.
 
 ## Timing
 

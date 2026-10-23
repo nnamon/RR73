@@ -17,7 +17,7 @@ docker compose run --rm node npm --prefix web ci
 docker compose run --rm node npm --prefix web run check      # svelte-check
 docker compose run --rm node npm --prefix web run lint:css   # stylelint
 docker compose run --rm node npm --prefix web test           # vitest
-docker compose run --rm node npm run lint:copy               # style guide lint
+docker compose run --rm node npm run lint:copy               # style guide lint (docs/writing-style.md)
 docker compose run --rm e2e npx --prefix web playwright test
 docker compose run --rm desktop sh -c 'cd desktop && cargo test && cargo clippy --all-targets -- -D warnings'
 docker compose run --rm desktop sh -c 'cd desktop && npm ci && npx tauri build --bundles deb,appimage'   # after npm --prefix web run build
@@ -70,16 +70,15 @@ Check every UI change against these before it ships, and compare the screen side
 
 ## Style guide
 
-Applies to every string on screen, the README, docs, changelogs, commit messages and code comments. `npm run lint:copy` enforces the mechanical parts.
+`docs/writing-style.md` is the style guide for everything in this repository: on-screen text, the README, the guide, docs, the changelog, commit messages and code comments. The rules below add what applies to RR73 only. `npm run lint:copy` enforces the mechanical parts of both.
 
-### Voice
+### Language
 
-- Lead with the fact, the action or the decision. No preamble.
-- Use numbers, units and names: "Decodes arrive 0.4 s after the slot ends."
-- One idea per sentence. Active voice.
-- The operator's vocabulary from the glossary below. No internal names on screen.
-- State uncertainty once, plainly: "Not tested on a device." No stacked hedges.
 - British spelling, sentence case, numbers as digits.
+- The operator's vocabulary from the glossary below. No internal names on screen.
+- Never name another ham program, or a third-party operator or receiver, in user-facing text.
+- No filler words: "simply", "just", "easily", "obviously", "of course", "basically", "actually", "really".
+- No "X, not Y" contrasts. State X, and mention Y only when the reader would otherwise assume it.
 
 ### Interface text
 
@@ -89,33 +88,15 @@ Applies to every string on screen, the README, docs, changelogs, commit messages
 - Errors say what happened, the cause if known, and what to do: "Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog." Never raw exception text.
 - Confirmations name the consequence: "End activation? The 7 QSOs stay on this phone."
 - Empty states say what will appear and when.
+- No semicolons on screen. Split the sentence.
+- No personality in the product: no "Oops", "Great job" or "RR73 is thinking…". State the event and its effect: "Wavelog is unreachable. 3 QSOs are waiting."
 - Formats: 14.074 MHz, 1500 Hz, −15 dB, 5 W, 37 dBm, 13:14:30 UTC. FT8 message text appears exactly as transmitted.
 
-### Never write
-
-<!-- lint-copy: off -->
-| Pattern | Examples | Write |
-| --- | --- | --- |
-| Meta narration | "This section describes the log." "Here's how it works." "Let's look at…" | The content: "The log stores each QSO as an ADIF record." |
-| Throat-clearing and wrap-ups | "It's worth noting that", "Importantly,", "In summary", "Overall" | Delete. |
-| Hype | seamless, robust, powerful, intuitive, effortless, cutting-edge, comprehensive, delightful, blazing fast | A measurement or a concrete property. |
-| Corporate verbs | leverage, unlock, empower, elevate, supercharge, harness, streamline, dive into | The specific action: use, add, show, send. |
-| Contrast clichés | "X, not Y." "Not X, but Y." "It's not just X, it's Y." "Not X. Y." "X over Y" as a slogan. "rather than" or "instead of" added for emphasis. | State X. Mention Y only when the reader would otherwise assume it. |
-| Cadence devices | Triplets for rhythm, rhetorical questions, "The result?", one-word dramatic sentences, colon reveals | Plain statements. |
-| Em dashes | "fast — really fast" | A full stop, comma, colon or brackets. |
-| Fillers | simply, just, easily, obviously, of course, basically, actually, really | Delete. |
-| Hedge stacks | "may potentially", "could possibly help to" | "may", or the measured fact. |
-| Personality in the product | "Oops", "Great job", "RR73 is thinking…", "We're excited to…", emoji, exclamation marks | The event and its effect: "Wavelog is unreachable. 3 QSOs are waiting." |
-| Formatting as emphasis | Bold phrases in every paragraph, a heading every two lines, title-case names for ordinary features | Structure only where it carries information. |
-
-<!-- lint-copy: on -->
-
-### Documentation, commits and comments
+### Documentation
 
 - The README opens with one sentence on what RR73 does and for whom, then its features, the decoder measurements, the requirements and setup.
 - Design docs and decision records give the decision, the reason, the alternatives rejected and the open risks. Unknowns are labelled "Unverified" or "Not tested on a device".
-- Commit subjects are imperative and under 72 characters: "Add OSD pass to FT8 decoder". The body says what changed and why.
-- The changelog lists user-visible changes, one line each.
+- The changelog lists user-visible changes, one line each, with the reason after a semicolon or in parentheses where it helps.
 - Code comments explain intent and constraints. No commented-out code.
 
 ## Glossary
