@@ -5,7 +5,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## Unreleased
 
 - Guide is the first row of Settings, and Operate's empty decode list links to Getting started until a callsign is set.
-- The guide shows annotated screenshots, tables and QSO ladders. Making QSOs is rewritten around them.
+- The guide shows annotated screenshots, tables and QSO ladders, and every page is rewritten around them with about a third of the prose.
 
 ## 0.27.6 · 2026-10-23
 

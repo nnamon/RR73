@@ -166,6 +166,54 @@ export function mockupLog(opts: { running?: boolean; stationRefusal?: boolean } 
   };
 }
 
+/**
+ * The guide's log (guide-shots.spec.ts), with the guide's example stations only: 3 QSOs today, one
+ * waiting for Wavelog, and a POTA activation under way at SG-0014 with 7 of its 10 QSOs.
+ */
+export function guideLog(): Seed {
+  n = 0;
+  const live: Activation = {
+    id: 'act-guide',
+    refs: [{ programme: 'POTA', ref: 'SG-0014' }],
+    callsign: '9V1NE',
+    operator: '9V1NE',
+    grid: 'OJ11',
+    gridSource: 'typed',
+    wavelogStationId: '1',
+    startedAt: FIXED_TIME - 50 * MIN,
+    endedAt: null,
+    updatedAt: FIXED_TIME - 50 * MIN,
+  };
+  const calls = [
+    ['AB4SS', -48, '20m', 'EM73', -12, -10],
+    ['OE3OGC', -44, '20m', 'JN88', -8, -11],
+    ['9V1DE', -37, '20m', 'OJ11', 4, 2],
+    ['AB4SS', -30, '40m', 'EM73', -15, -17],
+    ['OE3OGC', -24, '40m', 'JN88', -6, -9],
+    ['9V1DE', -16, '40m', 'OJ11', 7, 5],
+    ['AB4SS', -6, '15m', 'EM73', -11, -14],
+  ] as const;
+  const dial = { '20m': 14_074_000, '40m': 7_074_000, '15m': 21_074_000 } as const;
+  const lq = calls.map(([call, m, band, grid, s, r]) => qso(call, FIXED_TIME + m * MIN, { band, dialHz: dial[band], grid, reportSent: s, reportRcvd: r }, live));
+  const today = [
+    qso('AB4SS', FIXED_TIME - 70 * MIN, { grid: 'EM73', reportSent: -12, reportRcvd: -9, audioHz: 1210 }, null),
+    qso('OE3OGC', FIXED_TIME - 85 * MIN, { grid: 'JN88', reportSent: -16, reportRcvd: -13, audioHz: 1840 }, null),
+    qso('9V1DE', FIXED_TIME - 120 * MIN, { mode: 'FT4', dialHz: 14_080_000, audioHz: 1200, grid: 'OJ11', reportSent: 3, reportRcvd: 1 }, null),
+  ];
+  const ledger: LedgerEntry[] = [...entries(today[0], null, 'not-sent'), ...entries(today[1], null, 'delivered'), ...entries(today[2], null, 'delivered')];
+  for (const q of lq) ledger.push(...entries(q, live, 'delivered'));
+  return {
+    qsos: [...today, ...lq],
+    ledger,
+    activations: [live],
+    destinations: [WAVELOG],
+    kv: [
+      { key: 'logging', value: { sendAutomatically: false, sendEdits: true } },
+      { key: 'migrations', value: [SEND_AUTOMATICALLY_OFF] },
+    ],
+  };
+}
+
 /** Nothing stored: a seed to add features to. */
 export function emptySeed(): Seed {
   return { qsos: [], ledger: [], activations: [], destinations: [], kv: [] };

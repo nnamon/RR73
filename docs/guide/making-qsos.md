@@ -4,7 +4,7 @@ RR73 sends each message in its slot, fills in the reports and logs the QSO when 
 
 ## The transmit controls
 
-![Operate's transmit controls during a QSO with K1ABC](img/operate-tx.webp)
+![Operate's transmit controls during a QSO with AB4SS](img/operate-tx.webp)
 
 1. Status line: the message going next, its slot and second. The bars under it show the QSO's progress.
 2. The watchdog's time left.
@@ -17,12 +17,12 @@ RR73 sends each message in its slot, fills in the reports and logs the QSO when 
 ## Answering a CQ
 
 ```ladder
-Them: CQ K1ABC FN42
-You: K1ABC 9V1NE OJ11 | Tx1, after a double-tap on the CQ
-Them: 9V1NE K1ABC -12
-You: K1ABC 9V1NE R-10 | Tx3: R and your report
-Them: 9V1NE K1ABC RR73 | Logged
-You: K1ABC 9V1NE 73 | Tx5, then Tx goes off
+Them: CQ AB4SS EM73
+You: AB4SS 9V1NE OJ11 | Tx1, after a double-tap on the CQ
+Them: 9V1NE AB4SS -12
+You: AB4SS 9V1NE R-10 | Tx3: R and your report
+Them: 9V1NE AB4SS RR73 | Logged
+You: AB4SS 9V1NE 73 | Tx5, then Tx goes off
 ```
 
 Double-tap a message to you and RR73 answers from the step it has reached. A station that sends RR73 before your R-report has gone ends the QSO unlogged.
@@ -33,10 +33,10 @@ Call a station, in •••, calls a station you have not decoded. A call up to
 
 ```ladder
 You: CQ 9V1NE OJ11 | Tx6, after a tap on CQ
-Them: 9V1NE K1ABC FN42
-You: K1ABC 9V1NE -12 | Tx2: their report
-Them: 9V1NE K1ABC R-08
-You: K1ABC 9V1NE RR73 | Tx4. Logged
+Them: 9V1NE AB4SS EM73
+You: AB4SS 9V1NE -12 | Tx2: their report
+Them: 9V1NE AB4SS R-08
+You: AB4SS 9V1NE RR73 | Tx4. Logged
 ```
 
 CQ repeats until someone calls. A caller silent through 3 repeats is dropped, and the next caller or CQ follows.
@@ -44,10 +44,10 @@ CQ repeats until someone calls. A caller silent through 3 repeats is dropped, an
 ## After RR73
 
 ```ladder
-You: K1ABC 9V1NE RR73 | Logged
-Them: 9V1NE K1ABC R-08 | K1ABC missed your RR73
-You: K1ABC 9V1NE RR73 | Sent again, up to 3 times. The log keeps 1 entry
-Them: 9V1NE K1ABC 73 | The QSO ends
+You: AB4SS 9V1NE RR73 | Logged
+Them: 9V1NE AB4SS R-08 | AB4SS missed your RR73
+You: AB4SS 9V1NE RR73 | Sent again, up to 3 times. The log keeps 1 entry
+Them: 9V1NE AB4SS 73 | The QSO ends
 ```
 
 Silence also ends the QSO.
@@ -55,14 +55,14 @@ Silence also ends the QSO.
 ## No reply
 
 ```ladder
-You: K1ABC 9V1NE OJ11
+You: AB4SS 9V1NE OJ11
 Them:
-You: K1ABC 9V1NE OJ11 | Repeat 1 of 3
+You: AB4SS 9V1NE OJ11 | Repeat 1 of 3
 Them:
-You: K1ABC 9V1NE OJ11 | Repeat 2 of 3
+You: AB4SS 9V1NE OJ11 | Repeat 2 of 3
 Them:
-You: K1ABC 9V1NE OJ11 | Repeat 3 of 3
-Them: | Status line: No reply from K1ABC
+You: AB4SS 9V1NE OJ11 | Repeat 3 of 3
+Them: | Status line: No reply from AB4SS
 ```
 
 Tx stays on. Double-tap the station to call again.
@@ -70,11 +70,11 @@ Tx stays on. Double-tap the station to call again.
 ## A station that answers someone else
 
 ```ladder
-You: K1ABC 9V1NE OJ11
-Them: JA1KXM K1ABC -09 | Status line: K1ABC answered JA1KXM
+You: AB4SS 9V1NE OJ11
+Them: OE3OGC AB4SS -09 | Status line: AB4SS answered OE3OGC
 You: | Tail-end waits
-Them: JA1KXM K1ABC RR73
-You: K1ABC 9V1NE OJ11 | Tail-end calls once more
+Them: OE3OGC AB4SS RR73
+You: AB4SS 9V1NE OJ11 | Tail-end calls once more
 ```
 
 Tail-end is in Settings › FT8 and FT4, on by default. It gives up after 8 slots. Off, the call pauses at once.
@@ -109,7 +109,7 @@ Hunt skips dupes, stations heard sending anything but CQ, and stations that igno
 
 ## Logging
 
-The notice `Logged K1ABC 20m FT8 −08 / −11` shows for 10 s with Edit and Undo. If audio stops after reports have gone both ways, Log QSO on the audio strip logs the QSO.
+The notice `Logged AB4SS 20m FT8 −08 / −11` shows for 10 s with Edit and Undo. If audio stops after reports have gone both ways, Log QSO on the audio strip logs the QSO.
 
 ## Dupes
 
