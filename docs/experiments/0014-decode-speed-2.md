@@ -35,7 +35,7 @@ The exactness suite, 9 runs and 41,609 slot decodes per commit, each commit's de
 
 | Run | Sets | Slots |
 | --- | --- | --- |
-| Preset | `public/ft8_lib` and every recorded site under `kiwi/` (SARTS on 12 and 13 October and 6 sites recorded on 21 and 22 October: `aprs-kuopio`, `k1vl-vermont`, `va6ok-coronation`, `vinhedo-br`, `vk5arg-tarlee-2`, `wessex-g8jnj`); the FT8 preset refuses SARTS's 10 WSPR slots | 2068 |
+| Preset | `public/ft8_lib` and every recorded site under `kiwi/` (SARTS on 12 and 13 October and 6 sites in Europe, North America, South America and Australia recorded on 21 and 22 October); the FT8 preset refuses SARTS's 10 WSPR slots | 2068 |
 | Three stages | the same | 2068 |
 | Preset | the synthetic sets on disk: `crowded`, `noise`, `noise-ci`, `smoke`, `snr-sweep` | 6990 |
 | Three stages | the same | 6990 |
