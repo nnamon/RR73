@@ -36,6 +36,13 @@ pub struct ParityGraph {
     slot_bit: Vec<usize>,
     /// For each bit, its slots, in the order of `bit_edges` (from `bit_start`).
     bit_slots: Vec<usize>,
+    /// The slots of the padding checks.
+    padding: Vec<usize>,
+    /// The number of checks of every bit when all bits have the same number (3 in FT8).
+    bit_degree: Option<usize>,
+    /// Each bit's 3 slots when every bit has 3 checks and the slots fit [`SLOT_CAPACITY`];
+    /// else empty.
+    bit_slots3: Vec<[u16; 3]>,
     /// The most lanes of a group.
     widest: usize,
     /// For each check, its bits as a mask over words of 64 bits: bit `b` is bit `b % 64` of
@@ -46,6 +53,10 @@ pub struct ParityGraph {
 
 /// Checks per vector step of the sum-product schedule.
 const LANES: usize = 8;
+
+/// Slots of the fixed-size message arrays of the sum-product totals for graphs whose every
+/// bit has 3 checks (552 in FT8 and FT4).
+const SLOT_CAPACITY: usize = 1024;
 
 /// Checks of one degree in the slot numbering of [`ParityGraph`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -117,7 +128,26 @@ impl ParityGraph {
             groups.push(CheckGroup { degree, lanes, start });
             widest = widest.max(lanes);
         }
-        let bit_slots = bit_edges.iter().map(|&e| slot_of_edge[e]).collect();
+        let bit_slots: Vec<usize> = bit_edges.iter().map(|&e| slot_of_edge[e]).collect();
+        let mut real = vec![false; slot_bit.len()];
+        for &slot in &slot_of_edge {
+            real[slot] = true;
+        }
+        let padding = (0..slot_bit.len()).filter(|&slot| !real[slot]).collect();
+        let bit_degree = degree
+            .first()
+            .copied()
+            .filter(|&d| d > 0 && degree.iter().all(|&e| e == d));
+        let bit_slots3 = if bit_degree == Some(3) && slot_bit.len() <= SLOT_CAPACITY {
+            bit_slots
+                .as_chunks::<3>()
+                .0
+                .iter()
+                .map(|c| c.map(|s| s as u16))
+                .collect()
+        } else {
+            Vec::new()
+        };
         let words = bits.div_ceil(64);
         let mut check_masks = vec![0u64; checks * words];
         for (m, w) in check_start.windows(2).enumerate() {
@@ -134,6 +164,9 @@ impl ParityGraph {
             groups,
             slot_bit,
             bit_slots,
+            padding,
+            bit_degree,
+            bit_slots3,
             widest,
             check_masks,
             words,
@@ -180,7 +213,23 @@ impl ParityGraph {
             .count()
     }
 
+    /// Packs the hard decisions of `total` (`log(P(0) / P(1))` per bit; a bit is 1 when its
+    /// value is below 0) into `packed`, 64 per word, as [`ParityGraph::pack`] packs them;
+    /// bits past the end of `total` read as 0.
+    fn pack_signs(&self, total: &[f32], packed: &mut Vec<u64>) {
+        packed.clear();
+        packed.resize(self.words, 0);
+        let total = &total[..total.len().min(self.bits)];
+        for (word, chunk) in packed.iter_mut().zip(total.chunks(64)) {
+            *word = chunk
+                .iter()
+                .enumerate()
+                .fold(0, |w, (i, &t)| w | (u64::from(t < 0.0) << i));
+        }
+    }
+
     /// Packs hard bits (0 or 1 per bit; missing bits read as 0) into `packed`, 64 per word.
+    #[cfg(test)]
     fn pack(&self, hard: &[u8], packed: &mut Vec<u64>) {
         packed.clear();
         packed.resize(self.words, 0);
@@ -236,6 +285,9 @@ pub struct LdpcScratch {
     /// the tanh values of the slots before it in its check.
     tanh: Vec<f32>,
     prefix: Vec<f32>,
+    /// Sum-product, by slot: the total of the slot's bit, so the variable-to-check messages
+    /// come from contiguous memory.
+    at_slot: Vec<f32>,
     /// Sum-product, by check of one group: the product of the tanh values after a slot.
     suffix: Vec<f32>,
     /// The hard decision packed for the parity checks.
@@ -253,10 +305,12 @@ impl LdpcScratch {
         self.best.resize(graph.bits, 0.0);
         let slots = graph.slot_bit.len();
         self.v2c.resize(graph.edges(), 0.0);
-        // By edge for min-sum, by slot for sum-product.
-        self.c2v.resize(graph.edges().max(slots), 0.0);
+        // By edge for min-sum, by slot for sum-product; at least `SLOT_CAPACITY` long for the
+        // sum-product totals of `totals_of_three`.
+        self.c2v.resize(graph.edges().max(slots).max(SLOT_CAPACITY), 0.0);
         self.tanh.resize(slots, 0.0);
         self.prefix.resize(slots, 0.0);
+        self.at_slot.resize(slots.max(SLOT_CAPACITY), 0.0);
         self.suffix.resize(graph.widest, 0.0);
     }
 }
@@ -380,13 +434,18 @@ fn run(
     }
     s.c2v.fill(0.0);
     s.total.copy_from_slice(&s.l0);
+    for (a, &b) in s.at_slot.iter_mut().zip(&graph.slot_bit) {
+        *a = s.total[b];
+    }
 
+    // The parity checks read the hard decisions packed from the totals; the codeword gets
+    // the last of them. Bits the codeword has no room for read as 0.
+    let decided = n.min(codeword.len());
     let mut outcome = LdpcOutcome::default();
     let mut iteration = 0u32;
     let mut fewest = usize::MAX;
     loop {
-        hard_decision(&s.total, codeword);
-        graph.pack(codeword, &mut s.packed);
+        graph.pack_signs(&s.total[..decided], &mut s.packed);
         let unsatisfied = graph.unsatisfied_packed(&s.packed);
         if unsatisfied < fewest {
             fewest = unsatisfied;
@@ -394,15 +453,15 @@ fn run(
         }
         outcome.unsatisfied = unsatisfied as u32;
         outcome.iterations = iteration;
-        if unsatisfied == 0 {
-            outcome.converged = codeword.iter().take(n).any(|&b| b != 0);
-            break;
-        }
-        if iteration >= max_iterations {
+        if unsatisfied == 0 || iteration >= max_iterations {
             break;
         }
         iteration += 1;
         iterate(graph, s);
+    }
+    hard_decision(&s.total, codeword);
+    if outcome.unsatisfied == 0 {
+        outcome.converged = codeword.iter().take(n).any(|&b| b != 0);
     }
     outcome.hard_errors = codeword
         .iter()
@@ -442,10 +501,11 @@ fn sum_product_iteration(graph: &ParityGraph, s: &mut LdpcScratch) {
         tanh,
         prefix,
         suffix,
+        at_slot,
         ..
     } = s;
-    for ((t, &bit), &c) in tanh.iter_mut().zip(&graph.slot_bit).zip(c2v.iter()) {
-        *t = total[bit] - c;
+    for ((t, &a), &c) in tanh.iter_mut().zip(at_slot.iter()).zip(c2v.iter()) {
+        *t = a - c;
     }
     for t in tanh.iter_mut() {
         *t = fast_tanh(0.5 * *t);
@@ -495,10 +555,73 @@ fn sum_product_iteration(graph: &ParityGraph, s: &mut LdpcScratch) {
             }
         }
     }
-    for b in 0..graph.bits {
-        let slots = &graph.bit_slots[graph.bit_start[b]..graph.bit_start[b + 1]];
-        total[b] = l0[b] + slots.iter().map(|&e| c2v[e]).sum::<f32>();
+    // Each bit's total, and its copy at each of the bit's slots for the next iteration.
+    if totals_of_three(graph, l0, c2v, total, at_slot) {
+        pad(graph, total, at_slot);
+        return;
     }
+    let mut update = |b: usize, slots: &[usize]| {
+        let t = l0[b] + slots.iter().map(|&e| c2v[e]).sum::<f32>();
+        total[b] = t;
+        for &e in slots {
+            at_slot[e] = t;
+        }
+    };
+    match graph.bit_degree {
+        Some(d) => {
+            for (b, slots) in graph.bit_slots.chunks_exact(d).enumerate() {
+                update(b, slots);
+            }
+        }
+        None => {
+            for b in 0..graph.bits {
+                update(b, &graph.bit_slots[graph.bit_start[b]..graph.bit_start[b + 1]]);
+            }
+        }
+    }
+    pad(graph, total, at_slot);
+}
+
+/// Sets the padding slots' copies of their bit's total: padding slots read bit 0, as their
+/// slot bit says.
+fn pad(graph: &ParityGraph, total: &[f32], at_slot: &mut [f32]) {
+    if let Some(&t) = total.first() {
+        for &e in &graph.padding {
+            at_slot[e] = t;
+        }
+    }
+}
+
+/// The totals of [`sum_product_iteration`] for a graph whose every bit has 3 checks and whose
+/// slots fit [`SLOT_CAPACITY`], as FT8's and FT4's do: the slots index fixed-size arrays
+/// through a mask that keeps them in range, so the gathers and copies carry no bounds checks.
+/// Each total sums its slots as the general loop does. Returns `false`, having done nothing,
+/// for other graphs.
+fn totals_of_three(
+    graph: &ParityGraph,
+    l0: &[f32],
+    c2v: &[f32],
+    total: &mut [f32],
+    at_slot: &mut [f32],
+) -> bool {
+    let (Some(c2v), Some(at_slot)) = (
+        c2v.first_chunk::<SLOT_CAPACITY>(),
+        at_slot.first_chunk_mut::<SLOT_CAPACITY>(),
+    ) else {
+        return false;
+    };
+    if graph.bit_slots3.is_empty() {
+        return false;
+    }
+    for ((t, &l), slots) in total.iter_mut().zip(l0).zip(&graph.bit_slots3) {
+        let [a, b, c] = slots.map(|e| usize::from(e) & (SLOT_CAPACITY - 1));
+        let v = l + [c2v[a], c2v[b], c2v[c]].into_iter().sum::<f32>();
+        *t = v;
+        at_slot[a] = v;
+        at_slot[b] = v;
+        at_slot[c] = v;
+    }
+    true
 }
 
 /// Bit is 1 when `log(P(0) / P(1)) < 0`.
@@ -670,7 +793,141 @@ mod tests {
                 suffix *= t[i];
             }
         };
-        run(graph, llr, max_iterations, s, codeword, by_check(update))
+        run_0_24_2(graph, llr, max_iterations, s, codeword, by_check(update))
+    }
+
+    /// The flooding-schedule driver of 0.24.2: the hard decision written to the codeword
+    /// and packed from it every iteration.
+    fn run_0_24_2(
+        graph: &ParityGraph,
+        llr: &[f32],
+        max_iterations: u32,
+        s: &mut LdpcScratch,
+        codeword: &mut [u8],
+        iterate: impl Fn(&ParityGraph, &mut LdpcScratch),
+    ) -> LdpcOutcome {
+        s.ensure(graph);
+        let n = graph.bits;
+        for (b, l0) in s.l0.iter_mut().enumerate() {
+            let v = llr.get(b).copied().unwrap_or(0.0);
+            *l0 = if v.is_finite() { -v } else { 0.0 };
+        }
+        s.c2v.fill(0.0);
+        s.total.copy_from_slice(&s.l0);
+
+        let mut outcome = LdpcOutcome::default();
+        let mut iteration = 0u32;
+        let mut fewest = usize::MAX;
+        loop {
+            hard_decision(&s.total, codeword);
+            graph.pack(codeword, &mut s.packed);
+            let unsatisfied = graph.unsatisfied_packed(&s.packed);
+            if unsatisfied < fewest {
+                fewest = unsatisfied;
+                s.best.copy_from_slice(&s.total);
+            }
+            outcome.unsatisfied = unsatisfied as u32;
+            outcome.iterations = iteration;
+            if unsatisfied == 0 {
+                outcome.converged = codeword.iter().take(n).any(|&b| b != 0);
+                break;
+            }
+            if iteration >= max_iterations {
+                break;
+            }
+            iteration += 1;
+            iterate(graph, s);
+        }
+        outcome.hard_errors = codeword
+            .iter()
+            .zip(&s.l0)
+            .filter(|&(&c, &l0)| c != u8::from(l0 < 0.0))
+            .count() as u32;
+        outcome
+    }
+
+    /// The sum-product iteration of 0.24.2: each slot gathers its bit's total, and each bit
+    /// sums its slots through `bit_start`.
+    fn sum_product_iteration_0_24_2(graph: &ParityGraph, s: &mut LdpcScratch) {
+        let LdpcScratch {
+            l0,
+            total,
+            c2v,
+            tanh,
+            prefix,
+            suffix,
+            ..
+        } = s;
+        for ((t, &bit), &c) in tanh.iter_mut().zip(&graph.slot_bit).zip(c2v.iter()) {
+            *t = total[bit] - c;
+        }
+        for t in tanh.iter_mut() {
+            *t = fast_tanh(0.5 * *t);
+        }
+        for g in &graph.groups {
+            let (d, n, o) = (g.degree, g.lanes, g.start);
+            prefix[o..o + n].fill(1.0);
+            for i in 1..d {
+                let (before, here) = prefix[o + (i - 1) * n..o + (i + 1) * n].split_at_mut(n);
+                let t = &tanh[o + (i - 1) * n..o + i * n];
+                let (here, before, t) = (
+                    here.as_chunks_mut::<LANES>().0,
+                    before.as_chunks::<LANES>().0,
+                    t.as_chunks::<LANES>().0,
+                );
+                for ((h, b), t) in here.iter_mut().zip(before).zip(t) {
+                    for ((h, &b), &t) in h.iter_mut().zip(b).zip(t) {
+                        *h = b * t;
+                    }
+                }
+            }
+            let suffix = &mut suffix[..n];
+            suffix.fill(1.0);
+            for i in (0..d).rev() {
+                let r = o + i * n..o + (i + 1) * n;
+                let lanes = c2v[r.clone()]
+                    .as_chunks_mut::<LANES>()
+                    .0
+                    .iter_mut()
+                    .zip(prefix[r.clone()].as_chunks::<LANES>().0)
+                    .zip(tanh[r].as_chunks::<LANES>().0)
+                    .zip(suffix.as_chunks_mut::<LANES>().0.iter_mut());
+                for (((c, p), t), u) in lanes {
+                    let mut x = [0.0f32; LANES];
+                    for ((x, &p), &u) in x.iter_mut().zip(p).zip(u.iter()) {
+                        *x = p * u;
+                    }
+                    for (c, &x) in c.iter_mut().zip(&x) {
+                        *c = 2.0 * fast_atanh(x);
+                    }
+                    for (u, &t) in u.iter_mut().zip(t) {
+                        *u *= t;
+                    }
+                }
+            }
+        }
+        for b in 0..graph.bits {
+            let slots = &graph.bit_slots[graph.bit_start[b]..graph.bit_start[b + 1]];
+            total[b] = l0[b] + slots.iter().map(|&e| c2v[e]).sum::<f32>();
+        }
+    }
+
+    /// Sum-product as it ran in 0.24.2.
+    fn sum_product_0_24_2(
+        graph: &ParityGraph,
+        llr: &[f32],
+        max_iterations: u32,
+        s: &mut LdpcScratch,
+        codeword: &mut [u8],
+    ) -> LdpcOutcome {
+        run_0_24_2(
+            graph,
+            llr,
+            max_iterations,
+            s,
+            codeword,
+            sum_product_iteration_0_24_2,
+        )
     }
 
     /// ft8_lib's tanh approximation as it was written, with early returns.
@@ -724,15 +981,43 @@ mod tests {
         ParityGraph::new(bits, &rows).expect("graph")
     }
 
+    /// A graph over 40 bits in which every bit has 3 checks: each of three orderings of the
+    /// bits cut into checks of 6, 6, 7, 7, 7 and 7 bits.
+    fn regular_graph(state: &mut u64) -> ParityGraph {
+        let offset = (*state % 40) as usize;
+        let mut rows = Vec::new();
+        for p in [1usize, 3, 7] {
+            let order: Vec<u16> = (0..40).map(|i| ((i * p + offset) % 40) as u16).collect();
+            let mut at = 0;
+            for d in [6, 6, 7, 7, 7, 7] {
+                rows.push(order[at..at + d].to_vec());
+                at += d;
+            }
+        }
+        ParityGraph::new(40, &rows).expect("graph")
+    }
+
     #[test]
     fn slot_order_matches_the_check_loop_bit_for_bit() {
         let ft8 = ParityGraph::ft8();
         let mut state = 7u64;
         let toys: Vec<ParityGraph> = (0..4).map(|_| random_graph(60, 30, &mut state)).collect();
         let hamming = hamming();
-        let mut graphs: Vec<&ParityGraph> = vec![ft8, &hamming];
+        // Every bit of this one has 3 checks, as in FT8, through checks of several degrees.
+        let regular = regular_graph(&mut state);
+        let mut graphs: Vec<&ParityGraph> = vec![ft8, &hamming, &regular];
         graphs.extend(toys.iter());
-        let (mut a, mut b) = (LdpcScratch::default(), LdpcScratch::default());
+        assert_eq!(ft8.bit_degree, Some(3));
+        assert_eq!(regular.bit_degree, Some(3));
+        assert!(toys.iter().all(|t| t.bit_degree.is_none()));
+        // FT8 and the regular graph take the totals of three slots; the others the general loop.
+        assert!(!ft8.bit_slots3.is_empty() && !regular.bit_slots3.is_empty());
+        assert!(toys.iter().all(|t| t.bit_slots3.is_empty()) && hamming.bit_slots3.is_empty());
+        let (mut a, mut b, mut c) = (
+            LdpcScratch::default(),
+            LdpcScratch::default(),
+            LdpcScratch::default(),
+        );
         let mut converged = 0;
         for (g, graph) in graphs.iter().enumerate() {
             let n = graph.bits();
@@ -754,17 +1039,23 @@ mod tests {
                     })
                     .collect();
                 for iterations in [0u32, 1, 25, 60] {
-                    let (mut ca, mut cb) = (vec![0u8; n], vec![0u8; n]);
+                    let (mut ca, mut cb, mut cc) = (vec![0u8; n], vec![0u8; n], vec![0u8; n]);
                     let want = sum_product_by_check(graph, &llr, iterations, &mut a, &mut ca);
+                    let slots = sum_product_0_24_2(graph, &llr, iterations, &mut c, &mut cc);
                     let got = SumProduct {
                         max_iterations: iterations,
                     }
                     .decode(graph, &llr, &mut b, &mut cb);
                     let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
                     assert_eq!(want, got, "graph {g} trial {trial} iterations {iterations}");
+                    assert_eq!(slots, got, "graph {g} trial {trial} iterations {iterations}");
                     assert_eq!(ca, cb);
+                    assert_eq!(cc, cb);
                     assert_eq!(bits(&a.total), bits(&b.total));
                     assert_eq!(bits(&a.best), bits(&b.best));
+                    // The slot-order messages, padding included, as 0.24.2 left them.
+                    assert_eq!(bits(&c.c2v), bits(&b.c2v));
+                    assert_eq!(bits(&c.total), bits(&b.total));
                     converged += usize::from(got.converged);
                 }
             }
@@ -776,7 +1067,11 @@ mod tests {
     fn ft8_codewords_with_noise_decode_alike_in_both_orders() {
         // Real codewords at low SNR, where belief propagation iterates and often fails.
         let graph = ParityGraph::ft8();
-        let (mut a, mut b) = (LdpcScratch::default(), LdpcScratch::default());
+        let (mut a, mut b, mut c) = (
+            LdpcScratch::default(),
+            LdpcScratch::default(),
+            LdpcScratch::default(),
+        );
         let mut state = 11u64;
         let mut converged = 0;
         for trial in 0..300u32 {
@@ -799,16 +1094,55 @@ mod tests {
                     4.0 * (if c == 1 { 1.0 } else { -1.0 } + sigma * g)
                 })
                 .collect();
-            let (mut ca, mut cb) = ([0u8; 174], [0u8; 174]);
+            let (mut ca, mut cb, mut cc) = ([0u8; 174], [0u8; 174], [0u8; 174]);
             let want = sum_product_by_check(graph, &llr, 25, &mut a, &mut ca);
+            let slots = sum_product_0_24_2(graph, &llr, 25, &mut c, &mut cc);
             let got = SumProduct { max_iterations: 25 }.decode(graph, &llr, &mut b, &mut cb);
             assert_eq!(want, got, "trial {trial}");
+            assert_eq!(slots, got, "trial {trial}");
             assert_eq!(ca, cb);
+            assert_eq!(cc, cb);
             let bits = |v: &[f32]| v.iter().map(|x| x.to_bits()).collect::<Vec<_>>();
             assert_eq!(bits(&a.best), bits(&b.best));
+            assert_eq!(bits(&c.c2v), bits(&b.c2v));
             converged += usize::from(got.converged);
         }
         assert!(converged > 30 && converged < 300, "{converged}");
+    }
+
+    /// Hard decisions packed from the totals equal the codeword's hard decisions packed, for
+    /// totals of both signs, zeros of both signs, NaN and short or long codewords.
+    #[test]
+    fn signs_pack_as_the_hard_decisions() {
+        let mut state = 3u64;
+        let toys: Vec<ParityGraph> = (0..2).map(|_| random_graph(150, 70, &mut state)).collect();
+        let mut graphs: Vec<&ParityGraph> = vec![ParityGraph::ft8()];
+        graphs.extend(toys.iter());
+        let (mut want, mut got) = (Vec::new(), Vec::new());
+        for graph in graphs {
+            let n = graph.bits();
+            for trial in 0..200usize {
+                let total: Vec<f32> = (0..n)
+                    .map(|_| {
+                        state = state
+                            .wrapping_mul(6364136223846793005)
+                            .wrapping_add(1442695040888963407);
+                        match (state >> 40) % 8 {
+                            0 => 0.0,
+                            1 => -0.0,
+                            2 => f32::NAN,
+                            _ => (state >> 40) as f32 / (1u64 << 23) as f32 - 1.0,
+                        }
+                    })
+                    .collect();
+                let len = [n, n - 9, n + 5][trial % 3];
+                let mut codeword = vec![7u8; len];
+                hard_decision(&total, &mut codeword);
+                graph.pack(&codeword, &mut want);
+                graph.pack_signs(&total[..n.min(len)], &mut got);
+                assert_eq!(want, got, "trial {trial}");
+            }
+        }
     }
 
     #[test]
