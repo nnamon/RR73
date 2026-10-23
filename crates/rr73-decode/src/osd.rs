@@ -122,16 +122,23 @@ pub struct OsdScratch {
     /// Per code bit, the change in distance when a flip changes that bit: +reliability where
     /// the order-0 codeword agrees with the hard decision, -reliability where it does not.
     signed: Vec<f32>,
+    /// The order-1 change of the distance of each window row, and whether it is summed yet.
     deltas: Vec<f32>,
-    /// `member[bit * window + r]` is 1 when window row `r` has `bit`, else 0.
-    member: Vec<f32>,
-    /// Overlaps of one window row with the rows after it.
-    overlap: Vec<f32>,
-    /// Candidates within the distance limit as [`found_key`]s.
+    delta_known: Vec<bool>,
+    /// The window rows' bits that count as hard errors: word 0 of every row, then word 1,
+    /// then word 2.
+    masked_rows: Vec<u64>,
+    /// Hard errors of one window row paired with each later row.
+    errors: Vec<u32>,
+    /// Candidates that pass the integer checks and the distance limit, as [`found_key`]s.
     found: Vec<u64>,
-    /// The reference OSD's candidates, in tests.
+    /// The reference OSDs' candidates and buffers, in tests.
     #[cfg(test)]
     found_ref: Vec<(f32, u16, u16)>,
+    #[cfg(test)]
+    member: Vec<f32>,
+    #[cfg(test)]
+    overlap: Vec<f32>,
 }
 
 /// A candidate of distance `metric` from window rows `j` and `k` ([`NONE`] for none) as one
@@ -267,61 +274,108 @@ pub fn osd(
             .map(|(i, &r)| if get(&diff, i) { -r } else { r }),
     );
 
+    // The codeword returned is the one with the smallest key (distance, then rows) among the
+    // candidates within the distance limit that are not all zero, keep their hard errors
+    // within the limit and pass the CRC. The hard errors and the zero test are integer
+    // functions of a candidate's rows alone, so they are checked first, and only candidates
+    // that pass them get a distance. Each distance comes from the same operations in the same
+    // order as when every candidate got one: the order-1 sums of each row's signed
+    // reliabilities, and the order-2 overlap of two rows summed over the bits they share in
+    // increasing order from +0.
     let limit = params.max_distance * total;
-    s.found.clear();
-    if base_metric <= limit {
-        s.found.push(found_key(base_metric, NONE, NONE));
-    }
     let window = params.window.clamp(1, K);
     let first = K - window;
+    let (keep, extra) = if params.erasures_as_errors {
+        ([!erased[0], !erased[1], !erased[2]], popcount(&erased))
+    } else {
+        ([!0; 3], 0)
+    };
+    let masked = |w: &Bits| [w[0] & keep[0], w[1] & keep[1], w[2] & keep[2]];
+    // Code bits of the order-0 codeword that differ from the channel decisions, counted ones.
+    let mut errors0 = base;
+    xor(&mut errors0, &channel_hard);
+    let errors0 = masked(&errors0);
+    let max_errors = params.max_hard_errors;
     let OsdScratch {
         rows,
         signed,
         deltas,
-        member,
-        overlap,
+        delta_known,
+        masked_rows,
+        errors,
         found,
         ..
     } = s;
-    if params.order >= 1 {
-        deltas.clear();
-        for (j, row) in rows.iter().enumerate().skip(first) {
+    found.clear();
+    if base != [0; 3] && popcount(&errors0) + extra <= max_errors && base_metric <= limit {
+        found.push(found_key(base_metric, NONE, NONE));
+    }
+    deltas.clear();
+    deltas.resize(window, 0.0);
+    delta_known.clear();
+    delta_known.resize(window, false);
+    // The order-1 change of the distance of window row `r`, summed once when first needed.
+    let mut delta = |r: usize| -> f32 {
+        if !delta_known[r] {
             let mut d = 0.0;
-            for_each_bit(row, |i| d += signed[i]);
-            deltas.push(d);
-            let m = base_metric + d;
-            if m <= limit {
-                found.push(found_key(m, j as u16, NONE));
+            for_each_bit(&rows[first + r], |i| d += signed[i]);
+            deltas[r] = d;
+            delta_known[r] = true;
+        }
+        deltas[r]
+    };
+    if params.order >= 1 {
+        for r in 0..window {
+            let row = &rows[first + r];
+            let mut c = base;
+            xor(&mut c, row);
+            let mut e = errors0;
+            xor(&mut e, &masked(row));
+            if c != [0; 3] && popcount(&e) + extra <= max_errors {
+                let m = base_metric + delta(r);
+                if m <= limit {
+                    found.push(found_key(m, (first + r) as u16, NONE));
+                }
             }
         }
     }
     if params.order >= 2 {
-        // The overlap of rows j and k sums the signed reliabilities of the bits both rows
-        // have, in increasing bit order. For one j the sums for every k run side by side:
-        // walking the bits of row j, each k adds the bit's value times 1 when it has the bit
-        // and times 0 when not. A sum that starts at +0 never becomes -0, so adding a zero
-        // leaves it unchanged, and every overlap equals the bit-by-bit sum exactly.
-        member.clear();
-        member.resize(N * window, 0.0);
-        for r in 0..window {
-            for_each_bit(&rows[first + r], |i| member[i * window + r] = 1.0);
+        // The window rows' bits that count as errors, word by word across the rows, so the
+        // hard errors of row r with every later row come from one loop over whole words.
+        masked_rows.clear();
+        for word in 0..3 {
+            masked_rows.extend(rows[first..].iter().map(|row| row[word] & keep[word]));
         }
-        overlap.clear();
-        overlap.resize(window, 0.0);
         for r in 0..window {
-            let ov = &mut overlap[r + 1..];
-            ov.fill(0.0);
-            for_each_bit(&rows[first + r], |i| {
-                let x = signed[i];
-                let has = &member[i * window + r + 1..(i + 1) * window];
-                for (o, &h) in ov.iter_mut().zip(has) {
-                    *o += x * h;
+            let rj = rows[first + r];
+            let mut ej = errors0;
+            xor(&mut ej, &masked(&rj));
+            let later = r + 1..window;
+            errors.clear();
+            errors.extend(
+                masked_rows[later.clone()]
+                    .iter()
+                    .zip(&masked_rows[window + r + 1..2 * window])
+                    .zip(&masked_rows[2 * window + r + 1..3 * window])
+                    .map(|((&a, &b), &c)| {
+                        (a ^ ej[0]).count_ones() + (b ^ ej[1]).count_ones() + (c ^ ej[2]).count_ones()
+                    }),
+            );
+            for (q, &e) in later.zip(errors.iter()) {
+                if e + extra > max_errors {
+                    continue;
                 }
-            });
-            let dj = deltas[r];
-            for (c, &o) in ov.iter().enumerate() {
-                let q = r + 1 + c;
-                let m = base_metric + dj + deltas[q] - 2.0 * o;
+                let rk = &rows[first + q];
+                let mut c = base;
+                xor(&mut c, &rj);
+                xor(&mut c, rk);
+                if c == [0; 3] {
+                    continue;
+                }
+                let both = [rj[0] & rk[0], rj[1] & rk[1], rj[2] & rk[2]];
+                let mut o = 0.0;
+                for_each_bit(&both, |i| o += signed[i]);
+                let m = base_metric + delta(r) + delta(q) - 2.0 * o;
                 if m <= limit {
                     found.push(found_key(m, (first + r) as u16, (first + q) as u16));
                 }
@@ -339,24 +393,9 @@ pub fn osd(
         if k != NONE {
             xor(&mut c, &s.rows[k as usize]);
         }
-        if c == [0; 3] {
-            continue;
-        }
-        let mut errors = c;
-        xor(&mut errors, &channel_hard);
-        let hard_errors = if params.erasures_as_errors {
-            let received = [
-                errors[0] & !erased[0],
-                errors[1] & !erased[1],
-                errors[2] & !erased[2],
-            ];
-            popcount(&received) + popcount(&erased)
-        } else {
-            popcount(&errors)
-        };
-        if hard_errors > params.max_hard_errors {
-            continue;
-        }
+        let mut e = c;
+        xor(&mut e, &channel_hard);
+        let hard_errors = popcount(&masked(&e)) + extra;
         let mut message = [0u8; 12];
         message[..8].copy_from_slice(&c[0].to_be_bytes());
         message[8..].copy_from_slice(&c[1].to_be_bytes()[..4]);
@@ -743,6 +782,209 @@ mod tests {
         }
     }
 
+    /// The OSD of 0.24.2, after experiment 0009 and before 0014: a distance for every order-1
+    /// and order-2 candidate from dense overlaps, then a sort of all of those within the
+    /// limit and the checks in that order.
+    mod at_0_24_2 {
+        use super::super::*;
+
+        pub(super) fn reference(
+            params: &OsdParams,
+            source: impl Fn(usize) -> f32,
+            channel: &[f32],
+            s: &mut OsdScratch,
+        ) -> Option<OsdResult> {
+            if channel.len() < N {
+                return None;
+            }
+            s.reliability.clear();
+            let mut hard: Bits = [0; 3];
+            let mut channel_hard: Bits = [0; 3];
+            let mut erased: Bits = [0; 3];
+            let mut total = 0.0f32;
+            for (i, &c) in channel.iter().enumerate().take(N) {
+                let v = source(i);
+                let v = if v.is_finite() { v } else { 0.0 };
+                if v > 0.0 {
+                    set(&mut hard, i);
+                }
+                if c > 0.0 {
+                    set(&mut channel_hard, i);
+                }
+                if c == 0.0 || !c.is_finite() {
+                    set(&mut erased, i);
+                }
+                s.reliability.push(v.abs());
+                total += v.abs();
+            }
+            if total.is_nan() || total <= 0.0 {
+                return None;
+            }
+            let rel = &s.reliability;
+            // Reliability order, most reliable first, ties by position: the keys sort as the
+            // reliabilities' bit patterns, which order non-negative floats as their values do.
+            s.keys.clear();
+            s.keys.extend(
+                rel.iter()
+                    .enumerate()
+                    .map(|(i, r)| (u64::from(!r.to_bits()) << 32) | i as u64),
+            );
+            s.keys.sort_unstable();
+            s.order.clear();
+            s.order.extend(s.keys.iter().map(|&k| (k & 0xffff_ffff) as usize));
+
+            // Gauss-Jordan elimination with pivots taken in reliability order. Rows are cleared of the
+            // pivot column with a mask, so the inner loop has no branch on the data.
+            s.rows.clear();
+            s.rows.extend_from_slice(generator());
+            s.pivots.clear();
+            for &col in &s.order {
+                let p = s.pivots.len();
+                if p == K {
+                    break;
+                }
+                let Some(r) = (p..K).find(|&r| get(&s.rows[r], col)) else {
+                    continue;
+                };
+                s.rows.swap(p, r);
+                let pivot_row = s.rows[p];
+                let (word, shift) = (col >> 6, 63 - (col & 63));
+                for (q, row) in s.rows.iter_mut().enumerate() {
+                    let mask = ((row[word] >> shift) & u64::from(q != p)).wrapping_neg();
+                    row[0] ^= pivot_row[0] & mask;
+                    row[1] ^= pivot_row[1] & mask;
+                    row[2] ^= pivot_row[2] & mask;
+                }
+                s.pivots.push(col);
+            }
+            if s.pivots.len() < K {
+                return None;
+            }
+
+            // Order 0: re-encode the hard decisions of the information set.
+            let mut base: Bits = [0; 3];
+            for (p, &col) in s.pivots.iter().enumerate() {
+                if get(&hard, col) {
+                    xor(&mut base, &s.rows[p]);
+                }
+            }
+            let mut diff = base;
+            xor(&mut diff, &hard);
+            let mut base_metric = 0.0f32;
+            for_each_bit(&diff, |i| base_metric += rel[i]);
+            // Flipping bit i changes the metric by +rel (new disagreement) or -rel (fixed).
+            s.signed.clear();
+            s.signed.extend(
+                rel.iter()
+                    .enumerate()
+                    .map(|(i, &r)| if get(&diff, i) { -r } else { r }),
+            );
+
+            let limit = params.max_distance * total;
+            s.found.clear();
+            if base_metric <= limit {
+                s.found.push(found_key(base_metric, NONE, NONE));
+            }
+            let window = params.window.clamp(1, K);
+            let first = K - window;
+            let OsdScratch {
+                rows,
+                signed,
+                deltas,
+                member,
+                overlap,
+                found,
+                ..
+            } = s;
+            if params.order >= 1 {
+                deltas.clear();
+                for (j, row) in rows.iter().enumerate().skip(first) {
+                    let mut d = 0.0;
+                    for_each_bit(row, |i| d += signed[i]);
+                    deltas.push(d);
+                    let m = base_metric + d;
+                    if m <= limit {
+                        found.push(found_key(m, j as u16, NONE));
+                    }
+                }
+            }
+            if params.order >= 2 {
+                // The overlap of rows j and k sums the signed reliabilities of the bits both rows
+                // have, in increasing bit order. For one j the sums for every k run side by side:
+                // walking the bits of row j, each k adds the bit's value times 1 when it has the bit
+                // and times 0 when not. A sum that starts at +0 never becomes -0, so adding a zero
+                // leaves it unchanged, and every overlap equals the bit-by-bit sum exactly.
+                member.clear();
+                member.resize(N * window, 0.0);
+                for r in 0..window {
+                    for_each_bit(&rows[first + r], |i| member[i * window + r] = 1.0);
+                }
+                overlap.clear();
+                overlap.resize(window, 0.0);
+                for r in 0..window {
+                    let ov = &mut overlap[r + 1..];
+                    ov.fill(0.0);
+                    for_each_bit(&rows[first + r], |i| {
+                        let x = signed[i];
+                        let has = &member[i * window + r + 1..(i + 1) * window];
+                        for (o, &h) in ov.iter_mut().zip(has) {
+                            *o += x * h;
+                        }
+                    });
+                    let dj = deltas[r];
+                    for (c, &o) in ov.iter().enumerate() {
+                        let q = r + 1 + c;
+                        let m = base_metric + dj + deltas[q] - 2.0 * o;
+                        if m <= limit {
+                            found.push(found_key(m, (first + r) as u16, (first + q) as u16));
+                        }
+                    }
+                }
+            }
+            s.found.sort_unstable();
+
+            for &key in &s.found {
+                let (metric, j, k) = from_found_key(key);
+                let mut c = base;
+                if j != NONE {
+                    xor(&mut c, &s.rows[j as usize]);
+                }
+                if k != NONE {
+                    xor(&mut c, &s.rows[k as usize]);
+                }
+                if c == [0; 3] {
+                    continue;
+                }
+                let mut errors = c;
+                xor(&mut errors, &channel_hard);
+                let hard_errors = if params.erasures_as_errors {
+                    let received = [
+                        errors[0] & !erased[0],
+                        errors[1] & !erased[1],
+                        errors[2] & !erased[2],
+                    ];
+                    popcount(&received) + popcount(&erased)
+                } else {
+                    popcount(&errors)
+                };
+                if hard_errors > params.max_hard_errors {
+                    continue;
+                }
+                let mut message = [0u8; 12];
+                message[..8].copy_from_slice(&c[0].to_be_bytes());
+                message[8..].copy_from_slice(&c[1].to_be_bytes()[..4]);
+                if crc::check(&message).is_some() {
+                    return Some(OsdResult {
+                        bits: c,
+                        distance: metric / total,
+                        hard_errors,
+                    });
+                }
+            }
+            None
+        }
+    }
+
     /// A linear congruential generator and Box-Muller normal deviates.
     struct Lcg(u64);
 
@@ -802,10 +1044,17 @@ mod tests {
         assert_eq!(bits(&want), bits(&got));
     }
 
+    /// The search of experiment 0014, the 0.24.2 search it replaced and the 0.21.8 search give
+    /// the same codeword, distance and hard errors bit for bit, at the preset's limits and
+    /// looser and tighter ones; the 0.24.2 search also gives 0.21.8's candidate list.
     #[test]
     fn faster_search_matches_the_reference_bit_for_bit() {
         let mut rng = Lcg(2026);
-        let (mut a, mut b) = (OsdScratch::default(), OsdScratch::default());
+        let (mut a, mut b, mut c) = (
+            OsdScratch::default(),
+            OsdScratch::default(),
+            OsdScratch::default(),
+        );
         let (mut cases, mut decoded) = (0, 0);
         for trial in 0..100usize {
             let cw = codeword(trial as u8);
@@ -833,7 +1082,9 @@ mod tests {
             };
             for order in 0..=2u8 {
                 for window in [1usize, 2, 17, 40, 91] {
-                    for (max_distance, max_hard_errors) in [(1.0f32, N as u32), (0.07, 30)] {
+                    for (max_distance, max_hard_errors) in
+                        [(1.0f32, N as u32), (0.07, 30), (0.2, 45), (0.07, 24)]
+                    {
                         let p = OsdParams {
                             order,
                             window,
@@ -843,21 +1094,22 @@ mod tests {
                             erasures_as_errors: trial % 2 == 0,
                         };
                         let want = before::reference(&p, |i| source[i], &channel, &mut a);
-                        let got = osd(&p, |i| source[i], &channel, &mut b);
+                        let dense = at_0_24_2::reference(&p, |i| source[i], &channel, &mut b);
                         let found: Vec<(f32, u16, u16)> =
                             b.found.iter().map(|&k| from_found_key(k)).collect();
-                        assert_eq!(
-                            exact(want, &a.found_ref),
-                            exact(got, &found),
-                            "trial {trial}, order {order}, window {window}, limit {max_distance}"
+                        let what = format!(
+                            "trial {trial}, order {order}, window {window}, limits {max_distance} {max_hard_errors}"
                         );
+                        assert_eq!(exact(want, &a.found_ref), exact(dense, &found), "{what}");
+                        let got = osd(&p, |i| source[i], &channel, &mut c);
+                        assert_eq!(exact(want, &[]).0, exact(got, &[]).0, "{what}");
                         cases += 1;
                         decoded += usize::from(got.is_some());
                     }
                 }
             }
         }
-        assert_eq!(cases, 3000);
-        assert!(decoded > 500 && decoded < cases, "{decoded} of {cases} decoded");
+        assert_eq!(cases, 6000);
+        assert!(decoded > 1000 && decoded < cases, "{decoded} of {cases} decoded");
     }
 }
