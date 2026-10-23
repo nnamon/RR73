@@ -4,7 +4,7 @@ Status: accepted, 2026-10-16
 
 ## Context
 
-iOS stops the microphone when RR73 leaves the screen. Up to 0.24.0 RR73 applied that rule everywhere: hiding the page stopped capture and turned Tx off, and Resume audio needed a tap. Chrome and Edge on a desktop keep a page's microphone and AudioContext running while it is hidden: in a background tab, or with the window minimised or covered. On a Windows tablet an operator who switches to another window, such as to spot on POTA, lost receive and the QSO under way.
+iOS stops the microphone when RR73 leaves the screen. Up to 0.24.0 RR73 applied that rule everywhere: hiding the page stopped capture and turned Tx off, and Resume audio needed a tap. Chrome and Edge on a desktop keep a page's microphone and AudioContext running while it is hidden: in a background tab, or with the window minimised or covered. On a Windows tablet, an operator who switched to another window, such as to spot on POTA, lost receive and the QSO under way.
 
 Chromium throttles a hidden page's timers. Chrome's documentation ("Heavy throttling of chained JS timers beginning in Chrome 88") lists timers checked once per second in a hidden page that has been silent for 30 s, and once per minute for chained timers after 5 minutes hidden. RR73 starts transmissions from timers: each transmit scheduler waits with a timeout until 0.5 s before the start (the pre-roll), and the 1 s ticks of the sequencer, the WSPR beacon and the keyboard modes hand transmissions over and run the watchdog. The audio itself plays on the audio clock, so a timer that fires late costs nothing up to about 0.48 s and makes a late start beyond that.
 
@@ -53,7 +53,7 @@ Receive while hidden: every slot RR73 did not transmit in was decoded and none w
 
 - Not tested on a device: Chrome and Edge on Windows. The measurements ran in headless Chromium on Linux.
 - Chromium's documentation puts the once-a-minute throttling after 5 minutes hidden; Chromium's source sets 1 minute for a loaded page. Neither showed with capture running. The wake timers do not depend on it.
-- Chrome documents that Energy Saver does not freeze a page using the microphone. Edge's sleeping tabs are Unverified.
+- Chrome documents that Energy Saver does not freeze a page using the microphone. Edge's sleeping tabs are unverified.
 - The screen wake lock is released while the page is hidden (W3C Screen Wake Lock, "Handling document loss of visibility"), so Windows' sleep timeout applies: Radio and audio's checklist asks for Sleep set to Never.
 - Rig control's own timers (request timeouts, PTT on's confirmation, PTT off after the audio's tail and its retries, the drain, the keying's limit, the polls) and the waits around a keying run on the wake timers too (`docs/design/cat.md`, The link). They were measured against a fake wake clock only (`web/src/lib/cat/radio-wake.test.ts`). Not measured in a hidden page.
 - Halt is out of sight while the window is hidden. The watchdog runs on a wake timer, as visible.
