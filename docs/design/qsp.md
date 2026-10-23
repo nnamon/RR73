@@ -97,7 +97,7 @@ The app reports only what the operator's radio hears. Decodes from the practice 
 
 ## Who heard you
 
-The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https://www.mqtt.pskreporter.info, read 15 October 2026). An amateur runs the feed with PSK Reporter's permission. Its page invites any client, asks for no account, and lists apps that use it; it publishes no other terms.
+The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https://www.mqtt.pskreporter.info, read 15 October 2026). Tom M0LTE runs the feed with PSK Reporter's permission. Its page invites any client, asks for no account, and lists apps that use it; it publishes no other terms.
 
 - Port 1886 is MQTT over WebSocket and TLS, for pages on https. RR73's client (`lib/pskreporter/mqtt.ts`) speaks MQTT 3.1.1: a clean session, one subscription at QoS 0, a ping every 50 s.
 - Topics are `pskr/filter/v2/{band}/{mode}/{tx}/{rx}/{tx_grid}/{rx_grid}/{tx_dxcc}/{rx_dxcc}`; RR73 subscribes to `pskr/filter/v2/+/+/{callsign}/#`. A callsign's `/` is `.` in a topic: 7 of 161 messages sampled on 15 October showed it, such as `AI4UC/T` as `AI4UC.T`.
