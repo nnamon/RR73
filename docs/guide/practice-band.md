@@ -1,6 +1,6 @@
 # Practice band
 
-The practice band simulates a band of FT8 and FT4 stations, with CQs, callers and a DXpedition, and RTTY stations in RTTY. It needs no radio. Use it to learn Operate before going on the air.
+The practice band simulates a band of FT8 and FT4 stations, with CQs, callers and a DXpedition, and RTTY stations in RTTY. It needs no radio, so you can learn Operate before going on the air.
 
 ## Starting
 
@@ -12,19 +12,19 @@ Crowded band fills the band with more stations. It is off by default.
 
 ## Tx audio and the radio
 
-Play Tx audio is on by default. Practice transmissions then play their audio and key a connected radio: by VOX, or by CAT where rig control keys the radio. Turn Play Tx audio off to practise with the radio silent. Off, practice plays no Tx audio and keys nothing.
+With Play Tx audio on, the default, practice transmissions play their audio and key a connected radio: by VOX, or by CAT where rig control keys the radio. Turn Play Tx audio off to practise with the radio silent and unkeyed.
 
 ## The practice log
 
-Practice QSOs go to the Practice log, apart from your log. While the practice band is on, Log opens the Practice log. Clear practice log, in Settings › Practice band, empties it, with Undo.
+Practice QSOs go to the Practice log, kept apart from your log. While the practice band is on, Log opens the Practice log. Clear practice log, in Settings › Practice band, empties it, with Undo.
 
 While the practice band is on, Wavelog's log is not read, PSK Reporter reports pause, and Web SDR pauses. Back up the log and Import a log wait until it is off.
 
 ## Scenarios
 
-With the practice band on, Practice scenario in ••• on Operate shows the scenario in use. Tap it to choose another from the list. The one chosen sets how the stations that answer your CQ, or that you call, behave. The rest of the band carries on as before. The status line names the scenario on a change, such as `Practice · Pile-up`.
+With the practice band on, Practice scenario in ••• on Operate shows the scenario in use. Tap it to choose another. The scenario sets how the stations that answer your CQ, or that you call, behave. The rest of the band carries on as before. On a change, the status line names the scenario, such as `Practice · Pile-up`.
 
-- Random band: each station behaves as on a real band. This is the default.
+- Random band, the default: each station behaves as on a real band.
 - One caller: one station answers a CQ and completes the QSO.
 - Pile-up: 3 to 5 stations answer a CQ at once and keep calling.
 - Caller goes quiet: the station that answers a CQ stops after the report.

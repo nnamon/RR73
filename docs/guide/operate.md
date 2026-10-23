@@ -4,11 +4,11 @@ Operate shows FT8 and FT4 as a waterfall over the decode list, with the transmit
 
 ## The waterfall
 
-The waterfall shows 0 to 3000 Hz across, newest at the top. A line marks the start of each slot, labelled with its UTC time. Slots you transmitted in show your own signal, labelled Tx.
+The waterfall shows 0 to 3000 Hz across, newest at the top. A line marks the start of each slot, labelled with its UTC time. A slot you transmitted in shows your own signal, labelled Tx.
 
 The red marker is Tx and the green marker is Rx. Each spans a signal from its lowest to its highest tone.
 
-- Drag sideways to move Tx. A label shows the frequency of the lowest tone, and lifting your finger sets it.
+- Drag sideways to move Tx. A label shows the frequency of the lowest tone. Lift your finger to set it.
 - Start the drag on the green marker to move Rx.
 - Tap to set Tx where you tap.
 - With a mouse, click to set Tx and Shift-click to set Rx.
@@ -27,13 +27,13 @@ Each row shows the message, then the SNR and the audio frequency, such as −12 
 
 Your own transmissions are rows of their own. Next shows a countdown to its slot, Sending shows a red line that grows while it is on air, and Sent stays in its slot.
 
-New slots wait while you touch the list, and for 0.5 s after. Scrolled down, the rows in view stay put and a pill shows the number of new decodes. Tap it to go back to the top.
+New slots wait while you touch the list, and for 0.5 s after. Scrolled down, the rows in view stay put and a pill counts the new decodes. Tap it to go back to the top.
 
 While you call or work a station, rows unrelated to it dim.
 
 ## Colours
 
-The first category in Settings › Decode colours that matches a decode tints its row and draws a bar on its left edge. The RR73 scheme, the default, has these on:
+The first category in Settings › Decode colours that matches a decode tints its row and draws a bar on its left edge. The RR73 scheme, the default, turns on these categories:
 
 - My call in the message
 - New grid, and New grid on this band
@@ -50,7 +50,7 @@ A message to you also has a solid red left edge and heavier text.
 A bar on the right edge of a row shows that you have worked the station on this band and mode.
 
 - Solid grey: a dupe, worked today. With an activation running, only QSOs in that activation count.
-- In the New call colour: worked on another day. You can work it again.
+- In the New call colour: worked on another day, so you can work it again.
 
 ## Tags
 
@@ -71,7 +71,7 @@ Some rows carry a tag in the place of the country:
 
 The station's sheet has Call with the time the first message starts and its slot, Even or Odd. Under it are the last decode, the message, your last 3 QSOs with the station, and a chart of its signal over its last slots.
 
-Calling a station moves Rx to its frequency. With Hold Tx frequency on in Settings › FT8 and FT4, the default, Tx stays where it is. Off, Tx moves to the station's frequency too.
+Calling a station moves Rx to its frequency. Hold Tx frequency, in Settings › FT8 and FT4, keeps Tx where it is. It is on by default. Off, Tx moves to the station's frequency too.
 
 ## Filters
 

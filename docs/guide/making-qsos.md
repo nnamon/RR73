@@ -1,6 +1,6 @@
 # Making QSOs
 
-RR73 sends each FT8 and FT4 message in its slot, fills in the reports and logs the QSO when it completes. Callsign and grid must be set in Settings, and audio must run.
+RR73 sends each FT8 and FT4 message in its slot, fills in the reports and logs the QSO when it completes. It needs your callsign and grid in Settings, and audio running.
 
 ## The transmit controls
 
@@ -21,13 +21,13 @@ The steps row shows how far the QSO has got. Answering a CQ, the steps are your 
 1. Double-tap the CQ row of the station, or tap Call in its sheet.
 2. Tx1 goes out in the next slot of the other parity: `K1ABC 9V1NE OJ11`.
 3. K1ABC sends your report. Tx3 answers with R and its report: `K1ABC 9V1NE R-12`.
-4. K1ABC sends RR73 or RRR. The QSO is logged and Tx5 sends 73.
+4. K1ABC sends RR73 or RRR. The QSO goes in the log and Tx5 sends 73.
 
 After 73, Tx turns off. With Repeat CQ on and CQ running before the call, CQ starts again.
 
-A station that skips the report and sends an R-report gets RR73 in reply. A station that sends RR73 before your R-report has gone ends the QSO, and it is not logged: `K1ABC ended early · not logged`.
+A station that skips the report and sends an R-report gets RR73 in reply. A station that sends RR73 before your R-report has gone ends the QSO unlogged, and the status line says `K1ABC ended early · not logged`.
 
-Double-tapping a message to you answers it in the same way, from the step it has reached.
+Double-tap a message to you to answer it from the step it has reached.
 
 To call a station you have not decoded, such as one heard on another frequency or spotted elsewhere, tap Call a station in •••, type the callsign and tap Call. Tx1 goes out on your Tx frequency in the slot Transmit in sets, and the QSO runs as for a CQ you answered.
 
@@ -35,7 +35,7 @@ A call decided after its slot has started can still go out in that slot. It star
 
 ## No reply
 
-With no reply, the last message repeats in the next slot of your parity, up to 3 times. Then the call pauses on its last message and the status line says `No reply from K1ABC`. Tx stays on. Double-tap the station again to call it again.
+With no reply, the last message repeats in the next slot of your parity, up to 3 times. The call then pauses on its last message, Tx stays on, and the status line says `No reply from K1ABC`. Double-tap the station to call it again.
 
 ## A station that answers someone else
 
@@ -47,11 +47,11 @@ With Tail-end on in Settings › FT8 and FT4, the default, RR73 waits for K1ABC 
 
 1. Tap CQ. Tx6 goes out: `CQ 9V1NE OJ11`.
 2. K1ABC calls with a grid. Tx2 sends a report: `K1ABC 9V1NE -08`.
-3. K1ABC sends an R-report. Tx4 sends RR73, and the QSO is logged.
+3. K1ABC sends an R-report. Tx4 sends RR73 and the QSO goes in the log.
 
 A caller that sends a report first gets an R-report. A caller that sends an R-report first gets RR73.
 
-CQ repeats while nobody calls. Only stations that called in the latest decoded slot are answered. A caller who stays silent through 3 repeats is dropped, with `No reply from K1ABC · not logged`, and the next caller or CQ follows.
+CQ repeats while nobody calls. RR73 answers only stations that called in the latest decoded slot. A caller who stays silent through 3 repeats is dropped, with `No reply from K1ABC · not logged`, and the next caller or CQ follows.
 
 Transmit in, in •••, sets the slot CQ goes out in: 1st (Even), the default, or 2nd (Odd). Confirm with, in Settings › FT8 and FT4, sends RR73 or RRR.
 
@@ -59,7 +59,7 @@ To call CQ POTA or CQ DX, edit Tx6 in Edit messages, in •••. Tx6 keeps its
 
 ## After RR73
 
-The QSO is logged as soon as your RR73 or RRR has gone. Tx stays on for the station's next slot, whether you called CQ or called the station.
+Tx stays on for the station's next slot after your RR73 or RRR, whether you called CQ or called the station. The QSO is already in the log.
 
 - A repeated R-report means the station missed your RR73. RR73 goes again, up to 3 times, and the QSO stays one entry in the log.
 - 73, or no message from the station, ends the QSO.
@@ -71,7 +71,7 @@ With Stop after this QSO on, or the watchdog running out, the QSO ends as soon a
 Repeat CQ, in •••, decides what follows a QSO from CQ. It is off by default.
 
 - Off: Tx goes off after the QSO.
-- On: the next station that called is answered in the next slot, or CQ goes out again when none did.
+- On: RR73 answers the next station that called in the next slot, or calls CQ again when none did.
 
 Answer order, in •••, sets which caller goes first. Tap it to step through First, Strongest, Weakest, Farthest and New. New answers stations you have never worked first. The waiting callers carry the tags Next, 2nd and 3rd in the decode list.
 
@@ -86,7 +86,7 @@ Tap Hunt to answer CQs one after another until you stop it. The status line foll
 - After each slot with no QSO under way, Hunt calls the first CQ heard in that slot, in Hunt order.
 - It skips stations heard sending anything other than CQ, dupes, and stations that ignored it in the last 10 min.
 - It answers a directed CQ only when you are the station it asks for. CQ POTA, CQ SOTA, CQ WWFF, CQ IOTA and CQ QRP are open to all. CQ EU and the other continents need you on that continent. CQ DX needs you on another continent from the caller. A prefix such as CQ JA needs you in that DXCC entity. Contest CQs such as CQ TEST and CQ FD are skipped.
-- Hunt calls a station that does not answer 4 times, then moves to the next CQ. Hunt calls, in Settings › FT8 and FT4, takes 1 to 99.
+- Hunt calls a silent station 4 times, then moves to the next CQ. Hunt calls, in Settings › FT8 and FT4, sets the count from 1 to 99.
 - When the station Hunt calls answers someone else, Hunt moves on at once.
 - While Hunt calls a station that has not answered, a station calling you comes first.
 
@@ -96,9 +96,9 @@ Hunt and CQ stop each other. Stopping Hunt during a QSO lets the QSO finish, the
 
 ## Logging and ending
 
-A QSO is logged when it completes. Calling CQ, that is when your RR73 has gone after their R-report. Answering, it is when their RR73, RRR or 73 arrives after your R-report. A notice such as `Logged K1ABC 20m FT8 −08 / −11` shows for 10 s with Edit and Undo.
+RR73 logs a QSO when it completes. Calling CQ, that is when your RR73 or RRR has gone after their R-report. Answering, it is when their RR73, RRR or 73 arrives after your R-report. A notice such as `Logged K1ABC 20m FT8 −08 / −11` shows for 10 s, with Edit and Undo.
 
-If audio stops after the reports have gone both ways, the audio strip offers Log QSO. It logs the QSO as it stands.
+If audio stops after the reports have gone both ways, the audio strip offers Log QSO, which logs the QSO as it stands.
 
 End QSO, in •••, stops Tx and Hunt and leaves the QSO unlogged. A QSO already in the log stays there.
 
@@ -108,7 +108,7 @@ A dupe is a station in the log on this device on the same band, in the same mode
 
 Repeat CQ and Hunt skip dupes. Turn on Work dupes, in ••• or Settings › FT8 and FT4, to answer them after every other caller or CQ. A station you call by hand is always called.
 
-QSOs that Read Wavelog's log reads from Wavelog do not count as dupes. They count for the decode colours, New and Hide worked only.
+QSOs read from Wavelog by Read Wavelog's log are never dupes. They count for the decode colours, New and Hide worked only.
 
 ## Watchdog
 

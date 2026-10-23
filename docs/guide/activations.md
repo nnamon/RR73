@@ -1,6 +1,6 @@
 # Activations
 
-An activation ties the QSOs you log to one or more POTA, SOTA, WWFF or IOTA references. Turn on Activations in Settings › Optional features. Activations live in Spots.
+An activation ties the QSOs you log to one or more POTA, SOTA, WWFF or IOTA references. Turn on Activations in Settings › Optional features, then run activations from Spots.
 
 ## Starting an activation
 
@@ -18,7 +18,7 @@ While the activation runs, FT8 and FT4 messages carry its Callsign on air and gr
 
 Operate shows the activation in a strip above the waterfall, such as `POTA VK-0921 · 7 of 10`, with the time left in the UTC day. Tap it to open the activation in Spots. With more than 1 reference, the strip shows the first one that has a target and the number of others, such as +1.
 
-Each programme counts as its rules do:
+Each programme counts QSOs by its own rules:
 
 - POTA: 10 QSOs in one UTC day. A repeat of the same call, band and mode counts once.
 - SOTA: 4 different stations in one UTC day.
@@ -31,13 +31,13 @@ The activation in Spots shows the callsign and grid on air, the progress of each
 
 ## Dupes in an activation
 
-A station worked in this activation, on the same band, mode and UTC day, is a dupe. A new activation starts with no dupes, also at the same park. [Making QSOs](making-qsos.md#dupes) has the rules.
+Dupes count only QSOs in the running activation, so a new activation starts with none, even at the same park. [Dupes](making-qsos.md#dupes) has the rules.
 
 ## Editing and ending
 
 Edit activation changes the references, the callsign, the grid and the Wavelog station. The QSOs and dupes stay with the activation.
 
-End activation… asks once, and names the QSOs it keeps on the device. Tap End activation to end it, or Keep operating to go on.
+End activation… asks once and names the QSOs it keeps on the device. Tap End activation to end it, or Keep operating to go on.
 
 ## Where the QSOs go
 
@@ -46,6 +46,6 @@ Each QSO logged during the activation carries its references in the log.
 - Wavelog: the QSOs go to the Wavelog station location chosen for the activation.
 - Files: Settings › Logging turns on a POTA file to upload at pota.app, a SOTA file for the SOTA database, a WWFF file for your WWFF coordinator and an ADIF file with all fields. Files take only QSOs made in an activation.
 
-After the activation, in Spots, says what waits, such as Wavelog 3 waiting or POTA file ready. It opens Log › Activations, where each activation has its files. Tap Share to send a file, and Mark submitted once you have uploaded it.
+After the activation, in Spots, shows what is waiting, such as Wavelog 3 waiting or POTA file ready. It opens Log › Activations, where each activation has its files. Tap Share to send a file, and Mark submitted once you have uploaded it.
 
 While Activations is on, RR73 downloads the park and summit lists for the suggestions and keeps them on the device.

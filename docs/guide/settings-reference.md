@@ -1,6 +1,6 @@
 # Settings reference
 
-Every setting, by the screen it is on. Defaults are given where a setting has one.
+Every setting, by the screen it is on, with its default where it has one.
 
 ## Station
 
