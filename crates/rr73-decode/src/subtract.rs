@@ -304,54 +304,84 @@ impl<'a> Model<'a> {
     /// rotation chains run sample by sample.
     fn fill(&mut self, out: &mut [Complex64]) {
         let mut done = 0;
-        let mut delta = [0.0f64; MODEL_BLOCK];
-        let mut rot_re = [0.0f64; MODEL_BLOCK];
-        let mut rot_im = [0.0f64; MODEL_BLOCK];
+        let mut block = Block::default();
         while done < out.len() {
-            if self.until_resync == 0 {
-                self.resync(self.phase.theta);
-            }
-            let p = &mut self.phase;
-            let n = p.n;
-            let r = p.within;
-            let len = (out.len() - done)
-                .min(n - r)
-                .min(self.until_resync)
-                .min(MODEL_BLOCK);
-            let [n0, n1, n2] = p.near;
-            let (prev, here, next) = (
-                &p.pulse[2 * n + r..2 * n + r + len],
-                &p.pulse[n + r..n + r + len],
-                &p.pulse[r..r + len],
-            );
-            for (((d, &a), &b), &c) in delta[..len].iter_mut().zip(prev).zip(here).zip(next) {
-                *d = p.step * (n0 * a + n1 * b + n2 * c);
-            }
-            for ((re, im), &d) in rot_re[..len]
-                .iter_mut()
-                .zip(&mut rot_im[..len])
-                .zip(&delta[..len])
-            {
-                let d2 = d * d;
-                *re = 1.0 - d2 / 2.0 + d2 * d2 / 24.0;
-                *im = d * (1.0 - d2 / 6.0 + d2 * d2 / 120.0);
-            }
-            let rots = rot_re[..len].iter().zip(&rot_im[..len]);
-            for ((o, (&re, &im)), &d) in out[done..done + len].iter_mut().zip(rots).zip(&delta[..len]) {
+            let len = self.begin_block(out.len() - done, &mut block);
+            let steps = block.delta[..len]
+                .iter()
+                .zip(&block.rot_re[..len])
+                .zip(&block.rot_im[..len]);
+            for (o, ((&d, &re), &im)) in out[done..done + len].iter_mut().zip(steps) {
                 *o = self.carrier * self.modulation;
                 self.modulation *= Complex64::new(re, im);
                 self.carrier *= self.carrier_step;
-                p.theta += d;
+                self.phase.theta += d;
             }
-            p.within += len;
-            if p.within == n {
-                p.within = 0;
-                p.symbol += 1;
-                p.load();
-            }
-            self.k += len;
-            self.until_resync -= len;
+            self.end_block(len);
             done += len;
+        }
+    }
+
+    /// Starts a block of at most `most` samples that stays in one symbol and before the next
+    /// resync: resyncs when one is due and writes the block's phase steps and their
+    /// rotations to `block`. Returns the block's length. The caller runs the chains over it
+    /// as [`Model::fill`] does, then calls [`Model::end_block`].
+    fn begin_block(&mut self, most: usize, block: &mut Block) -> usize {
+        if self.until_resync == 0 {
+            self.resync(self.phase.theta);
+        }
+        let p = &self.phase;
+        let n = p.n;
+        let r = p.within;
+        let len = most.min(n - r).min(self.until_resync).min(MODEL_BLOCK);
+        let [n0, n1, n2] = p.near;
+        let (prev, here, next) = (
+            &p.pulse[2 * n + r..2 * n + r + len],
+            &p.pulse[n + r..n + r + len],
+            &p.pulse[r..r + len],
+        );
+        for (((d, &a), &b), &c) in block.delta[..len].iter_mut().zip(prev).zip(here).zip(next) {
+            *d = p.step * (n0 * a + n1 * b + n2 * c);
+        }
+        for ((re, im), &d) in block.rot_re[..len]
+            .iter_mut()
+            .zip(&mut block.rot_im[..len])
+            .zip(&block.delta[..len])
+        {
+            let d2 = d * d;
+            *re = 1.0 - d2 / 2.0 + d2 * d2 / 24.0;
+            *im = d * (1.0 - d2 / 6.0 + d2 * d2 / 120.0);
+        }
+        len
+    }
+
+    /// Ends a block of `len` samples begun with [`Model::begin_block`].
+    fn end_block(&mut self, len: usize) {
+        let p = &mut self.phase;
+        p.within += len;
+        if p.within == p.n {
+            p.within = 0;
+            p.symbol += 1;
+            p.load();
+        }
+        self.k += len;
+        self.until_resync -= len;
+    }
+}
+
+/// The phase steps of one block of [`Model`] and their rotations.
+struct Block {
+    delta: [f64; MODEL_BLOCK],
+    rot_re: [f64; MODEL_BLOCK],
+    rot_im: [f64; MODEL_BLOCK],
+}
+
+impl Default for Block {
+    fn default() -> Self {
+        Self {
+            delta: [0.0; MODEL_BLOCK],
+            rot_re: [0.0; MODEL_BLOCK],
+            rot_im: [0.0; MODEL_BLOCK],
         }
     }
 }
@@ -380,11 +410,15 @@ fn remove(
     scratch.models.clear();
     scratch.models.resize(first.max(span), Complex64::new(0.0, 0.0));
     model.fill(&mut scratch.models[..first]);
-    model.fill(&mut scratch.models[..span]);
-    scratch.models.truncate(span);
     let half = smooth / 2;
     let offset = at.start + first as isize;
     let audio = &mut audio[offset as usize..offset as usize + span];
+    if half >= MODEL_BLOCK && span > 2 * half + 2 {
+        remove_fused(&mut model, audio, half, scratch);
+        return;
+    }
+    model.fill(&mut scratch.models[..span]);
+    scratch.models.truncate(span);
     scratch.products.clear();
     scratch.products.extend(
         scratch
@@ -429,6 +463,104 @@ fn remove(
         window.step(k, half, products);
         let rebuilt = (window.sum * models[k]).re * window.scale;
         audio[k] = (f64::from(audio[k]) - rebuilt) as f32;
+    }
+}
+
+/// [`remove`] when the window reaches at least [`MODEL_BLOCK`] samples either side and
+/// the span holds a steady part: the model of the span is computed `half` samples ahead of
+/// the moving sum in the same loop, so the model's rotation chains and the sum's chain
+/// overlap. `model` stands at the start of the span. Every value comes from the same
+/// operations in the same order as computing the model and its products over the whole
+/// span first: a product is taken before the sample it reads is subtracted from.
+fn remove_fused(model: &mut Model<'_>, audio: &mut [f32], half: usize, scratch: &mut SubtractScratch) {
+    let span = audio.len();
+    let zero = Complex64::new(0.0, 0.0);
+    scratch.models.clear();
+    scratch.models.resize(span, zero);
+    scratch.products.clear();
+    scratch.products.resize(span, zero);
+    let steady = half + 1..span - half - 1;
+    // The model and products that the steps before the steady part read.
+    let ahead = steady.start + half;
+    model.fill(&mut scratch.models[..ahead]);
+    let made = scratch.products[..ahead]
+        .iter_mut()
+        .zip(&scratch.models[..ahead])
+        .zip(audio.iter());
+    for ((p, c), &x) in made {
+        *p = c.conj() * f64::from(x);
+    }
+    let mut window = Window {
+        lo: 0,
+        hi: 0,
+        sum: zero,
+        scale: 0.0,
+        scale_for: usize::MAX,
+    };
+    for (k, y) in audio.iter_mut().enumerate().take(steady.start) {
+        window.step(k, half, &scratch.products);
+        let rebuilt = (window.sum * scratch.models[k]).re * window.scale;
+        *y = (f64::from(*y) - rebuilt) as f32;
+    }
+    // Each step makes the model and product at `k + half`, adds that product, drops the one
+    // at `k - half - 1` and subtracts at `k`.
+    let (mut sum, scale) = (window.sum, window.scale);
+    let mut block = Block::default();
+    let mut k = steady.start;
+    while k < steady.end {
+        let len = model.begin_block(steady.end - k, &mut block);
+        let j = k + half;
+        let (models_done, models_new) = scratch.models.split_at_mut(j);
+        let (products_done, products_new) = scratch.products.split_at_mut(j);
+        let (audio_done, audio_ahead) = audio.split_at_mut(j);
+        let (mut carrier, mut modulation, carrier_step) =
+            (model.carrier, model.modulation, model.carrier_step);
+        let mut theta = model.phase.theta;
+        let made = models_new[..len]
+            .iter_mut()
+            .zip(&mut products_new[..len])
+            .zip(&audio_ahead[..len]);
+        let steps = block.delta[..len]
+            .iter()
+            .zip(&block.rot_re[..len])
+            .zip(&block.rot_im[..len]);
+        let rows = audio_done[k..k + len]
+            .iter_mut()
+            .zip(&models_done[k..k + len])
+            .zip(&products_done[k - half - 1..k - half - 1 + len]);
+        for ((((m, p), &x), ((&d, &re), &im)), ((y, &c), &drop)) in made.zip(steps).zip(rows) {
+            let ahead = carrier * modulation;
+            *m = ahead;
+            let add = ahead.conj() * f64::from(x);
+            *p = add;
+            modulation *= Complex64::new(re, im);
+            carrier *= carrier_step;
+            theta += d;
+            sum += add;
+            sum -= drop;
+            let rebuilt = (sum * c).re * scale;
+            *y = (f64::from(*y) - rebuilt) as f32;
+        }
+        (model.carrier, model.modulation, model.phase.theta) = (carrier, modulation, theta);
+        model.end_block(len);
+        k += len;
+    }
+    window.sum = sum;
+    window.hi = steady.end + half;
+    window.lo = steady.end - half - 1;
+    let from = steady.end + half;
+    model.fill(&mut scratch.models[from..]);
+    let made = scratch.products[from..]
+        .iter_mut()
+        .zip(&scratch.models[from..])
+        .zip(&audio[from..]);
+    for ((p, c), &x) in made {
+        *p = c.conj() * f64::from(x);
+    }
+    for (k, y) in audio.iter_mut().enumerate().skip(steady.end) {
+        window.step(k, half, &scratch.products);
+        let rebuilt = (window.sum * scratch.models[k]).re * window.scale;
+        *y = (f64::from(*y) - rebuilt) as f32;
     }
 }
 
@@ -871,11 +1003,24 @@ mod tests {
                 (-total + 10, slot),
                 (slot as isize - 3000, slot),
                 (1234, 100_000.min(slot)),
+                // Spans just longer than the preset's window, at the end and at the start.
+                (slot as isize - 1925, slot),
+                (-total + 1924, slot),
                 (2000, 500),
                 (-total - 5, slot),
                 (slot as isize + 5, slot),
             ] {
-                for (freq_hz, smooth) in [(1234.56, 1920usize), (377.0, 1), (2950.25, 961), (1500.0, 4000)] {
+                // Windows below, at and above the fused removal's least half-width of 256
+                // samples, and the preset's 1920.
+                for (freq_hz, smooth) in [
+                    (1234.56, 1920usize),
+                    (377.0, 1),
+                    (2950.25, 961),
+                    (1500.0, 4000),
+                    (811.5, 511),
+                    (2003.0, 512),
+                    (640.25, 515),
+                ] {
                     let mut want = base[..len].to_vec();
                     let mut got = want.clone();
                     let at = Placement { start, freq_hz };
@@ -890,7 +1035,7 @@ mod tests {
                 }
             }
         }
-        assert_eq!(checked, 72);
+        assert_eq!(checked, 154);
     }
 
     #[test]
