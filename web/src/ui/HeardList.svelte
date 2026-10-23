@@ -29,7 +29,7 @@
 <div class="section">
   <h2 class="section-head">Heard you, last 30 min</h2>
   {#if heard.list.length}
-    <ul class="group" aria-label="Stations that heard you in the last 30 minutes">
+    <ul class="group" aria-label="Stations that heard you in the last 30 min">
       {#each heard.list as h (`${h.receiver}|${h.band}`)}
         {@const dist = km(h.locator)}
         <li class="row hr">

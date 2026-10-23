@@ -70,7 +70,7 @@
       <a class="btn tint" href={links.json.url} download={links.json.name}>Download {links.json.name}</a>
     </div>
   {/if}
-  <p class="note">RR73 keeps the last 8 slots, about 2 minutes. Each slot saves as a 16-bit 12 kHz mono WAV with a JSON sidecar for the decoder corpus.</p>
+  <p class="note">RR73 keeps the last 8 slots, about 2 min. Each slot saves as a 16-bit 12 kHz mono WAV with a JSON sidecar for the decoder corpus.</p>
 </Sheet>
 
 <style>

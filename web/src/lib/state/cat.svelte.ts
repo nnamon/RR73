@@ -223,7 +223,7 @@ async function open(port: SerialPortLike): Promise<boolean> {
     if (current !== me) return;
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: f === 'silent' ? `No reply from the ${radioName()} during the test. PTT off was sent.` : stayedInReceive(), atMs: utcNow() };
+      rig.test = { state: 'done', ok: false, text: f === 'silent' ? `No reply from the ${radioName()} during the test. RR73 sent PTT off.` : stayedInReceive(), atMs: utcNow() };
     }
     radioNotice(f === 'silent' ? STATUS.radioSilent : STATUS.radioReceive, true);
     halt();
@@ -474,10 +474,10 @@ function testFailed(why: 'ng' | 'timeout' | 'closed' | 'dial'): string {
       // The KX2's TX has no answer: TQ stayed at receive, or the radio answered ?;. TX does nothing
       // in FSK D and PSK D (Programmer's Reference p. 28).
       return settings.cat.radio === 'kx2'
-        ? 'The KX2 did not key on TX. PTT off was sent and confirmed. It ignores TX in FSK D and PSK D: choose a band to set DATA A.'
-        : `The ${name} refused PTT. PTT off was sent and confirmed.`;
+        ? 'The KX2 did not key on TX. RR73 sent PTT off and the radio confirmed it. It ignores TX in FSK D and PSK D: choose a band to set DATA A.'
+        : `The ${name} refused PTT. RR73 sent PTT off and the radio confirmed it.`;
     case 'timeout':
-      return `No reply to PTT from the ${name} within 0.3 s. PTT off was sent and confirmed.`;
+      return `No reply to PTT from the ${name} within 0.3 s. RR73 sent PTT off and the radio confirmed it.`;
     case 'closed':
       return 'The port closed during the test.';
     case 'dial':
@@ -625,7 +625,7 @@ export async function initCat(): Promise<void> {
   offHalt = onHalt(() => {
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. PTT off was sent.', atMs: utcNow() };
+      rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. RR73 sent PTT off.', atMs: utcNow() };
     }
     const c = current;
     // PTT off unless nothing can be keyed: RR73 holds no PTT and the radio last read receive. The

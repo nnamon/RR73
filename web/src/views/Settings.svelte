@@ -229,7 +229,7 @@
       </label>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Callsign and grid are needed to transmit.</p>
+    <p class="section-foot">Transmitting needs a callsign and grid.</p>
   </div>
 
 {/snippet}

@@ -31,7 +31,7 @@ test('lists the stations that heard you, live from the feed', async ({ page, bas
   feed.ws!.send(publish('pskr/filter/v2/20m/FT8/9V1NE/JA1XYZ/OJ11/PM95/381/339', spot('JA1XYZ', 'PM95qq', -8, '20m', 60)));
   feed.ws!.send(publish('pskr/filter/v2/20m/FT8/9V1NE/VK3QRP/OJ11/QF22/381/150', spot('VK3QRP', 'QF22lb', null, '20m', 30)));
   feed.ws!.send(publish('pskr/filter/v2/20m/FT8/9V1NE/JA1XYZ/OJ11/PM95/381/339', spot('JA1XYZ', 'PM95qq', -3, '20m', 15)));
-  const list = page.getByRole('list', { name: 'Stations that heard you in the last 30 minutes' });
+  const list = page.getByRole('list', { name: 'Stations that heard you in the last 30 min' });
   await expect(list.getByRole('listitem')).toHaveCount(2);
   await expect(page.getByRole('heading', { name: 'Heard you, last 30 min' })).toBeVisible();
   const rows = await list.getByRole('listitem').allInnerTexts();
