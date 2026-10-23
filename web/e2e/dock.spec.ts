@@ -136,6 +136,28 @@ test('a double-tap on a decode calls the station with Tx on at once, and ends CQ
   await expect(bar.getByRole('list', { name: 'QSO progress' })).toHaveText(/OJ11.*Report.*R-report.*RR73.*73/);
 });
 
+test('Call a station calls a typed callsign in the Transmit in slot, and refuses what is not a callsign', async ({ page }) => {
+  const bar = await setUp(page);
+  await bar.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitem', { name: 'Call a station' }).click();
+  const sheet = page.getByRole('dialog', { name: 'Call a station' });
+  const field = sheet.getByRole('textbox', { name: 'Callsign' });
+  await expect(sheet.getByRole('status')).toHaveText('Tx1 goes out on 1500 Hz in the 1st (Even) slot.');
+  await field.fill('hello');
+  await sheet.getByRole('button', { name: 'Call' }).click();
+  await expect(sheet.getByRole('status')).toHaveText('Not a callsign. Type it as sent, such as K1ABC or VK3/9V1NE.');
+  await expect(sheet).toBeVisible();
+  await field.fill('k1abc');
+  await field.press('Enter');
+  await expect(sheet).toBeHidden();
+  await expect(bar.getByRole('button', { name: 'Tx on' })).toHaveAttribute('aria-pressed', 'true');
+  await expect(bar.getByRole('list', { name: 'QSO progress' })).toContainText('OJ11');
+  // Tx1 answers K1ABC.
+  await bar.getByRole('button', { name: 'More' }).click();
+  await page.getByRole('menu', { name: 'More' }).getByRole('menuitem', { name: 'Edit messages' }).click();
+  await expect(page.getByRole('dialog', { name: 'Messages' }).getByRole('textbox').first()).toHaveValue('K1ABC 9V1NE OJ11');
+});
+
 test('the ••• menu holds the rest, acts on the first tap and closes with Escape', async ({ page }) => {
   const bar = await setUp(page);
   const more = bar.getByRole('button', { name: 'More' });
@@ -143,7 +165,7 @@ test('the ••• menu holds the rest, acts on the first tap and closes with E
   await expect(more).toHaveAttribute('aria-expanded', 'true');
   const menu = page.getByRole('menu', { name: 'More' });
   const items = menu.getByRole('menuitem').or(menu.getByRole('menuitemcheckbox'));
-  await expect(items).toHaveText(['Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Night display', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st (Even)', 'Hunt order Not worked']);
+  await expect(items).toHaveText(['Call a station', 'Edit messages', 'Find clear Tx', 'Tune for 10 s', 'Night display', 'Clear decodes', 'Repeat CQ Off', 'Hound Off', 'Answer order First', 'Work dupes Off', 'Transmit in 1st (Even)', 'Hunt order Not worked']);
   await expect(items.first()).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(items.nth(1)).toBeFocused();

@@ -34,6 +34,7 @@
   import { practice } from '../lib/state/practice.svelte';
   import { scenarioOf } from '../lib/practice/scenarios';
   import ScenarioSheet from './ScenarioSheet.svelte';
+  import CallSheet from './CallSheet.svelte';
   import { showNight } from '../lib/state/night.svelte';
   import { utcNow } from '../lib/clock/utc';
 
@@ -111,6 +112,7 @@
 
   let menuOpen = $state(false);
   let scenarioOpen = $state(false);
+  let callOpen = $state(false);
   let barEl: HTMLElement;
   let menuEl: HTMLDivElement | undefined = $state();
   let dockEl: HTMLDivElement | undefined = $state();
@@ -242,6 +244,7 @@
       {#if st.phase !== 'idle' || st.partner}
         <button class="mi" role="menuitem" onclick={act(endQso)}>End QSO</button>
       {/if}
+      <button class="mi" role="menuitem" onclick={act(() => (callOpen = true))}>Call a station</button>
       {#if !listed}<button class="mi" role="menuitem" onclick={act(onmessages)}>Edit messages</button>{/if}
       <button class="mi" role="menuitem" onclick={act(onfindclear)}>Find clear Tx</button>
       <button class="mi" role="menuitem" onclick={act(startTune)}>Tune for 10 s</button>
@@ -278,6 +281,7 @@
 </section>
 
 <ScenarioSheet bind:open={scenarioOpen} />
+<CallSheet bind:open={callOpen} />
 
 <svelte:window onkeydown={(e) => menuOpen && e.key === 'Escape' && closeMenu()} />
 

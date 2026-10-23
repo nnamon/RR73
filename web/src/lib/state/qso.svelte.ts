@@ -28,7 +28,8 @@ import { log, logQso } from '../log/log.svelte';
 import { features } from './features.svelte';
 import { withChaseRefs } from './spots.svelte';
 import type { Qso } from '../log/types';
-import { settings, updateSettings } from './settings.svelte';
+import { normaliseCallsign, settings, updateSettings } from './settings.svelte';
+import { looksLikeCall } from '../decode/marking';
 import { txLevel } from './practice.svelte';
 import { dialNow, onRadioNotice, rigGate, txKeyer, txShiftHz } from './radio.svelte';
 import { audio, audioOut, clearDecodes, codec, cutTx, markTransmitted, onAudioStatus, onClockWarning, onHalt, onSlotDecoded, provideQsoContext, showTx, txClockFixS } from './station.svelte';
@@ -283,6 +284,24 @@ export function callStation(decode: Decode, slotStartMs: number) {
   unmute();
   dispatch({ type: 'callStation', decode, slotStartMs, nowMs: utcNow() });
   qso.selected = null;
+}
+
+/**
+ * Calls a station by its callsign, typed in Call a station: Tx1 goes out on the Tx frequency in
+ * the slot Transmit in sets, as an answer to a CQ heard in the other slot. False when `call` is
+ * not a callsign. Call from the tap.
+ */
+export function callByCallsign(call: string): boolean {
+  const c = normaliseCallsign(call);
+  if (!looksLikeCall(c) || !isFt(settings.mode)) return false;
+  const mode = settings.mode as FtMode;
+  const now = utcNow();
+  const len = SLOT_MS[mode];
+  // A slot of the other parity, so ours is the one Transmit in names.
+  let slot = Math.floor(now / len) * len;
+  if (parityOf(slot, mode) === settings.cqParity) slot -= len;
+  callStation({ text: `CQ ${c}`, freq_hz: settings.txHz, snr_db: 0, dt_s: 0 }, slot);
+  return true;
 }
 
 /** Calls CQ. Call from the tap. */

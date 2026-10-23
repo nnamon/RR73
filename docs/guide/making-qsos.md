@@ -29,6 +29,8 @@ A station that skips the report and sends an R-report gets RR73 in reply. A stat
 
 Double-tapping a message to you answers it in the same way, from the step it has reached.
 
+To call a station you have not decoded, such as one heard on another frequency or spotted elsewhere, tap Call a station in •••, type the callsign and tap Call. Tx1 goes out on your Tx frequency in the slot Transmit in sets, and the QSO runs as for a CQ you answered.
+
 A call decided after its slot has started can still go out in that slot. It starts up to 4 s late in FT8 and 1.25 s late in FT4. Later than that it goes in the next slot of the same parity.
 
 ## No reply

@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Call a station in Operate's ••• calls a callsign you type, on the Tx frequency in the slot Transmit in sets.
+
 ## 0.27.4 · 2026-10-23
 
 - Log rows show the contest exchanges sent and received after the reports.
