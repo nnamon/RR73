@@ -38,6 +38,7 @@
 
   const groups = $derived<Item[][]>([
     [
+      { id: 'guide', title: 'Guide', icon: 'book', tile: 'blue' },
       { id: 'station', title: 'Station', icon: 'person', tile: 'blue', value: settings.callsign || 'Required' },
       { id: 'ft8', title: 'FT8 and FT4', icon: 'wave', tile: 'indigo' },
       { id: 'wspr', title: 'WSPR', icon: 'antenna', tile: 'indigo', value: `${settings.wspr.txPct}% · ${settings.wspr.powerDbm} dBm` },
@@ -61,10 +62,10 @@
     ],
   ]);
 
-  /** The section a path belongs to: Wavelog under Logging, Guide, Version history and Credits under About. */
+  /** The section a path belongs to: Wavelog under Logging, Version history and Credits under About. */
   const current = $derived.by(() => {
     const sub = route.path[1] ?? 'station';
-    if (sub === 'guide' || sub === 'versions' || sub === 'credits') return 'about';
+    if (sub === 'versions' || sub === 'credits') return 'about';
     return groups.flat().some((i) => i.id === sub) ? sub : 'station';
   });
 

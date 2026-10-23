@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Guide is the first row of Settings, and Operate's empty decode list links to Getting started until a callsign is set.
+- The guide shows annotated screenshots, tables and QSO ladders. Making QSOs is rewritten around them.
+
 ## 0.27.6 · 2026-10-23
 
 - The guide, Version history and 12 on-screen messages follow the new writing style.

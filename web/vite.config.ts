@@ -35,7 +35,8 @@ function repoText(id: string, path: string): Plugin {
 /**
  * Serves the Markdown files of a repository directory as the module `id`: an object from each
  * file's name without `.md` to its text, read on every load. docs/guide becomes the Guide in
- * Settings, bundled so it reads offline.
+ * Settings, bundled so it reads offline. The images in its img/ directory are the named export
+ * `images`, from "img/name.webp" to the URL of the bundled file, so the precache holds them.
  */
 function repoDir(id: string, path: string): Plugin {
   const resolved = `\0${id}`;
@@ -46,6 +47,12 @@ function repoDir(id: string, path: string): Plugin {
     load(source) {
       if (source !== resolved) return null;
       const pages: Record<string, string> = {};
+      const images: string[] = [];
+      const imgDir = `${dir}/img`;
+      if (existsSync(imgDir)) {
+        this.addWatchFile(imgDir);
+        images.push(...readdirSync(imgDir).filter((n) => n.endsWith('.webp')).sort());
+      }
       if (existsSync(dir)) {
         this.addWatchFile(dir);
         for (const name of readdirSync(dir).filter((n) => n.endsWith('.md')).sort()) {
@@ -54,7 +61,9 @@ function repoDir(id: string, path: string): Plugin {
           pages[name.slice(0, -3)] = readFileSync(file, 'utf8');
         }
       }
-      return `export default ${JSON.stringify(pages)};`;
+      const imports = images.map((n, i) => `import i${i} from ${JSON.stringify(`${imgDir}/${n}`)};`).join('\n');
+      const map = images.map((n, i) => `${JSON.stringify(`img/${n}`)}: i${i}`).join(', ');
+      return `${imports}\nexport const images = {${map}};\nexport default ${JSON.stringify(pages)};`;
     },
   };
 }
@@ -99,7 +108,7 @@ export default defineConfig({
         // Reference data (tools/refdata): the country file and the data manifest install with the
         // app. The park and summit lists belong to Activations; the app fetches and keeps them
         // itself only while it is on (src/lib/reference/store.ts).
-        globPatterns: ['**/*.{js,css,html,svg,png,ico,webmanifest,wasm}', 'data/manifest.json', 'data/cty.json'],
+        globPatterns: ['**/*.{js,css,html,svg,png,webp,ico,webmanifest,wasm}', 'data/manifest.json', 'data/cty.json'],
         navigateFallback: `${base}index.html`,
         cleanupOutdatedCaches: true,
         // Wait for SKIP_WAITING from the app. The first install controls the open page at once.
@@ -111,7 +120,8 @@ export default defineConfig({
     }),
   ],
   worker: { format: 'es' },
-  server: { host: '0.0.0.0', port: 7374, strictPort: true },
+  // The dev server reads the guide's images from docs/guide, outside web/.
+  server: { host: '0.0.0.0', port: 7374, strictPort: true, fs: { allow: ['..'] } },
   preview: { host: '0.0.0.0', port: 7374, strictPort: true },
   // iOS 26 is the target, so CSS keeps light-dark() native. Older targets get the minifier's fallback.
   build: { target: 'es2022', cssTarget: ['safari18', 'chrome123'], sourcemap: true },

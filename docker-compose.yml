@@ -45,6 +45,8 @@ services:
       - CI=1
       # RR73_REVIEW=1 docker compose run ... adds the review projects (docs/testing.md).
       - RR73_REVIEW
+      # RR73_GUIDE_SHOTS=1 adds the guide-shots and guide-review projects (docs/testing.md).
+      - RR73_GUIDE_SHOTS
 
   # The desktop app's Linux build and its checks (docs/design/desktop.md).
   desktop:

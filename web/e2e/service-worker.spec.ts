@@ -26,6 +26,8 @@ test('the precache holds the app, the decoder and the country file, and stays sm
     expect(urls.some((u) => pattern.test(u)), String(pattern)).toBe(true);
   }
   expect(urls.filter((u) => u.endsWith('.map'))).toEqual([]);
+  // The guide's screenshots (docs/guide/img), so its pages read offline.
+  expect(urls.some((u) => /^assets\/operate-tx-[\w-]+\.webp$/.test(u))).toBe(true);
   // Reference data (tools/refdata): the country file and the manifest when the build has them,
   // and nothing that loads only with a feature switched on.
   const data = ['data/manifest.json', 'data/cty.json'].filter((u) => existsSync(`${DIST}${u}`));

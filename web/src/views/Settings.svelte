@@ -425,10 +425,6 @@
   <div class="section">
     {#if !one}<h2 class="section-head">About</h2>{/if}
     <div class="group">
-      <a class="row link" href={href('settings', 'guide')}>
-        <span class="row-main"><span class="row-title">Guide</span></span>
-        <Icon name="chevright" size={13} class="row-chevron" />
-      </a>
       <a class="row link" href={href('settings', 'versions')}>
         <span class="row-main"><span class="row-title">Version history</span></span>
         <span class="row-value">{__APP_VERSION__}</span>
@@ -466,6 +462,16 @@
   <section class="screen" aria-labelledby="settings-title">
     <BackLink to={href('operate')} label="Operate" title="Settings" id="settings-title" />
 
+    <div class="section">
+      <div class="group">
+        <a class="row link" href={href('settings', 'guide')}>
+          <span class="ic" aria-hidden="true"><Icon name="book" size={20} /></span>
+          <span class="row-main"><span class="row-title">Guide</span><span class="row-sub">QSOs, your radio and logging</span></span>
+          <Icon name="chevright" size={13} class="row-chevron" />
+        </a>
+      </div>
+    </div>
+
     {@render stationSection()}
 
     {@render modesSection()}
@@ -487,6 +493,18 @@
 <style>
   .link {
     color: var(--rr-label);
+  }
+
+  .ic {
+    display: flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    width: var(--rr-row-icon);
+    height: var(--rr-row-icon);
+    border-radius: var(--rr-radius-m);
+    background: var(--rr-ic-blue);
+    color: var(--rr-on-fill);
   }
 
   .err {
