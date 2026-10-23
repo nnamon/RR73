@@ -2523,7 +2523,7 @@ dependencies = [
 
 [[package]]
 name = "rr73-desktop"
-version = "0.27.3"
+version = "0.27.4"
 dependencies = [
  "serde",
  "thiserror 2.0.21",
