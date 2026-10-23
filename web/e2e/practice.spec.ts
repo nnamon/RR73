@@ -51,7 +51,8 @@ async function practiceOn(page: Page) {
 async function scenario(page: Page, name: string) {
   const bar = page.getByRole('region', { name: 'Transmit' });
   await bar.getByRole('button', { name: 'More' }).click();
-  await page.getByRole('menuitemradio', { name: `Practice: ${name}` }).click();
+  await page.getByRole('menuitem', { name: /^Practice scenario/ }).click();
+  await page.getByRole('radiogroup', { name: 'Practice scenario' }).getByRole('radio', { name, exact: true }).click();
   await expect(bar.getByRole('status')).toContainText(`Practice · ${name}`);
 }
 

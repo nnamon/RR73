@@ -34,7 +34,17 @@ export function freqText(hz: number | null): string {
 
 /** "20m FT8 · 14.076 · QF56 · −12 / −10". */
 export function qsoLine(q: Qso): string {
-  return [`${q.band} ${displayMode(q)}`.trim(), freqText(q.freqHz), q.gridsquare, reportsText(q)].filter(Boolean).join(' · ');
+  return [`${q.band} ${displayMode(q)}`.trim(), freqText(q.freqHz), q.gridsquare, reportsText(q), exchangesText(q)].filter(Boolean).join(' · ');
+}
+
+/** "1D WI / 2B EMA": the contest exchanges sent and received, as the reports are shown. */
+export function exchangesText(q: Pick<Qso, 'stx' | 'srx'>): string {
+  const sent = (q.stx ?? '').trim();
+  const rcvd = (q.srx ?? '').trim();
+  if (sent && rcvd) return `${sent} / ${rcvd}`;
+  if (sent) return `sent ${sent}`;
+  if (rcvd) return `received ${rcvd}`;
+  return '';
 }
 
 const DAY_MS = 86_400_000;

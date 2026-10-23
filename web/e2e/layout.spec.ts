@@ -172,26 +172,30 @@ for (const theme of ['light', 'dark', 'sun'] as const) {
     });
   }
 
-  test(`practice scenarios in the ••• menu in ${theme}`, ci(theme, 375), async ({ page }, info) => {
+  test(`practice scenarios in a sheet from the ••• menu in ${theme}`, ci(theme, 375), async ({ page }, info) => {
     await open(page, '#/operate', theme, undefined, undefined, true);
     const bar = page.getByRole('region', { name: 'Transmit' });
     await bar.getByRole('button', { name: 'More' }).click();
     const menu = page.getByRole('menu', { name: 'More' });
-    const items = menu.getByRole('menuitemradio');
-    await expect(items).toHaveCount(19);
-    await expect(items.first()).toHaveText('Practice: Random band');
-    await expect(items.first()).toHaveAttribute('aria-checked', 'true');
+    const row = menu.getByRole('menuitem', { name: /^Practice scenario/ });
+    await expect(row).toContainText('Random band');
     expect(await smallTargets(page, '[role=menu]')).toEqual([]);
-    // Taller than a small screen: the menu stays above the bar and scrolls to its last item.
+    // The menu fits above the bar on a small screen.
     const halt = (await bar.getByRole('button', { name: 'Halt' }).boundingBox())!;
     const m = (await menu.boundingBox())!;
     expect(m.y).toBeGreaterThanOrEqual(0);
     expect(m.y + m.height).toBeLessThanOrEqual(halt.y);
-    await shot(page, info, SHOTS, `${theme}-practice-menu`, 200);
-    await items.last().scrollIntoViewIfNeeded();
-    const last = (await items.last().boundingBox())!;
-    expect(last.y + last.height).toBeLessThanOrEqual(m.y + m.height + 0.5);
-    await shot(page, info, SHOTS, `${theme}-practice-menu-end`, 200);
+    await row.click();
+    const list = page.getByRole('radiogroup', { name: 'Practice scenario' });
+    await expect(list.getByRole('radio')).toHaveCount(19);
+    await expect(list.getByRole('radio', { name: 'Random band', exact: true })).toHaveAttribute('aria-checked', 'true');
+    expect(await smallTargets(page, '[role=radiogroup]')).toEqual([]);
+    await shot(page, info, SHOTS, `${theme}-practice-scenarios`, 200);
+    await list.getByRole('radio', { name: 'Clock off', exact: true }).click();
+    await expect(list).toBeHidden();
+    await expect(bar.getByRole('status')).toContainText('Practice · Clock off');
+    await bar.getByRole('button', { name: 'More' }).click();
+    await expect(menu.getByRole('menuitem', { name: /^Practice scenario/ })).toContainText('Clock off');
   });
 
   test(`a drag on the waterfall never scrolls the screen in ${theme}`, ci(theme, 375), async ({ page }) => {

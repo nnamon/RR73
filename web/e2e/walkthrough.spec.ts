@@ -53,7 +53,8 @@ for (const theme of ['light', 'dark'] as const) {
     // A caller answers the CQ; the screenshot catches the QSO under way.
     const bar = page.getByRole('region', { name: 'Transmit' });
     await bar.getByRole('button', { name: 'More' }).click();
-    await page.getByRole('menuitemradio', { name: 'Practice: One caller' }).click();
+    await page.getByRole('menuitem', { name: /^Practice scenario/ }).click();
+    await page.getByRole('radiogroup', { name: 'Practice scenario' }).getByRole('radio', { name: 'One caller', exact: true }).click();
     await bar.getByRole('button', { name: 'CQ' }).click();
     const caller = rows(page).filter({ has: page.locator('.c-msg', { hasText: /^9V1NE [A-Z0-9]+ [A-R]{2}\d{2}$/ }) }).first();
     await expect(caller).toBeVisible({ timeout: 90_000 });
@@ -86,7 +87,8 @@ test('Hound working the practice Fox', async ({ page }, info) => {
   await practiceOn(page, 'light');
   const bar = page.getByRole('region', { name: 'Transmit' });
   await bar.getByRole('button', { name: 'More' }).click();
-  await page.getByRole('menuitemradio', { name: 'Practice: Fox (DXpedition)' }).click();
+  await page.getByRole('menuitem', { name: /^Practice scenario/ }).click();
+  await page.getByRole('radiogroup', { name: 'Practice scenario' }).getByRole('radio', { name: 'Fox (DXpedition)', exact: true }).click();
   await bar.getByRole('button', { name: 'More' }).click();
   await page.getByRole('menuitemcheckbox', { name: /^Hound/ }).click();
   await page.keyboard.press('Escape');

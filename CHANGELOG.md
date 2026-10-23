@@ -2,6 +2,11 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Log rows show the contest exchanges sent and received after the reports.
+- Practice scenario in Operate's ••• opens the list of practice scenarios. They no longer fill the menu.
+
 ## 0.27.3 · 2026-10-23
 
 - FT8 decodes about 1% more stations on busy bands, with fewer false decodes.

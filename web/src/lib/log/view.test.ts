@@ -69,6 +69,9 @@ describe('rows', () => {
     const x = q('VK2ESN', NOW);
     expect(qsoLine(x)).toBe('20m FT8 · 14.076 · QF56 · −12 / −10');
     expect(qsoLine({ ...x, mode: 'MFSK', submode: 'FT4', freqHz: null, gridsquare: '', rstSent: '', rstRcvd: '' })).toBe('20m FT4');
+    // A contest exchange follows the reports: class and section carry no report.
+    expect(qsoLine({ ...x, rstSent: '', rstRcvd: '', stx: '1D WI', srx: '2B EMA' })).toBe('20m FT8 · 14.076 · QF56 · 1D WI / 2B EMA');
+    expect(qsoLine({ ...x, rstSent: '579', rstRcvd: '559', stx: 'WI', srx: 'MA' })).toBe('20m FT8 · 14.076 · QF56 · 579 / 559 · WI / MA');
     expect(qsoLine({ ...x, rstRcvd: '' })).toBe('20m FT8 · 14.076 · QF56 · sent −12');
   });
 

@@ -22,7 +22,7 @@ While the practice band is on, Wavelog's log is not read, PSK Reporter reports p
 
 ## Scenarios
 
-With the practice band on, ••• on Operate lists the scenarios, such as Practice: Pile-up. The one chosen sets how the stations that answer your CQ, or that you call, behave. The rest of the band carries on as before. The status line names the scenario on a change, such as `Practice · Pile-up`.
+With the practice band on, Practice scenario in ••• on Operate shows the scenario in use. Tap it to choose another from the list. The one chosen sets how the stations that answer your CQ, or that you call, behave. The rest of the band carries on as before. The status line names the scenario on a change, such as `Practice · Pile-up`.
 
 - Random band: each station behaves as on a real band. This is the default.
 - One caller: one station answers a CQ and completes the QSO.

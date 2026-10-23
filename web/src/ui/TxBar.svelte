@@ -32,8 +32,8 @@
   import { callCq, chooseNext, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
-  import { chooseScenario } from '../lib/practice/runtime.svelte';
-  import { SCENARIOS } from '../lib/practice/scenarios';
+  import { scenarioOf } from '../lib/practice/scenarios';
+  import ScenarioSheet from './ScenarioSheet.svelte';
   import { showNight } from '../lib/state/night.svelte';
   import { utcNow } from '../lib/clock/utc';
 
@@ -110,6 +110,7 @@
   });
 
   let menuOpen = $state(false);
+  let scenarioOpen = $state(false);
   let barEl: HTMLElement;
   let menuEl: HTMLDivElement | undefined = $state();
   let dockEl: HTMLDivElement | undefined = $state();
@@ -267,16 +268,16 @@
         Hunt order <span class="v">{huntOrder.label}</span>
       </button>
       {#if practice.on}
-        {#each SCENARIOS as s (s.id)}
-          <button class="mi" role="menuitemradio" aria-checked={practice.scenario === s.id} onclick={act(() => chooseScenario(s.id))}>
-            Practice: {s.name}{#if practice.scenario === s.id}<Icon name="check" size={18} class="chk" />{/if}
-          </button>
-        {/each}
+        <button class="mi" role="menuitem" onclick={act(() => (scenarioOpen = true))}>
+          Practice scenario <span class="v">{scenarioOf(practice.scenario).name}</span>
+        </button>
       {/if}
     </div>
   {/if}
   </div>
 </section>
+
+<ScenarioSheet bind:open={scenarioOpen} />
 
 <svelte:window onkeydown={(e) => menuOpen && e.key === 'Escape' && closeMenu()} />
 
@@ -376,7 +377,7 @@
     z-index: 5;
     width: min(268px, calc(100vw - 2 * var(--rr-space-3)));
 
-    /* With the practice scenarios the menu is taller than a small screen: it scrolls. */
+    /* A tall menu on a small screen scrolls. */
     max-height: calc(100dvh - var(--rr-safe-top) - 180px);
     overflow: hidden auto;
     overscroll-behavior: contain;
