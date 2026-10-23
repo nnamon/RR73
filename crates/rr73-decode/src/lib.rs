@@ -35,6 +35,7 @@ pub mod silence;
 pub mod snr;
 pub mod stages;
 pub mod subtract;
+mod trig;
 pub mod validate;
 pub mod view;
 pub mod wspr;

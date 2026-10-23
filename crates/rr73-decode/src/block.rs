@@ -22,6 +22,7 @@ use rr73_ft8::Mode;
 
 use crate::demod::normalise_variance_over;
 use crate::layout::{CODEWORD_BITS, FrameLayout};
+use crate::trig::sin_cos_f32;
 
 /// Baseband samples per symbol.
 pub const SAMPLES_PER_SYMBOL: usize = 30;
@@ -189,6 +190,11 @@ pub struct BlockWorkspace {
     /// An interferer's model and its products with the baseband.
     model: Vec<Complex32>,
     products: Vec<Complex64>,
+    /// For each data symbol, the largest block power with each of its tones, for the mode
+    /// and block length in `bests_for`, from the amplitudes of the last candidate: sets of
+    /// soft bits of one block length that differ only in their score share them.
+    best: Vec<[f32; MAX_TONES]>,
+    bests_for: Option<(Mode, usize)>,
 }
 
 /// A signal to remove from a candidate's baseband before refinement: a neighbour whose tones
@@ -360,6 +366,7 @@ impl BlockWorkspace {
         reach: (f32, f32),
         interferers: &[Interferer<'_>],
     ) -> Option<Refined> {
+        self.bests_for = None;
         let (mode, g) = self.prepared?;
         if mode != layout.mode || !freq_hz.is_finite() || !start_s.is_finite() {
             return None;
@@ -509,8 +516,9 @@ impl BlockWorkspace {
             for m in 0..SAMPLES_PER_SYMBOL {
                 let a = -std::f64::consts::TAU * ((t as f64 + q) * m as f64 - t as f64 * late)
                     / SAMPLES_PER_SYMBOL as f64;
-                self.twiddles_re[m * MAX_TONES + t] = a.cos() as f32;
-                self.twiddles_im[m * MAX_TONES + t] = a.sin() as f32;
+                let (sin, cos) = sin_cos_f32(a);
+                self.twiddles_re[m * MAX_TONES + t] = cos;
+                self.twiddles_im[m * MAX_TONES + t] = sin;
             }
         }
         self.amps.clear();
@@ -528,7 +536,8 @@ impl BlockWorkspace {
             }
             self.erased[s] = false;
             let a = -std::f64::consts::TAU * q * s as f64;
-            let rot = Complex32::new(a.cos() as f32, a.sin() as f32);
+            let (sin, cos) = sin_cos_f32(a);
+            let rot = Complex32::new(cos, sin);
             let corr = correlate_tones(&self.baseband, b, &self.twiddles_re, &self.twiddles_im);
             for (amp, &c) in self.amps[s].iter_mut().zip(&corr).take(tones) {
                 *amp = c * rot;
@@ -648,10 +657,48 @@ impl BlockWorkspace {
         }
         self.tables(layout);
         let block = block.clamp(1, MAX_BLOCK);
+        if self.bests_for != Some((layout.mode, block)) {
+            self.bests(layout, block);
+            self.bests_for = Some((layout.mode, block));
+        }
+        let tones = layout.tones.min(MAX_TONES).min(layout.gray.len());
+        let bps = layout.bits_per_symbol;
+        for (k, &sym) in layout.data.iter().enumerate() {
+            let base = k * bps;
+            if base + bps > CODEWORD_BITS {
+                break;
+            }
+            if sym >= layout.symbols || self.erased[sym] {
+                continue;
+            }
+            let best = &self.best[k];
+            for i in 0..bps {
+                let mask = 1usize << (bps - 1 - i);
+                let (mut one, mut zero) = (0.0f32, 0.0f32);
+                for (v, &tone) in layout.gray.iter().enumerate().take(tones) {
+                    let b = best[usize::from(tone).min(MAX_TONES - 1)];
+                    if v & mask != 0 {
+                        one = one.max(b);
+                    } else {
+                        zero = zero.max(b);
+                    }
+                }
+                llr[base + i] = score.bit(one, zero);
+            }
+            skip[base..base + bps].fill(false);
+        }
+        normalise_variance_over(llr, variance, &skip);
+    }
+
+    /// For each data symbol inside the audio, the largest power of a block of `block` symbols
+    /// with each tone of the symbol, into `best`.
+    fn bests(&mut self, layout: &FrameLayout, block: usize) {
         let before = (block - 1) / 2;
         let after = block - 1 - before;
         let tones = layout.tones.min(MAX_TONES).min(layout.gray.len());
         let bps = layout.bits_per_symbol;
+        self.best.clear();
+        self.best.resize(layout.data.len(), [0.0; MAX_TONES]);
         for (k, &sym) in layout.data.iter().enumerate() {
             let base = k * bps;
             if base + bps > CODEWORD_BITS {
@@ -687,27 +734,11 @@ impl BlockWorkspace {
                     }
                 }
             }
-            let mut best = [0.0f32; MAX_TONES];
-            for (t, b) in best.iter_mut().enumerate().take(tones) {
+            for (t, b) in self.best[k].iter_mut().enumerate().take(tones) {
                 let own = self.amps[sym][t];
                 *b = max_norm_sqr(own, &self.others);
             }
-            for i in 0..bps {
-                let mask = 1usize << (bps - 1 - i);
-                let (mut one, mut zero) = (0.0f32, 0.0f32);
-                for (v, &tone) in layout.gray.iter().enumerate().take(tones) {
-                    let b = best[usize::from(tone).min(MAX_TONES - 1)];
-                    if v & mask != 0 {
-                        one = one.max(b);
-                    } else {
-                        zero = zero.max(b);
-                    }
-                }
-                llr[base + i] = score.bit(one, zero);
-            }
-            skip[base..base + bps].fill(false);
         }
-        normalise_variance_over(llr, variance, &skip);
     }
 }
 
@@ -1382,6 +1413,7 @@ mod tests {
             start_s: f32,
             reach: (f32, f32),
         ) -> Option<Refined> {
+            self.bests_for = None;
             let (mode, g) = self.prepared?;
             if mode != layout.mode || !freq_hz.is_finite() || !start_s.is_finite() {
                 return None;
@@ -1575,7 +1607,7 @@ mod tests {
                 let mut plans = FftPlans::new();
                 a.prepare(l, &audio, &mut plans);
                 b.prepare(l, &audio, &mut plans);
-                for k in 0..24 {
+                for k in 0..96 {
                     let f = 1234.5 + spacing * (k as f32 * 0.37 - 4.0);
                     let t = l.start_offset_s + dt as f32 + l.symbol_s() * (k as f32 * 0.21 - 2.5);
                     let reach = [(0.5, 0.5), (0.25, 0.125), (0.05, 0.5), (0.5, 0.01)][k % 4];
@@ -1597,7 +1629,7 @@ mod tests {
                 }
             }
         }
-        assert!(checked > 150, "{checked}");
+        assert!(checked > 600, "{checked}");
     }
 
     #[test]
@@ -1630,7 +1662,12 @@ mod tests {
                         ws.amps[10][3] = Complex32::new(f32::NAN, 0.0);
                     }
                     for block in 1..=MAX_BLOCK {
-                        for score in [BlockScore::Amplitude, BlockScore::Log] {
+                        for score in [
+                            BlockScore::Amplitude,
+                            BlockScore::Log,
+                            BlockScore::Power,
+                            BlockScore::Normalised,
+                        ] {
                             let (mut want, mut got) = ([0.0f32; CODEWORD_BITS], [0.0f32; CODEWORD_BITS]);
                             ws.llrs_reference(l, block, score, 24.0, &mut want);
                             ws.llrs(l, block, score, 24.0, &mut got);
@@ -1645,7 +1682,7 @@ mod tests {
                 }
             }
         }
-        assert!(checked > 200, "{checked}");
+        assert!(checked > 400, "{checked}");
     }
 
     #[test]
