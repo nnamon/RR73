@@ -114,6 +114,8 @@ pub struct OsdParams {
 #[derive(Clone, Debug, Default)]
 pub struct OsdScratch {
     rows: Vec<Bits>,
+    /// The rows during the elimination, word by word ([`eliminate`]).
+    words: Vec<u64>,
     pivots: Vec<usize>,
     order: Vec<usize>,
     /// Sort keys of the reliability order.
@@ -179,6 +181,65 @@ impl OsdResult {
 
 const NONE: u16 = u16::MAX;
 
+/// Gauss-Jordan elimination of the generator matrix with pivots taken in the column order
+/// `order`: writes to `rows` the 91 rows that are the identity on the pivot columns, and to
+/// `pivots` those columns in pivot order. Returns `false` when `order` holds fewer than 91
+/// independent columns. `words` holds the rows during the elimination, word by word: word 0
+/// of every row, then word 1, then word 2, so clearing a column from every row runs as
+/// whole-vector operations. The pivots and rows are those of a row-by-row elimination: each
+/// column is a pivot when no combination of the earlier pivot columns gives it, and the rows
+/// that are the identity on the pivots are unique.
+fn eliminate(order: &[usize], words: &mut Vec<u64>, rows: &mut Vec<Bits>, pivots: &mut Vec<usize>) -> bool {
+    words.clear();
+    for w in 0..3 {
+        words.extend(generator().iter().map(|row| row[w]));
+    }
+    let (w0, rest) = words.split_at_mut(K);
+    let (w1, w2) = rest.split_at_mut(K);
+    pivots.clear();
+    for &col in order {
+        let p = pivots.len();
+        if p == K {
+            break;
+        }
+        let (word, shift) = (col >> 6, 63 - (col & 63) as u32);
+        let column = match word {
+            0 => &*w0,
+            1 => &*w1,
+            _ => &*w2,
+        };
+        let Some(r) = (p..K).find(|&r| (column[r] >> shift) & 1 == 1) else {
+            continue;
+        };
+        w0.swap(p, r);
+        w1.swap(p, r);
+        w2.swap(p, r);
+        let pivot = [w0[p], w1[p], w2[p]];
+        match word {
+            0 => clear_column::<0>(w0, w1, w2, pivot, shift),
+            1 => clear_column::<1>(w0, w1, w2, pivot, shift),
+            _ => clear_column::<2>(w0, w1, w2, pivot, shift),
+        }
+        // The pivot row cleared itself.
+        (w0[p], w1[p], w2[p]) = (pivot[0], pivot[1], pivot[2]);
+        pivots.push(col);
+    }
+    rows.clear();
+    rows.extend((0..K).map(|p| [w0[p], w1[p], w2[p]]));
+    pivots.len() == K
+}
+
+/// Adds the pivot row's words `pivot` to every row that has bit `shift` of word `W` set, the
+/// pivot row included; the rows' words lie word by word in `w0`, `w1` and `w2`.
+fn clear_column<const W: usize>(w0: &mut [u64], w1: &mut [u64], w2: &mut [u64], pivot: Bits, shift: u32) {
+    for ((a, b), c) in w0.iter_mut().zip(w1.iter_mut()).zip(w2.iter_mut()) {
+        let mask = (([*a, *b, *c][W] >> shift) & 1).wrapping_neg();
+        *a ^= pivot[0] & mask;
+        *b ^= pivot[1] & mask;
+        *c ^= pivot[2] & mask;
+    }
+}
+
 /// Runs OSD. `source(i)` gives the LLR of bit `i` used for ordering (positive means 1);
 /// `channel` holds the demodulator's LLRs (positive means 1), against which hard errors
 /// are counted. Returns `None` when no candidate passes the CRC and the limits.
@@ -227,31 +288,7 @@ pub fn osd(
     s.order.clear();
     s.order.extend(s.keys.iter().map(|&k| (k & 0xffff_ffff) as usize));
 
-    // Gauss-Jordan elimination with pivots taken in reliability order. Rows are cleared of the
-    // pivot column with a mask, so the inner loop has no branch on the data.
-    s.rows.clear();
-    s.rows.extend_from_slice(generator());
-    s.pivots.clear();
-    for &col in &s.order {
-        let p = s.pivots.len();
-        if p == K {
-            break;
-        }
-        let Some(r) = (p..K).find(|&r| get(&s.rows[r], col)) else {
-            continue;
-        };
-        s.rows.swap(p, r);
-        let pivot_row = s.rows[p];
-        let (word, shift) = (col >> 6, 63 - (col & 63));
-        for (q, row) in s.rows.iter_mut().enumerate() {
-            let mask = ((row[word] >> shift) & u64::from(q != p)).wrapping_neg();
-            row[0] ^= pivot_row[0] & mask;
-            row[1] ^= pivot_row[1] & mask;
-            row[2] ^= pivot_row[2] & mask;
-        }
-        s.pivots.push(col);
-    }
-    if s.pivots.len() < K {
+    if !eliminate(&s.order, &mut s.words, &mut s.rows, &mut s.pivots) {
         return None;
     }
 
@@ -1002,6 +1039,69 @@ mod tests {
             let v = self.uniform();
             (-2.0 * u.ln()).sqrt() * (std::f32::consts::TAU * v).cos()
         }
+    }
+
+    /// The elimination of 0.24.2: rows one by one, each cleared of the pivot column with a
+    /// mask.
+    fn eliminate_0_24_2(order: &[usize], rows: &mut Vec<Bits>, pivots: &mut Vec<usize>) -> bool {
+        rows.clear();
+        rows.extend_from_slice(generator());
+        pivots.clear();
+        for &col in order {
+            let p = pivots.len();
+            if p == K {
+                break;
+            }
+            let Some(r) = (p..K).find(|&r| get(&rows[r], col)) else {
+                continue;
+            };
+            rows.swap(p, r);
+            let pivot_row = rows[p];
+            let (word, shift) = (col >> 6, 63 - (col & 63));
+            for (q, row) in rows.iter_mut().enumerate() {
+                let mask = ((row[word] >> shift) & u64::from(q != p)).wrapping_neg();
+                row[0] ^= pivot_row[0] & mask;
+                row[1] ^= pivot_row[1] & mask;
+                row[2] ^= pivot_row[2] & mask;
+            }
+            pivots.push(col);
+        }
+        pivots.len() == K
+    }
+
+    /// The word-by-word elimination gives the 0.24.2 elimination's pivots and rows bit for bit:
+    /// random column orders, the systematic order, parity columns first, and orders with too
+    /// few independent columns.
+    #[test]
+    fn elimination_matches_the_row_by_row_elimination() {
+        let mut rng = Lcg(77);
+        let (mut rows_a, mut pivots_a) = (Vec::new(), Vec::new());
+        let (mut rows_b, mut pivots_b, mut words) = (Vec::new(), Vec::new(), Vec::new());
+        let mut full = 0;
+        for trial in 0..500usize {
+            let mut order: Vec<usize> = (0..N).collect();
+            match trial % 5 {
+                0 => {}
+                1 => order.reverse(),
+                // The parity columns and only a few information columns: too few pivots.
+                2 => order = (K - 5..N).collect(),
+                _ => {
+                    for i in (1..N).rev() {
+                        let j = (rng.uniform() * (i + 1) as f32) as usize % (i + 1);
+                        order.swap(i, j);
+                    }
+                }
+            }
+            let a = eliminate_0_24_2(&order, &mut rows_a, &mut pivots_a);
+            let b = eliminate(&order, &mut words, &mut rows_b, &mut pivots_b);
+            assert_eq!(a, b, "trial {trial}");
+            if a {
+                assert_eq!(pivots_a, pivots_b, "trial {trial}");
+                assert_eq!(rows_a, rows_b, "trial {trial}");
+                full += 1;
+            }
+        }
+        assert_eq!(full, 400);
     }
 
     type Found = Vec<(u32, u16, u16)>;
