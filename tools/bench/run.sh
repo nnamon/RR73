@@ -4,5 +4,6 @@
 # (docs/bench.md). Usage: tools/bench/run.sh run --preset baseline corpus/synthetic/smoke
 set -eu
 sha=$(git rev-parse --short=12 HEAD)
-git diff --quiet HEAD -- || sha="$sha-dirty"
+# Gate files being recorded do not make the code dirty.
+git diff --quiet HEAD -- . ":(exclude)bench" || sha="$sha-dirty"
 exec docker compose run --rm -e RR73_GIT_SHA="$sha" rust rr73-bench "$@"
