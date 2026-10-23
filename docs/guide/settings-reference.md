@@ -1,106 +1,109 @@
 # Settings reference
 
-Every setting, by the screen it is on, with its default where it has one.
+Each setting by the screen it is on, with its default.
 
 ## Station
 
-- Callsign: needed to transmit. [Getting started](getting-started.md#callsign-and-grid)
-- Grid: 4 or 6 characters, needed to transmit. Use GPS fills it in.
-- Name and QTH: optional, sent by the RTTY macros `{MYNAME}` and `{MYQTH}`.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Callsign, Grid | Empty | Needed to transmit. [Getting started](getting-started.md#callsign-and-grid) |
+| Name, QTH | Empty | Sent by the RTTY macros `{MYNAME}` and `{MYQTH}` |
 
 ## FT8 and FT4
 
-- Confirm with: RR73 or RRR in Tx4. RR73 by default. [Making QSOs](making-qsos.md#calling-cq)
-- Work dupes: Repeat CQ and Hunt answer dupes after everyone else. Off by default. [Dupes](making-qsos.md#dupes)
-- Tail-end: call a station once more after it ends a QSO with another. On by default. [Making QSOs](making-qsos.md#a-station-that-answers-someone-else)
-- Hunt calls: calls to a silent station before Hunt moves on, 1 to 99. 4 by default. [Hunt](making-qsos.md#hunt)
-- Watchdog: stops Tx after a time with no touch. On by default. [Watchdog](making-qsos.md#watchdog)
-- Stop Tx after: the watchdog's limit, 6 min by default.
-- Responses refresh watchdog: each new message restarts the watchdog. Off by default.
-- Hold Tx frequency: calling a station moves Rx only. On by default. [Operate](operate.md#selecting-and-calling)
-- Exchange: your contest exchange. Empty by default. [Contest exchange](contest-exchange.md)
-- Next serial number: the serial number the exchange sends next. 1 by default. [Serial numbers](contest-exchange.md#serial-numbers)
-- Depth: Deep, the default, runs every decoding stage. Fast runs the first only and decodes about 3% fewer stations.
-- A priori decoding: during a QSO, tries the messages expected next on weak signals near the station. On by default.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Confirm with | RR73 | RR73 or RRR as Tx4. [Calling CQ](making-qsos.md#calling-cq) |
+| Work dupes | Off | Repeat CQ and Hunt answer [dupes](making-qsos.md#dupes) last |
+| Tail-end | On | [Calls once more](making-qsos.md#a-station-that-answers-someone-else) when a station ends a QSO with another |
+| Hunt calls | 4 | Calls to a silent station before [Hunt](making-qsos.md#hunt) moves on, 1 to 99 |
+| Watchdog, Stop Tx after | On, 6 min | [Watchdog](making-qsos.md#watchdog) |
+| Responses refresh watchdog | Off | Each new message restarts the watchdog |
+| Hold Tx frequency | On | Calling moves Rx only. [Operate](operate.md#selecting-and-calling) |
+| Exchange, Next serial number | Empty, 1 | [Contest exchange](contest-exchange.md#serial-numbers) |
+| Depth | Deep | Fast runs the first decoding stage only and decodes about 3% fewer stations |
+| A priori decoding | On | Tries the messages expected next on weak signals near the station you work |
 
-## WSPR
+Hunt order, in Operate's •••: Not worked, the default, puts stations not worked on this band and mode first. Strongest, Newest, Farthest and New call order by signal, by how recently their CQs started, by distance, and stations never worked first.
 
-- Tx percentage, Reported power, Tx frequency, Stop beacon after, Message, Sort spots by and Upload spots to WSPRnet. [WSPR](wspr.md#settings-wspr)
+## WSPR, RTTY and Macros
 
-## RTTY
-
-- Speed, Shift, Reverse, Unshift on space, Figures, AFC, Squelch, Stop bits, Preamble, Idle, Tail, Start each Tx with a new line, Stop idle Tx after, Watchdog and Repeat CQ gap. [RTTY](rtty.md#settings-rtty)
-- Contest, Next serial, Serial digits and Exchange. [RTTY contest](rtty.md#contest)
-
-## Macros
-
-- The QSO and Contest sets of keyboard macros. [Macros](rtty.md#macros)
+- [Settings › WSPR](wspr.md#settings-wspr)
+- [Settings › RTTY](rtty.md#settings-rtty) and its [Contest](rtty.md#contest) group
+- [Macros](rtty.md#macros)
 
 ## Radio and audio
 
-- Input: the audio input. System default by default. [Receive audio](your-radio.md#receive-audio)
-- Waterfall contrast: Low, Normal or High. Normal by default.
-- Output: the audio output, in Chrome and Edge. [Transmit audio](your-radio.md#transmit-audio)
-- Monitor and Monitor level: a second output that plays transmit audio.
-- Output level: the transmit audio level. [Tune](your-radio.md#setting-levels-with-tune)
-- Start chime: a tone when audio starts, which keys the radio by VOX. On by default.
-- Before you transmit: a checklist to tick as you set up the device. [Your radio](your-radio.md#iphone-and-vox)
-- Correct Tx timing: moves each transmission by the clock error in the decodes. Off by default. [Timing](timing.md#correct-tx-timing)
-- Correct with time server and Time server: in the desktop app, the clock against an NTP server, the public pool when empty. On by default. [Time server](timing.md#the-desktop-app-s-time-server)
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Input, Waterfall contrast | System default, Normal | [Receive audio](your-radio.md#receive-audio) |
+| Output, Monitor, Monitor level | System default | [Transmit audio](your-radio.md#transmit-audio) |
+| Output level | | [Tune](your-radio.md#setting-levels-with-tune) |
+| Start chime | On | Keys the radio by VOX when audio starts |
+| Before you transmit | | A checklist. [Your radio](your-radio.md#iphone-and-vox) |
+| Correct Tx timing | Off | [Timing](timing.md#correct-tx-timing) |
+| Correct with time server, Time server | On, public pool | Desktop app only. [Time server](timing.md#the-desktop-app-s-time-server) |
 
 ## Rig control
 
-Shows in Chrome and Edge on a computer, and in the desktop app. [Rig control](your-radio.md#rig-control-in-chrome-or-edge)
+In Chrome and Edge on a computer, and in the desktop app. [Rig control](your-radio.md#rig-control-in-chrome-or-edge)
 
-- Rig control: off by default. Off, transmissions key the radio by VOX.
-- Radio: Icom IC-705 or Elecraft KX2.
-- Connection and Baud rate: for the KX2.
-- Key the radio with CAT: keys by PTT over CAT. Off by default. [Keying by CAT](your-radio.md#keying-by-cat)
-- Keep Tx audio centred: on the IC-705, moves the dial for each transmission. Off by default.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Rig control | Off | Off, VOX keys the radio |
+| Radio | Icom IC-705 | Or Elecraft KX2, with Connection and Baud rate |
+| Key the radio with CAT | Off | [Keying by CAT](your-radio.md#keying-by-cat) |
+| Keep Tx audio centred | Off | IC-705: moves the dial for each transmission |
 
 ## Web SDR, PSK Reporter and Relay
 
-- Receive from a web SDR, and the receiver. Off by default. [Web SDR](web-sdr.md#receiving-from-a-web-sdr)
-- Report to PSK Reporter, Antenna and Relay. Off by default. [PSK Reporter](web-sdr.md#psk-reporter)
-- Show who heard you: lists on Spots who reported your signal. Off by default.
-- Relay: None, or a relay you added, with its Access key. None by default. [The relay](web-sdr.md#the-relay)
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Receive from a web SDR | Off | [Web SDR](web-sdr.md#receiving-from-a-web-sdr) |
+| Report to PSK Reporter, Antenna | Off | [PSK Reporter](web-sdr.md#psk-reporter) |
+| Show who heard you | Off | Lists on Spots who reported your signal |
+| Relay, Access key | None | [The relay](web-sdr.md#the-relay) |
 
 ## Logging
 
-- Wavelog: Address, API key, Station location, Use Wavelog, Send radio status and Read Wavelog's log. [Wavelog](logging.md#wavelog)
-- POTA, SOTA, WWFF and ADIF file: files for activations, shown while Activations is on. [Activations](activations.md#where-the-qsos-go)
-- Send automatically: sends each QSO as it is logged.
-- Send edits to QSOs already sent: where the destination accepts changes.
-- Back up the log and Import a log. [Backup and import](logging.md#backup-and-import)
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Wavelog | | [Wavelog](logging.md#wavelog) |
+| POTA, SOTA, WWFF and ADIF file | | Shown while Activations is on. [Activations](activations.md#where-the-qsos-go) |
+| Send automatically | Off | Sends each QSO as it is logged |
+| Send edits to QSOs already sent | On | Where the destination takes edits |
+| Back up the log, Import a log | | [Backup and import](logging.md#backup-and-import) |
 
 ## Practice band
 
-- Practice band: the simulated band. Off by default. [Practice band](practice-band.md)
-- Crowded band: more stations. Off by default.
-- Play Tx audio: practice transmissions play and can key a connected radio. On by default.
-- Clear practice log: empties the practice log, with Undo.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Practice band | Off | [Practice band](practice-band.md) |
+| Crowded band | Off | More stations |
+| Play Tx audio | On | Plays practice transmissions and can key a radio |
+| Clear practice log | | Empties the practice log, with Undo |
 
 ## Optional features
 
-- Activations: POTA, SOTA, WWFF and IOTA activations. Off by default. [Activations](activations.md)
-- POTA spots: activators from pota.app, in Spots. Off by default.
-- Cluster spots: the DX cluster from HamQTH, in Spots. Off by default.
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Activations | Off | [Activations](activations.md) |
+| POTA spots | Off | Activators from pota.app, in Spots |
+| Cluster spots | Off | The DX cluster from HamQTH, in Spots |
 
 ## Appearance
 
-- Theme: Light, Dark, Sun or System. Sun is light with the most contrast, for direct sunlight. Light by default.
-- Font: Automatic, System or Inter. Automatic, the default, uses Inter on Linux and Android.
-- Monospace: System, JetBrains or Roboto, for messages, times and callsigns. System by default.
-- Decode messages: Interface font, the default, or Monospace.
-- Waterfall colours: RR73, Fire or Grey. RR73 by default.
-- Callsigns on the waterfall: writes each FT8 and FT4 decode's callsign over its signal. Off by default.
-- Night display: dims Operate to red on black after 2, 5 or 10 min untouched. Off by default. Night display in ••• turns it on at once, and a tap wakes Operate.
-- Decode colours: the colour of each kind of decode, a preset, and the legend. [Colours](operate.md#colours)
+| Setting | Default | Choices |
+| --- | --- | --- |
+| Theme | Light | Light, Dark, Sun (light, most contrast) or System |
+| Font | Automatic | Automatic (Inter on Linux and Android), System or Inter |
+| Monospace | System | System, JetBrains or Roboto |
+| Decode messages | Interface font | Interface font or Monospace |
+| Waterfall colours | RR73 | RR73, Fire or Grey |
+| Callsigns on the waterfall | Off | Writes each decode's callsign over its signal |
+| Night display | Off | Red on black after 2, 5 or 10 min untouched |
+| Decode colours | RR73 | [Colours](operate.md#colours) |
 
-## About
+## Guide and About
 
-- Guide: these pages.
-- Version history: the changes in each version.
-- Credits: the third-party work in RR73 and its licences.
-- Reload app: installs any update. Audio stops.
-- Clear cached copy and reload: keeps settings and QSOs. Needs a connection. Audio stops.
+Guide, the first row of Settings, opens these pages. About holds Version history, Credits, Reload app and Clear cached copy and reload. Both reloads stop audio.

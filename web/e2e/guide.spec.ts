@@ -18,7 +18,7 @@ test('Settings › Guide lists the pages and opens one with a way back', async (
   await expect(page.getByRole('heading', { level: 1, name: 'Making QSOs' })).toBeVisible();
   await expect(page.getByRole('heading', { level: 2, name: 'After RR73' })).toBeVisible();
   // Messages as transmitted, in the monospace font.
-  await expect(page.locator('code', { hasText: 'K1ABC 9V1NE R-10' })).toBeVisible();
+  await expect(page.locator('code', { hasText: 'AB4SS 9V1NE R-10' })).toBeVisible();
 
   await page.getByRole('link', { name: 'Guide', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Guide' })).toBeVisible();
@@ -107,7 +107,7 @@ test.describe('with the service worker', () => {
     await expect(page.getByRole('heading', { level: 1, name: 'Making QSOs' })).toBeVisible();
 
     // The screenshot is in the precache: it loads with the network off.
-    const img = page.getByRole('img', { name: "Operate's transmit controls during a QSO with K1ABC" });
+    const img = page.getByRole('img', { name: "Operate's transmit controls during a QSO with AB4SS" });
     await expect(img).toBeVisible();
     expect(await img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth)).toBeGreaterThan(0);
     const legend = page.getByRole('list', { name: 'Callouts' });
@@ -122,13 +122,54 @@ test.describe('with the service worker', () => {
     const them = (await answering.locator('.them code').first().boundingBox())!;
     const you = (await answering.locator('.you code').first().boundingBox())!;
     expect(you.x).toBeLessThan(them.x);
-    await expect(answering.locator('.you code').first()).toHaveText('K1ABC 9V1NE OJ11');
+    await expect(answering.locator('.you code').first()).toHaveText('AB4SS 9V1NE OJ11');
     await expect(answering.locator('.you code').first()).toHaveCSS('font-family', /mono|Mono|Menlo|Courier/);
     await expect(ladders.nth(3).getByText('Nothing decoded')).toHaveCount(4);
 
     await expect(page.getByRole('table').first().getByRole('row')).toHaveCount(10);
     await expect(page.getByRole('cell', { name: 'Repeat CQ', exact: true })).toBeVisible();
   });
+
+  test('every page of the guide shows its screenshots with no network', async ({ page, context }) => {
+    await page.goto('./#/settings/guide');
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
+    const slugs = await page.locator('main .pane:not([hidden]) .group a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!.split('/').pop()!));
+    expect(slugs.length).toBe(13);
+    await context.setOffline(true);
+    let images = 0;
+    for (const slug of slugs) {
+      await page.goto(`./#/settings/guide/${slug}`);
+      await expect(page.locator('main h1:visible').first()).not.toHaveText('Guide');
+      for (const img of await page.locator('.fig img').all()) {
+        await img.scrollIntoViewIfNeeded();
+        await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0), { message: `${slug}: ${await img.getAttribute('alt')}` }).toBe(true);
+        images++;
+      }
+    }
+    // Every screenshot in docs/guide/img appears on a page (guide.test.ts).
+    expect(images).toBe(13);
+  });
+});
+
+test('every page of the guide fits a 375 x 667 screen', async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.goto('./#/settings/guide');
+  const slugs = await page.locator('main .pane:not([hidden]) .group a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!.split('/').pop()!));
+  const problems: string[] = [];
+  for (const slug of slugs) {
+    await page.goto(`./#/settings/guide/${slug}`);
+    await page.locator('main h1:visible').first().waitFor();
+    const wide = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    if (wide > 0) problems.push(`${slug}: page ${wide} px wide`);
+    const outside = await page.locator('main .pane:not([hidden])').evaluate((root) =>
+      [...root.querySelectorAll('.fig img, .rung > *, table')]
+        .map((el) => ({ el: el.textContent?.slice(0, 30) || el.tagName, r: el.getBoundingClientRect() }))
+        .filter(({ r }) => r.left < 16 || r.right > window.innerWidth - 16)
+        .map(({ el }) => el),
+    );
+    for (const o of outside) problems.push(`${slug}: ${o}`);
+  }
+  expect(problems).toEqual([]);
 });
 
 test('Making QSOs fits a 375 x 667 screen in both themes', async ({ page }) => {

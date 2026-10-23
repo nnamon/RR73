@@ -1,60 +1,68 @@
 # Contest exchange
 
-Type your exchange in Contest exchange, in Settings › FT8 and FT4, as you would say it on the air. Leave it empty outside contests and RR73 sends and reads standard messages only.
+Type your exchange in Settings › FT8 and FT4, as you would say it on the air. Empty, RR73 sends standard messages only.
+
+![Settings › FT8 and FT4 with the exchange 1D WI](img/contest-exchange.webp)
+
+1. Exchange.
+2. What goes out in each format, to a station at −10 dB, or the part missing.
+3. Next serial number, sent for `#`.
+4. What to type for each contest.
 
 ## What to type
 
-- Field Day: your class and ARRL or RAC section, such as `1D WI`. The class is 1 to 32 transmitters and a letter from A to H.
-- RTTY Roundup and FT Roundup: your US state or Canadian province, such as `WI`. Outside the US and Canada, type `#` to send a serial number.
-- European VHF contests: `#`, for a serial number and the 6-character grid from Settings › Station.
-
-Each format takes the parts it needs, so `1D WI` works for Field Day and the Roundups. The rows under the field show what goes out to a station at −10 dB, and name any missing part, such as Exchange needs a section.
+| Contest | Type |
+| --- | --- |
+| Field Day | Class and ARRL or RAC section: `1D WI` |
+| RTTY Roundup, FT Roundup | US state or Canadian province: `WI`. Elsewhere `#`, for a serial number |
+| European VHF | `#`, for a serial number and the 6-character grid from Settings › Station |
 
 ## When it is used
 
-The exchange goes out when a station calls CQ FD or CQ RU, or sends you an exchange.
-
-- Answering CQ FD or CQ RU, your first message carries the exchange in place of your grid.
-- Answering any other CQ, Tx1 carries your grid. A reply with an exchange moves the QSO to that format.
-- Calling CQ, each caller's first message sets the format. Edit Tx6 in Edit messages to call CQ FD.
-- A grid in a reply moves the QSO back to standard messages.
+Answering CQ FD or CQ RU, your first message carries the exchange. A reply with an exchange moves any QSO to that format, and a grid moves it back. To call CQ FD, edit Tx6 in Edit messages.
 
 ## What goes on air
 
-Field Day, class and section:
+Field Day:
 
-- `K1ABC 9V1NE 1D WI`
-- `K1ABC 9V1NE R 1D WI`
+```ladder
+Them: CQ FD AB4SS EM73
+You: AB4SS 9V1NE 1D WI | Class and section
+Them: 9V1NE AB4SS R 2A TN
+You: AB4SS 9V1NE RR73 | Logged
+```
 
-Roundups, report with state or serial number:
+Roundup, from outside the US and Canada:
 
-- `K1ABC 9V1NE 579 WI`
-- `K1ABC 9V1NE 579 0013`
+```ladder
+Them: CQ RU AB4SS EM73
+You: AB4SS 9V1NE 579 0013 | Report and serial number
+Them: 9V1NE AB4SS R 589 TN
+You: AB4SS 9V1NE RR73 | Logged
+```
 
-European VHF, report, serial number and grid, with both callsigns hashed:
+European VHF, with both callsigns hashed:
 
-- `<K1ABC> <9V1NE> 570013 OJ11AB`
-- `<K1ABC> <9V1NE> R 570013 OJ11AB`
+```ladder
+Them: CQ TEST OE3OGC JN88
+You: OE3OGC 9V1NE OJ11 | Tx1 carries your grid
+Them: <9V1NE> <OE3OGC> 570021 JN88UF | Their exchange sets the format
+You: <OE3OGC> <9V1NE> R 590013 OJ11VI | Report, serial number and grid
+Them: 9V1NE OE3OGC RR73 | Logged
+```
 
-The second message of each pair is the R-exchange. RR73, RRR and 73 go out as usual, with both callsigns in full.
-
-The report digit follows the station's SNR in 4 dB steps from 2 to 9, with 7 at −10 dB. Your exchange is fixed once it first goes out in a QSO.
-
-If Contest exchange lacks a part the QSO needs, the exchange messages stay empty, nothing goes out and the status line names the part, such as `Exchange needs a section`. The message goes out once you type it in.
+The report digit follows the station's SNR in 4 dB steps from 2 to 9, with 7 at −10 dB.
 
 ## Serial numbers
 
-Next serial number shows under the exchange while it is set, starting at 1.
-
-- It goes out as 4 digits, such as 0013.
-- It counts up by 1 each time a QSO that sent it is logged. An unlogged QSO leaves it for the next.
-- The Roundup format takes 1 to 7999 and the VHF format 0 to 2047. Outside those the status line says `Serial number out of range`.
-- Type a new number to change it.
+The serial number goes out as 4 digits and counts up by 1 each time a QSO that sent it is logged. Roundup takes 1 to 7999 and European VHF 0 to 2047. Outside those the status line says `Serial number out of range`.
 
 ## In the log
 
-- Exchange sent and Exchange received: the exchange without the report, such as `1D WI` or `0013 OJ11AB`.
-- Report sent and Report received: the report as on air, such as 579 or 57. Empty for class and section.
-- Their grid: the grid of a VHF exchange.
+| Field | Holds |
+| --- | --- |
+| Exchange sent, Exchange received | The exchange without the report: `1D WI` or `0013 OJ11VI` |
+| Report sent, Report received | The report as on air, 579 or 57. Empty for Field Day |
+| Their grid | The grid of a European VHF exchange |
 
-ADIF export writes a serial number to STX and SRX and any other exchange to STX_STRING and SRX_STRING. An exchange that starts with a serial number goes to both.
+ADIF export writes a serial number to STX and SRX and any other exchange to STX_STRING and SRX_STRING.

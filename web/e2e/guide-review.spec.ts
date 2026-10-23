@@ -1,6 +1,7 @@
 // The guide as the app shows it, for review beside the Markdown (guide-review project only,
-// RR73_GUIDE_SHOTS=1; docs/testing.md): Making QSOs screen by screen and at full length in both
-// themes, the top of Settings and Operate's empty decode list on first start. An iPhone at
+// RR73_GUIDE_SHOTS=1; docs/testing.md): every page at full length in light, Making QSOs screen by
+// screen and at full length in both themes, the top of Settings and Operate's empty decode list on
+// first start. An iPhone at
 // 393 x 852 in WebKit, with its status bar and home indicator insets. Screenshots go to
 // test-results/screens/guide.
 import { expect, test, type Page } from '@playwright/test';
@@ -59,5 +60,19 @@ for (const theme of ['light', 'dark'] as const) {
     await openAt(page, '#/operate', theme);
     await expect(page.getByRole('link', { name: 'Read Getting started' })).toBeVisible();
     await page.screenshot({ path: `${OUT}/first-start-${theme}.png` });
+  });
+}
+
+const PAGES = ['getting-started', 'your-radio', 'operate', 'making-qsos', 'activations', 'contest-exchange', 'logging', 'wspr', 'rtty', 'web-sdr', 'practice-band', 'timing', 'settings-reference'];
+
+for (const [i, slug] of PAGES.entries()) {
+  test(`${slug} at full length in light`, async ({ page }) => {
+    await openAt(page, `#/settings/guide/${slug}`, 'light');
+    for (const img of await page.locator('.fig img').all()) await expect.poll(() => img.evaluate((el: HTMLImageElement) => el.complete && el.naturalWidth > 0)).toBe(true);
+    const el = await scroller(page);
+    const { total, view } = await el.evaluate((s) => ({ total: (s as HTMLElement).scrollHeight, view: (s as HTMLElement).clientHeight }));
+    await page.setViewportSize({ width: 393, height: 852 + Math.max(0, total - view) });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: `${OUT}/page-${String(i + 1).padStart(2, '0')}-${slug}.png` });
   });
 }
