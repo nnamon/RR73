@@ -188,7 +188,7 @@ Every set in `required_sets` must be in the results. `[default]` holds the limit
 
 The `bench` job in `.github/workflows/ci.yml` fetches the public files, synthesises `smoke` and `noise-ci`, and gates two presets and the later stages, each against its own recorded file with the thresholds in `bench/gate.toml`:
 
-| Preset | Recorded file | Why CI gates it |
+| Preset | Recorded file | Reason for the gate |
 | --- | --- | --- |
 | `baseline` | `bench/baseline.json` | The ft8_lib method, kept unchanged as the research reference. It checks the stages every preset shares (spectrogram, search, demodulator, belief propagation, validator) and the bench itself. |
 | `subtract-3-osd2` | `bench/subtract-3-osd2.json` | The preset the app ships from 0.4.0. Its numbers are what operators get from the first decodes of a slot. |
