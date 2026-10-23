@@ -12,7 +12,7 @@ After 0.24.2 the three stages miss 235 of the 5508 reference decodes on the 403 
 4. FT4's sync gate for the normalised set: 9 of 16 sync symbols on their sent tone, 2.25 times chance against FT8's 9 of 21 at 3.5 times. FT4's preset costs about 20 % more time with the normalised set.
 5. If time allows, the second normalised set in stage 3 only (SARTS 4010 through three stages with stage 1 unchanged, experiment 0011).
 
-## Why the changes should help
+## Rationale
 
 ### Overlapping signals
 
@@ -163,7 +163,7 @@ WebKit 26.6 (Playwright, `tools/wasm-cost/ab.mjs`), a dedicated module worker, e
 
 In WebKit the preset costs 14 % more at the mean and 22 % more at the 95th percentile; the three stages 3 % and 8 %. With experiment 0009's factor of 2.2 for an A13, the three stages' 95th percentile is 860 ms and the slowest slot 1240 ms, inside the 2 s budget. Not tested on a device.
 
-## Against the expectations
+## Expected and measured
 
 | Measure | Expected | Measured |
 | --- | --- | --- |

@@ -116,7 +116,7 @@ The preset with overrides, on the FT4 AWGN and fading subsets and the 2000 noise
 
 A grid is frames per symbol by bins per tone spacing (`spectrogram.time_osr`, `spectrogram.freq_osr`), the window `spectrogram.window_symbols`. The false decodes in the grid rows are OSD codewords at 28 to 30 hard errors on the slots' true signals, or the true message 10 to 11 Hz from its frequency; the last row's 25 are OSD codewords at 22 to 30 hard errors, 11 of them in the noise slots, and 23 report -20.8 to -23.0 dB, below the FT4 OSD floor that row removes.
 
-## What it means
+## Interpretation
 
 - FT4 is 2.2 dB behind `jt9` in AWGN and 2.7 dB with fading through RR73's three stages, with `jt9`'s a priori decodes left out. The preset alone, which early-pass and transmit slots use, is 3.4 and 4.1 dB behind. FT8 through the same stages is 0.6 and 1.0 dB behind. FT4 therefore carries a deficit of 1.6 to 1.7 dB that FT8 does not, with the same search, demodulator, LDPC and OSD code; the FT4 and FT8 intervals do not overlap.
 - In operating terms: a station `jt9` decodes in every slot at -16 dB in AWGN, RR73 decodes in 7 of 40 slots through stage 3 and in 1 of 40 with the preset alone.

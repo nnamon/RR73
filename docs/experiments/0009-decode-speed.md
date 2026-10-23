@@ -8,9 +8,9 @@ Status: hypothesis recorded 2026-10-15, before profiling or optimising. Measured
 2. How much of that time can go without changing a single decode: the same messages, frequencies, DTs, SNRs, passes and stages on every slot?
 3. Can a second decoder worker shorten a slot's decoding in WebKit, at what memory cost and risk, given that workers share no memory (decision 0004)?
 
-Speed counts twice. The first decodes of a slot should arrive early: the early pass decodes the first 13.5 s of an FT8 slot (6 s in FT4) and the whole slot follows at its end. The later stages find more the more of them fit in their 2 s budget on a slow phone.
+Speed matters at two points. The first decodes of a slot should arrive early: the early pass decodes the first 13.5 s of an FT8 slot (6 s in FT4) and the whole slot follows at its end. The later stages find more the more of them fit in their 2 s budget on a slow phone.
 
-## Why it should be possible
+## Rationale
 
 From reading the code (`crates/rr73-decode`, `crates/rr73-dsp`), before any measurement:
 
@@ -172,7 +172,7 @@ Subtraction, the demodulator and the SNR estimate stay scalar. Subtraction runs 
 - `FftPlans` keeps rustfft's plans by length in the context, so each worker plans each FFT size once. The spectrogram plan, its window and the SNR scale are rebuilt when the stage's grid changes, 3 times per slot in the app's plan; the step that sets up a stage takes 0.12 ms at the median, too little for a cache.
 - Repeated work across stages: stage 3's even frames sit where stage 2's frames sit, with the same FFT size and window. The spectrogram transforms frames in pairs, one real frame in each half of a complex FFT, and stage 3 pairs them differently, so its values differ in the last bits; reusing stage 2's frames would move decodes and was left out. No other work repeats on equal inputs: each stage starts on audio with the previous stage's decodes subtracted.
 
-### What stays, and why
+### Remaining costs
 
 - Subtraction: 54 % of the preset's time natively and 62 % in WebAssembly. Each subtraction runs serial f64 recurrences per sample (phase, carrier, modulation and the moving sum) over the 151 680 samples of an FT8 signal. At this point experiment 0010 was changing the model on its branch, so this experiment left the code alone; 0010 then kept the model, and dee19cd (below) takes the first of two directions: compute the model and the products block by block, so the per-sample products vectorise with the same values in the same order; or a cheaper model, such as f32 arithmetic or the phase from the pulse sums at block centres (`phase_at_block_centres`), which changes values and needs the decoder gate.
 - The logarithm of each spectrogram bin and rustfft's transposes: faster versions give different values in the last bits, outside this experiment's rule. Together they take about 15 % of the three stages.
@@ -330,7 +330,7 @@ A second worker that runs the later stages while the first takes the next slot g
 
 `DecodeSession::step` bounds the work between yields of the app's worker, which steps stages 2 and 3 in slices of 40 ms. The longest step of work on the 60 public files, each slot's shortest maximum over 3 runs (runs under load add preemption: single runs gave 30 to 170 ms in either build): before 13bcebb 7.0 ms in WebKit and 7.3 ms in Chromium, after it 4.0 and 4.3 ms, with no change in time per slot. On an A13 that is about 9 ms. Single runs at load 20 to 24 reached 59 to 172 ms in WebKit with either build while no slot's shortest run exceeded 7.3 ms, so steps that long, such as the 109 ms seen during the block soft bit integration, are the worker waiting for a CPU. origin/main's step lengths were not measured this way.
 
-## Against the expectations
+## Expected and measured
 
 | Measure | Expected | Measured |
 | --- | --- | --- |
