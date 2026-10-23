@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions, programFindings } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions, programFindings, withValues, sourcePieces } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
 const screen = (text) => lintText(text, 'x', { screen: true }).map((f) => `${f.level}:${f.rule}`);
@@ -16,11 +16,41 @@ test('flags hype, corporate verbs, fillers and meta narration', () => {
   assert.deepEqual(rules('We leverage the decoder'), ['error:corporate']);
   assert.deepEqual(rules('Harness the decoder'), ['error:corporate']);
   assert.deepEqual(rules('The test harness links ft8_lib.'), []);
-  assert.deepEqual(rules('Unlock the potential of FT8'), ['error:corporate', 'warning:unlock']);
-  assert.deepEqual(rules('Resume audio plays silence for the same unlock.'), ['warning:unlock']);
+  assert.deepEqual(rules('Unlock the potential of FT8'), ['error:corporate']);
+  assert.deepEqual(rules('Resume audio plays silence to unlock audio.'), ['error:corporate']);
   assert.deepEqual(rules('Simply tap Call'), ['error:filler']);
   assert.deepEqual(rules("Here's how the log works"), ['error:meta']);
   assert.deepEqual(rules("It's not just a decoder, it's a lab"), ['error:contrast']);
+});
+
+test('flags spaced hyphens and en dashes used as dashes, and passes ranges, bullets and tables', () => {
+  assert.deepEqual(rules('Decodes arrive late - after the slot.'), ['error:spaced-hyphen']);
+  assert.deepEqual(rules('Decodes arrive late \u2013 after the slot.'), ['error:spaced-hyphen']);
+  assert.deepEqual(rules('Checks 1\u20136 pass. Timor-Leste is one word.'), []);
+  assert.deepEqual(lintText(markdownProse('- First item\n  - Nested item\n| a | - |'), 'x'), []);
+});
+
+test('flags headings that end in a full stop or a question mark', () => {
+  assert.deepEqual(rules('## Built for the field.'), ['error:heading-punctuation']);
+  assert.deepEqual(rules('## Why a relay?'), ['error:heading-punctuation']);
+  assert.deepEqual(rules('## Version numbers'), []);
+  assert.deepEqual(rules('A sentence that asks why?'), []);
+});
+
+test('flags inflated words, idioms and conversational residue', () => {
+  for (const w of ['Delve into the log', 'Navigate to Settings', 'The FT8 landscape', 'In the realm of FT8', 'A tapestry of decodes', 'Your FT8 journey', 'Utilise the decoder'])
+    assert.deepEqual(rules(w), ['error:plain-words'], w);
+  assert.deepEqual(rules('Navigation and the navigator API'), []);
+  for (const w of ['Empower operators', 'Elevate your QSOs', 'Harness the decoder', 'Dive into FT8'])
+    assert.deepEqual(rules(w), ['error:corporate'], w);
+  assert.deepEqual(rules('A game-changer for FT8'), ['error:hype']);
+  for (const w of ['Under the hood it decodes twice', 'A footgun in the log', 'The gotcha is the clock'])
+    assert.deepEqual(rules(w), ['error:idiom'], w);
+  for (const w of ["You're right, the relay is needed", 'Good catch on the clock', 'Key takeaways', 'To be clear, it logs'])
+    assert.deepEqual(rules(w), ['error:residue'], w);
+  for (const w of ["Here's the thing: it logs", 'In summary, it logs', 'It logs. Overall, it works'])
+    assert.deepEqual(rules(w), ['error:meta'], w);
+  assert.deepEqual(rules('The overall SNR is 3 dB higher.'), []);
 });
 
 test('warns on contrast phrasing for review', () => {
@@ -79,6 +109,22 @@ test('screen text passes the formats and entities the style guide asks for', () 
   assert.deepEqual(screen('The app has 3 tabs. Tx moved to 1500 Hz.'), []);
   assert.deepEqual(screen('Add&nbsp;QSO and &#8722;15'), []);
   assert.deepEqual(screen('Twice a day, once in a while.'), []);
+});
+
+test('the changelog may give a reason after a semicolon, and the screen may not', () => {
+  const changelog = (text) => lintText(text, 'CHANGELOG.md', { screen: true, changelog: true }).map((f) => `${f.level}:${f.rule}`);
+  assert.deepEqual(changelog('- Tx stops at the slot end; a late start overran the slot.'), []);
+  assert.deepEqual(changelog('- WSJT-X colours; matches the decoder.'), ['error:other-program']);
+  assert.deepEqual(changelog('- The tab bar is gone; Log opens over Operate.'), ['error:contrast-semicolon']);
+  assert.deepEqual(screen('Tx stops at the slot end; a late start overran it.'), ['error:semicolon']);
+});
+
+test('template interpolations are values, so code in them is not copy', () => {
+  assert.equal(withValues('CQ in ${Math.ceil((a - b) / 1000)} s'), 'CQ in N s');
+  assert.equal(withValues("${n} of ${t}${p ? ' stations' : ''} more"), 'N of NN  stations  more');
+  const ts = "const a = `CQ in ${Math.max(0, x - y)} s, then again`;\nconst b = `Tx stops - then ${n} more`;";
+  assert.deepEqual(lintText(sourceProse(ts, '.ts'), 'x').map((f) => `${f.line}:${f.rule}`), ['2:spaced-hyphen']);
+  assert.equal(sourcePieces("const r = `${v < 0 ? '-' : '+'}${a}`;", '.ts').length, 0);
 });
 
 test('screen rules stay off for documents and commit messages', () => {
