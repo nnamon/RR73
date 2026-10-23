@@ -4,7 +4,7 @@ Status: accepted, 2026-10-14. Amended 2026-10-15: FT4 slots run the same stages 
 
 ## Context
 
-The shipped preset, `subtract-3-osd2`, decodes an FT8 slot in about 70 ms of the 15 s (native, busiest public files). Experiment 0003 part 2 measured later stages that run on what it leaves, each returning only new decodes: finer search grids, more candidates, deeper OSD. The finer grid gave most of the gain. This record chooses the stages, says how the app runs them within a time budget, and gives the measurements.
+The shipped preset, `subtract-3-osd2`, decodes an FT8 slot in about 70 ms of the 15 s (native, busiest public files). Experiment 0003 part 2 measured later stages that run on what it leaves, each returning only new decodes: finer search grids, more candidates, deeper OSD. The finer grid gave most of the gain.
 
 ## Decision
 
@@ -59,7 +59,7 @@ Time per slot on the 410 recorded slots (60 public, 350 SARTS), each slot's fast
 | Through stage 3 | 242.1, 560.0, 691.5 ms | 321, 711, 888 ms | 264, 613, 753 ms |
 | Longest step | 5.5 ms | 6.4 ms | 8.0 ms |
 
-The WebKit worker stays well inside the limits set for this work (median under 2 s, 95th percentile under 3 s). With the budget set to 150 ms for a check, every public slot stopped between 151 and 155 ms. The decodes in the browsers equal the native ones: 4341, 387 and 164 by stage.
+Through stage 3 the WebKit worker takes 264 ms at the median and 613 ms at the 95th percentile, against the limits set for this work of 2 s and 3 s. With the budget set to 150 ms for a check, every public slot stopped between 151 and 155 ms. The decodes in the browsers equal the native ones: 4341, 387 and 164 by stage.
 
 ## Alternatives rejected
 
@@ -70,7 +70,7 @@ The WebKit worker stays well inside the limits set for this work (median under 2
 
 ## Open risks
 
-- Not tested on a device. The budget bounds the later stages to 2 s from the start of decoding whatever the phone's speed; on a phone slower than the budget allows, stage 3 ends early with its best candidates tried.
+- Not tested on a device. The budget stops the later stages 2 s after decoding starts on any phone. On a phone slower than the budget allows, stage 3 ends early with its best candidates tried.
 - A reply that only stage 2 or 3 finds often arrives after our next transmission has started (stage 3 ends at a WebKit p50 of 264 ms after decoding starts, the transmission at 0.5 s): that transmission plays out and the answer goes a cycle later, one period after it would have with stage 1. In FT4 stage 3 ends at a WebKit p50 of 181 ms. The sequencer tests cover this; it is not tested on air.
 - The later stages raise the unmatched decodes on the recordings from 68 to 132; about 2 of the new 64 look false. The noise sets cannot show interference-shaped false decodes.
 - The later stages take about 7 times the CPU time of stage 1 per FT8 slot (native mean 260 ms against 37 ms). Battery use is not measured.

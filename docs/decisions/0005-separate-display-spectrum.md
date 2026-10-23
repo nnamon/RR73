@@ -13,4 +13,4 @@ The waterfall computes its own spectrum in TypeScript in a worker with Offscreen
 ## Consequences
 
 - Decoder experiments never affect display performance.
-- Two FFT paths to maintain. Both are small.
+- The project maintains two FFT paths. Both are small.

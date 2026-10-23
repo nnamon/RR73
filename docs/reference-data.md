@@ -136,7 +136,7 @@ Rows show a short name where the country file's name is longer than 14 character
 | St. Peter & St. Paul | St. Peter/Paul |
 | St. Pierre & Miquelon | St. Pierre |
 | Temotu Province | Temotu |
-| Timor - Leste | Timor-Leste |
+| `Timor - Leste` | Timor-Leste |
 | Tokelau Islands | Tokelau |
 | Trindade & Martim Vaz | Trindade |
 | Trinidad & Tobago | Trinidad |
@@ -166,7 +166,7 @@ Tested in Chromium through Playwright: lookups online, then offline with the cou
 
 ## Callsign rules
 
-`dxcc.ts` and `callsign.ts` state the rules in full. In short: an exact callsign in the country file wins; /MM and /AM have no entity; a prefix before the home call is the location (VK3/9V1NE is Australia). After the home call, a single digit is a call area (K1ABC/6 uses K6); one letter, LH, AE, AG or 3 or more letters are ignored (/P, /QRP, the Argentine province letters); anything else is the location (9V1NE/VK3). Then the longest prefix wins. WAE entities report their DXCC entity and code for ADIF.
+`dxcc.ts` and `callsign.ts` state the rules in full. An exact callsign in the country file wins; /MM and /AM have no entity; a prefix before the home call is the location (VK3/9V1NE is Australia). After the home call, a single digit is a call area (K1ABC/6 uses K6); one letter, LH, AE, AG or 3 or more letters are ignored (/P, /QRP, the Argentine province letters); anything else is the location (9V1NE/VK3). Then the longest prefix wins. WAE entities report their DXCC entity and code for ADIF.
 
 ## Refreshing
 

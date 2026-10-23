@@ -6,7 +6,7 @@ Status: measured 2026-10-16 with the block demodulator on 0.21.8 (commit 945b59d
 
 Do soft bits from noncoherent detection of blocks of symbols (1, 2 and 3 FT8 symbols; 1, 2 and 4 FT4 symbols), computed from complex tone amplitudes at a refined start and frequency, lower SNR50 and raise recall over the shipped preset's single-symbol LLRs, with no added false decodes and within the time budget? Does the demodulator belong in the preset or in a later stage (decision 0007)?
 
-## Why it should work
+## Rationale
 
 The preset's demodulator is ft8_lib's: for each symbol on its own, the dB magnitudes of the 8 (FT8) or 4 (FT4) tones in a spectrogram with a 2-symbol Hann window, 2 frames per symbol and 2 bins per tone spacing. It loses sensitivity three ways:
 
@@ -181,7 +181,7 @@ No FT4 slot reached the budget. In FT4 the preset with blocks decodes 255 messag
 
 The plan expected a block stage after decision 0007's stages to add 0.3 to 0.6 dB in FT8 and 1 to 1.5 dB in FT4. Block soft bits in those stages add 1.67 dB and 1.60 dB (FT8 AWGN, fading) and 2.13 dB and 2.73 dB (FT4).
 
-## What it means
+## Interpretation
 
 - Block soft bits are the largest single gain measured in this decoder. In the preset they lower SNR50 by 2.2 dB (FT8 AWGN), 2.6 dB (FT8 fading), 2.8 dB (FT4 AWGN) and 3.5 dB (FT4 fading), and raise SARTS recall from 0.739 to 0.915 and public recall from 0.894 to 0.963. The preset with blocks alone beats decision 0007's three stages on every set.
 - The hypothesis expected less: -19.8 to -20.5 dB in FT8 AWGN (measured -21.25), -15.8 to -17.0 dB in FT4 AWGN (-17.02), and SARTS recall up by 0.02 to 0.05 (0.18). Both parts count in both modes: the matched single-symbol correlation at the refined position (1.1 to 1.9 dB) and the longer blocks (1.1 to 1.6 dB).
@@ -194,7 +194,7 @@ The plan expected a block stage after decision 0007's stages to add 0.3 to 0.6 d
 
 Accepted 2026-10-16: `subtract-3-osd2` takes its soft bits from blocks of 1 and 3 FT8 symbols or 1 and 4 FT4 symbols, with the sync gate at 5 of 21 and 7 of 16. The app's later stages are written as overrides of the preset, so they take block soft bits as well. The plan strings, CI's stage strings and the gate files keep their names, and the gate files were recorded again with the change.
 
-- Why the preset: the early pass and the slots RR73 transmitted in decode with the preset alone (decision 0007), and stage 1's decodes reach the sequencer first. The preset with blocks alone beats the three stages it replaces in recall and SNR50 on every set.
+- Reason for the preset: the early pass and the slots RR73 transmitted in decode with the preset alone (decision 0007), and stage 1's decodes reach the sequencer first. The preset with blocks alone beats the three stages it replaces in recall and SNR50 on every set.
 - Cost: 1.6 times the preset's time natively on the FT8 recordings; in WebKit on a loaded host stage 1 ends at p50 72 ms (60 ms now) and p95 256 ms (179 ms). Half the added time decodes the added signals. The three stages together take p50 561 ms (497 ms now) and p95 1416 ms (1090 ms) in WebKit; 3 of 410 slots reached the 2 s budget, which ends stage 3 early as designed. A phone is slower than the M4: more slots will reach the budget there. Not tested on a device.
 - Rejected: block soft bits in the later stages only. They reach nearly the same SNR50 after stage 3 but leave the early pass and the transmit slots at today's sensitivity, and a new `DEEP` needs a new gate file. Blocks [1,2,3]: 30 more SARTS decodes and 0.1 dB with fading for a third set per candidate. Spectrogram LLRs first: a third set for no gain. Log scores and OSD on one set only: the losses above.
 

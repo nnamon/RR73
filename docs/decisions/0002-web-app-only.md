@@ -12,6 +12,6 @@ Ship only as a web app installed from Safari to the home screen, served from Git
 
 ## Consequences
 
-- Radio connection is audio through the headset jack with VOX. No CAT, so band changes go through a confirmation sheet and the log uses the confirmed band.
+- The radio connects by audio through the headset jack, keyed by VOX. Without CAT, band changes go through a confirmation sheet and the log uses the confirmed band.
 - No background execution: the screen stays on while operating, and the outbox runs only while the app is open.
 - Services without CORS headers wait for a relay.

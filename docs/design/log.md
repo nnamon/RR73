@@ -41,7 +41,7 @@ One entry per QSO and destination: `state`, `attempts`, `lastAttemptAt`, `nextAt
 | submitted | The operator confirmed a file upload. |
 | not needed | Outside the destination's scope, such as POTA for a QSO outside an activation, or a QSO undone before it was sent. |
 
-To do counts what needs the operator: not sent, waiting, refused and changed QSOs, and files not yet submitted. Changed is included because the destination holds a copy that no longer matches.
+To do counts what needs the operator: not sent, waiting, refused and changed QSOs, and files not yet submitted. A changed QSO counts because the destination holds a copy that no longer matches.
 
 File destinations track each file on its own in the entry's `parts`: a QSO at two parks is in two POTA files and is submitted when both are.
 

@@ -89,7 +89,6 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 - Frequency is the RF frequency: dial plus audio, in Hz. Mode is the ADIF mode or submode: FT8, FT4.
 - flowStartSeconds is the time the callsign was recognised: when the decode arrived. PSK Reporter keeps a list of software that sends the start of the transmission instead (https://pskreporter.info/api/characteristics), and reads the time as a decode time for software not on it.
 - A datagram stays under 1400 bytes.
-
 - Port 14739 on the same host is a test listener. Its analysis page (https://pskreporter.info/cgi-bin/psk-analysis.pl) lists the last packets from the address that opens it. `pskreporter.info` itself is behind Cloudflare and takes no UDP.
 
 QSP keeps one report stream per receiving station: its own observation domain, sequence number and timer. All streams send from one UDP socket. `POST /v1/pskreporter/receptions` takes a station and up to 500 spots and answers what was taken, what repeated a recent report, and what was refused. `GET /v1/pskreporter/status?callsign=` shows what waits and what went.
@@ -98,7 +97,7 @@ The app reports only what the operator's radio hears. Decodes from the practice 
 
 ## Who heard you
 
-The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https://www.mqtt.pskreporter.info, read 15 October 2026). The feed is run by Tom M0LTE with PSK Reporter's permission. Its page invites any client, asks for no account, and lists apps that use it; it publishes no other terms.
+The phone subscribes to PSK Reporter's MQTT feed directly, with no relay (https://www.mqtt.pskreporter.info, read 15 October 2026). An amateur runs the feed with PSK Reporter's permission. Its page invites any client, asks for no account, and lists apps that use it; it publishes no other terms.
 
 - Port 1886 is MQTT over WebSocket and TLS, for pages on https. RR73's client (`lib/pskreporter/mqtt.ts`) speaks MQTT 3.1.1: a clean session, one subscription at QoS 0, a ping every 50 s.
 - Topics are `pskr/filter/v2/{band}/{mode}/{tx}/{rx}/{tx_grid}/{rx_grid}/{tx_dxcc}/{rx_dxcc}`; RR73 subscribes to `pskr/filter/v2/+/+/{callsign}/#`. A callsign's `/` is `.` in a topic: 7 of 161 messages sampled on 15 October showed it, such as `AI4UC/T` as `AI4UC.T`.

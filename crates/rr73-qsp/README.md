@@ -55,7 +55,7 @@ Check it with `curl https://relay.example.org/qsp/about`. The API reference is a
 
 ## Settings
 
-`qsp.example.toml` lists every field. In short:
+`qsp.example.toml` lists every field. The main ones:
 
 - `access_keys`: keys RR73 sends as `Authorization: Bearer <key>`, at least 16 characters; `openssl rand -hex 24` makes one. Empty: anyone may use the instance, still only for the receivers listed.
 - `allowed_origins`: the sites a browser may call QSP from. RR73's is `https://nnamon.github.io`.
