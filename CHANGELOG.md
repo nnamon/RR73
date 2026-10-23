@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.27.6 · 2026-10-23
 
 - The guide, Version history and 12 on-screen messages follow the new writing style.
 
