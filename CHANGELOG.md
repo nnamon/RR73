@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.27.8 · 2026-10-24
 
 - The guide's Operate and WSPR screenshots show live signals on the waterfall.
 
