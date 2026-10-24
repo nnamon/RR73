@@ -79,7 +79,7 @@ test('on first start, the empty decode list links to Getting started', async ({ 
   await page.goto('./#/operate');
   const list = page.getByTestId('decode-list');
   await expect(list.getByText('No decodes yet')).toBeVisible();
-  await list.getByRole('link', { name: 'Read Getting started' }).click();
+  await list.getByRole('link', { name: 'Getting started guide' }).click();
   await expect(page).toHaveURL(/#\/settings\/guide\/getting-started$/);
   await expect(page.getByRole('heading', { level: 1, name: 'Getting started' })).toBeVisible();
 
@@ -90,7 +90,7 @@ test('on first start, the empty decode list links to Getting started', async ({ 
   await call.press('Enter');
   await page.goto('./#/operate');
   await expect(list.getByText('No decodes yet')).toBeVisible();
-  await expect(list.getByRole('link', { name: 'Read Getting started' })).toHaveCount(0);
+  await expect(list.getByRole('link', { name: 'Getting started guide' })).toHaveCount(0);
 });
 
 test.describe('with the service worker', () => {

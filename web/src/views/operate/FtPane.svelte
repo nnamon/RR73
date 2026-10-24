@@ -373,7 +373,7 @@
           {/if}
           {#if !settings.callsign && band.decoder.state !== 'loading'}
             <!-- First start: the station is not set up yet. -->
-            <a class="guide" href={href('settings', 'guide', 'getting-started')}>Read Getting started</a>
+            <a class="guide" href={href('settings', 'guide', 'getting-started')}>Getting started guide</a>
           {/if}
         </div>
       {/if}
