@@ -58,7 +58,7 @@ for (const theme of ['light', 'dark'] as const) {
 
   test(`Operate on first start in ${theme}`, async ({ page }) => {
     await openAt(page, '#/operate', theme);
-    await expect(page.getByRole('link', { name: 'Read Getting started' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Getting started guide' })).toBeVisible();
     await page.screenshot({ path: `${OUT}/first-start-${theme}.png` });
   });
 }
