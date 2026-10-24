@@ -11,7 +11,10 @@ import type { Decode } from '../decode/types';
 import type { TxNum } from '../qso/messages';
 import { qso } from '../state/qso.svelte';
 import { settings, updateSettings, type Settings, type Theme } from '../state/settings.svelte';
-import { audio, audioOut, band, deliverDecodes, deliverEarly, deliverWspr, noteHeardBack, onAudioChunk, txClockFixS } from '../state/station.svelte';
+import { audio, audioOut, band, codec, deliverDecodes, deliverEarly, deliverWspr, noteHeardBack, onAudioChunk, setInputSource, txClockFixS } from '../state/station.svelte';
+import { PracticeInput } from '../practice/source';
+import { amplitudeFor } from '../practice/render';
+import { SLOT_RATE, parity as parityOf, type FtMode } from '../clock/slots';
 import { isFt } from '../clock/slots';
 import type { WsprDecode } from '../wspr/spots';
 import { TX_SECONDS } from '../wspr/schedule';
@@ -71,6 +74,13 @@ export interface E2eHooks {
   /** Changes settings as the operator would. */
   settings(patch: Partial<Settings>): Promise<void>;
   /** The audio status and the FT8 and FT4 slots in the decode list, newest first, with their decode times, ms. */
+  /**
+   * Replaces the input with a band of fixed stations for screenshots: each FT8 or FT4 station sends
+   * its message in every slot of its parity, and each WSPR station from 1 s into every even
+   * minute, through the practice band's audio path, so the waterfall shows them and the decoder
+   * decodes them. Start audio after calling it.
+   */
+  playStations(stations: { text: string; freqHz: number; snrDb: number; dtS?: number; parity?: 'even' | 'odd' }[]): void;
   station(): { audio: string; onAirStartMs: number | null; slots: { startUtcMs: number; decodes: number; ms: number; skipped: boolean; early: boolean }[] };
 }
 
@@ -144,6 +154,34 @@ export function installE2eHooks() {
     },
     wavelogCheck: () => checkWavelogNow(),
     settings: (patch) => updateSettings(patch),
+    playStations: (stations) => {
+      const ft = () => (isFt(settings.mode) ? (settings.mode as FtMode) : 'FT8');
+      const playedWspr = new Set<number>();
+      setInputSource(
+        new PracticeInput(
+          {
+            active: () => isFt(settings.mode),
+            mode: ft,
+            signals: (startMs) =>
+              stations
+                .filter((st) => !st.parity || st.parity === parityOf(startMs, ft()))
+                .map((st) => ({ call: st.text.split(' ')[1] ?? st.text, text: st.text, freqHz: st.freqHz, dtS: st.dtS ?? 0.1, snrDb: st.snrDb, fading: null })),
+            synth: (text, mode, f0Hz) => codec().synthesize(text, mode, f0Hz, SLOT_RATE),
+          },
+          undefined,
+          undefined,
+          {
+            due: (nowMs) => {
+              if (settings.mode !== 'WSPR') return [];
+              const slot = Math.floor(nowMs / 120_000) * 120_000;
+              if (nowMs - slot < 900 || nowMs - slot > 1600 || playedWspr.has(slot)) return [];
+              playedWspr.add(slot);
+              return stations.map((st) => ({ samples: codec().synthesize(st.text, 'WSPR', st.freqHz, SLOT_RATE), amplitude: amplitudeFor(st.snrDb) }));
+            },
+          },
+        ),
+      );
+    },
     station: () => ({
       audio: audio.status,
       onAirStartMs: qso.onAir?.startMs ?? null,
