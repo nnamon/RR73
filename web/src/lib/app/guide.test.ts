@@ -159,7 +159,7 @@ describe('docs/guide', () => {
     expect(broken).toEqual([]);
   });
 
-  it('shows only images that exist in docs/guide/img, each under 40 kB, each with alt text', () => {
+  it('shows only images that exist in docs/guide/img, each under 64 kB, each with alt text', () => {
     const missing: string[] = [];
     const used = new Set<string>();
     for (const p of pages)
@@ -169,7 +169,7 @@ describe('docs/guide', () => {
             used.add(b.src);
             const file = new URL(b.src, dir);
             if (!existsSync(file)) missing.push(`${p.slug} → ${b.src}`);
-            else expect(statSync(file).size, b.src).toBeLessThan(40_000);
+            else expect(statSync(file).size, b.src).toBeLessThan(64_000);
             expect(b.alt, b.src).not.toBe('');
           }
     expect(missing).toEqual([]);

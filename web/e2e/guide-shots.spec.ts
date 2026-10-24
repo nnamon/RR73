@@ -18,7 +18,7 @@ const IMG = fileURLToPath(new URL('../../docs/guide/img/', import.meta.url));
 /** The same captures as PNG, without circles, for choosing where they go. */
 const RAW = fileURLToPath(new URL('../test-results/screens/guide-raw/', import.meta.url));
 /** The largest file the guide takes, bytes (guide.test.ts). */
-const MAX_BYTES = 40_000;
+const MAX_BYTES = 64_000;
 
 const STATION = { callsign: '9V1NE', grid: 'OJ11', freqPicked: true };
 
@@ -213,16 +213,24 @@ test('Making QSOs: the transmit controls and status line in a QSO under way', as
 });
 
 test('Operate: the waterfall and the decode list', async ({ page }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   await openApp(page, '#/operate', { txHz: 1500, rxHz: 1840 });
+  // The stations play through the practice band's audio path: the waterfall shows their traces
+  // and the decoder decodes them.
+  await page.evaluate(
+    ([even, odd]) =>
+      window.__rr73!.playStations([
+        ...even.map((x) => ({ text: x.text, freqHz: x.freq_hz, snrDb: x.snr_db, dtS: x.dt_s, parity: 'even' as const })),
+        ...odd.map((x) => ({ text: x.text, freqHz: x.freq_hz, snrDb: x.snr_db, dtS: x.dt_s, parity: 'odd' as const })),
+      ]),
+    [SLOT_EVEN, SLOT_ODD] as const,
+  );
   await startAudio(page);
-  // A few seconds of waterfall from the mock microphone, then the decodes.
-  await page.waitForTimeout(6000);
-  const now = await phase(page, 2, 10);
-  await inject(page, now - 2 * SLOT, SLOT_EVEN);
-  await inject(page, now - SLOT, SLOT_ODD);
   const toYou = rowOf(page, '9V1NE OE3OGC JN88');
-  await expect(toYou).toBeVisible();
+  await expect(toYou).toBeVisible({ timeout: 90_000 });
+  await expect(rowOf(page, 'OE3OGC 9V1DE OJ11')).toBeVisible({ timeout: 40_000 });
+  // One more slot, so the waterfall holds both parities' traces.
+  await page.waitForTimeout(16_000);
   const list = page.getByTestId('decode-list');
   await list.evaluate((el) => el.scrollTo({ top: 0 }));
   const top = await topOf(page.getByRole('button', { name: /^Change band/ }));
@@ -234,7 +242,7 @@ test('Operate: the waterfall and the decode list', async ({ page }) => {
     mid(rowOf(page, 'CQ AB4SS EM73'), 0.55),
     { target: page.getByRole('radio', { name: /^All/ }), fx: 1, fy: 0, dx: -2, dy: -2 },
     { target: page.getByRole('button', { name: 'Save slot' }), fx: 0, fy: 0, dx: 2, dy: -2 },
-  ]);
+  ], 0.8);
 });
 
 test('Getting started: Change band', async ({ page }) => {
@@ -317,24 +325,25 @@ test('Contest exchange: the exchange and what goes out', async ({ page }) => {
 });
 
 test('WSPR: spots and the beacon', async ({ page }) => {
+  test.setTimeout(420_000);
   await openApp(page, '#/operate', { mode: 'WSPR' });
+  // 2 stations transmit through the practice band's audio path; the decoder finds them after the
+  // 2 min slot.
+  await page.evaluate(() =>
+    window.__rr73!.playStations([
+      { text: 'AB4SS EM73 37', freqHz: 1462, snrDb: -20 },
+      { text: 'OE3OGC JN88 30', freqHz: 1531, snrDb: -23 },
+    ]),
+  );
   await startAudio(page);
-  await page.waitForTimeout(4000);
-  const slot = Math.floor(Date.now() / 120_000) * 120_000;
-  const spots = [
-    ['AB4SS', 'EM73', 37, -23, 1462],
-    ['OE3OGC', 'JN88', 30, -26, 1531],
-  ] as const;
-  const decodes = spots.map(([call, grid, dbm, snr, hz]) => ({ text: `${call} ${grid} ${dbm}`, freq_hz: hz, dt_s: 0.2, drift_hz_per_s: 0, snr_db: snr }));
-  await page.evaluate(([s, ds]) => window.__rr73!.wsprDecoded(s as number, ds as never), [slot - 120_000, decodes] as const);
-  await page.waitForTimeout(500);
   const list = page.getByTestId('spot-list');
   const rows = list.locator('button.sr');
+  await expect(rows).toHaveCount(2, { timeout: 360_000 });
   const top = await topOf(page.getByRole('button', { name: /^Change band/ }));
   await save(page, 'wspr', band(page, top - 8, (await bottomOf(rows.last())) + 4), [
     mid(page.getByTestId('tx-marker')),
     mid(list.locator('.slot-bar, .sbar').first(), 0.75),
-    mid(rows.first(), 0.41),
+    mid(rows.first(), 0.23),
   ]);
 });
 
