@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.28.0 · 2026-10-29
 
 - LQ8 is a new mode in Change band, on 40m to 10m. A QSO takes 4 messages, and Hunt, Repeat CQ and tail-end work as in FT8.
 - In LQ8, a message that confirms several stations counts as your report and 73 when it names you.
