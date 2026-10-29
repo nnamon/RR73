@@ -34,9 +34,11 @@ test('the precache holds the app, the decoder and the country file, and stays sm
   expect(urls.filter((u) => u.startsWith('data/')).sort()).toEqual(data.sort());
   const bytes = urls.reduce((n, u) => n + statSync(`${DIST}${u}`).size, 0);
   test.info().annotations.push({ type: 'precache', description: `${urls.length} files, ${(bytes / 1e6).toFixed(2)} MB` });
-  // 3.7 MB: the decoder with experiment 0012's retries and the 3 bundled fonts (121 kB) came to
-  // 3.02 MB, and the guide's 13 screenshots (docs/guide/img) add 0.48 MB.
-  expect(bytes).toBeLessThan(3.7e6);
+  // 3.8 MB: the decoder with experiment 0012's retries and the 3 bundled fonts (121 kB) came to
+  // 3.02 MB, and the guide's 13 screenshots (docs/guide/img) add 0.48 MB. The LQ8 codec adds 67 kB
+  // to the WASM (1584 kB to 1651 kB), which brought a fresh build to 3.68 MB with the country
+  // file, so the budget rose from 3.7 MB to leave room for the next change.
+  expect(bytes).toBeLessThan(3.8e6);
 });
 
 test.describe('in the browser', () => {
