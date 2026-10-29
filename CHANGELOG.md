@@ -4,13 +4,14 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## Unreleased
 
-- LQ8 is a mode in Change band, on 40m to 10m: a QSO takes 4 messages, the call carrying grid and report and the answer the report and 73, with Hunt, Repeat CQ and tail-end as in FT8.
-- In LQ8, a multi-station message that names you counts as the other station's report and 73, and free text takes up to about 17 characters.
-- Hound, Contest exchange, Confirm with and a priori decoding hide in LQ8, which has none of them.
-- The practice band runs LQ8 QSOs when LQ8 is chosen, in every scenario but Contest exchanges and Fox.
-- LQ8 QSOs log as mode DATA with submode LQ8, as the LQ8 portal specifies, and go to Wavelog the same way.
-- PSK Reporter spots of LQ8 decodes carry mode LQ8 (the relay needs this version).
-- Spots that name LQ8 in their mode or comment show LQ8, and Go opens LQ8 on their band; the filter chip FT8 and FT4 is now FT8, FT4, LQ8.
+- LQ8 is a new mode in Change band, on 40m to 10m. A QSO takes 4 messages, and Hunt, Repeat CQ and tail-end work as in FT8.
+- In LQ8, a message that confirms several stations counts as your report and 73 when it names you.
+- LQ8 free text holds about 17 characters. Longer text is refused.
+- Hound, Contest exchange, Confirm with and a priori decoding hide in LQ8.
+- The practice band runs LQ8 QSOs in LQ8, in every scenario but Contest exchanges and Fox.
+- LQ8 QSOs log as mode DATA, submode LQ8.
+- PSK Reporter spots of LQ8 decodes carry mode LQ8 (relays need this version).
+- Spots of LQ8 stations show LQ8, and Go opens LQ8 on their band. The filter chip reads FT8, FT4, LQ8.
 
 ## 0.27.8 · 2026-10-24
 
