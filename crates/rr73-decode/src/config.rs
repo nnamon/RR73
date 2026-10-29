@@ -113,7 +113,7 @@ impl PairParams {
     /// The fewest sync symbols for a hypothesis and for a target in `mode`.
     pub fn min_sync(&self, mode: Mode) -> (usize, usize) {
         match mode {
-            Mode::Ft8 => (
+            Mode::Ft8 | Mode::Lq8 => (
                 usize::from(self.ft8_min_sync),
                 usize::from(self.ft8_target_min_sync),
             ),
@@ -390,7 +390,7 @@ impl DemodParams {
     pub fn blocks(&self, mode: Mode) -> &[u8] {
         match (self.kind, mode) {
             (DemodKind::MaxLog, _) => &[],
-            (DemodKind::Block, Mode::Ft8) => &self.ft8_blocks,
+            (DemodKind::Block, Mode::Ft8 | Mode::Lq8) => &self.ft8_blocks,
             (DemodKind::Block, Mode::Ft4) => &self.ft4_blocks,
         }
     }
@@ -400,7 +400,7 @@ impl DemodParams {
     pub fn extra_sets(&self, mode: Mode) -> &[(u8, crate::block::BlockScore)] {
         match (self.kind, mode) {
             (DemodKind::MaxLog, _) => &[],
-            (DemodKind::Block, Mode::Ft8) => &self.ft8_extra_sets,
+            (DemodKind::Block, Mode::Ft8 | Mode::Lq8) => &self.ft8_extra_sets,
             (DemodKind::Block, Mode::Ft4) => &self.ft4_extra_sets,
         }
     }
@@ -408,7 +408,7 @@ impl DemodParams {
     /// The fewest sync symbols a candidate of `mode` needs for the extra sets.
     pub fn extra_min_sync(&self, mode: Mode) -> usize {
         usize::from(match mode {
-            Mode::Ft8 => self.ft8_extra_min_sync,
+            Mode::Ft8 | Mode::Lq8 => self.ft8_extra_min_sync,
             Mode::Ft4 => self.ft4_extra_min_sync,
         })
     }
@@ -416,7 +416,7 @@ impl DemodParams {
     /// The fewest sync symbols a candidate of `mode` needs for the block sets.
     pub fn min_sync(&self, mode: Mode) -> usize {
         usize::from(match mode {
-            Mode::Ft8 => self.ft8_min_sync,
+            Mode::Ft8 | Mode::Lq8 => self.ft8_min_sync,
             Mode::Ft4 => self.ft4_min_sync,
         })
     }
@@ -424,7 +424,7 @@ impl DemodParams {
     /// The fewest sync symbols a weak candidate of `mode` needs for the block sets.
     pub fn weak_min_sync(&self, mode: Mode) -> usize {
         usize::from(match mode {
-            Mode::Ft8 => self.ft8_weak_min_sync,
+            Mode::Ft8 | Mode::Lq8 => self.ft8_weak_min_sync,
             Mode::Ft4 => self.ft4_weak_min_sync,
         })
     }
@@ -433,7 +433,7 @@ impl DemodParams {
     /// block demodulator.
     pub fn weak_grid_sync(&self, mode: Mode) -> usize {
         usize::from(match mode {
-            Mode::Ft8 => self.ft8_weak_grid_sync,
+            Mode::Ft8 | Mode::Lq8 => self.ft8_weak_grid_sync,
             Mode::Ft4 => self.ft4_weak_grid_sync,
         })
     }
@@ -511,7 +511,7 @@ impl ValidateParams {
     pub fn osd_floor_db(&self, mode: Mode) -> f32 {
         match mode {
             Mode::Ft4 => self.osd_ft4_min_snr_db.unwrap_or(self.osd_min_snr_db),
-            Mode::Ft8 => self.osd_min_snr_db,
+            Mode::Ft8 | Mode::Lq8 => self.osd_min_snr_db,
         }
     }
 }
@@ -561,7 +561,7 @@ impl DecoderConfig {
     /// the weak candidates' lower threshold.
     pub fn score_floor_db(&self, mode: Mode) -> f32 {
         let weak = match mode {
-            Mode::Ft8 => self.search.ft8_weak_score_db,
+            Mode::Ft8 | Mode::Lq8 => self.search.ft8_weak_score_db,
             Mode::Ft4 => self.search.ft4_weak_score_db,
         };
         weak.map_or(self.search.min_score_db, |w| w.min(self.search.min_score_db))

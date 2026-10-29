@@ -26,6 +26,7 @@ pub const SETS: &[&str] = &[
     "late-start",
     "ap-sweep",
     "ft4-sweep",
+    "lq8-sweep",
     "band-edge",
     "overlap",
 ];
@@ -136,7 +137,7 @@ pub const BAND_EDGE_SOFT: Passband = Passband {
 
 /// SNR steps of the stronger signal of each pair in the `overlap` set, in dB: FT8, then FT4.
 pub fn overlap_steps(mode: Mode) -> impl Iterator<Item = i32> {
-    let from = if mode == Mode::Ft8 { -16 } else { -12 };
+    let from = if mode == Mode::Ft4 { -12 } else { -16 };
     (from..=from + 20).step_by(4)
 }
 
@@ -276,6 +277,24 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
                         i += 1;
                     }
                 }
+            }
+        }
+        "lq8-sweep" => {
+            // LQ8 alone: one message per slot at the snr-sweep's steps in AWGN and with
+            // fading, and noise slots, to set LQ8 against FT8's snr-sweep (docs/design/lq8.md).
+            for (sub, fading) in [("awgn", None), ("fading", Some(Watterson::MODERATE))] {
+                let mut i = 0;
+                for snr in sweep_steps() {
+                    for _ in 0..opts.per_step {
+                        push(sub, i, &mut |r| {
+                            JobScene::Ft(single(Mode::Lq8, f64::from(snr), fading, r))
+                        });
+                        i += 1;
+                    }
+                }
+            }
+            for i in 0..opts.noise_count {
+                push("noise", i, &mut |_| JobScene::Ft(noise_only(Mode::Lq8)));
             }
         }
         "ft4-sweep" => {
@@ -514,6 +533,7 @@ pub fn render_job(job: &Job) -> Result<(Vec<f32>, SlotMeta, String), String> {
                 let mode = match scene.mode {
                     Mode::Ft8 => SlotMode::Ft8,
                     Mode::Ft4 => SlotMode::Ft4,
+                    Mode::Lq8 => SlotMode::Lq8,
                 };
                 let signals = serde_json::to_value(&scene.signals).unwrap_or_default();
                 (samples, truth, mode, scene.noise, signals)
@@ -631,6 +651,10 @@ mod tests {
         assert_eq!(
             jobs_for("ft4-sweep", base, &opts).map(|j| j.len()),
             Ok(19 * 3 * 2 + 2 + 7)
+        );
+        assert_eq!(
+            jobs_for("lq8-sweep", base, &opts).map(|j| j.len()),
+            Ok(21 * 3 * 2 + 7)
         );
         // FT8: 4 ways x 12 delays, FT4: 4 x 11, each at 8 SNRs.
         assert_eq!(

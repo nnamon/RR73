@@ -1,4 +1,4 @@
-//! FT8 and FT4 protocol primitives.
+//! FT8, FT4 and LQ8 protocol primitives.
 //!
 //! This crate turns operator text into the 77-bit payload and back, adds the CRC-14,
 //! encodes with the (174,91) LDPC code, maps codewords to tones and synthesises GFSK
@@ -33,6 +33,7 @@
 pub mod crc;
 pub mod hash;
 pub mod ldpc;
+pub mod lq8;
 pub mod message;
 pub mod mode;
 pub mod synth;

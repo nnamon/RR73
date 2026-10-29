@@ -72,7 +72,7 @@ pub fn gfsk(mode: Mode, tones: &[u8], f0_hz: f32, sample_rate: u32, amplitude: f
     }
 
     let ramp = match mode {
-        Mode::Ft8 => n / 8,
+        Mode::Ft8 | Mode::Lq8 => n / 8,
         Mode::Ft4 => n,
     }
     .min(out.len() / 2);

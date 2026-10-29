@@ -84,11 +84,12 @@ fn bits_of(cw: &[u8; CODEWORD_BITS], indices: impl Iterator<Item = usize>) -> Ve
     indices.map(|i| (i, cw[i])).collect()
 }
 
-/// The hypotheses for `ctx` in `mode`: none when the operator's callsign is not a standard
-/// one, and only `my` without a standard callsign for the other station.
+/// The hypotheses for `ctx` in `mode`: none in LQ8 or when the operator's callsign is not a
+/// standard one, and only `my` without a standard callsign for the other station.
 pub fn hypotheses(mode: Mode, ctx: &ApContext) -> Vec<Hypothesis> {
     let my = ctx.my_call.trim().to_uppercase();
-    if !standard(&my) {
+    // The templates are FT8 messages; LQ8 has no a priori decoding (docs/design/lq8.md).
+    if !standard(&my) || mode == Mode::Lq8 {
         return Vec::new();
     }
     let mut out = Vec::new();
@@ -138,6 +139,9 @@ pub fn hypotheses(mode: Mode, ctx: &ApContext) -> Vec<Hypothesis> {
 /// `CQ` as the first word of a message of type 1: the first callsign field and its flag (bits
 /// 0 to 28) and the message type (74 to 76), as `jt9` tries without a QSO context.
 pub fn cq_hypothesis(mode: Mode) -> Option<Hypothesis> {
+    if mode == Mode::Lq8 {
+        return None;
+    }
     let cw = codeword(mode, "CQ K1ABC FN42")?;
     Some(Hypothesis {
         kind: ApKind::Cq,

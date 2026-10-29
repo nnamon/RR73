@@ -3,7 +3,8 @@
 //! Values are from QEX, sections 4 and 5 and Table 4, and match ft8_lib's `constants.h`.
 //! The FT8 start offset of 0.5 s is the nominal start time given in QEX, section 8. QEX does
 //! not state the FT4 start offset; 0.5 s follows WSJT-X practice (Unverified against a WSJT-X
-//! binary).
+//! binary). LQ8 sends FT8's frame with its own Costas array, so its parameters are FT8's
+//! (lq_lib `include/lq/constants.h`, commit 00f3bcf).
 
 /// Transmission mode.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -12,6 +13,9 @@ pub enum Mode {
     Ft8,
     /// FT4: 4-GFSK, 105 symbols of 0.048 s, 7.5 s slots.
     Ft4,
+    /// LQ8: FT8's 8-GFSK frame with the Costas array 2 5 6 1 3 0 4 and the LQ message layer
+    /// ([`crate::lq8`]), 15 s slots.
+    Lq8,
 }
 
 /// Fixed parameters of a mode. All sample counts are at 12 kHz.
@@ -57,10 +61,15 @@ const FT4: ModeParams = ModeParams {
 };
 
 impl Mode {
+    /// True for the modes with FT8's 8-GFSK frame: FT8 and LQ8.
+    pub fn is_8gfsk(self) -> bool {
+        matches!(self, Mode::Ft8 | Mode::Lq8)
+    }
+
     /// Returns the fixed parameters of this mode.
     pub fn params(self) -> ModeParams {
         match self {
-            Mode::Ft8 => FT8,
+            Mode::Ft8 | Mode::Lq8 => FT8,
             Mode::Ft4 => FT4,
         }
     }
@@ -126,8 +135,15 @@ mod tests {
     }
 
     #[test]
+    fn lq8_parameters_are_ft8s() {
+        // lq_lib constants.h: 8 tones, 0.160 s symbols, 6.25 Hz, 79 symbols, 12.64 s, 15 s.
+        assert_eq!(Mode::Lq8.params(), Mode::Ft8.params());
+        assert!((Mode::Lq8.params().transmission_s() - 12.64).abs() < 1e-9);
+    }
+
+    #[test]
     fn transmissions_fit_their_slots() {
-        for mode in [Mode::Ft8, Mode::Ft4] {
+        for mode in [Mode::Ft8, Mode::Ft4, Mode::Lq8] {
             let p = mode.params();
             assert!(f64::from(p.start_offset_s) + p.transmission_s() < f64::from(p.slot_s));
         }

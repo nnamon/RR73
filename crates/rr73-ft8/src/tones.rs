@@ -5,6 +5,9 @@
 //! arrays separating three blocks of 29 data symbols of 2 bits each, and a closing ramp
 //! symbol (QEX, section 4). Codeword bits map to tones through a Gray code (QEX, Table 3).
 //!
+//! LQ8 sends FT8's arrangement with its own Costas array (lq_lib by Luis Quesada HB9IPH, MIT
+//! licence, commit 00f3bcf: `include/lq/constants.h` and `src/transport.cpp`).
+//!
 //! The arrangement follows `ft8/encode.c` in ft8_lib by Kārlis Goba (MIT licence); the
 //! constants match `ft8/constants.c` there and QEX.
 
@@ -12,6 +15,9 @@ use crate::{Mode, Payload, crc, ldpc};
 
 /// FT8 Costas sync array, sent at symbols 0, 36 and 72.
 pub const FT8_COSTAS: [u8; 7] = [3, 1, 4, 0, 6, 5, 2];
+
+/// LQ8 Costas sync array, sent at the FT8 positions, symbols 0, 36 and 72.
+pub const LQ8_COSTAS: [u8; 7] = [2, 5, 6, 1, 3, 0, 4];
 
 /// Symbol indices where each FT8 Costas array starts.
 pub const FT8_COSTAS_STARTS: [usize; 3] = [0, 36, 72];
@@ -48,9 +54,10 @@ pub fn from_codeword(mode: Mode, codeword: &[u8; ldpc::N]) -> Vec<u8> {
     let params = mode.params();
     let mut tones = vec![0u8; params.symbols];
     match mode {
-        Mode::Ft8 => {
+        Mode::Ft8 | Mode::Lq8 => {
+            let costas = if mode == Mode::Lq8 { LQ8_COSTAS } else { FT8_COSTAS };
             for start in FT8_COSTAS_STARTS {
-                tones[start..start + 7].copy_from_slice(&FT8_COSTAS);
+                tones[start..start + 7].copy_from_slice(&costas);
             }
         }
         Mode::Ft4 => {
@@ -65,7 +72,7 @@ pub fn from_codeword(mode: Mode, codeword: &[u8; ldpc::N]) -> Vec<u8> {
             .iter()
             .fold(0usize, |acc, &b| (acc << 1) | usize::from(b & 1));
         tones[symbol] = match mode {
-            Mode::Ft8 => FT8_GRAY[bits],
+            Mode::Ft8 | Mode::Lq8 => FT8_GRAY[bits],
             Mode::Ft4 => FT4_GRAY[bits],
         };
     }
@@ -75,7 +82,7 @@ pub fn from_codeword(mode: Mode, codeword: &[u8; ldpc::N]) -> Vec<u8> {
 /// Returns the data symbol indices of a mode, in the order the codeword is sent.
 pub fn data_symbols(mode: Mode) -> Vec<usize> {
     match mode {
-        Mode::Ft8 => (7..36).chain(43..72).collect(),
+        Mode::Ft8 | Mode::Lq8 => (7..36).chain(43..72).collect(),
         Mode::Ft4 => (5..34).chain(38..67).chain(71..100).collect(),
     }
 }
@@ -83,7 +90,7 @@ pub fn data_symbols(mode: Mode) -> Vec<usize> {
 /// Codeword bits carried by one data symbol: 3 for FT8, 2 for FT4.
 pub fn bits_per_symbol(mode: Mode) -> usize {
     match mode {
-        Mode::Ft8 => 3,
+        Mode::Ft8 | Mode::Lq8 => 3,
         Mode::Ft4 => 2,
     }
 }
@@ -131,7 +138,7 @@ mod tests {
 
     #[test]
     fn data_symbols_cover_the_codeword_once() {
-        for mode in [Mode::Ft8, Mode::Ft4] {
+        for mode in [Mode::Ft8, Mode::Ft4, Mode::Lq8] {
             let symbols = data_symbols(mode);
             assert_eq!(symbols.len() * bits_per_symbol(mode), ldpc::N);
             let mut sorted = symbols.clone();
@@ -165,5 +172,13 @@ mod tests {
             assert_eq!(ft4[*start..start + 4], costas);
         }
         assert!(ft4.iter().all(|&t| t < 4));
+        let lq8 = from_payload(Mode::Lq8, &payload);
+        for start in FT8_COSTAS_STARTS {
+            assert_eq!(lq8[start..start + 7], LQ8_COSTAS);
+        }
+        // Only the sync symbols differ from FT8.
+        for k in data_symbols(Mode::Ft8) {
+            assert_eq!(lq8[k], ft8[k]);
+        }
     }
 }

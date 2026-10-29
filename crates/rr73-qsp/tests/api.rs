@@ -648,6 +648,7 @@ async fn reports_to_pskreporter_by_its_rules() {
         "spots": [
             heard("K1ABC", "FN42", "FT8", now - 20),
             heard("JA1XYZ", "", "FT8", now - 20),
+            heard("OE3OGC", "JN78", "lq8", now - 20),
             heard("K1ABC", "FN42", "FT8", now - 5),
             heard("VK3QRP", "QF22", "WSPR", now - 20),
             heard("W1AW", "FN31", "FT8", now - 7200),
@@ -658,7 +659,7 @@ async fn reports_to_pskreporter_by_its_rules() {
     assert_eq!(s, StatusCode::OK, "{t}");
     assert_eq!(
         (t["taken"].as_u64(), t["repeats"].as_u64(), t["rejected"].as_u64()),
-        (Some(2), Some(1), Some(3))
+        (Some(3), Some(1), Some(3))
     );
     let next = t["nextReport"].as_u64().unwrap();
     assert!((now + 150..=now + 300).contains(&next), "{next}");
@@ -668,7 +669,7 @@ async fn reports_to_pskreporter_by_its_rules() {
         (StatusCode::BAD_REQUEST, Some("invalid"))
     );
     let (_, st) = call(&app, "GET", "/v1/pskreporter/status?callsign=9V1NE", None, true).await;
-    assert_eq!((st["waiting"].as_u64(), st["sent"].as_u64()), (Some(2), Some(0)));
+    assert_eq!((st["waiting"].as_u64(), st["sent"].as_u64()), (Some(3), Some(0)));
 
     // Nothing goes before the timer; then one datagram, from one socket.
     let listener = tokio::net::UdpSocket::bind("127.0.0.1:0").await.unwrap();
@@ -695,6 +696,7 @@ async fn reports_to_pskreporter_by_its_rules() {
     let has = |s: &[u8]| d.windows(s.len()).any(|w| w == s);
     assert!(has(b"\x059V1NE\x04OJ11\x0bRR73 0.16.2\x00"), "receiver record");
     assert!(has(b"\x05K1ABC") && has(b"\x06JA1XYZ") && has(b"\x04FN42"));
+    assert!(has(b"\x06OE3OGC") && has(b"\x03LQ8"), "an LQ8 spot");
     assert!(!has(b"VK3QRP") && !has(b"W1AW"));
     let (_, st) = call(&app, "GET", "/v1/pskreporter/status?callsign=9V1NE", None, true).await;
     assert_eq!(
@@ -703,6 +705,6 @@ async fn reports_to_pskreporter_by_its_rules() {
             st["sent"].as_u64(),
             st["datagrams"].as_u64()
         ),
-        (Some(0), Some(2), Some(1))
+        (Some(0), Some(3), Some(1))
     );
 }

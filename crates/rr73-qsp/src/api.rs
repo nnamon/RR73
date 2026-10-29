@@ -633,7 +633,7 @@ pub struct Heard {
     pub frequency_hz: u32,
     /// SNR in 2500 Hz, dB.
     pub snr_db: i32,
-    /// FT8 or FT4.
+    /// FT8, FT4 or LQ8.
     pub mode: String,
     /// When it was heard, s since 1970.
     pub time: u64,
@@ -742,7 +742,7 @@ fn clean_spot(h: Heard, now: u64) -> Option<Spot> {
         clean_locator(&h.locator)?
     };
     let mode = h.mode.trim().to_ascii_uppercase();
-    if mode != "FT8" && mode != "FT4" {
+    if !matches!(mode.as_str(), "FT8" | "FT4" | "LQ8") {
         return None;
     }
     if !(100_000..=1_000_000_000).contains(&h.frequency_hz) {

@@ -1,7 +1,15 @@
 //! Validation of LDPC codewords: CRC, payload checks, message unpacking and duplicates.
+//!
+//! LQ8 codewords unpack with the LQ message layer ([`rr73_ft8::lq8`]) and have their own
+//! checks: the reserved types 14 to 16 and payloads whose unused bits are not zero are
+//! refused, and OSD codewords pass only as types 1, 5, 8 and 9 with plausible callsigns, the
+//! LQ8 counterpart of the FT8 rule (`docs/design/lq8.md`).
 
+use rr73_ft8::lq8::{self, Kind};
 use rr73_ft8::message::{self, Addressee, Exchange, Message, Station, UnpackError};
 use rr73_ft8::{CallHash, Callsign, CallsignHashes, HashWidth, Mode, Payload, crc, ldpc};
+
+use crate::report::DecodedMessage;
 
 use crate::config::OsdMessages;
 use crate::layout::CODEWORD_BITS;
@@ -13,7 +21,7 @@ pub struct Validated {
     /// The 77-bit payload (for FT4, after removing the scrambling sequence).
     pub payload: Payload,
     /// The unpacked message.
-    pub message: Message,
+    pub message: DecodedMessage,
     /// Canonical message text.
     pub text: String,
 }
@@ -30,6 +38,9 @@ pub enum Rejection {
     /// The payload does not unpack to a message.
     #[error("unpack failed: {0}")]
     Unpack(UnpackError),
+    /// An LQ8 payload that does not unpack, of a reserved type, or with unused bits set.
+    #[error("LQ8 payload refused")]
+    Lq8Unpack,
     /// An OSD codeword carries a message that fails the plausibility checks.
     #[error("implausible message from OSD")]
     Implausible,
@@ -79,7 +90,12 @@ impl Default for CrcUnpack {
 /// 1A (Sovereign Military Order of Malta, 1A0KM) and 1S (Spratly Islands).
 /// `docs/experiments/0002-osd.md` records why other 0 and 1 prefixes stay rejected.
 pub fn plausible_callsign(call: &Callsign) -> bool {
-    match call.as_str().as_bytes() {
+    plausible_call(call.as_str())
+}
+
+/// [`plausible_callsign`] on text, for LQ8 callsigns (up to 13 characters, with /P).
+pub fn plausible_call(call: &str) -> bool {
+    match call.as_bytes() {
         [] | [b'Q', ..] | [b'0', ..] => false,
         [b'1', second, ..] => matches!(second, b'A' | b'S'),
         [b'1'] => false,
@@ -116,6 +132,55 @@ pub fn plausible(message: &Message, rule: OsdMessages, hashes: &CallsignHashes) 
     }
 }
 
+/// Applies `rule` to an LQ8 message decoded by OSD: any message for [`OsdMessages::Any`],
+/// else types 1, 5, 8 and 9 (callsigns in full, standard) whose callsigns could have been
+/// issued. [`OsdMessages::StandardKnown`] reads as [`OsdMessages::Standard`]: the validator has
+/// no LQ8 callsign table.
+pub fn plausible_lq8(message: &lq8::Message, rule: OsdMessages) -> bool {
+    if rule == OsdMessages::Any {
+        return true;
+    }
+    let calls: Vec<&str> = match message.kind {
+        Kind::CqStd => vec![&message.call1],
+        Kind::CallStd | Kind::Report73 | Kind::Seventy3Std => vec![&message.call1, &message.call2],
+        _ => return false,
+    };
+    calls.iter().all(|c| {
+        let base = c.strip_suffix("/P").unwrap_or(c);
+        !matches!(base, "DE" | "QRZ" | "CQ") && plausible_call(base)
+    })
+}
+
+/// Validates an LQ8 codeword: CRC, nonzero payload, a type in use with zero padding, unpack,
+/// and the OSD rule. Hashes stay unresolved; the session resolves them from its LQ8 table.
+fn validate_lq8(
+    codeword: &[u8; CODEWORD_BITS],
+    outcome: &LdpcOutcome,
+    rule: OsdMessages,
+) -> Result<Validated, Rejection> {
+    let m91 = ldpc::message_bits(codeword);
+    let payload = crc::payload_from_message91(Mode::Lq8, &m91).ok_or(Rejection::Crc)?;
+    if payload.0.iter().all(|&b| b == 0) {
+        return Err(Rejection::ZeroPayload);
+    }
+    if !lq8::padding_is_zero(&payload) {
+        return Err(Rejection::Lq8Unpack);
+    }
+    let message = lq8::unpack(&payload).map_err(|_| Rejection::Lq8Unpack)?;
+    if message.kind.is_reserved() {
+        return Err(Rejection::Lq8Unpack);
+    }
+    if outcome.osd && !plausible_lq8(&message, rule) {
+        return Err(Rejection::Implausible);
+    }
+    let text = message.render();
+    Ok(Validated {
+        payload,
+        message: DecodedMessage::Lq8(message),
+        text,
+    })
+}
+
 impl Validator for CrcUnpack {
     fn name(&self) -> &'static str {
         "crc-unpack"
@@ -128,6 +193,9 @@ impl Validator for CrcUnpack {
         outcome: &LdpcOutcome,
         hashes: &mut CallsignHashes,
     ) -> Result<Validated, Rejection> {
+        if mode == Mode::Lq8 {
+            return validate_lq8(codeword, outcome, self.osd_messages);
+        }
         let m91 = ldpc::message_bits(codeword);
         let payload = crc::payload_from_message91(mode, &m91).ok_or(Rejection::Crc)?;
         if payload.0.iter().all(|&b| b == 0) {
@@ -140,7 +208,7 @@ impl Validator for CrcUnpack {
         let text = message.to_string();
         Ok(Validated {
             payload,
-            message,
+            message: DecodedMessage::Ft8(message),
             text,
         })
     }
@@ -168,6 +236,36 @@ mod tests {
         for bad in ["Q1ABC", "QA1XYZ", "0S1A", "1B1AB", "1Z9A", "0A1BC"] {
             assert!(!plausible_callsign(&call(bad)), "{bad}");
         }
+    }
+
+    #[test]
+    fn the_lq8_osd_rule_takes_standard_calls_in_full() {
+        let check = |text: &str| {
+            let m = lq8::Message::parse(text).expect(text);
+            plausible_lq8(&m, OsdMessages::StandardHf)
+        };
+        for ok in [
+            "CQ AB4SS FN42",
+            "CQ DX AB4SS/P FN42",
+            "AB4SS 9V1NE OJ11 -03",
+            "9V1NE AB4SS R+05",
+            "AB4SS 9V1NE/P 73",
+        ] {
+            assert!(check(ok), "{ok}");
+        }
+        for bad in [
+            "CQ Q1ABC FN42",
+            "AB4SS 0A1BC OJ11 -03",
+            "AB4SS 9V1NE/P OJ11 -03",
+            "<AB4SS> VP8/9V1NE -03",
+            "CQ 3DA0RU JN47",
+            "TNX FER QSO",
+            "<9V1NE> R+05 <OE3OGC> R-03 <AB4SS>",
+        ] {
+            assert!(!check(bad), "{bad}");
+        }
+        let any = lq8::Message::parse("TNX FER QSO").expect("parse");
+        assert!(plausible_lq8(&any, OsdMessages::Any));
     }
 
     #[test]

@@ -60,10 +60,10 @@ pub fn check(message91: &[u8; 12]) -> Option<crate::Payload> {
 }
 
 /// Returns the 91-bit message sent in `mode`. FT4 XORs the payload with
-/// [`FT4_XOR`](crate::tones::FT4_XOR) before computing the CRC; FT8 sends it unchanged.
+/// [`FT4_XOR`](crate::tones::FT4_XOR) before computing the CRC; FT8 and LQ8 send it unchanged.
 pub fn message91(mode: Mode, payload: &Payload) -> [u8; 12] {
     match mode {
-        Mode::Ft8 => append(payload),
+        Mode::Ft8 | Mode::Lq8 => append(payload),
         Mode::Ft4 => append(&payload.ft4_scrambled()),
     }
 }
@@ -73,7 +73,7 @@ pub fn message91(mode: Mode, payload: &Payload) -> [u8; 12] {
 pub fn payload_from_message91(mode: Mode, message91: &[u8; 12]) -> Option<Payload> {
     let payload = check(message91)?;
     Some(match mode {
-        Mode::Ft8 => payload,
+        Mode::Ft8 | Mode::Lq8 => payload,
         Mode::Ft4 => payload.ft4_scrambled(),
     })
 }

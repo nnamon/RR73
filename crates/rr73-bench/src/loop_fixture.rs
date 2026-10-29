@@ -379,7 +379,7 @@ mod tests {
     fn decoded(text: &str, freq_hz: f32, dt_s: f32, snr_db: f32) -> Decode {
         Decode {
             text: text.into(),
-            message: rr73_ft8::Message::parse(text).expect("message"),
+            message: rr73_decode::DecodedMessage::Ft8(rr73_ft8::Message::parse(text).expect("message")),
             payload: rr73_ft8::Payload([0; 10]),
             freq_hz,
             dt_s,

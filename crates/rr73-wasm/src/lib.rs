@@ -11,6 +11,9 @@
 //! For transmitting, [`pack_message`] checks operator text and gives its canonical form, and
 //! [`synthesize`] renders a message as GFSK audio at the audio output's sample rate.
 //!
+//! LQ8 goes through the same exports with the mode `LQ8`: its own Costas array and the LQ
+//! message layer (`rr73_ft8::lq8`), with its own callsign table in the decoder context.
+//!
 //! WSPR has its own entry points: [`decode_wspr`] for a 120 s slot, [`pack_wspr`] and
 //! [`synthesize_wspr`]. The WSPR decoder keeps its own context per worker, so callsigns from
 //! type 1 and type 2 messages resolve the hashed callsigns of type 3 messages in later slots.
@@ -25,7 +28,7 @@ use std::cell::RefCell;
 use rr73_decode::wspr::{WsprConfig, WsprContext, decode_wspr as run_wspr};
 use rr73_decode::{Decode, DecodeContext, DecodeSession, DecoderConfig, SlotAudio, Stage, decode};
 use rr73_ft8::message::Callsign;
-use rr73_ft8::{CallsignHashes, Message, Mode, message, synth, tones};
+use rr73_ft8::{CallsignHashes, Message, Mode, lq8, message, synth, tones};
 use serde::Serialize;
 use wasm_bindgen::prelude::*;
 
@@ -76,12 +79,13 @@ fn round(x: f32, digits: i32) -> f64 {
     (f64::from(x) * scale).round() / scale
 }
 
-/// Parses `FT8` or `FT4` (any case).
+/// Parses `FT8`, `FT4` or `LQ8` (any case).
 pub fn parse_mode(mode: &str) -> Result<Mode, String> {
     match mode.trim().to_ascii_uppercase().as_str() {
         "FT8" => Ok(Mode::Ft8),
         "FT4" => Ok(Mode::Ft4),
-        other => Err(format!("unknown mode {other:?}; use FT8 or FT4")),
+        "LQ8" => Ok(Mode::Lq8),
+        other => Err(format!("unknown mode {other:?}; use FT8, FT4 or LQ8")),
     }
 }
 
@@ -103,7 +107,8 @@ impl<'a> AppDecode<'a> {
 /// a positive number leaves those out.
 ///
 /// Both callsigns also go into the decoder's hash table, so a message that carries them only
-/// as hashes (type 5, `<9V1NE> <G4ABC> 570007 JO22DB`) shows them.
+/// as hashes (type 5, `<9V1NE> <G4ABC> 570007 JO22DB`) shows them. In LQ8 they are the
+/// callsigns the 16-bit hash of the multi-station messages may name.
 #[wasm_bindgen]
 pub fn set_qso_context(my_call: &str, dx_call: &str, dx_hz: f32) {
     let ap = (!my_call.trim().is_empty()).then(|| rr73_decode::ApContext {
@@ -118,6 +123,7 @@ pub fn set_qso_context(my_call: &str, dx_call: &str, dx_hz: f32) {
                 ctx.hashes.insert(&call);
             }
         }
+        ctx.lq8.set_active(&[my_call, dx_call]);
         ctx.ap = ap;
     });
 }
@@ -363,14 +369,51 @@ pub struct Packed {
     pub ok: bool,
     /// The message as it will be decoded at the other end, or the input when `ok` is false.
     pub text: String,
-    /// Message type as `i3.n3`, such as `1.0` for a standard message; empty when `ok` is false.
+    /// Message type as `i3.n3`, such as `1.0` for a standard message, or `lq8.` and the LQ8
+    /// type number (`lq8.5`); empty when `ok` is false.
     pub i3n3: String,
     /// Why the text cannot be sent; `None` when `ok` is true.
     pub error: Option<String>,
 }
 
+/// An LQ8 message for `text`, its payload, and its text as the other station decodes it:
+/// hashes of the callsigns the text names resolve, as the station named knows its own call.
+fn lq8_pack(text: &str) -> Result<(lq8::Message, rr73_ft8::Payload, String), String> {
+    let text = text.trim().to_ascii_uppercase();
+    let msg = lq8::Message::parse(&text).map_err(|e| e.to_string())?;
+    if msg.kind.is_reserved() {
+        return Err("reserved LQ8 message types are not sent".into());
+    }
+    let payload = lq8::pack(&msg).map_err(|e| e.to_string())?;
+    let mut table = lq8::CallTable::new();
+    let named: Vec<&str> = text
+        .split_whitespace()
+        .map(|w| w.trim_start_matches('<').trim_end_matches('>'))
+        .collect();
+    table.set_active(&named);
+    let mut back = lq8::unpack(&payload).map_err(|e| e.to_string())?;
+    back.resolve(&table);
+    Ok((msg, payload, back.render()))
+}
+
 /// [`pack_message`] as a struct, for native callers and tests.
 pub fn pack(text: &str, mode: &str) -> Packed {
+    if parse_mode(mode) == Ok(Mode::Lq8) {
+        return match lq8_pack(text) {
+            Ok((msg, _, canonical)) => Packed {
+                ok: true,
+                text: canonical,
+                i3n3: format!("lq8.{}", msg.kind.id()),
+                error: None,
+            },
+            Err(e) => Packed {
+                ok: false,
+                text: text.to_string(),
+                i3n3: String::new(),
+                error: Some(e),
+            },
+        };
+    }
     let checked = parse_mode(mode).and_then(|_| {
         let msg = Message::parse(text).map_err(|e| e.to_string())?;
         message::pack(&msg, &mut CallsignHashes::new()).map_err(|e| e.to_string())?;
@@ -395,7 +438,7 @@ pub fn pack(text: &str, mode: &str) -> Packed {
     }
 }
 
-/// Checks operator text for transmission in `mode` (`FT8` or `FT4`). Returns JSON
+/// Checks operator text for transmission in `mode` (`FT8`, `FT4` or `LQ8`). Returns JSON
 /// `{ "ok", "text", "i3n3", "error" }`: the canonical text and message type when it packs,
 /// otherwise the reason it cannot be sent.
 #[wasm_bindgen]
@@ -414,15 +457,20 @@ pub fn synthesize_samples(text: &str, mode: &str, f0_hz: f32, sample_rate: u32) 
             "sample rate {sample_rate} Hz is outside 8000 to 192000 Hz"
         ));
     }
-    let msg = Message::parse(text).map_err(|e| e.to_string())?;
-    let payload = message::pack(&msg, &mut CallsignHashes::new()).map_err(|e| e.to_string())?;
+    let payload = if mode == Mode::Lq8 {
+        lq8_pack(text)?.1
+    } else {
+        let msg = Message::parse(text).map_err(|e| e.to_string())?;
+        message::pack(&msg, &mut CallsignHashes::new()).map_err(|e| e.to_string())?
+    };
     let symbols = tones::from_payload(mode, &payload);
     Ok(synth::gfsk(mode, &symbols, f0_hz, sample_rate, 1.0))
 }
 
 /// Renders `text` as a transmission in `mode`: phase-continuous GFSK with the base tone at
 /// `f0_hz` (100 to 3000 Hz), at `sample_rate` Hz (the AudioContext rate, so no resampling
-/// is needed), peak amplitude 1. FT8 lasts 12.64 s, FT4 5.04 s, with the protocol's ramps.
+/// is needed), peak amplitude 1. FT8 and LQ8 last 12.64 s, FT4 5.04 s, with the protocol's
+/// ramps.
 /// Throws for text that does not pack or parameters out of range.
 #[wasm_bindgen]
 pub fn synthesize(text: &str, mode: &str, f0_hz: f32, sample_rate: u32) -> Result<Vec<f32>, JsError> {
@@ -563,6 +611,7 @@ mod tests {
     fn modes_and_presets_are_checked() {
         assert_eq!(parse_mode("ft8"), Ok(Mode::Ft8));
         assert_eq!(parse_mode(" FT4 "), Ok(Mode::Ft4));
+        assert_eq!(parse_mode("lq8"), Ok(Mode::Lq8));
         assert!(parse_mode("JT65").is_err());
         assert!(decode_slot_json(&[], "FT8", "no-such-preset").is_err());
         assert!(decode_slot_json(&[], "WSPR", "baseline").is_err());
@@ -589,6 +638,34 @@ mod tests {
             serde_json::from_str(&pack_message("JA1KXM 9V1NE RR73", "FT8")).expect("json");
         assert_eq!(json["ok"], true);
         assert_eq!(json["error"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn packs_lq8_text_as_the_other_station_decodes_it() {
+        let call = pack("ab4ss 9v1ne oj11 -03", "LQ8");
+        assert_eq!(
+            (call.ok, call.text.as_str(), call.i3n3.as_str()),
+            (true, "AB4SS 9V1NE OJ11 -03", "lq8.5")
+        );
+        assert_eq!(pack("9V1NE AB4SS R+05", "LQ8").i3n3, "lq8.8");
+        assert_eq!(
+            pack("AB4SS 9V1NE/P OJ11 -03", "LQ8").text,
+            "<AB4SS> 9V1NE/P OJ11 -03"
+        );
+        assert_eq!(pack("AB4SS VP8/9V1NE 73", "LQ8").text, "<AB4SS> VP8/9V1NE 73");
+        assert_eq!(pack("TNX FER QSO", "LQ8").i3n3, "lq8.13");
+        let long = pack("TNX FER QSO ES 73 GL DE", "LQ8");
+        assert!(!long.ok);
+        assert_eq!(
+            long.error.as_deref(),
+            Some("free text holds 14 of its 23 characters")
+        );
+        // FT8 reads the same text by its own rules.
+        assert!(!pack("AB4SS 9V1NE OJ11 -03", "FT8").ok);
+        let lq8 = synthesize_samples("CQ 9V1NE OJ11", "LQ8", 1500.0, 12_000).expect("lq8");
+        let ft8 = synthesize_samples("CQ 9V1NE OJ11", "FT8", 1500.0, 12_000).expect("ft8");
+        assert_eq!(lq8.len(), ft8.len());
+        assert_ne!(lq8, ft8);
     }
 
     #[test]

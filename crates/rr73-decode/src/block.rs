@@ -990,7 +990,7 @@ mod tests {
                 assert!(others < 0.05 * c.norm_sqr(), "{mode:?} symbol {s}");
             }
             let limit = match mode {
-                Mode::Ft8 => 0.12,
+                Mode::Ft8 | Mode::Lq8 => 0.12,
                 Mode::Ft4 => 0.3,
             };
             assert!(worst < limit, "{mode:?}: phase step up to {worst} rad");
@@ -1249,7 +1249,7 @@ mod tests {
             // Chance alone matches 1 in 8 FT8 or 1 in 4 FT4 sync symbols: 2.6 or 4 of them.
             let mean = noise.iter().sum::<usize>() as f64 / noise.len() as f64;
             let (signal_min, noise_mean) = match mode {
-                Mode::Ft8 => (10, 4.0),
+                Mode::Ft8 | Mode::Lq8 => (10, 4.0),
                 Mode::Ft4 => (11, 6.0),
             };
             assert_eq!(noise.len(), 40);

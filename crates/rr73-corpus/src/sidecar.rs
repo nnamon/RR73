@@ -24,13 +24,16 @@ pub enum SlotMode {
     /// WSPR, 120 s slots starting in even UTC minutes.
     #[serde(rename = "WSPR")]
     Wspr,
+    /// LQ8, 15 s slots.
+    #[serde(rename = "LQ8")]
+    Lq8,
 }
 
 impl SlotMode {
-    /// Samples in one slot at 12 kHz: 180000 for FT8, 90000 for FT4, 1440000 for WSPR.
+    /// Samples in one slot at 12 kHz: 180000 for FT8 and LQ8, 90000 for FT4, 1440000 for WSPR.
     pub fn slot_samples(self) -> usize {
         match self {
-            SlotMode::Ft8 => 180_000,
+            SlotMode::Ft8 | SlotMode::Lq8 => 180_000,
             SlotMode::Ft4 => 90_000,
             SlotMode::Wspr => 1_440_000,
         }
@@ -47,6 +50,7 @@ impl SlotMode {
             SlotMode::Ft8 => "FT8",
             SlotMode::Ft4 => "FT4",
             SlotMode::Wspr => "WSPR",
+            SlotMode::Lq8 => "LQ8",
         }
     }
 }

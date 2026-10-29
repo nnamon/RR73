@@ -67,6 +67,9 @@ pub struct DecodeContext {
     pub hashes: CallsignHashes,
     /// The QSO under way, for a priori decoding; `None` turns it off.
     pub ap: Option<crate::ap::ApContext>,
+    /// LQ8 callsigns seen in full, and those of the QSO under way, for LQ8 hashes. Decoding
+    /// LQ8 adds to it.
+    pub lq8: rr73_ft8::lq8::CallTable,
     pub(crate) ws: Workspace,
 }
 
@@ -91,6 +94,7 @@ impl DecodeContext {
         Self {
             hashes: CallsignHashes::new(),
             ap: None,
+            lq8: rr73_ft8::lq8::CallTable::new(),
             ws: Workspace::default(),
         }
     }
@@ -287,9 +291,11 @@ impl Pipeline {
 pub fn layout(mode: Mode) -> &'static FrameLayout {
     static FT8: OnceLock<FrameLayout> = OnceLock::new();
     static FT4: OnceLock<FrameLayout> = OnceLock::new();
+    static LQ8: OnceLock<FrameLayout> = OnceLock::new();
     match mode {
         Mode::Ft8 => FT8.get_or_init(|| FrameLayout::new(Mode::Ft8)),
         Mode::Ft4 => FT4.get_or_init(|| FrameLayout::new(Mode::Ft4)),
+        Mode::Lq8 => LQ8.get_or_init(|| FrameLayout::new(Mode::Lq8)),
     }
 }
 

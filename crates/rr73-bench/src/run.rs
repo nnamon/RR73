@@ -376,11 +376,11 @@ fn run_decoder(
     ctx: &mut Contexts,
 ) -> Result<Decoded, String> {
     match (plan.decoder, meta.mode) {
-        (Decoder::Ft(_), SlotMode::Ft8 | SlotMode::Ft4) => {
-            let mode = if meta.mode == SlotMode::Ft8 {
-                Mode::Ft8
-            } else {
-                Mode::Ft4
+        (Decoder::Ft(_), SlotMode::Ft8 | SlotMode::Ft4 | SlotMode::Lq8) => {
+            let mode = match meta.mode {
+                SlotMode::Ft4 => Mode::Ft4,
+                SlotMode::Lq8 => Mode::Lq8,
+                _ => Mode::Ft8,
             };
             // Each slot starts from an empty hash table so results do not depend on thread
             // order, unless the run carries callsigns from slot to slot in time order.

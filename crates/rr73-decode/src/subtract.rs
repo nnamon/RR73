@@ -112,7 +112,7 @@ fn pulse(mode: Mode, n: usize, bt: f64) -> &'static [f64] {
             .collect()
     };
     match mode {
-        Mode::Ft8 => FT8.get_or_init(build),
+        Mode::Ft8 | Mode::Lq8 => FT8.get_or_init(build),
         Mode::Ft4 => FT4.get_or_init(build),
     }
 }
@@ -133,7 +133,7 @@ fn pulse_sums(mode: Mode, n: usize, bt: f64) -> &'static [f64] {
         out
     };
     match mode {
-        Mode::Ft8 => FT8.get_or_init(build),
+        Mode::Ft8 | Mode::Lq8 => FT8.get_or_init(build),
         Mode::Ft4 => FT4.get_or_init(build),
     }
 }

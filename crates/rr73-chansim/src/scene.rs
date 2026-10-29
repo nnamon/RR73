@@ -9,6 +9,7 @@
 use rand::{Rng, SeedableRng};
 use rand_chacha::ChaCha8Rng;
 use rr73_dsp::FftPlans;
+use rr73_ft8::lq8;
 use rr73_ft8::message::{self, Message};
 use rr73_ft8::{CallsignHashes, Mode, synth, tones};
 use serde::{Deserialize, Serialize};
@@ -144,13 +145,17 @@ fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<
         {
             return Err(RenderError::NotFinite(i));
         }
-        let parsed =
-            Message::parse(&s.message).map_err(|e| RenderError::Message(s.message.clone(), e.to_string()))?;
-        let payload = message::pack(&parsed, &mut hashes)
-            .map_err(|e| RenderError::Message(s.message.clone(), e.to_string()))?;
-        let text = message::unpack(&payload, &hashes)
-            .map(|m| m.to_string())
-            .unwrap_or_else(|_| parsed.to_string());
+        let fail = |e: String| RenderError::Message(s.message.clone(), e);
+        let (payload, text) = if scene.mode == Mode::Lq8 {
+            lq8_payload(&s.message).map_err(fail)?
+        } else {
+            let parsed = Message::parse(&s.message).map_err(|e| fail(e.to_string()))?;
+            let payload = message::pack(&parsed, &mut hashes).map_err(|e| fail(e.to_string()))?;
+            let text = message::unpack(&payload, &hashes)
+                .map(|m| m.to_string())
+                .unwrap_or_else(|_| parsed.to_string());
+            (payload, text)
+        };
         let symbols = tones::from_payload(scene.mode, &payload);
         let amplitude = (2.0 * 10f64.powf(s.snr_db / 10.0) * NOISE_RMS * NOISE_RMS * 2500.0 / 6000.0).sqrt();
         let wave = synth::gfsk(scene.mode, &symbols, s.freq_hz as f32, 12_000, amplitude as f32);
@@ -197,6 +202,22 @@ fn render_placed(scene: &Scene, seed: u64, wrap: bool) -> Result<(Vec<f32>, Vec<
 
 /// Base-tone frequency range used for random placement, in Hz.
 pub const FREQ_RANGE_HZ: (f64, f64) = (300.0, 2700.0);
+
+/// An LQ8 message's payload and its text as a receiver that knows the callsigns in it shows
+/// it: hashes of callsigns the text names in full resolve.
+fn lq8_payload(text: &str) -> Result<(rr73_ft8::Payload, String), String> {
+    let parsed = lq8::Message::parse(text).map_err(|e| e.to_string())?;
+    let payload = lq8::pack(&parsed).map_err(|e| e.to_string())?;
+    let mut table = lq8::CallTable::new();
+    let named: Vec<&str> = text
+        .split_whitespace()
+        .map(|w| w.trim_start_matches('<').trim_end_matches('>'))
+        .collect();
+    table.set_active(&named);
+    let mut back = lq8::unpack(&payload).map_err(|e| e.to_string())?;
+    back.resolve(&table);
+    Ok((payload, back.render()))
+}
 
 /// A scene with one random message at `snr_db`, random frequency in [`FREQ_RANGE_HZ`] and
 /// DT uniform in [-0.5, 0.5] s, drawn from `rng`.

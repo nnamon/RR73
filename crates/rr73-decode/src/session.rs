@@ -26,7 +26,7 @@ use crate::layout::FrameLayout;
 use crate::ldpc::{LdpcDecoder, LdpcOutcome, LdpcScratch, ParityGraph};
 use crate::pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, Workspace, layout};
 use crate::refine::Refined;
-use crate::report::{Decode, DecodeReport, DecodeStats, StageTimings};
+use crate::report::{Decode, DecodeReport, DecodeStats, DecodedMessage, StageTimings};
 use crate::snr::SnrScale;
 use crate::validate::{Rejection, Validated};
 use crate::view::{Candidate, SymbolView, frame_range};
@@ -544,12 +544,21 @@ impl DecodeSession {
             if !d.text.contains("<...>") {
                 continue;
             }
-            if let Ok(message) = rr73_ft8::message::unpack(&d.payload, &self.ctx.hashes) {
-                let text = message.to_string();
-                if text != d.text {
-                    d.text = text;
-                    d.message = message;
+            let message = match &d.message {
+                DecodedMessage::Ft8(_) => rr73_ft8::message::unpack(&d.payload, &self.ctx.hashes)
+                    .ok()
+                    .map(|m| (m.to_string(), DecodedMessage::Ft8(m))),
+                DecodedMessage::Lq8(m) => {
+                    let mut m = m.clone();
+                    m.resolve(&self.ctx.lq8);
+                    Some((m.render(), DecodedMessage::Lq8(m)))
                 }
+            };
+            if let Some((text, message)) = message
+                && text != d.text
+            {
+                d.text = text;
+                d.message = message;
             }
         }
     }
@@ -610,7 +619,7 @@ impl DecodeSession {
             return;
         };
         let (dt_min, dt_max) = match self.layout.mode {
-            Mode::Ft8 => (config.search.ft8_dt_min_s, config.search.ft8_dt_max_s),
+            Mode::Ft8 | Mode::Lq8 => (config.search.ft8_dt_min_s, config.search.ft8_dt_max_s),
             Mode::Ft4 => (config.search.ft4_dt_min_s, config.search.ft4_dt_max_s),
         };
         let hop = spec_config.hop;
@@ -777,6 +786,7 @@ impl DecodeSession {
         let DecodeContext {
             hashes,
             ap: ap_ctx,
+            lq8,
             ws,
         } = &mut self.ctx;
         let hyps: &[Hypothesis] = if config.ap.enabled { &self.hyps } else { &[] };
@@ -982,7 +992,7 @@ impl DecodeSession {
                     });
                 }
             };
-            let Some(valid) = valid else {
+            let Some(mut valid) = valid else {
                 record(if outcome.converged {
                     TraceOutcome::Rejected
                 } else {
@@ -1038,7 +1048,7 @@ impl DecodeSession {
                 continue;
             }
             ws.seen.push(valid.payload);
-            hashes.learn(&valid.message);
+            learn(hashes, lq8, &mut valid);
             stats.ap_decodes += u32::from(found_by.is_some());
             // A decode's refined place and tones, so the pass's retries can remove it from its
             // neighbours.
@@ -1241,7 +1251,7 @@ impl DecodeSession {
         let sp = &config.spectrogram;
         let blocks = config.demod.blocks(mode);
         let extra = config.demod.extra_sets(mode);
-        let DecodeContext { hashes, ws, .. } = &mut self.ctx;
+        let DecodeContext { hashes, lq8, ws, .. } = &mut self.ctx;
         let Workspace {
             block,
             plans,
@@ -1340,7 +1350,7 @@ impl DecodeSession {
                 break;
             }
         }
-        let Some(valid) = valid else {
+        let Some(mut valid) = valid else {
             let outcome = if outcome.converged {
                 TraceOutcome::Rejected
             } else {
@@ -1431,7 +1441,7 @@ impl DecodeSession {
             return None;
         }
         seen.push(valid.payload);
-        hashes.learn(&valid.message);
+        learn(hashes, lq8, &mut valid);
         let decode = Decode {
             text: valid.text,
             message: valid.message,
@@ -1492,6 +1502,22 @@ impl DecodeSession {
 
 /// `true` when `config` retries failed candidates under overlapping signals: it asks for them,
 /// and the block demodulator and the model subtraction they need are in use.
+/// Records the callsigns a decode carries in full, so later hashes of them resolve. An LQ8
+/// decode also has its hashes resolved and its text rendered with them.
+fn learn(hashes: &mut rr73_ft8::CallsignHashes, lq8: &mut rr73_ft8::lq8::CallTable, valid: &mut Validated) {
+    match &mut valid.message {
+        DecodedMessage::Ft8(m) => hashes.learn(m),
+        DecodedMessage::Lq8(m) => {
+            let calls: Vec<String> = m.full_callsigns().into_iter().map(String::from).collect();
+            for c in &calls {
+                lq8.insert(c);
+            }
+            m.resolve(lq8);
+            valid.text = m.render();
+        }
+    }
+}
+
 fn pairs_enabled(config: &DecoderConfig) -> bool {
     config.pairs.enabled
         && config.demod.kind == DemodKind::Block
@@ -1529,7 +1555,7 @@ fn attempt(
             match r {
                 Rejection::Crc => stats.crc_failures += 1,
                 Rejection::ZeroPayload => stats.zero_payloads += 1,
-                Rejection::Unpack(_) => stats.unpack_failures += 1,
+                Rejection::Unpack(_) | Rejection::Lq8Unpack => stats.unpack_failures += 1,
                 Rejection::Implausible => stats.implausible += 1,
             }
             None

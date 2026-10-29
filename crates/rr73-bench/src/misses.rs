@@ -234,6 +234,7 @@ pub fn misses(opts: &MissOptions) -> Result<MissReport, String> {
         let mode = match slot.meta.mode {
             SlotMode::Ft8 => Mode::Ft8,
             SlotMode::Ft4 => Mode::Ft4,
+            SlotMode::Lq8 => Mode::Lq8,
             _ => return None,
         };
         let expected = slot.meta.expected(reference);
@@ -382,7 +383,7 @@ fn analyse_slot(
         .iter()
         .fold((f32::INFINITY, f32::NEG_INFINITY), |(lo, hi), (_, c)| {
             let (a, b) = match mode {
-                Mode::Ft8 => (c.search.ft8_dt_min_s, c.search.ft8_dt_max_s),
+                Mode::Ft8 | Mode::Lq8 => (c.search.ft8_dt_min_s, c.search.ft8_dt_max_s),
                 Mode::Ft4 => (c.search.ft4_dt_min_s, c.search.ft4_dt_max_s),
             };
             (lo.min(a), hi.max(b))
@@ -942,7 +943,7 @@ fn reference_decode(e: &Entry) -> Option<Decode> {
     let payload = rr73_ft8::message::pack(&message, &mut CallsignHashes::new()).ok()?;
     Some(Decode {
         text: e.text.clone(),
-        message,
+        message: rr73_decode::DecodedMessage::Ft8(message),
         payload,
         freq_hz: e.freq_hz as f32,
         dt_s: e.dt_s as f32,

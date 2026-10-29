@@ -75,7 +75,7 @@ struct Geometry {
 impl Geometry {
     fn new(layout: &FrameLayout) -> Self {
         let p = match layout.mode {
-            Mode::Ft8 => 32,
+            Mode::Ft8 | Mode::Lq8 => 32,
             Mode::Ft4 => 16,
         };
         let d = (layout.samples_per_symbol / p).max(1);
@@ -644,7 +644,7 @@ mod tests {
         };
         let mut cands = Vec::new();
         let range = match layout.mode {
-            Mode::Ft8 => view.frame_range(-2.3, 2.5),
+            Mode::Ft8 | Mode::Lq8 => view.frame_range(-2.3, 2.5),
             Mode::Ft4 => view.frame_range(-1.0, 1.0),
         };
         CostasSearch {

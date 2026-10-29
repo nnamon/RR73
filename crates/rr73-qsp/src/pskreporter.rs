@@ -212,7 +212,7 @@ pub struct Spot {
     pub frequency_hz: u32,
     /// SNR in 2500 Hz, dB.
     pub snr_db: i8,
-    /// ADIF mode or submode: FT8, FT4.
+    /// ADIF mode or submode: FT8, FT4, LQ8.
     pub mode: String,
     /// When it was heard, s since 1970.
     pub time_s: u32,

@@ -48,6 +48,6 @@ pub use clock::set_clock;
 pub use config::{ConfigError, DecoderConfig, PRESETS};
 pub use layout::FrameLayout;
 pub use pipeline::{DecodeContext, Pipeline, SAMPLE_RATE, SlotAudio, decode};
-pub use report::{Decode, DecodeReport, DecodeStats, StageTimings};
+pub use report::{Decode, DecodeReport, DecodeStats, DecodedMessage, StageTimings};
 pub use session::{CandidateTrace, DecodeSession, Stage, StepOutcome, TraceOutcome};
 pub use view::Candidate;

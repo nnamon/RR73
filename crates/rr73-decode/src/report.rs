@@ -1,7 +1,16 @@
 //! Decoder output: decodes, counters and per-stage timings.
 
-use rr73_ft8::{Message, Payload};
+use rr73_ft8::{Message, Payload, lq8};
 use serde::{Deserialize, Serialize};
+
+/// A decoded message in the message layer of its mode.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DecodedMessage {
+    /// An FT8 or FT4 message.
+    Ft8(Message),
+    /// An LQ8 message ([`rr73_ft8::lq8`]).
+    Lq8(lq8::Message),
+}
 
 /// One decoded message.
 #[derive(Clone, Debug, PartialEq, Serialize)]
@@ -10,7 +19,7 @@ pub struct Decode {
     pub text: String,
     /// The unpacked message.
     #[serde(skip)]
-    pub message: Message,
+    pub message: DecodedMessage,
     /// The 77-bit payload.
     #[serde(skip)]
     pub payload: Payload,
@@ -58,7 +67,7 @@ pub struct DecodeStats {
     pub crc_failures: u32,
     /// Codewords with an all-zero payload.
     pub zero_payloads: u32,
-    /// Payloads that did not unpack.
+    /// Payloads that did not unpack (for LQ8 also the reserved types and nonzero padding).
     pub unpack_failures: u32,
     /// Valid messages already decoded in the slot.
     pub duplicates: u32,

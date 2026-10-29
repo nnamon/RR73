@@ -1,9 +1,9 @@
-//! Frame layout of FT8 and FT4 transmissions as the decoder uses it: physical parameters,
+//! Frame layout of FT8, FT4 and LQ8 transmissions as the decoder uses it: physical parameters,
 //! sync groups, data symbol order and the Gray map.
 
 use rr73_ft8::Mode;
 use rr73_ft8::tones::{
-    self, FT4_COSTAS, FT4_COSTAS_STARTS, FT4_GRAY, FT8_COSTAS, FT8_COSTAS_STARTS, FT8_GRAY,
+    self, FT4_COSTAS, FT4_COSTAS_STARTS, FT4_GRAY, FT8_COSTAS, FT8_COSTAS_STARTS, FT8_GRAY, LQ8_COSTAS,
 };
 
 /// Number of LLRs per candidate: the (174,91) codeword length.
@@ -50,16 +50,19 @@ impl FrameLayout {
     pub fn new(mode: Mode) -> Self {
         let p = mode.params();
         let (sync, gray) = match mode {
-            Mode::Ft8 => (
-                FT8_COSTAS_STARTS
-                    .iter()
-                    .map(|&start| SyncGroup {
-                        start,
-                        tones: FT8_COSTAS.to_vec(),
-                    })
-                    .collect(),
-                FT8_GRAY.to_vec(),
-            ),
+            Mode::Ft8 | Mode::Lq8 => {
+                let costas = if mode == Mode::Lq8 { LQ8_COSTAS } else { FT8_COSTAS };
+                (
+                    FT8_COSTAS_STARTS
+                        .iter()
+                        .map(|&start| SyncGroup {
+                            start,
+                            tones: costas.to_vec(),
+                        })
+                        .collect(),
+                    FT8_GRAY.to_vec(),
+                )
+            }
             Mode::Ft4 => (
                 FT4_COSTAS_STARTS
                     .iter()
@@ -217,6 +220,18 @@ mod tests {
         test_layouts::ft4().check().expect("ft4");
         assert_eq!(test_layouts::ft8().slot_samples(), 180_000);
         assert!((test_layouts::ft8().symbol_s() - 0.16).abs() < 1e-6);
+    }
+
+    #[test]
+    fn lq8_is_ft8_with_its_own_costas_array() {
+        let ft8 = FrameLayout::new(Mode::Ft8);
+        let lq8 = FrameLayout::new(Mode::Lq8);
+        lq8.check().expect("lq8");
+        assert_eq!(lq8.data, ft8.data);
+        assert_eq!(lq8.gray, ft8.gray);
+        assert_eq!(lq8.samples_per_symbol, ft8.samples_per_symbol);
+        assert!(lq8.sync.iter().all(|g| g.tones == [2, 5, 6, 1, 3, 0, 4]));
+        assert_eq!(lq8.sync.iter().map(|g| g.start).collect::<Vec<_>>(), [0, 36, 72]);
     }
 
     #[test]
