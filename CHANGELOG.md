@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.28.1 · 2026-10-29
 
 - POTA files write LQ8 QSOs as mode MFSK with no submode; POTA accepts LQ8 only that way.
 
