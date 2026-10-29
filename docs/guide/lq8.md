@@ -61,4 +61,4 @@ Edit a message in Edit messages and type the text: LQ8 sends up to about 17 char
 
 ## What LQ8 lacks
 
-Hound, Contest exchange, Confirm with and a priori decoding are FT8 and FT4 only, and hide in LQ8. QSOs log as mode `DATA` with submode `LQ8`, and PSK Reporter spots carry `LQ8`.
+Hound, Contest exchange, Confirm with and a priori decoding are FT8 and FT4 only, and hide in LQ8. QSOs log as mode `DATA` with submode `LQ8`. POTA files write them as `MFSK` with no submode, which POTA requires. PSK Reporter spots carry `LQ8`.

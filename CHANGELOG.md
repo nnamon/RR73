@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- POTA files write LQ8 QSOs as mode MFSK with no submode; POTA accepts LQ8 only that way.
+
 ## 0.28.0 · 2026-10-29
 
 - LQ8 is a new mode in Change band, on 40m to 10m. A QSO takes 4 messages, and Hunt, Repeat CQ and tail-end work as in FT8.

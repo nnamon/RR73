@@ -45,6 +45,15 @@ describe('programme files', () => {
     expect(buildPartFile('pota|VK-0921|20261014', QSOS, ACT, OPTS)?.name).toBe('VK3-9V1NE@VK-0921-20261014.adi');
   });
 
+  it('writes LQ8 as MFSK with no submode in a POTA file only', () => {
+    const lq8 = { ...q('OE3OGC', DAY1), ...{ mode: 'DATA', submode: 'LQ8' } };
+    const pota = parseAdif(buildPartFile('pota|VK-0922|20261013', [lq8], ACT, OPTS)!.text).records[0];
+    expect(pota.MODE).toBe('MFSK');
+    expect(pota.SUBMODE).toBeUndefined();
+    const sota = parseAdif(buildPartFile('sota|VK3/VC-012|20261013', [lq8], ACT, OPTS)!.text).records[0];
+    expect(sota).toMatchObject({ MODE: 'DATA', SUBMODE: 'LQ8' });
+  });
+
   it('makes a SOTA file per summit and UTC day', () => {
     const f = buildPartFile('sota|VK3/VC-012|20261014', QSOS, ACT, OPTS)!;
     expect(f.name).toBe('VK3-9V1NE@VK3-VC-012-20261014.adi');

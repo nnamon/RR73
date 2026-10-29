@@ -58,8 +58,9 @@ export function qsoToRecord(q: Qso, opts: RecordOptions = {}): AdifRecord {
     TIME_OFF: adifTime(q.end),
     BAND: q.band,
     FREQ: q.freqHz ? adifFreq(q.freqHz) : '',
-    MODE: q.mode,
-    SUBMODE: q.submode,
+    // POTA accepts LQ8 only as MODE MFSK with no SUBMODE (lq8.org, ADIF section).
+    MODE: ref?.programme === 'POTA' && q.submode === 'LQ8' ? 'MFSK' : q.mode,
+    SUBMODE: ref?.programme === 'POTA' && q.submode === 'LQ8' ? '' : q.submode,
     RST_SENT: q.rstSent,
     RST_RCVD: q.rstRcvd,
     GRIDSQUARE: q.gridsquare,
