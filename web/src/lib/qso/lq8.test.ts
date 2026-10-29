@@ -115,6 +115,13 @@ describe('answering a CQ in LQ8', () => {
     expect(steps(s.st).map((x) => `${x.label}:${x.state}`)).toEqual(['OJ11:done', 'R+05:done', '73:now']);
   });
 
+  it('cannot call the sender of a multi-station message it cannot name', () => {
+    const s = lq8();
+    s.call(1, '<OE3OGC> R+05 <9V1DE> R-03 <...>');
+    expect(s.notices().map((n) => n.text)).toEqual(['Sender callsign not known yet']);
+    expect(s.st.partner).toBeNull();
+  });
+
   it('answers a station that calls us directly with REPORT+73', () => {
     const s = lq8();
     s.call(1, '9V1NE AB4SS FN42 -07');

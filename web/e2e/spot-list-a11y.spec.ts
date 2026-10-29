@@ -28,7 +28,7 @@ for (const theme of ['light', 'dark'] as const) {
 test('rows and chips say what they are and their state', async ({ page }) => {
   await openSpotList(page, 'list', 'light');
   await expect(page.getByRole('group', { name: 'Show spots' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'FT8 and FT4', exact: true })).toHaveAttribute('aria-pressed', 'true');
+  await expect(page.getByRole('button', { name: 'FT8, FT4, LQ8', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const list = page.getByRole('list', { name: 'Spots, newest first' });
   await expect(list.getByRole('listitem')).toHaveCount(4);
   const first = list.getByRole('button', { name: /^JE1QEV, New park, 430\.512 MHz FT8, POTA JP-1834, Chichibu Muse Prefectural Park, 1 minute ago$/ });

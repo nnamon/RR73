@@ -110,7 +110,7 @@ test('chips filter the list', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'DX', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const withDx = await rows.count();
   expect(withDx).toBeGreaterThan(4);
-  await page.getByRole('button', { name: 'FT8 and FT4', exact: true }).tap();
+  await page.getByRole('button', { name: 'FT8, FT4, LQ8', exact: true }).tap();
   expect(await rows.count()).toBeGreaterThan(withDx);
   await page.getByRole('button', { name: 'My bands', exact: true }).tap();
   const bands = await page.locator('li.spot .freq').allTextContents();

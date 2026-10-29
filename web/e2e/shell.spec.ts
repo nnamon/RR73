@@ -158,7 +158,7 @@ test('Settings › About › Credits shows each third-party licence in full', as
   await page.goto('./#/settings');
   await page.getByRole('link', { name: 'Credits' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Credits' })).toBeVisible();
-  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'Lucide', 'Inter', 'JetBrains Mono', 'Roboto Mono', 'Tauri', 'serialport']);
+  await expect(page.getByRole('heading', { level: 2 })).toHaveText(['ft8_lib', 'lq_lib', 'Lucide', 'Inter', 'JetBrains Mono', 'Roboto Mono', 'Tauri', 'serialport']);
   const text = (await page.locator('main .pane:not([hidden])').innerText()).replace(/\s+/g, ' ');
   // Lucide's ISC licence, word for word.
   const isc = readFileSync(new URL('../../THIRD_PARTY_NOTICES.md', import.meta.url), 'utf8').split('```text\nISC License')[1].split('```')[0];
@@ -167,6 +167,9 @@ test('Settings › About › Credits shows each third-party licence in full', as
   const mit = readFileSync(new URL('../../crates/rr73-ft8/LICENSE-ft8_lib', import.meta.url), 'utf8');
   expect(text).toContain(mit.replace(/\s+/g, ' ').trim());
   expect(text).toContain('Kārlis Goba');
+  // lq_lib's MIT licence, as kept beside the crate.
+  const lq = readFileSync(new URL('../../crates/rr73-ft8/LICENSE-lq_lib', import.meta.url), 'utf8');
+  expect(text).toContain(lq.replace(/\s+/g, ' ').trim());
   await page.getByRole('link', { name: 'Settings' }).click();
   await expect(page.getByRole('heading', { level: 1, name: 'Settings' })).toBeVisible();
 });

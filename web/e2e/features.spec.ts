@@ -104,8 +104,8 @@ test('a spot source alone shows Spots with spots and no activation', async ({ pa
   await page.goto('./#/settings');
   await feature(page, 'Cluster spots').check();
   await openScreen(page, 'Spots');
-  // The recorded cluster spots hold no FT8 or FT4 activation spot.
-  await expect(page.getByText('No FT8 or FT4 activation spots.')).toBeVisible();
+  // The recorded cluster spots hold no FT8, FT4 or LQ8 activation spot.
+  await expect(page.getByText('No FT8, FT4 or LQ8 activation spots.')).toBeVisible();
   await expect(page.getByRole('button', { name: /^Start activation/ })).toHaveCount(0);
   // Off again, Spots goes.
   await page.goto('./#/settings');

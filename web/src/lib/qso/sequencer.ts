@@ -1322,7 +1322,7 @@ class Machine {
     else if (sameCall(ex.from, me)) dx = ex.to;
     else dx = ex.from ?? ex.to;
     if (ex.multi && dx === '<...>') {
-      this.notice('cannot-call', STATUS.foxUnknown);
+      this.notice('cannot-call', this.lq8 ? STATUS.senderUnknown : STATUS.foxUnknown);
       return;
     }
     if (ex.multi && dx) dx = bare(dx);

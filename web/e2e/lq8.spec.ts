@@ -142,6 +142,19 @@ test('Settings › FT8 and FT4 hides what LQ8 lacks, and the messages sheet list
   await expect(sheet.getByRole('alert')).toContainText('Cannot be sent: free text holds');
   await page.keyboard.press('Escape');
 
+  // A band without an LQ8 dial takes FT8, as FT4 does on 160m.
+  await page.getByRole('button', { name: /^Change band/ }).click();
+  const sheet2 = page.getByRole('dialog', { name: 'Change band' });
+  await expect(sheet2.getByRole('radio', { name: 'LQ8' })).toBeChecked();
+  await sheet2.getByText('80m', { exact: true }).click();
+  await page.getByRole('button', { name: /^Change band/ }).click();
+  await expect(sheet2.getByRole('radio', { name: 'FT8' })).toBeChecked();
+  await expect(sheet2.getByRole('radio', { name: 'LQ8' })).toBeDisabled();
+  await sheet2.getByText('20m', { exact: true }).click();
+  await page.getByRole('button', { name: /^Change band/ }).click();
+  await sheet2.getByText('LQ8', { exact: true }).click();
+  await page.keyboard.press('Escape');
+
   await page.goto('./#/settings/ft8');
   await expect(page.getByText('LQ8 QSOs follow these settings too.')).toBeVisible();
   await expect(page.getByRole('textbox', { name: 'Contest exchange' })).toHaveCount(0);

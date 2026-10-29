@@ -39,6 +39,8 @@ export const STATUS = {
   relayUnreachable: 'Relay unreachable',
   relayRefused: 'Relay refused the request',
   foxUnknown: 'Fox callsign not in this message',
+  /** LQ8: a multi-station message whose sender's hash RR73 cannot name. */
+  senderUnknown: 'Sender callsign not known yet',
   houndCalling: (call: string) => `Calling the Fox · ${call}`,
   houndReport: (db: string, call: string) => `Report received · ${db} dB from ${call}`,
   houndLogged: (call: string) => `Logged · ${call}`,

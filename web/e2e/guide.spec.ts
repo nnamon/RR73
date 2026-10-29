@@ -134,7 +134,7 @@ test.describe('with the service worker', () => {
     await page.goto('./#/settings/guide');
     await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 30_000 });
     const slugs = await page.locator('main .pane:not([hidden]) .group a').evaluateAll((as) => as.map((a) => a.getAttribute('href')!.split('/').pop()!));
-    expect(slugs.length).toBe(13);
+    expect(slugs.length).toBe(14);
     await context.setOffline(true);
     let images = 0;
     for (const slug of slugs) {

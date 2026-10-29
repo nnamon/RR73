@@ -286,6 +286,9 @@ describe('the WSPR settings migration', () => {
     expect(validate({ band: '70cm', mode: 'FT8' })).toMatchObject({ band: '70cm', mode: 'FT8' });
     expect(validate({ band: '70cm', mode: 'FT4' })).toMatchObject({ band: '70cm', mode: 'FT8' });
     expect(validate({ band: '60m', mode: 'FT4' })).toMatchObject({ band: '60m', mode: 'FT8' });
+    // LQ8 has dials on 40m to 10m only.
+    expect(validate({ band: '20m', mode: 'LQ8' })).toMatchObject({ band: '20m', mode: 'LQ8' });
+    expect(validate({ band: '80m', mode: 'LQ8' })).toMatchObject({ band: '80m', mode: 'FT8' });
   });
 });
 
