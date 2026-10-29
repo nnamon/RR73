@@ -86,14 +86,14 @@ From its developer page (https://pskreporter.info/pskdev.html, read 15 October 2
 - informationSource is 1, automatically extracted. While developing, the 0x80 test bit is set (`test = true` in the settings).
 - Sender records use the page's fourth descriptor: senderCallsign, frequency, sNR, iMD, mode, informationSource, senderLocator, flowStartSeconds. RR73 has no IMD figure and sends 0, since the page offers no descriptor with sNR and without iMD. A locator not received is an empty string.
 - Receiver records: receiverCallsign, receiverLocator, decodingSoftware (`RR73 0.x.y`) and antennaInformation when the operator gives one.
-- Frequency is the RF frequency: dial plus audio, in Hz. Mode is the ADIF mode or submode: FT8, FT4.
+- Frequency is the RF frequency: dial plus audio, in Hz. Mode is the ADIF mode or submode: FT8, FT4, LQ8.
 - flowStartSeconds is the time the callsign was recognised: when the decode arrived. PSK Reporter keeps a list of software that sends the start of the transmission instead (https://pskreporter.info/api/characteristics), and reads the time as a decode time for software not on it.
 - A datagram stays under 1400 bytes.
 - Port 14739 on the same host is a test listener. Its analysis page (https://pskreporter.info/cgi-bin/psk-analysis.pl) lists the last packets from the address that opens it. `pskreporter.info` itself is behind Cloudflare and takes no UDP.
 
 QSP keeps one report stream per receiving station: its own observation domain, sequence number and timer. All streams send from one UDP socket. `POST /v1/pskreporter/receptions` takes a station and up to 500 spots and answers what was taken, what repeated a recent report, and what was refused. `GET /v1/pskreporter/status?callsign=` shows what waits and what went.
 
-The app reports only what the operator's radio hears. Decodes from the practice band or a web SDR are left out: their signals or antenna belong to someone else. It reports FT8 and FT4, the sender of each message once per band and slot, with the grid the message carried. Hashed callsigns are left out. It sends to QSP at most once a minute, 500 spots at most, and keeps up to 1000 while the relay is unreachable. A refusal from the relay drops them. Settings › PSK Reporter turns reports on, off by default, and takes the antenna.
+The app reports only what the operator's radio hears. Decodes from the practice band or a web SDR are left out: their signals or antenna belong to someone else. It reports FT8, FT4 and LQ8, the sender of each message once per band and slot, with the grid the message carried. Hashed callsigns are left out. It sends to QSP at most once a minute, 500 spots at most, and keeps up to 1000 while the relay is unreachable. A refusal from the relay drops them. Settings › PSK Reporter turns reports on, off by default, and takes the antenna.
 
 ## Who heard you
 

@@ -32,7 +32,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 
 | Path | Contents |
 | --- | --- |
-| `crates/rr73-ft8` | FT8 and FT4 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis. No decoding logic. |
+| `crates/rr73-ft8` | FT8, FT4 and LQ8 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis; `lq8` holds LQ8's message layer (design/lq8.md). No decoding logic. |
 | `crates/rr73-wspr` | WSPR protocol: message types 1 to 3, 50-bit packing, the 15-bit callsign hash, the K = 32 rate 1/2 convolutional code, bit-reversal interleaving, the sync vector, 4-FSK synthesis. No decoding logic. |
 | `crates/rr73-dsp` | Shared DSP: FFT plans, windows, spectrogram with configurable bin and time resolution, resampling. |
 | `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. |
@@ -62,7 +62,8 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 
 ### rr73-ft8
 
-- `Mode { Ft8, Ft4 }` with `ModeParams` (symbol count, samples per symbol at 12 kHz, tone spacing, Costas layout, slot length).
+- `Mode { Ft8, Ft4, Lq8 }` with `ModeParams` (symbol count, samples per symbol at 12 kHz, tone spacing, Costas layout, slot length). LQ8 takes FT8's parameters and its own Costas array.
+- `lq8::Message`, `lq8::pack`, `lq8::unpack` and `lq8::CallTable`: LQ8's 16 message types, ported from lq_lib and checked against its golden vectors in `fixtures/lq8/`.
 - `Payload`: 77 bits, stored as `[u8; 10]`, most significant bit first.
 - `message::Message`: one variant per i3.n3 type. `Message::parse(&str)` reads operator text; `Display` writes canonical text.
 - `message::pack(&Message, &mut CallsignHashes) -> Result<Payload, PackError>` and `message::unpack(&Payload, &CallsignHashes) -> Result<Message, UnpackError>`.

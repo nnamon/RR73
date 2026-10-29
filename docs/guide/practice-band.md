@@ -1,6 +1,6 @@
 # Practice band
 
-Practice band, in Settings › Practice band, runs a simulated band of FT8, FT4 and RTTY stations with no radio. Operate shows a Practice badge. Call CQ, call stations and Hunt as on the air.
+Practice band, in Settings › Practice band, runs a simulated band of FT8, FT4, LQ8 and RTTY stations with no radio. Operate shows a Practice badge. Call CQ, call stations and Hunt as on the air.
 
 ## Scenarios
 
@@ -29,6 +29,8 @@ Practice scenario, in ••• on Operate, sets how the stations you work behav
 | New ones | CQs from DXCC entities, zones and grids not in the practice log |
 | Clock off | Every station is 1.5 s early or late |
 | Fox (DXpedition) | A Fox works 3 Hounds a slot. Turn on Hound to work it |
+
+In LQ8 the stations run LQ8's 4-message QSO. Contest exchanges and Fox are FT8 and FT4 only, and Caller misses RR73 is Caller misses R-report: the caller calls again after your first R-report.
 
 ## Tx audio and the radio
 

@@ -24,6 +24,8 @@ Each setting by the screen it is on, with its default.
 | Depth | Deep | Fast runs the first decoding stage only and decodes about 3% fewer stations |
 | A priori decoding | On | Tries the messages expected next on weak signals near the station you work |
 
+LQ8 QSOs follow these settings too. In LQ8 the screen hides Confirm with, the Contest exchange groups and A priori decoding, which LQ8 has no use for ([LQ8](lq8.md#what-lq8-lacks)).
+
 Hunt order, in Operate's •••: Not worked, the default, puts stations not worked on this band and mode first. Strongest, Newest, Farthest and New call order by signal, by how recently their CQs started, by distance, and stations never worked first.
 
 ## WSPR, RTTY and Macros

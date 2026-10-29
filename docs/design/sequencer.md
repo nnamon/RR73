@@ -48,6 +48,10 @@ Run was a button that started CQ. It became a setting because the CQ button alre
 
 **Tail-end.** A setting, on by default. After a lost station sends RR73, RRR or 73 to the other station, or calls CQ, the sequencer calls it once more in the next slot of the opposite parity, with the late start allowed. One unanswered call ends the attempt. Nothing goes out while the station is in its QSO, Tx on included. Waiting ends after 8 slots. With tail-end off, the call pauses at once. Hunt never tail-ends: it moves on to the next CQ as soon as the station it calls answers another, whatever the setting, because another CQ is a quicker QSO than waiting out theirs.
 
+## LQ8
+
+LQ8's 4-message QSO runs in the same machine (design/lq8.md). Tx1 is the call with grid and report, Tx3 REPORT+73 (`AB4SS 9V1NE R-11`), Tx5 73 and Tx6 CQ; Tx2 and Tx4 stay empty. Its call reads as a report with a grid, and REPORT+73 as an R-report that ends the QSO (`replyLq8`). Answering logs on their REPORT+73 and sends 73; calling CQ logs on their 73. A multi-station message counts through the part addressed to us. Lost station and tail-end take REPORT+73 and 73 as the other QSO's end. Hound and the exchange formats are off in LQ8, and reports are clamped to −26 to +5 dB, the range its field carries.
+
 ## Exchange formats
 
 Contest exchange, in Settings › FT8 and FT4, is the operator's exchange as said on the air: `6A WI`, `WI`, `#` for a serial number. Empty, the default, the sequencer reads and sends standard messages only, as before. Set, each QSO runs in the format the other station uses, with the codec's message types (`lib/qso/exchange.ts`):

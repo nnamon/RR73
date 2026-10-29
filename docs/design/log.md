@@ -10,7 +10,7 @@ Each QSO is an ADIF record plus RR73 fields.
 | --- | --- | --- |
 | Their callsign | `CALL` | |
 | Their grid | `GRIDSQUARE` | When received. |
-| Mode | `MODE` `FT8`; FT4 as `MODE` `MFSK` with `SUBMODE` `FT4` | ADIF 3.1 rule. |
+| Mode | `MODE` `FT8`; FT4 as `MODE` `MFSK` with `SUBMODE` `FT4`; LQ8 as `MODE` `DATA` with `SUBMODE` `LQ8` | ADIF 3.1 rule for FT4; the LQ8 portal's fields for LQ8 (design/lq8.md). |
 | Band, frequency | `BAND`, `FREQ` | `FREQ` in MHz = dial + audio frequency. |
 | Start, end | `QSO_DATE`, `TIME_ON`, `QSO_DATE_OFF`, `TIME_OFF` | UTC. |
 | Reports | `RST_SENT`, `RST_RCVD` | dB, as sent on air, for example `-14`. |

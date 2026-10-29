@@ -6,6 +6,7 @@
 - [Making QSOs](making-qsos.md)
 - [Activations](activations.md)
 - [Contest exchange](contest-exchange.md)
+- [LQ8](lq8.md)
 - [Logging](logging.md)
 - [WSPR](wspr.md)
 - [RTTY](rtty.md)

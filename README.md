@@ -1,6 +1,6 @@
 # RR73
 
-RR73 is an FT8, FT4, WSPR and RTTY app for amateur radio operators, made for the iPhone. It runs in Safari and connects to the radio through an audio cable, keying the transmitter by VOX.
+RR73 is an FT8, FT4, LQ8, WSPR and RTTY app for amateur radio operators, made for the iPhone. It runs in Safari and connects to the radio through an audio cable, keying the transmitter by VOX.
 
 The app is at https://nnamon.github.io/RR73/. Added to the Home Screen, it opens and decodes with no network connection.
 
@@ -22,6 +22,7 @@ Every upload and optional feature is off until turned on in Settings.
 - Repeat CQ keeps calling CQ after each QSO and answers callers from a queue, in the order chosen.
 - Hunt answers CQs one after another until stopped, unworked stations first.
 - Hound mode works FT8 DXpeditions running Fox and Hound, reading the report out of the Fox's multi-call messages.
+- LQ8 completes a QSO in 4 messages on FT8's signal: the call carries grid and report, the answer carries the report and 73. Hunt, Repeat CQ and the practice band run it too (`docs/design/lq8.md`).
 - Halt is always on screen. The watchdog stops Tx after 6 min without a touch. Settings sets the limit.
 - Decode colours mark messages to your call, CQs, new DXCC entities, continents, zones, grids and calls, and stations already worked. One colour scheme is designed for colour blindness.
 - Chips filter the list to CQ, New, To me or Rx freq. Hide worked drops stations already logged on the band and mode.
@@ -29,7 +30,7 @@ Every upload and optional feature is off until turned on in Settings.
 
 ### Decoding
 
-- The FT8, FT4, WSPR and RTTY decoders are RR73's own, written in Rust and compiled to WebAssembly. They run on the phone.
+- The FT8, FT4, LQ8, WSPR and RTTY decoders are RR73's own, written in Rust and compiled to WebAssembly. They run on the phone. LQ8's message codec is ported from lq_lib by Luis Quesada HB9IPH (MIT).
 - The decoder runs up to 3 passes per FT8 or FT4 slot and subtracts each decoded signal before the next. Ordered-statistics decoding (OSD) takes the candidates belief propagation fails on.
 - After the slot, 2 later stages search finer time and frequency grids for up to 2 s.
 - First decodes appear 13.5 s into an FT8 slot (6 s into FT4).
@@ -97,9 +98,11 @@ Figures from `rr73-bench`. SNR is in a 2500 Hz bandwidth, and SNR50 is the SNR a
 | FT8 SNR50, white noise | −21.4 dB | −21.6 dB |
 | FT8 SNR50, Watterson fading | −18.6 dB | −19.0 dB |
 | FT4 SNR50, white noise | −17.1 dB | −17.6 dB |
+| LQ8 SNR50, white noise | −21.3 dB | −21.5 dB |
+| LQ8 SNR50, Watterson fading | −18.7 dB | −18.9 dB |
 | FT8, reference decodes found in 350 slots recorded on 40m | 95% | 96% |
 
-Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.4 to −22.7 dB, with none in 5000 noise-only slots. Method and data sets: `docs/bench.md`, decision records 0007 and 0009 and experiments 0008, 0011 and 0012.
+Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots, or with the later stages in 5000 LQ8 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.4 to −22.7 dB, with none in 5000 noise-only slots. Method and data sets: `docs/bench.md`, decision records 0007 and 0009 and experiments 0008, 0011 and 0012.
 
 ## Requirements
 
