@@ -1,5 +1,9 @@
 <script lang="ts">
-  /** Settings › FT8 and FT4: the sequencer's settings (ADR 0006). */
+  /**
+   * Settings › FT8 and FT4: the sequencer's settings (ADR 0006), which LQ8's QSOs follow too. In
+   * LQ8 the rows it has no use for hide: Confirm with, Contest exchange and a priori decoding
+   * (docs/design/lq8.md).
+   */
   import BackLink from '../ui/BackLink.svelte';
   import Icon from '../ui/Icon.svelte';
   import { href } from '../lib/app/router.svelte';
@@ -7,6 +11,8 @@
   import { features } from '../lib/state/features.svelte';
   import { readExchange, sentExchange } from '../lib/qso/exchange';
 
+  /** LQ8 in use: its QSOs have no RR73 or RRR, no exchange formats and no a priori decoding. */
+  const lq8 = $derived(settings.mode === 'LQ8');
   let watchdogMin = $state(String(settings.watchdogMin));
   $effect(() => {
     watchdogMin = String(settings.watchdogMin);
@@ -81,6 +87,7 @@
 
   <div class="section">
     <div class="group">
+      {#if !lq8}
       <div class="row">
         <span class="row-main"><span class="row-title" id="ack">Confirm with</span></span>
         <span class="seg ack" role="radiogroup" aria-labelledby="ack">
@@ -92,6 +99,7 @@
           {/each}
         </span>
       </div>
+      {/if}
       <label class="row">
         <!-- Dupes count within one activation (docs/design/sequencer.md). With Activations off, QSOs are logged outside any. -->
         <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">{features.activations ? 'Same day, band, mode and activation' : 'Same day, band and mode'}</span></span>
@@ -144,8 +152,10 @@
         <input class="switch" type="checkbox" role="switch" checked={settings.holdTx} onchange={(e) => void updateSettings({ holdTx: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
     </div>
+    {#if lq8}<p class="section-foot">LQ8 QSOs follow these settings too.</p>{/if}
   </div>
 
+  {#if !lq8}
 
   <div class="section">
     <h2 class="section-head" id="exchange-head">Contest exchange</h2>
@@ -209,6 +219,8 @@
     </div>
   </div>
 
+  {/if}
+
   <div class="section">
     <h2 class="section-head">Decoding</h2>
     <div class="group">
@@ -223,10 +235,12 @@
           {/each}
         </span>
       </div>
-      <label class="row">
-        <span class="row-main"><span class="row-title">A priori decoding</span></span>
-        <input class="switch" type="checkbox" role="switch" checked={settings.aPriori} onchange={(e) => void updateSettings({ aPriori: (e.currentTarget as HTMLInputElement).checked })} />
-      </label>
+      {#if !lq8}
+        <label class="row">
+          <span class="row-main"><span class="row-title">A priori decoding</span></span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.aPriori} onchange={(e) => void updateSettings({ aPriori: (e.currentTarget as HTMLInputElement).checked })} />
+        </label>
+      {/if}
     </div>
     <p class="section-foot">Fast decodes about 3% fewer stations.</p>
   </div>

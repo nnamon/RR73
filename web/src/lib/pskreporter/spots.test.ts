@@ -29,6 +29,15 @@ describe('spots from a slot', () => {
     expect(spots.map((s) => [s.callsign, s.locator, s.mode])).toEqual([['K1ABC', 'FN42', 'FT4']]);
   });
 
+  it('report LQ8 senders in mode LQ8, with the grid of their call, and leave out hashed senders', () => {
+    const spots = spotsOf([d('9V1NE AB4SS FN42 -03'), d('<OE3OGC> R+05 <9V1NE> R-03 <9V1DE>'), d('<AB4SS> VP8/9V1DE 73'), d('CQ OE3OGC JN78')], SLOT, 14_084_000, 'LQ8');
+    expect(spots.map((s) => [s.callsign, s.locator, s.mode])).toEqual([
+      ['AB4SS', 'FN42', 'LQ8'],
+      ['VP8/9V1DE', '', 'LQ8'],
+      ['OE3OGC', 'JN78', 'LQ8'],
+    ]);
+  });
+
   it('take the Fox of a multi-call message only once its callsign is known', () => {
     expect(spotsOf([d('K1ABC RR73; W9XYZ <...> -08')], SLOT, 14_074_000, 'FT8')).toEqual([]);
     expect(spotsOf([d('K1ABC RR73; W9XYZ <KH1/KH7Z> -08')], SLOT, 14_074_000, 'FT8')).toEqual([]);

@@ -24,7 +24,7 @@ const STEP = 120;
 /** Sinusoids in each path's gain. */
 const TERMS = 8;
 /** Lowest tone to the middle of the signal, Hz: 3.5 tones of 6.25 Hz in FT8, 1.5 of 20.83 Hz in FT4. */
-const CENTRE_HZ: Record<Mode, number> = { FT8: 21.875, FT4: 31.25 };
+const CENTRE_HZ: Record<Mode, number> = { FT8: 21.875, FT4: 31.25, LQ8: 21.875 };
 
 /** What the band adds to a slot besides the transmissions. */
 export interface SlotConditions {

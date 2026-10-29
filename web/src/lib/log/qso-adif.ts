@@ -142,10 +142,11 @@ export function recordToQso(rec: AdifRecord, ctx: ReadContext): ReadResult {
   if (band && !isAdifBand(band)) warnings.push(`The QSO with ${call} has an unknown BAND "${get('BAND')}".`);
   if (!band && freqHz) band = bandOfHz(freqHz) ?? '';
 
-  // Older WSJT-X versions wrote MODE FT4; ADIF 3.1 has MODE MFSK with SUBMODE FT4.
+  // Older loggers wrote MODE FT4; ADIF 3.1 has MODE MFSK with SUBMODE FT4. A bare MODE LQ8 reads as
+  // the LQ8 portal's MODE DATA with SUBMODE LQ8.
   let mode = get('MODE').toUpperCase();
   let submode = get('SUBMODE').toUpperCase();
-  if (mode === 'FT4' && !submode) ({ mode, submode } = adifMode('FT4'));
+  if ((mode === 'FT4' || mode === 'LQ8') && !submode) ({ mode, submode } = adifMode(mode));
 
   const pwr = Number(get('TX_PWR'));
   const extra: Record<string, string> = {};

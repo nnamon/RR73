@@ -22,7 +22,7 @@ export interface SpotRef {
 export type SourceId = 'pota' | 'hamqth' | 'sota';
 
 /** The modes RR73 can work. */
-export type DigitalMode = 'FT8' | 'FT4';
+export type DigitalMode = 'FT8' | 'FT4' | 'LQ8';
 
 /** One spot. Text fields hold '' when the source gave nothing. */
 export interface Spot {
@@ -41,7 +41,7 @@ export interface Spot {
   band: string | null;
   /** Mode as spotted, upper case: FT8, CW, SSB, DIGI; '' when none. */
   mode: string;
-  /** FT8 or FT4 from the mode, the comments or the frequency (see digital.ts). */
+  /** FT8, FT4 or LQ8 from the mode, the comments or the frequency (see digital.ts). */
   digital: DigitalMode | null;
   /** When the spot was made, UTC ms. */
   spottedAt: number;

@@ -67,6 +67,18 @@ function sameStation(a: string, b: string): boolean {
   return !!a && !!b && baseCall(a) === baseCall(b);
 }
 
+const HASHED = /^<[^>]+>$/;
+const R_REPORT = /^R[+-]\d{2}$/;
+
+/** The sender of an LQ8 MULTI-REPORT+73 or MULTI-73 (lib/qso/messages.ts), or null for other words. */
+function lq8MultiSender(t: string[]): string | null {
+  const all = (...i: number[]) => i.every((k) => HASHED.test(t[k]));
+  if (t.length === 5 && all(0, 2, 4) && R_REPORT.test(t[1]) && R_REPORT.test(t[3])) return t[4];
+  if (t.length === 3 && all(0, 2) && R_REPORT.test(t[1])) return t[2];
+  if (t.length === 4 && t[3] === '73' && all(0, 1, 2)) return t[2];
+  return null;
+}
+
 /** Marks a decode for the list. `sent` is true for messages this station transmitted. */
 export function markDecode(decode: Decode, myCall: string, sent = false): { mark: Mark; key: string | null } {
   const tokens = decode.text.trim().split(/\s+/);
@@ -74,6 +86,10 @@ export function markDecode(decode: Decode, myCall: string, sent = false): { mark
   if (sent) return { mark: 'sent', key: tokens[0] ?? null };
   const mine = me ? tokens.findIndex((t) => looksLikeCall(t) && sameStation(t, me)) : -1;
   if (mine >= 0) {
+    // LQ8's multi-station messages name their sender last ("<9V1NE> R+05 <OE3OGC> R-03 <AB4SS>",
+    // "<9V1NE> <OE3OGC> <AB4SS> 73"): the other station is the sender.
+    const sender = lq8MultiSender(tokens);
+    if (sender) return { mark: 'me', key: sameStation(sender, me) ? null : sender };
     // The other station: the callsign beside mine, before it for "CALL MINE ...", after it for
     // "MINE CALL ...".
     const others = tokens.filter((t, i) => i !== mine && t !== 'CQ' && looksLikeCall(t) && !sameStation(t, me));

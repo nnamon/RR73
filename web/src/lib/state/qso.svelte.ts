@@ -72,7 +72,7 @@ export const qso = new QsoRuntime();
 /** When this session started, UTC ms: the Run rate counts QSOs from here. */
 const sessionStart = utcNow();
 
-/** The sequencer's mode: FT8 or FT4. In WSPR the sequencer stays idle (qsoForMode) and keeps FT8. */
+/** The sequencer's mode: FT8, FT4 or LQ8. In WSPR the sequencer stays idle (qsoForMode) and keeps FT8. */
 function ftMode(): FtMode {
   return isFt(settings.mode) ? settings.mode : 'FT8';
 }
@@ -205,7 +205,7 @@ function onTxReport(r: TxReport) {
     const txn = (Object.entries(messages(qso.st)).find(([, t]) => t === r.text)?.[0] ?? '6') as unknown as TxNum;
     dispatch({ type: 'txStarted', slotStartMs: r.slotStartMs, text: r.text, nowMs: now });
     // A transmission that started part way through ends on time.
-    const dur = (qso.st.config.mode === 'FT8' ? 12_640 : 5_040) - r.skippedS * 1000;
+    const dur = (qso.st.config.mode === 'FT4' ? 5_040 : 12_640) - r.skippedS * 1000;
     qso.onAir = { text: r.text, tx: Number(txn) as TxNum, startMs: r.startUtcMs, endMs: r.startUtcMs + dur };
     // The slot it was scheduled in: a transmission, late start included, ends inside its slot.
     markTransmitted(r.slotStartMs, r.slotStartMs + 1, qso.st.config.mode, { text: r.text, f0Hz: hz });
@@ -376,14 +376,14 @@ export function callStart(slotStartMs: number, nowMs = utcNow()): { startMs: num
 }
 
 /**
- * FT8 and FT4 QSOs in the log, as the sequencer's worked-before list, each with the activation it
- * belongs to: the one running when it was logged, or the one Edit QSO moved it into.
+ * FT8, FT4 and LQ8 QSOs in the log, as the sequencer's worked-before list, each with the activation
+ * it belongs to: the one running when it was logged, or the one Edit QSO moved it into.
  */
 export function workedFrom(qsos: readonly Qso[]): Worked[] {
   const out: Worked[] = [];
   for (const q of qsos) {
     if (q.deletedAt !== null) continue;
-    const mode = q.mode === 'FT8' ? 'FT8' : q.mode === 'MFSK' && q.submode === 'FT4' ? 'FT4' : null;
+    const mode = q.mode === 'FT8' ? 'FT8' : q.mode === 'MFSK' && q.submode === 'FT4' ? 'FT4' : q.mode === 'DATA' && q.submode === 'LQ8' ? 'LQ8' : null;
     if (!mode) continue;
     out.push({ call: q.call, band: q.band, mode, day: new Date(q.start).toISOString().slice(0, 10).replace(/-/g, ''), grid: q.gridsquare || null, activationId: q.activationId });
   }

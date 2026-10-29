@@ -150,7 +150,7 @@ export class WorkerDecoder implements DecoderClient {
     if (!this.worker) return Promise.reject(new DecoderUnavailableError('no worker'));
     if (this.pending.size >= this.maxPending) return Promise.reject(new DecoderBusyError(`${this.pending.size} slots waiting`));
     const id = this.nextId++;
-    const deep = more && (slot.mode === 'FT8' || slot.mode === 'FT4') && !slot.partial && this.deep ? this.deep : undefined;
+    const deep = more && (slot.mode === 'FT8' || slot.mode === 'FT4' || slot.mode === 'LQ8') && !slot.partial && this.deep ? this.deep : undefined;
     const done = new Promise<Decode[]>((resolve, reject) => this.pending.set(id, { resolve, reject, more: deep && more }));
     this.worker.postMessage({ type: 'decode', id, mode: slot.mode, preset: this.preset, samples: slot.samples, ...(deep ? { deep } : {}), ...(slot.qso ? { qso: slot.qso } : {}), ...(slot.partial ? { partial: true } : {}) }, [slot.samples.buffer]);
     return done;

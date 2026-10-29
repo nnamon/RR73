@@ -4,7 +4,8 @@
  *
  * Calls are keyed by the base callsign (VK3/9V1NE/P gives 9V1NE), so a station worked portable
  * counts as worked. Grids are keyed by their first 4 characters, upper case. Bands are lower case
- * ("20m"); modes are FT8 or FT4 (FT4 is stored as MODE MFSK with SUBMODE FT4).
+ * ("20m"); modes are FT8, FT4 or LQ8 (FT4 is stored as MODE MFSK with SUBMODE FT4, LQ8 as MODE DATA
+ * with SUBMODE LQ8).
  *
  * DXCC entities, continents and CQ and ITU zones come from the country file, by the whole call as
  * logged: a QSO with VK3/9V1NE counts for Australia. Without the country file they stay empty and

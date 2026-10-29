@@ -90,7 +90,7 @@
   const isoTime = (ms: number) => new Date(ms).toISOString().slice(11, 19);
   const mhzText = (hz: number | null) => (hz ? String(Math.round(hz) / 1e6) : '');
   // The dial the band sheet sets for the band and mode.
-  const defaultFreq = (b: string, m: string) => (!isBand(b) ? '' : m === 'FT8' || m === 'FT4' ? mhzText(operatingDialHz(b, m, false, {}, settings.ftDialHz)) : m === 'RTTY' ? mhzText(rttyDialHz(b, settings.rtty.dialHz)) : '');
+  const defaultFreq = (b: string, m: string) => (!isBand(b) ? '' : m === 'FT8' || m === 'FT4' || m === 'LQ8' ? mhzText(operatingDialHz(b, m, false, {}, settings.ftDialHz)) : m === 'RTTY' ? mhzText(rttyDialHz(b, settings.rtty.dialHz)) : '');
 
   /** The fields as loaded, to tell an edit in the pane. */
   let loaded = $state('');
@@ -109,7 +109,7 @@
     date = isoDate(t);
     time = isoTime(t);
     band = q?.band ?? d?.band ?? settings.band;
-    // QSOs are FT8, FT4 or RTTY here: WSPR spots never become QSOs.
+    // QSOs are FT8, FT4, LQ8 or RTTY here: WSPR spots never become QSOs.
     mode = q ? displayMode(q) : (d?.mode ?? (isFt(settings.mode) || settings.mode === 'RTTY' ? settings.mode : 'FT8'));
     freq = q ? mhzText(q.freqHz) : d ? mhzText(d.freqHz) : defaultFreq(band, mode);
     grid = q?.gridsquare ?? d?.grid ?? '';
@@ -142,7 +142,7 @@
   const formId = `qso-form-${Math.random().toString(36).slice(2, 8)}`;
 
   const bands = $derived([...new Set([...BAND_IDS, ...(original && !isBand(original.band) && original.band ? [original.band] : [])])]);
-  const modes = $derived([...new Set(['FT8', 'FT4', 'RTTY', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
+  const modes = $derived([...new Set(['FT8', 'FT4', 'LQ8', 'RTTY', ...(original ? [displayMode(original)] : [])])].filter(Boolean));
   const keyboardRows = $derived(mode === 'RTTY' || !!(name || qth));
   // Contest numbers: with the Contest set in use, or when the QSO has them.
   const numberRows = $derived(!!(stx || srx) || (mode === 'RTTY' && settings.keyboard.set === 'contest'));
@@ -246,7 +246,7 @@
         await logQso({
           call: c,
           grid: normaliseGrid(grid),
-          mode: mode === 'FT4' ? 'FT4' : mode === 'RTTY' ? 'RTTY' : 'FT8',
+          mode: mode === 'FT4' || mode === 'LQ8' || mode === 'RTTY' ? mode : 'FT8',
           band: band.toLowerCase(),
           dialHz: hz ?? 0,
           audioHz: 0,

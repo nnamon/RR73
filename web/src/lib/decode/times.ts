@@ -40,10 +40,10 @@ export class DecodeTimes {
     this.skipped++;
   }
 
-  /** The modes with times, in the order FT8, FT4, WSPR. */
+  /** The modes with times, in the order FT8, FT4, LQ8, WSPR. */
   summary(): DecodeTime[] {
     const out: DecodeTime[] = [];
-    for (const mode of ['FT8', 'FT4', 'WSPR'] as const) {
+    for (const mode of ['FT8', 'FT4', 'LQ8', 'WSPR'] as const) {
       const xs = this.byMode.get(mode);
       if (!xs?.length) continue;
       const sorted = [...xs].sort((a, b) => a - b);

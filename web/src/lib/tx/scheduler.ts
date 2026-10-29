@@ -33,7 +33,7 @@ import { DIAL_TIMEOUT_MS, PTT_LEAD_MS, PTT_SETTLE_MS, PTT_TIMEOUT_MS, keyFailedT
 import { utcNow } from '../clock/utc';
 
 /** Where a transmission starts in its slot, s. */
-export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, WSPR: 1 };
+export const NOMINAL_S: Record<Mode, number> = { FT8: 0.5, FT4: 0.5, LQ8: 0.5, WSPR: 1 };
 /** How late after the nominal start a transmission may still start, s. WSPR decoders take DT up to 2 s and more. */
 const LATE_LIMIT_S: Record<Mode, number> = { ...LATE_S, WSPR: 1 };
 /**

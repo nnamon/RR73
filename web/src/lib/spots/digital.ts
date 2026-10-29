@@ -1,5 +1,7 @@
 /**
- * FT8 and FT4 detection: from the mode, then the comments, then the frequency.
+ * FT8, FT4 and LQ8 detection: from the mode, then the comments, then the frequency. LQ8 comes
+ * from the mode or the comments only: its dials sit 2 kHz above FT4's on 17m, where a window
+ * would read FT4 spots as LQ8, and little LQ8 traffic is on air yet.
  *
  * Dial frequencies (USB), kHz, from the app's own table (lib/radio/bands.ts).
  *
@@ -62,21 +64,22 @@ const GENERIC_MODES = new Set(['', 'DATA', 'DIGI', 'DIGITAL', 'DIG', 'MFSK', 'OT
 const OTHER_MODE = /\b(CW|SSB|USB|LSB|FM|JS8|JT65|JT9|JT4|Q65|MSK144|FST4W?|WSPR|RTTY|B?PSK\d*|OLIVIA|SSTV|VARA|FSK441|ISCAT|MFSK\d+)\b/i;
 
 /**
- * FT8 or FT4 for a spot.
+ * FT8, FT4 or LQ8 for a spot.
  *
- * 1. A mode of FT8 or FT4.
+ * 1. A mode of FT8, FT4 or LQ8.
  * 2. Any other specific mode (CW, SSB) rules them out.
- * 3. With an empty or generic mode (DATA, DIGI), the first of FT8 or FT4 the comments name.
+ * 3. With an empty or generic mode (DATA, DIGI), the first of FT8, FT4 or LQ8 the comments name.
  * 4. A comment naming another mode (WSPR, JS8, CW) rules them out.
- * 5. The frequency, against the dial table above.
+ * 5. The frequency, against the dial table above (FT8 and FT4).
  */
 export function detectDigital(spotMode: string, comments: string, freqHz: number | null): DigitalMode | null {
   const m = spotMode.toUpperCase().replace(/[\s-]/g, '');
   if (m === 'FT8') return 'FT8';
   if (m === 'FT4') return 'FT4';
+  if (m === 'LQ8') return 'LQ8';
   if (!GENERIC_MODES.has(m)) return null;
-  const hit = /\bFT[\s-]?([48])\b/i.exec(comments);
-  if (hit) return hit[1] === '8' ? 'FT8' : 'FT4';
+  const hit = /\b(?:FT[\s-]?([48])|(LQ)[\s-]?8)\b/i.exec(comments);
+  if (hit) return hit[2] ? 'LQ8' : hit[1] === '8' ? 'FT8' : 'FT4';
   if (OTHER_MODE.test(comments)) return null;
   return freqHz === null ? null : digitalByFrequency(freqHz);
 }

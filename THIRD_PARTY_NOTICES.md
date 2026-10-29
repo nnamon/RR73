@@ -30,6 +30,34 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 ```
 
+## lq_lib
+
+The LQ8 message layer in `rr73-ft8` (`crates/rr73-ft8/src/lq8/`) is ported from [lq_lib](https://github.com/lquesada/lq_lib) by Luis Quesada HB9IPH, commit 00f3bcf; each such file says so in its header. `fixtures/lq8/golden_vectors.json` holds lq_lib's LQ8 golden vectors. lq_lib is under the MIT licence, kept beside the crate in `crates/rr73-ft8/LICENSE-lq_lib`:
+
+```text
+MIT License
+
+Copyright (c) 2026 Luis Quesada (HB9IPH)
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
 ## Lucide
 
 The reset glyph in the band sheet is the `rotate-ccw` icon from [Lucide](https://lucide.dev), taken from lucide-static 1.57.0 (`https://unpkg.com/lucide-static@1.57.0/icons/rotate-ccw.svg`). Its paths are in `web/src/ui/icons.ts`, drawn at stroke 2.5. Lucide is under the ISC licence:

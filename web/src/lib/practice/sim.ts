@@ -9,6 +9,10 @@
  * same way, read from the sequencer; the scenario decides how the stations that answer the
  * operator's CQ, or that the operator calls, treat them.
  *
+ * In LQ8 the stations run its 4-message QSO (docs/design/lq8.md): a caller sends its grid and
+ * report in one call, the station calling CQ answers with REPORT+73 ("R-05"), and the caller ends
+ * with 73. Contest exchanges and the Fox are FT8 and FT4 only (scenarioIn).
+ *
  * The band lives as one does: it opens and closes over 10 to 20 minutes, stations fade in and
  * out with it, clocks and frequencies are a little off, some paths carry multipath fading, and
  * the noise floor rises and falls with the odd static crash and carrier (conditions()).
@@ -18,7 +22,7 @@ import { SLOT_MS, type FtMode as Mode } from '../clock/slots';
 import { formatReport, parseExchange, sameCall, bare, type Exchange } from '../qso/messages';
 import { strength, type Format } from '../qso/exchange';
 import { BAND_ENTITIES, Rng, callsignIn, compoundOf, contestPlace, continentOf, newCallsign, nonstandard, rareCallsign, type Callsign, type Continent } from './calls';
-import type { ScenarioId } from './scenarios';
+import { scenarioIn, type ScenarioId } from './scenarios';
 import type { SlotConditions } from './render';
 import { FoxBand } from './fox';
 
@@ -98,7 +102,7 @@ const HUNT_DEAF_DB = -10;
 const LOW_HZ = 200;
 const HIGH_HZ = 2850;
 /** FT8 and FT4 signals are 50 and 83 Hz wide. */
-const SPACING_HZ: Record<Mode, number> = { FT8: 55, FT4: 90 };
+const SPACING_HZ: Record<Mode, number> = { FT8: 55, FT4: 90, LQ8: 55 };
 /** Clock off: every station this far early or late, s. */
 export const CLOCK_OFF_S = 1.5;
 /** A background station whose level falls below this as the band closes leaves, dB. */
@@ -237,7 +241,7 @@ export class PracticeBand {
   private fixedCalls: Callsign[] = [];
 
   constructor(options: BandOptions) {
-    this.options = { ...options, myCall: options.myCall.toUpperCase() };
+    this.options = { ...options, myCall: options.myCall.toUpperCase(), scenario: scenarioIn(options.scenario, options.mode) };
     this.rng = new Rng(options.seed);
     this.target = [this.rng.int(-2, 2), this.rng.int(-2, 2)];
     this.myContinent = continentOf(this.options.myCall);
@@ -254,13 +258,24 @@ export class PracticeBand {
    */
   configure(o: { scenario?: ScenarioId; crowded?: boolean }) {
     if (o.crowded !== undefined) this.options.crowded = o.crowded;
-    if (o.scenario === undefined || o.scenario === this.options.scenario) return;
-    this.options.scenario = o.scenario;
+    const scenario = o.scenario === undefined ? undefined : scenarioIn(o.scenario, this.options.mode);
+    if (scenario === undefined || scenario === this.options.scenario) return;
+    this.options.scenario = scenario;
     const calledOften = this.calledOften;
     for (const s of this.stations) {
       if (s.partner !== this.options.myCall) s.policy = null;
       if (calledOften && s.state === 'cq') s.patience = Math.max(s.patience, s.idle + 40);
     }
+  }
+
+  /** The band runs LQ8 QSOs. */
+  private get lq8(): boolean {
+    return this.options.mode === 'LQ8';
+  }
+
+  /** A message from `from` to `to`: as line() writes it, or in LQ8 with both callsigns in full, which the codec hashes where its types need. */
+  private msg(to: string, from: string, word: string): string {
+    return this.lq8 ? `${bare(to)} ${bare(from)}${word ? ` ${word}` : ''}` : line(to, from, word);
   }
 
   /** Scenarios in which the operator calls the stations calling CQ: they stay long enough to be called. */
@@ -444,12 +459,27 @@ export class PracticeBand {
         if (++s.tries >= (s.contest ? s.maxCalls : 3)) return s.caller ? this.leave(s) : this.backToCq(s, toMe);
         return this.sendReport(s);
       case 'sentRR73':
-        if (kind === 'rreport' && ++s.tries < 3) return this.sendFinal(s);
+        // LQ8: a caller who missed our REPORT+73 calls again.
+        if (kind === (this.lq8 ? 'report' : 'rreport') && ++s.tries < 3) return this.sendFinal(s);
         // 73, or nothing: the QSO is over.
         if (s.caller && s.partner === me && !s.fixed) return this.leave(s);
         return this.backToCq(s, toMe.filter((m) => m !== fromPartner));
       case 'calling':
-        if (kind === 'report' || kind === 'rreport') {
+        if (this.lq8 && kind === 'rreport') {
+          if (s.behaviour === 'quiet') {
+            s.state = 'quiet';
+            s.tries = 0;
+            return;
+          }
+          // The repeat behaviour misses the first REPORT+73 and calls again.
+          if (s.behaviour === 'repeat' && !s.missed && s.partner === me) {
+            s.missed = true;
+            s.say = this.callText(s);
+            return;
+          }
+          return this.send73(s);
+        }
+        if (!this.lq8 && (kind === 'report' || kind === 'rreport')) {
           if (s.behaviour === 'quiet') {
             s.state = 'quiet';
             s.tries = 0;
@@ -473,7 +503,7 @@ export class PracticeBand {
         return this.sendR(s);
       case 'sent73':
         if ((kind === 'rr73' || kind === 'rrr' || kind === 'rreport') && ++s.tries < 2) {
-          s.say = line(s.partner!, s.call, '73');
+          s.say = this.msg(s.partner!, s.call, '73');
           return;
         }
         // Some stations stay and call CQ after a QSO.
@@ -491,7 +521,7 @@ export class PracticeBand {
     if (s.partner === this.options.myCall && this.options.scenario === 'new-ones') this.rareWorked.add(s.entity);
     s.tries = 0;
     s.state = 'sent73';
-    s.say = line(s.partner!, s.call, '73');
+    s.say = this.msg(s.partner!, s.call, '73');
   }
 
   private decideCq(s: Station, toMe: Heard[]) {
@@ -558,6 +588,8 @@ export class PracticeBand {
     s.idle = 0;
     s.engaged = s.engaged || operator;
     s.report = operator ? s.rng.int(-18, 0) : s.rng.int(-22, 5);
+    // LQ8: the call carried the caller's report, and REPORT+73 answers it.
+    if (this.lq8) return this.sendFinal(s);
     if (gotReport) return this.sendR(s);
     this.sendReport(s);
   }
@@ -578,11 +610,15 @@ export class PracticeBand {
     s.say = s.contest ? this.exchangeText(s, false) : line(s.partner!, s.call, formatReport(s.report));
   }
 
-  /** RR73 to end the QSO; RRR now and then; 73 from some stations. */
+  /** RR73 to end the QSO; RRR now and then; 73 from some stations. In LQ8, REPORT+73. */
   private sendFinal(s: Station) {
     s.state = 'sentRR73';
     const toOperator = s.partner === this.options.myCall;
     if (toOperator && this.options.scenario === 'new-ones') this.rareWorked.add(s.entity);
+    if (this.lq8) {
+      s.say = this.msg(s.partner!, s.call, `R${formatReport(s.report, true)}`);
+      return;
+    }
     const ends73 = toOperator ? this.options.scenario === 'random' && s.ends73Op : s.ends73;
     const word = ends73 ? '73' : !s.sure && s.rng.chance(0.1) ? 'RRR' : 'RR73';
     s.say = line(s.partner!, s.call, word);
@@ -604,8 +640,9 @@ export class PracticeBand {
     this.decideCq(s, toMe);
   }
 
-  /** A caller's first message and its repeats: the grid, a contest exchange, or a report. */
+  /** A caller's first message and its repeats: the grid, a contest exchange, or a report. In LQ8 the grid and the report. */
   private callText(s: Station): string {
+    if (this.lq8) return this.msg(s.partner!, s.call, `${s.grid} ${formatReport(s.report, true)}`);
     if (s.contest && s.contest.format !== 'vhf') return this.exchangeText(s, false);
     if (s.behaviour === 'direct') return line(s.partner!, s.call, formatReport(s.report));
     return line(s.partner!, s.call, nonstandard(s.call) ? '' : s.grid);
@@ -616,7 +653,7 @@ export class PracticeBand {
     const partnerSent = inbox.find((m) => sameCall(m.ex.from, s.partner));
     // The station called is working someone else: wait, or call over them; call again as their QSO ends.
     const busy = partnerSent && partnerSent.ex.kind !== 'cq' && !sameCall(partnerSent.ex.to, s.call);
-    const ending = busy && (partnerSent.ex.kind === 'rr73' || partnerSent.ex.kind === 'rrr' || partnerSent.ex.kind === '73');
+    const ending = busy && (partnerSent.ex.kind === 'rr73' || partnerSent.ex.kind === 'rrr' || partnerSent.ex.kind === '73' || (this.lq8 && partnerSent.ex.kind === 'rreport'));
     if (busy && !ending && !s.rng.chance(0.5)) return;
     s.say = this.callText(s);
   }
@@ -710,11 +747,14 @@ export class PracticeBand {
     const sc = this.options.scenario;
     const waiting = this.stations.some((s) => s.partner === me && s.state === 'calling');
     const running = this.opCqSlot !== null && k - this.opCqSlot <= 24;
-    if ((op.kind === 'rr73' || op.kind === '73' || op.kind === 'rrr') && running && !waiting) {
+    // LQ8: the operator's REPORT+73 ends the QSO from CQ.
+    const ends = op.kind === 'rr73' || op.kind === '73' || op.kind === 'rrr' || (this.lq8 && op.kind === 'rreport');
+    if (ends && running && !waiting) {
       const p = sc === 'activation' ? ACTIVATION_TAIL : sc === 'random' || sc === 'cq-pileup' ? 0.25 : 0;
       if (p && this.rng.chance(p)) this.callOperator(parity, 'normal', undefined).maxCalls = 6;
     }
-    if (sc === 'hunt-caller' && (op.kind === 'grid' || op.kind === 'call') && op.to && !sameCall(op.to, this.huntCalled)) {
+    const calls = op.kind === 'grid' || op.kind === 'call' || (this.lq8 && op.kind === 'report' && !!op.grid);
+    if (sc === 'hunt-caller' && calls && op.to && !sameCall(op.to, this.huntCalled)) {
       const engaged = this.stations.some((s) => s.partner === me && s.state !== 'quiet');
       if (!engaged) {
         this.huntCalled = bare(op.to);

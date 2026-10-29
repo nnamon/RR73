@@ -50,7 +50,7 @@ export function isSpot(v: unknown): v is Spot {
     isNumOrNull(s.freqHz) &&
     (s.band === null || isStr(s.band)) &&
     isStr(s.mode) &&
-    (s.digital === null || s.digital === 'FT8' || s.digital === 'FT4') &&
+    (s.digital === null || s.digital === 'FT8' || s.digital === 'FT4' || s.digital === 'LQ8') &&
     isNum(s.spottedAt) &&
     isStr(s.spotter) &&
     typeof s.automatic === 'boolean' &&

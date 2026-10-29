@@ -44,7 +44,7 @@
     const out: { id: ChipId; label: string; on: boolean }[] = [];
     if (!feed.sources.length) return out;
     if (feed.classes.length > 1) for (const c of feed.classes) out.push({ id: c, label: c, on: filter.classes.includes(c) });
-    out.push({ id: 'digital', label: 'FT8 and FT4', on: filter.digitalOnly });
+    out.push({ id: 'digital', label: 'FT8, FT4, LQ8', on: filter.digitalOnly });
     if (myBands.length) out.push({ id: 'bands', label: 'My bands', on: filter.myBandsOnly });
     if (isNew) out.push({ id: 'new', label: 'New only', on: filter.newOnly });
     return out;

@@ -141,7 +141,7 @@ const transmitProjects = [
   // The practice band and the web SDR: audio made or streamed in the page, decoded in real time,
   // no microphone. They load the machine as the transmit tests do, so they run after them, with
   // 2 retries.
-  { name: 'practice', testMatch: /(practice|web-sdr)\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
+  { name: 'practice', testMatch: /(practice|web-sdr|lq8)\.spec/, retries: 2, dependencies: ['transmit', 'tx-cq', 'webkit-tx'], use: desktop },
 ];
 
 export default defineConfig({

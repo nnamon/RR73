@@ -34,9 +34,9 @@ export interface Qso {
   call: string;
   /** GRIDSQUARE, their grid when received. */
   gridsquare: string;
-  /** MODE: FT8, RTTY, or MFSK for FT4 (ADIF 3.1). */
+  /** MODE: FT8, RTTY, MFSK for FT4 (ADIF 3.1), or DATA for LQ8 (the LQ8 portal's ADIF). */
   mode: string;
-  /** SUBMODE: FT4 with MODE MFSK, else ''. */
+  /** SUBMODE: FT4 with MODE MFSK, LQ8 with MODE DATA, else ''. */
   submode: string;
   /** BAND, lower case: 20m. */
   band: string;
@@ -105,7 +105,7 @@ export interface LogQsoRecord {
   call: string;
   /** Their grid, when received. */
   grid?: string | null;
-  mode: 'FT8' | 'FT4' | 'RTTY';
+  mode: 'FT8' | 'FT4' | 'LQ8' | 'RTTY';
   band: string;
   /** Dial frequency, Hz. */
   dialHz: number;

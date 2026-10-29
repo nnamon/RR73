@@ -69,6 +69,20 @@ export const SCENARIOS: readonly Scenario[] = [
   { id: 'fox', name: 'Fox (DXpedition)' },
 ];
 
+/** LQ8 has no contest exchange formats and no DXpedition mode: these scenarios are FT8 and FT4 only. */
+const NOT_LQ8: readonly ScenarioId[] = ['contest', 'fox'];
+
+/** The scenarios the menu offers in `mode`, with LQ8's names where its messages differ. */
+export function scenariosIn(mode: string): readonly Scenario[] {
+  if (mode !== 'LQ8') return SCENARIOS;
+  return SCENARIOS.filter((s) => !NOT_LQ8.includes(s.id)).map((s) => (s.id === 'cq-repeat' ? { ...s, name: 'Caller misses R-report' } : s));
+}
+
+/** The scenario that runs in `mode`: Random band in LQ8 for a scenario LQ8 lacks. */
+export function scenarioIn(id: ScenarioId, mode: string): ScenarioId {
+  return mode === 'LQ8' && NOT_LQ8.includes(id) ? 'random' : id;
+}
+
 export function isScenario(v: unknown): v is ScenarioId {
   return SCENARIOS.some((s) => s.id === v);
 }

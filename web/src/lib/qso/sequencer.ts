@@ -9,13 +9,19 @@
  * parity and plans the next transmission for the slot that follows. Later passes of the same
  * slot (deeper decoder stages) bring only new decodes, and act on what they hold as the final
  * pass would have: in the slot that follows when still in time, else a cycle later.
+ *
+ * LQ8 runs its 4-message QSO in the same machine (docs/design/lq8.md): its call carries a grid
+ * and a report and reads as a report, REPORT+73 reads as an R-report that also ends the QSO,
+ * and its 73 is the last message. Answering, we send the call (Tx1), log on their REPORT+73 and
+ * send 73 (Tx5). Calling CQ, we answer a call with REPORT+73 (Tx3) and log on their 73. Hound
+ * and the exchange formats are FT8 and FT4 only.
  */
 
 import { SLOT_MS, parity as parityOf, slotStart, type FtMode as Mode, type Parity } from '../clock/slots';
 import { PAUSED, STATUS } from './status';
 import type { Decode } from '../decode/types';
 import { gridPath } from '../reference/grid';
-import { buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
+import { LQ8_REPORT, buildMessages, foxCall, formatReport, fromFox, isGrid, parseExchange, parseParts, sameCall, bare, type Exchange, type ExchangeKind, type TxNum } from './messages';
 import type { LogQsoRecord } from '../log/types';
 import { cqFormat, exchangeOn, readExchange, sentExchange, type Format, type ReceivedExchange, type SentExchange } from './exchange';
 
@@ -36,7 +42,7 @@ export type Phase = 'idle' | 'answering' | 'cq';
  * first part and ends on time. At the limit WSJT-X's jt9 decodes every one at -16 dB (FT8) and
  * -12 dB (FT4), and loses 2.6 dB (FT8) and 2 dB (FT4) at the weak end (docs/design/sequencer.md).
  */
-export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25 };
+export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25, LQ8: 4.0 };
 /**
  * Up to this late, s, a transmission goes out whole (tx/scheduler.ts), and a newer message may
  * replace ours on air in its slot. jt9 finds none sent whole from 2.5 s late in FT8 and 1.0 s in
@@ -44,7 +50,7 @@ export const LATE_S: Record<Mode, number> = { FT8: 4.0, FT4: 1.25 };
  * decodes as well as one sent alone; cut after it, it fails from 3 s (FT8) and 1 s (FT4) whatever
  * the level (docs/design/sequencer.md).
  */
-export const SHIFT_LIMIT_S: Record<Mode, number> = { FT8: 1.5, FT4: 0.5 };
+export const SHIFT_LIMIT_S: Record<Mode, number> = { FT8: 1.5, FT4: 0.5, LQ8: 1.5 };
 /** Time the audio layer needs to synthesise and start a transmission after a decision, s. */
 export const LEAD_S = 0.2;
 /** Hunt forgets a CQ heard more than this many slots ago. */
@@ -401,7 +407,18 @@ export function notReady(st: SeqState): string | null {
 /** The exchange format the QSO with the partner runs in, or null for standard messages. */
 export function partnerFormat(st: SeqState): Exclude<Format, 'standard'> | null {
   const f = st.partner?.format;
-  return f && f !== 'standard' && exchangeOn(st.config.exchange) ? f : null;
+  return f && f !== 'standard' && formatsOn(st.config) ? f : null;
+}
+
+/** True when Contest exchange is set and the mode has the exchange formats (FT8 and FT4). */
+export function formatsOn(c: SeqConfig): boolean {
+  return c.mode !== 'LQ8' && exchangeOn(c.exchange);
+}
+
+/** The report we send, whole dB, in the range the mode carries: −50 to +49, or −26 to +5 in LQ8. */
+export function reportOf(snrDb: number, mode: Mode): number {
+  const [lo, hi] = mode === 'LQ8' ? [LQ8_REPORT.min, LQ8_REPORT.max] : [-50, 49];
+  return Math.max(lo, Math.min(hi, Math.round(snrDb)));
 }
 
 /**
@@ -427,6 +444,7 @@ export function messages(st: SeqState): Record<TxNum, string> {
     ack: st.config.ack,
     cqModifier: st.config.cqModifier,
     exchange: exchangeFor(st),
+    lq8: st.config.mode === 'LQ8',
   });
   for (const k of Object.keys(st.edits) as unknown as TxNum[]) {
     const e = st.edits[k];
@@ -500,6 +518,8 @@ export function huntCandidates(st: SeqState, slotStartMs: number, nowMs: number)
 
 const ENDS: ExchangeKind[] = ['rr73', 'rrr', '73'];
 const TO_OTHER: ExchangeKind[] = ['report', 'rreport', ...ENDS];
+/** LQ8's last message of each side: REPORT+73 from the station that called CQ, 73 from the caller. */
+const LQ8_ENDS: ExchangeKind[] = ['rreport', '73'];
 
 
 class Machine {
@@ -520,7 +540,24 @@ class Machine {
 
   /** Reads a decoded message: with Contest exchange set, the exchange formats too. */
   read(text: string): Exchange {
-    return parseExchange(text, exchangeOn(this.cfg.exchange));
+    return parseExchange(text, formatsOn(this.cfg));
+  }
+
+  get lq8(): boolean {
+    return this.cfg.mode === 'LQ8';
+  }
+
+  /**
+   * The parts of a decoded message the QSO reads: in LQ8 each target of a multi-station
+   * message, so REPORT+73 or 73 to us inside one counts; in FT8 and FT4 the message as `read`.
+   */
+  parts(text: string): Exchange[] {
+    return this.lq8 ? parseParts(text) : [this.read(text)];
+  }
+
+  /** The kinds that end a QSO from the other side: RR73, RRR, 73, or LQ8's REPORT+73 and 73. */
+  get ends(): ExchangeKind[] {
+    return this.lq8 ? LQ8_ENDS : ENDS;
   }
 
   /** The QSO runs in `format` from now on; our exchange is fixed again in it. */
@@ -727,7 +764,7 @@ class Machine {
     if (!p || p.logged) return;
     p.logged = true;
     const c = this.cfg;
-    // The log attaches the running activation and builds the ADIF fields (MFSK for FT4).
+    // The log attaches the running activation and builds the ADIF fields (MFSK for FT4, DATA for LQ8).
     const record: LogQsoRecord = {
       call: bare(p.call),
       grid: p.grid,
@@ -737,7 +774,7 @@ class Machine {
       audioHz: c.txHz,
       startUtcMs: p.startMs ?? nowMs,
       endUtcMs: nowMs,
-      reportSent: formatReport(p.reportSent ?? p.snrDb),
+      reportSent: formatReport(p.reportSent ?? p.snrDb, this.lq8),
       reportRcvd: p.reportRcvd === null ? '' : formatReport(p.reportRcvd),
       source: 'sequencer',
       decode: { preset: c.preset, snrDb: p.snrDb, dtS: p.dtS, audioHz: p.freqHz },
@@ -761,6 +798,7 @@ class Machine {
 
   /** The message that answers the partner's last message, or null when there is none. */
   reply(ex: Exchange, nowMs: number): TxNum | 'complete' | 'incomplete' | 'done' | null {
+    if (this.lq8) return this.replyLq8(ex, nowMs);
     const p = this.st.partner!;
     // Replies go in the format the station sends.
     const took = () => {
@@ -803,10 +841,47 @@ class Machine {
     }
   }
 
-  /** Fixes the report we send the first time a report goes into a message. */
+  /**
+   * LQ8's replies. Their call (grid and report) gets REPORT+73; their REPORT+73 after our call
+   * logs the QSO and gets 73 ('complete'), or REPORT+73 when ours has not gone; their 73 after
+   * our REPORT+73 logs it. A 73 before we sent REPORT+73 ends the QSO unlogged.
+   */
+  replyLq8(ex: Exchange, nowMs: number): TxNum | 'complete' | 'incomplete' | 'done' | null {
+    const p = this.st.partner!;
+    switch (ex.kind) {
+      case 'report':
+        p.reportRcvd = ex.report;
+        if (ex.grid) p.grid = ex.grid;
+        p.rcvdRpt = true;
+        return 3;
+      case 'rreport':
+        p.reportRcvd = ex.report;
+        p.rcvdRpt = true;
+        p.rcvdRRpt = true;
+        if (p.logged) return 'done';
+        if (p.sentRpt) {
+          p.rcvdAck = true;
+          return 'complete';
+        }
+        return 3;
+      case '73':
+        p.rcvdAck = true;
+        if (p.logged) return 'done';
+        if (p.sentRRpt) {
+          this.complete(nowMs);
+          return 'done';
+        }
+        return 'incomplete';
+      default:
+        return null;
+    }
+  }
+
+  /** Fixes the report we send the first time a report goes into a message (in LQ8 also Tx1, the call). */
   fixReport(tx: TxNum) {
     const p = this.st.partner;
-    if (p && (tx === 2 || tx === 3) && p.reportSent === null) p.reportSent = Math.max(-50, Math.min(49, Math.round(p.snrDb)));
+    const carries = tx === 2 || tx === 3 || (this.lq8 && tx === 1);
+    if (p && carries && p.reportSent === null) p.reportSent = reportOf(p.snrDb, this.cfg.mode);
     if (p && (tx === 2 || tx === 3) && !p.exch) {
       const x = ourExchange(this.st);
       if (x && 'ok' in x) p.exch = x.ok;
@@ -885,7 +960,7 @@ class Machine {
     this.newPartner(pick.call, pick);
     st.parity = opposite(parityOf(pick.heardMs, this.cfg.mode));
     const tx = this.reply({ to: this.cfg.myCall, from: pick.call, kind: pick.kind, grid: pick.grid, report: pick.report, modifier: null, format: pick.format, rcvd: pick.rcvd }, nowMs);
-    const t: TxNum = typeof tx === 'number' ? tx : 2;
+    const t: TxNum = typeof tx === 'number' ? tx : this.lq8 ? 3 : 2;
     this.fixReport(t);
     st.retries = 0;
     this.plan(t, nowMs);
@@ -1014,7 +1089,7 @@ class Machine {
     const p = st.partner!;
     if (p.rcvdRpt || p.rcvdAck || p.logged) return false;
     const me = this.cfg.myCall;
-    const theirs = e.decodes.map((d) => this.read(d.text)).filter((x) => sameCall(x.from, p.call));
+    const theirs = e.decodes.flatMap((d) => this.parts(d.text)).filter((x) => sameCall(x.from, p.call));
     const toOther = theirs.filter((x) => x.to && !sameCall(x.to, me) && TO_OTHER.includes(x.kind)).at(-1);
     const call = bare(p.call);
     const lost = st.lost;
@@ -1035,11 +1110,11 @@ class Machine {
         return true;
       }
       this.notice('lost', STATUS.answered(call, other));
-      if (ENDS.includes(toOther.kind)) this.tailCall(e);
+      if (this.ends.includes(toOther.kind)) this.tailCall(e);
       return true;
     }
     if (lost.state === 'watching') {
-      const ended = theirs.some((x) => x.kind === 'cq' || (ENDS.includes(x.kind) && x.to && !sameCall(x.to, me)));
+      const ended = theirs.some((x) => x.kind === 'cq' || (this.ends.includes(x.kind) && x.to && !sameCall(x.to, me)));
       if (ended) {
         this.tailCall(e);
         return true;
@@ -1094,7 +1169,7 @@ class Machine {
     } else if (e.pass === 'final') st.decided = { slotStartMs: e.slotStartMs, texts: e.decodes.map((d) => d.text) };
     // Keep the partner's latest signal for the report and the log.
     if (st.partner) {
-      const heard = e.decodes.filter((d) => parseParts(d.text, exchangeOn(this.cfg.exchange)).some((x) => sameCall(x.from, st.partner!.call)));
+      const heard = e.decodes.filter((d) => parseParts(d.text, formatsOn(this.cfg)).some((x) => sameCall(x.from, st.partner!.call)));
       const last = heard[heard.length - 1];
       if (last) Object.assign(st.partner, { snrDb: last.snr_db, dtS: last.dt_s, freqHz: last.freq_hz });
     }
@@ -1130,13 +1205,13 @@ class Machine {
 
     if (st.partner) {
       const p = st.partner;
-      const replies = e.decodes.map((d) => this.read(d.text)).filter((x) => sameCall(x.to, me) && sameCall(x.from, p.call));
+      const replies = e.decodes.flatMap((d) => this.parts(d.text)).filter((x) => sameCall(x.to, me) && sameCall(x.from, p.call));
       const ex = replies[replies.length - 1];
       if (p.logged) {
         // After RR73: the QSO is in the log. A station that missed our RR73 and repeats its
         // R-report gets it again, in every mode, up to maxRetries; otherwise the QSO is over.
         if (ex?.kind === 'rreport') {
-          this.goTo(4, e.nowMs);
+          this.goTo(this.lq8 ? 5 : 4, e.nowMs);
           return;
         }
         if (!more) this.afterQso(e.nowMs, true);
@@ -1239,7 +1314,7 @@ class Machine {
   callStation(e: Extract<SeqEvent, { type: 'callStation' }>) {
     const st = this.st;
     const me = this.cfg.myCall;
-    const parts = parseParts(e.decode.text, exchangeOn(this.cfg.exchange));
+    const parts = parseParts(e.decode.text, formatsOn(this.cfg));
     const ex = parts.find((x) => sameCall(x.to, me)) ?? parts[0];
     let dx: string | null;
     if (ex.kind === 'cq') dx = ex.from;
@@ -1276,7 +1351,7 @@ class Machine {
     st.lastSent = null;
     // With Contest exchange set, a CQ that names a format (CQ FD, CQ RU) or a station sending one
     // gets our exchange at once.
-    if (exchangeOn(this.cfg.exchange)) this.setFormat(ex.kind === 'cq' ? cqFormat(ex.modifier) : (ex.format ?? st.partner!.format ?? 'standard'));
+    if (formatsOn(this.cfg)) this.setFormat(ex.kind === 'cq' ? cqFormat(ex.modifier) : (ex.format ?? st.partner!.format ?? 'standard'));
     const addressed = sameCall(ex.to, me) ? this.reply(ex, e.nowMs) : null;
     if (this.cfg.hound && st.partner && (addressed === 3 || addressed === 4)) st.partner.foxHz = Math.round(e.decode.freq_hz);
     if (addressed === 'complete') {
@@ -1373,7 +1448,7 @@ class Machine {
     st.lastSent = sent;
     const p = st.partner;
     if (!p) return;
-    if (sent.tx === 2) p.sentRpt = true;
+    if (sent.tx === 2 || (this.lq8 && sent.tx === 1)) p.sentRpt = true;
     if (sent.tx === 3) {
       p.sentRpt = true;
       p.sentRRpt = true;

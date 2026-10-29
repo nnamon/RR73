@@ -8,9 +8,9 @@
    * With Hound on, the sheet takes the DXpedition's dial frequency for the band, stored per band.
    * WSPR takes WSPRnet's dial on every band; 2m has WSPR only, so its tile is off in FT8 and FT4.
    * RTTY has no calling frequency: the sheet takes the dial, in MHz or kHz, kept per band, and
-   * opens with that field focused, so a retune takes a few digits. FT8 and FT4 take a dial of the
-   * operator's own per band and mode in the same field, such as a 60m channel; an empty field, or
-   * the usual dial, goes back to the usual one.
+   * opens with that field focused, so a retune takes a few digits. FT8, FT4 and LQ8 take a dial of
+   * the operator's own per band and mode in the same field, such as a 60m channel; an empty field, or
+   * the usual dial, goes back to the usual one. LQ8 has usual dials on 40m to 10m only.
    */
   import { tick, untrack } from 'svelte';
   import Sheet from './Sheet.svelte';
@@ -74,8 +74,9 @@
     });
   });
 
-  // FT8 and FT4 outside Hound: the operator's own dial, as typed.
-  const ownDial = $derived((mode === 'FT8' || mode === 'FT4') && !(hound && mode === 'FT8'));
+  // FT8, FT4 and LQ8 outside Hound: the operator's own dial, as typed.
+  const ownMode = (m: Mode): m is 'FT8' | 'FT4' | 'LQ8' => m === 'FT8' || m === 'FT4' || m === 'LQ8';
+  const ownDial = $derived(ownMode(mode) && !(hound && mode === 'FT8'));
   const usualHz = $derived(dialHz(band, mode));
   let ftText = $state('');
   let ftError = $state<string | null>(null);
@@ -89,7 +90,7 @@
   });
 
   function saveFtDial() {
-    if (mode !== 'FT8' && mode !== 'FT4') return;
+    if (!ownMode(mode)) return;
     const m = mode;
     const next = { ...settings.ftDialHz[m] };
     if (ftText.trim() === '') delete next[band];
@@ -108,9 +109,9 @@
     tuneRadio(next[band] ?? usualHz);
   }
 
-  /** Back to the band's usual FT8 or FT4 dial. */
+  /** Back to the band's usual FT8, FT4 or LQ8 dial. */
   function resetFtDial() {
-    if (mode !== 'FT8' && mode !== 'FT4') return;
+    if (!ownMode(mode)) return;
     const next = { ...settings.ftDialHz[mode] };
     delete next[band];
     ftError = null;
@@ -188,10 +189,13 @@
     return { text: `The ${name} is on ${mhz(rig.hz)} ${m}.`, bad: false };
   });
 
-  /** The mode after choosing band `b`: the same, or FT8 where FT4 has no usual frequency (160m, 60m); null where the mode has none. */
+  /**
+   * The mode after choosing band `b`: the same, or FT8 where FT4 or LQ8 has no usual frequency
+   * (160m and 60m for FT4, all but 40m to 10m for LQ8); null where the mode has none.
+   */
   function modeOn(b: BandId, m: Mode): Mode | null {
     if (dialHz(b, m) !== null) return m;
-    return m === 'FT4' && dialHz(b, 'FT8') !== null ? 'FT8' : null;
+    return (m === 'FT4' || m === 'LQ8') && dialHz(b, 'FT8') !== null ? 'FT8' : null;
   }
 
   function chooseBand(b: BandId) {
@@ -310,7 +314,7 @@
           data-testid="ft-dial"
         />
         <span class="mhz">MHz</span>
-        {#if (mode === 'FT8' || mode === 'FT4') && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
+        {#if ownMode(mode) && settings.ftDialHz[mode][band] !== undefined && usualHz !== null}
           <button class="reset" aria-label="Reset to {ftDialText(usualHz)} MHz" onclick={resetFtDial}><Icon name="reset" class="reset-i" /></button>
         {/if}
       </div>

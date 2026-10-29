@@ -22,7 +22,9 @@ const parityName = (p: 'even' | 'odd') => (p === 'even' ? 'Even' : 'Odd');
 /** The 5 steps of the exchange, from our side. */
 /** The grid our Tx1 carries ("OJ11"), or "Call" when it carries none, as with a compound callsign. */
 function sentGrid(st: SeqState): string {
-  const last = messages(st)[1]?.trim().split(/\s+/).at(-1) ?? '';
+  // LQ8's call ends in the report, after the grid.
+  const words = messages(st)[1]?.trim().split(/\s+/) ?? [];
+  const last = (st.config.mode === 'LQ8' ? words.at(-2) : words.at(-1)) ?? '';
   return /^[A-R]{2}\d{2}$/i.test(last) ? last.toUpperCase() : 'Call';
 }
 
@@ -41,6 +43,7 @@ export function steps(st: SeqState): Step[] {
   // Answering: our grid, their report, our R-report, their RR73, our 73.
   // Called by them (CQ): their grid, our report, their R-report, our RR73, logged.
   const calling = st.phase === 'cq';
+  if (st.config.mode === 'LQ8') return mark(lq8Steps(st, calling, sent, rcvd));
   const list: [string, boolean][] = calling
     ? [
         [p.grid ?? 'Call', true],
@@ -57,6 +60,32 @@ export function steps(st: SeqState): Step[] {
         // A Hound logs on the Fox's RR73 and sends no 73.
         st.config.hound ? ['Logged', p.logged] : ['73', p.logged && !st.onAir && st.current !== 5],
       ];
+  return mark(list);
+}
+
+/**
+ * LQ8's steps (docs/design/lq8.md). Answering: our call with grid and report, their R-report
+ * (REPORT+73), our 73. Called by them (CQ): their call, our R-report, their 73, logged.
+ */
+function lq8Steps(st: SeqState, calling: boolean, sent: string | null, rcvd: string | null): [string, boolean][] {
+  const p = st.partner!;
+  if (calling) {
+    return [
+      [p.grid ?? 'Call', true],
+      [sent ? `R${sent}` : 'R-report', p.sentRRpt],
+      ['73', p.rcvdAck],
+      ['Logged', p.logged],
+    ];
+  }
+  return [
+    [sentGrid(st), p.startMs !== null || p.rcvdRpt],
+    [rcvd ? `R${rcvd}` : 'R-report', p.rcvdRRpt],
+    ['73', p.logged && !st.onAir && st.current !== 5],
+  ];
+}
+
+/** Marks the first step not done as now. */
+function mark(list: [string, boolean][]): Step[] {
   let marked = false;
   return list.map(([label, done]) => {
     if (done) return { label, state: 'done' };

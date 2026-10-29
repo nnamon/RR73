@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseAdif, writeAdif } from './adif';
+import { parseAdif, writeAdif, writeRecord } from './adif';
 import { bandOfHz, isAdifBand } from './bandplan';
 import { createQso } from './qso';
 import { adifDate, adifFreq, adifTime, parseDateTime, qsoToRecord, recordToQso } from './qso-adif';
@@ -134,6 +134,23 @@ describe('ADIF from other loggers to QSOs', () => {
       stationCallsign: '9V1NE',
       source: 'import',
     });
+  });
+
+  it('writes an LQ8 QSO as MODE DATA with SUBMODE LQ8 and reads it back, also from a bare LQ8', () => {
+    const q = createQso(
+      { call: 'AB4SS', grid: 'FN42', mode: 'LQ8', band: '20m', dialHz: 14_084_000, audioHz: 1500, startUtcMs: T - 45_000, endUtcMs: T, reportSent: -11, reportRcvd: 5 },
+      { id: '0b8f5f0e-3d2a-4c1b-9a8e-222222222222', now: T, activation: null, callsign: '9V1NE' },
+    );
+    expect(q).toMatchObject({ mode: 'DATA', submode: 'LQ8', freqHz: 14_085_500 });
+    const text = writeRecord(qsoToRecord(q));
+    expect(text).toContain('<MODE:4>DATA');
+    expect(text).toContain('<SUBMODE:3>LQ8');
+    const back = recordToQso(parseAdif(text).records[0], ctx);
+    if (!back.ok) throw new Error(back.reason);
+    expect(back.qso).toMatchObject({ mode: 'DATA', submode: 'LQ8', call: 'AB4SS' });
+    const bare = recordToQso({ CALL: 'AB4SS', QSO_DATE: '20261012', TIME_ON: '1200', BAND: '20m', MODE: 'lq8' }, ctx);
+    if (!bare.ok) throw new Error(bare.reason);
+    expect(bare.qso).toMatchObject({ mode: 'DATA', submode: 'LQ8' });
   });
 
   it('derives BAND from FREQ, keeps unknown fields and crosses midnight', () => {

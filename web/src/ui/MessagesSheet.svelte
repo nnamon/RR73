@@ -1,14 +1,20 @@
 <script lang="ts">
-  /** Tx1 to Tx6: choose the next message and edit any of them. Each edit is checked by the encoder. */
+  /**
+   * Tx1 to Tx6: choose the next message and edit any of them. Each edit is checked by the encoder.
+   * LQ8 has 4: Tx1 the call with grid and report, Tx3 the report with 73, Tx5 73 and Tx6 CQ.
+   */
   import Sheet from './Sheet.svelte';
-  import { TX_NUMS, type TxNum } from '../lib/qso/messages';
+  import { txNums, type TxNum } from '../lib/qso/messages';
   import { messages } from '../lib/qso/sequencer';
   import { codec } from '../lib/state/station.svelte';
   import { chooseNext, editMessage, qso } from '../lib/state/qso.svelte';
 
   let { open = $bindable(false) }: { open: boolean } = $props();
 
-  const LABEL: Record<TxNum, string> = { 1: 'Grid', 2: 'Report', 3: 'R-report', 4: 'RR73', 5: '73', 6: 'CQ' };
+  const FT_LABEL: Record<TxNum, string> = { 1: 'Grid', 2: 'Report', 3: 'R-report', 4: 'RR73', 5: '73', 6: 'CQ' };
+  const LQ8_LABEL: Record<TxNum, string> = { ...FT_LABEL, 1: 'Call', 3: 'R-report' };
+  const lq8 = $derived(qso.st.config.mode === 'LQ8');
+  const LABEL = $derived(lq8 ? LQ8_LABEL : FT_LABEL);
   const all = $derived(messages(qso.st));
   let drafts = $state<Record<number, string>>({});
   let errors = $state<Record<number, string>>({});
@@ -44,7 +50,7 @@
 <Sheet bind:open title="Messages">
   <fieldset class="list">
     <legend class="visually-hidden">Next message</legend>
-    {#each TX_NUMS as tx (tx)}
+    {#each txNums(qso.st.config.mode) as tx (tx)}
       <div class="msg" class:cur={qso.st.current === tx}>
         <label class="pick">
           <input type="radio" name="next-tx" value={tx} checked={qso.st.current === tx} disabled={!all[tx]} onchange={() => chooseNext(tx)} />
@@ -67,7 +73,7 @@
       {#if errors[tx]}<p class="err" role="alert">{errors[tx]}</p>{/if}
     {/each}
   </fieldset>
-  <p class="note">Choosing a message sends it next. Edits to Tx1 to Tx5 last until you call another station. Tx6 keeps its text.</p>
+  <p class="note">Choosing a message sends it next. Edits to Tx1 to Tx5 last until you call another station. Tx6 keeps its text.{#if lq8} Text other than these messages goes as free text, up to about 17 characters.{/if}</p>
 </Sheet>
 
 <style>

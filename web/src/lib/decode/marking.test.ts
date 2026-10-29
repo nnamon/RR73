@@ -43,6 +43,15 @@ describe('markDecode', () => {
     expect(markDecode(d('CQ K1ABC FN42'), 'FN42')).toEqual({ mark: 'cq', key: 'K1ABC' });
   });
 
+  it('marks LQ8 multi-station messages to me with their sender in bold', () => {
+    expect(markDecode(d('<OE3OGC> R+05 <9V1NE> R-03 <AB4SS>'), '9V1NE')).toEqual({ mark: 'me', key: '<AB4SS>' });
+    expect(markDecode(d('<9V1NE> R-03 <AB4SS>'), '9V1NE')).toEqual({ mark: 'me', key: '<AB4SS>' });
+    expect(markDecode(d('<9V1NE> <OE3OGC> <...> 73'), '9V1NE')).toEqual({ mark: 'me', key: '<...>' });
+    expect(markDecode(d('<OE3OGC> R+05 <9V1DE> R-03 <AB4SS>'), '9V1NE')).toEqual({ mark: null, key: null });
+    // The LQ8 call: my callsign, then the caller.
+    expect(markDecode(d('9V1NE AB4SS FN42 -03'), '9V1NE')).toEqual({ mark: 'me', key: 'AB4SS' });
+  });
+
   it('leaves other traffic unmarked, and everything when no callsign is set', () => {
     expect(markDecode(d('JH1RRT YB0AZK RR73'), '9V1NE')).toEqual({ mark: null, key: null });
     expect(markDecode(d('9V1NE JA1KXM -09'), '')).toEqual({ mark: null, key: null });

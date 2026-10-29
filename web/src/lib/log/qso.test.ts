@@ -59,6 +59,8 @@ describe('QSO fields', () => {
 
   it('writes FT4 as MODE MFSK with SUBMODE FT4', () => {
     expect(adifMode('FT4')).toEqual({ mode: 'MFSK', submode: 'FT4' });
+    // The LQ8 portal's ADIF: <MODE:4>DATA <SUBMODE:3>LQ8.
+    expect(adifMode('lq8')).toEqual({ mode: 'DATA', submode: 'LQ8' });
     expect(adifMode('ft8')).toEqual({ mode: 'FT8', submode: '' });
   });
 

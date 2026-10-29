@@ -55,8 +55,8 @@ export function linkSpotFeed(): () => void {
   });
 }
 
-/** The band and mode Go takes for a spot: FT8 or FT4 on a band RR73 has a dial for, else null. */
-export function goTarget(s: Spot): { band: BandId; mode: 'FT8' | 'FT4' } | null {
+/** The band and mode Go takes for a spot: FT8, FT4 or LQ8 on a band RR73 has a dial for, else null. */
+export function goTarget(s: Spot): { band: BandId; mode: 'FT8' | 'FT4' | 'LQ8' } | null {
   if (!s.digital || !s.band) return null;
   const band = BAND_IDS.find((b) => b === s.band);
   if (!band || dialHz(band, s.digital) === null) return null;

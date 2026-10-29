@@ -35,7 +35,7 @@ const NOISE_S = 9.7;
  * the slot before (4.5 s into an FT8 slot, 1.75 s into an FT4 one), and early enough for a
  * station 1.5 s early to start on time.
  */
-const LEAD_MS: Record<Mode, number> = { FT8: 2500, FT4: 2000 };
+const LEAD_MS: Record<Mode, number> = { FT8: 2500, FT4: 2000, LQ8: 2500 };
 const TICK_MS = 200;
 
 export function practiceReport(contextRate: number, audioSession: string | null): CaptureReport {

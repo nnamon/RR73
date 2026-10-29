@@ -7,7 +7,7 @@ import { BIN_HZ, DISPLAY_BINS, viewOf } from './spectrum';
 import { SLOT_MS, type FtMode, type Mode } from '../clock/slots';
 
 /** Width of a signal, Hz: FT8 is 8 tones 6.25 Hz apart, FT4 4 tones 20.83 Hz apart. */
-export const SIGNAL_HZ: Record<FtMode, number> = { FT8: 50, FT4: 83 };
+export const SIGNAL_HZ: Record<FtMode, number> = { FT8: 50, FT4: 83, LQ8: 50 };
 
 /**
  * Lowest and highest audio frequency for the lowest tone (FT8 and FT4) or the signal centre
@@ -17,6 +17,7 @@ export const SIGNAL_HZ: Record<FtMode, number> = { FT8: 50, FT4: 83 };
 export const FREQ_LIMITS: Record<Mode, { minHz: number; maxHz: number }> = {
   FT8: { minHz: 200, maxHz: 2800 },
   FT4: { minHz: 200, maxHz: 2767 },
+  LQ8: { minHz: 200, maxHz: 2800 },
   WSPR: { minHz: 1410, maxHz: 1590 },
   // RTTY's pair: its mark tone, kept so both tones stay inside 200 to 2900 Hz (lib/rtty/settings.ts).
   RTTY: { minHz: 200, maxHz: 2900 },
@@ -54,7 +55,7 @@ export const QUIET_MAX_SLOTS = 4;
  * 13.1 s plus their DT and FT4 signals by 5.5 s; the next slot's start 0.5 s early at the
  * soonest. A row is in the pause when its window (171 ms) is.
  */
-export const PAUSE_S: Record<FtMode, { from: number; to: number }> = { FT8: { from: 14.2, to: 15 }, FT4: { from: 6.3, to: 7.4 } };
+export const PAUSE_S: Record<FtMode, { from: number; to: number }> = { FT8: { from: 14.2, to: 15 }, FT4: { from: 6.3, to: 7.4 }, LQ8: { from: 14.2, to: 15 } };
 
 /** Power per bin of one slot: the mean over the slot, and the mean over its pause. */
 export interface SlotPower {

@@ -104,18 +104,18 @@ describe('emptyText', () => {
   });
 
   it('names the filters that hide everything', () => {
-    expect(emptyText(view(), defaultFilter(), ctx)).toBe('No FT8 or FT4 spots.');
+    expect(emptyText(view(), defaultFilter(), ctx)).toBe('No FT8, FT4 or LQ8 spots.');
     expect(emptyText(view(), { ...defaultFilter(), digitalOnly: false }, ctx)).toBe('No spots.');
     const full = { myBands: ['20m'], isNew: () => true };
-    expect(emptyText(view(), { ...defaultFilter(), myBandsOnly: true, newOnly: true }, full)).toBe('No new FT8 or FT4 spots on your bands.');
-    expect(emptyText(view(), { ...defaultFilter(), myBandsOnly: true, newOnly: true }, ctx)).toBe('No FT8 or FT4 spots.');
+    expect(emptyText(view(), { ...defaultFilter(), myBandsOnly: true, newOnly: true }, full)).toBe('No new FT8, FT4 or LQ8 spots on your bands.');
+    expect(emptyText(view(), { ...defaultFilter(), myBandsOnly: true, newOnly: true }, ctx)).toBe('No FT8, FT4 or LQ8 spots.');
   });
 
   it('names the classes when some are hidden', () => {
-    expect(emptyText(view(BOTH), defaultFilter(), ctx)).toBe('No FT8 or FT4 activation spots.');
-    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: SPOT_CLASSES }, ctx)).toBe('No FT8 or FT4 spots.');
-    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: ['SOTA'] }, ctx)).toBe('No FT8 or FT4 SOTA spots.');
-    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: ['SOTA', 'DX'] }, ctx)).toBe('No FT8 or FT4 SOTA or DX spots.');
+    expect(emptyText(view(BOTH), defaultFilter(), ctx)).toBe('No FT8, FT4 or LQ8 activation spots.');
+    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: SPOT_CLASSES }, ctx)).toBe('No FT8, FT4 or LQ8 spots.');
+    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: ['SOTA'] }, ctx)).toBe('No FT8, FT4 or LQ8 SOTA spots.');
+    expect(emptyText(view(BOTH), { ...defaultFilter(), classes: ['SOTA', 'DX'] }, ctx)).toBe('No FT8, FT4 or LQ8 SOTA or DX spots.');
     expect(emptyText(view(BOTH), { ...defaultFilter(), classes: [] }, ctx)).toBe('Choose POTA, SOTA, WWFF, IOTA or DX to see spots.');
     expect(emptyText(view(), { ...defaultFilter(), classes: ['SOTA'] }, ctx)).toBe('Choose POTA to see spots.');
   });

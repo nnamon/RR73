@@ -89,6 +89,18 @@ describe('detectDigital', () => {
     expect(detectDigital('', '<TR> FT8 -6 dB 813 Hz', kHz(144174))).toBe('FT8');
   });
 
+  it('takes LQ8 from the mode or the comments, never from the frequency', () => {
+    expect(detectDigital('LQ8', '', null)).toBe('LQ8');
+    expect(detectDigital('lq-8', '', kHz(14074))).toBe('LQ8');
+    expect(detectDigital('DATA', 'LQ8 -12 dB', null)).toBe('LQ8');
+    expect(detectDigital('', 'lq8 then FT8', null)).toBe('LQ8');
+    expect(detectDigital('', 'FT8 then LQ8', null)).toBe('FT8');
+    // 14.0845 MHz is LQ8's dial plus 500 Hz, but outside every FT8 and FT4 window.
+    expect(detectDigital('', '', kHz(14084.5))).toBeNull();
+    // On 17m an FT4 signal 2.5 kHz up sits next to LQ8's dial: it stays FT4.
+    expect(detectDigital('', '', kHz(18106.5))).toBe('FT4');
+  });
+
   it('needs a whole word in the comments', () => {
     expect(detectDigital('', 'SOFT8 antenna', null)).toBeNull();
     expect(detectDigital('', 'FT88', null)).toBeNull();

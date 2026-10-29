@@ -10,6 +10,27 @@ describe('bands', () => {
     expect(dialHz('60m', 'FT4')).toBeNull();
   });
 
+  it('has the LQ8 portal’s dials on 40m to 10m and none elsewhere', () => {
+    const lq8 = Object.fromEntries(BAND_IDS.map((b) => [b, dialHz(b, 'LQ8')]));
+    expect(lq8).toEqual({
+      '160m': null,
+      '80m': null,
+      '60m': null,
+      '40m': 7_084_000,
+      '30m': 10_146_000,
+      '20m': 14_084_000,
+      '17m': 18_106_000,
+      '15m': 21_084_000,
+      '12m': 24_925_000,
+      '10m': 28_084_000,
+      '6m': null,
+      '2m': null,
+      '70cm': null,
+    });
+    // Each sits in its band with the 3 kHz of audio above it.
+    for (const [b, hz] of Object.entries(lq8)) if (hz) expect(bandOfHz(hz + 3000), b).toBe(b);
+  });
+
   it('lists 13 bands, each with an FT8 frequency inside the band', () => {
     expect(BAND_IDS).toHaveLength(13);
     for (const b of BAND_IDS) expect(bandOfHz(dialHz(b, 'FT8')!)).toBe(b);

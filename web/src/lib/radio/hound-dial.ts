@@ -12,10 +12,10 @@ import { dialHz, type BandId } from './bands';
 /** Dial frequencies entered for Hound mode, Hz, by band. */
 export type HoundDials = Partial<Record<BandId, number>>;
 
-/** The operator's own FT8 and FT4 dials, Hz, by mode and band. */
-export type FtDials = Record<'FT8' | 'FT4', Partial<Record<BandId, number>>>;
+/** The operator's own FT8, FT4 and LQ8 dials, Hz, by mode and band. */
+export type FtDials = Record<'FT8' | 'FT4' | 'LQ8', Partial<Record<BandId, number>>>;
 
-export const NO_FT_DIALS: FtDials = { FT8: {}, FT4: {} };
+export const NO_FT_DIALS: FtDials = { FT8: {}, FT4: {}, LQ8: {} };
 
 /**
  * The dial frequency in use, Hz: the DXpedition's while Hound is on, else the operator's own for
@@ -24,7 +24,7 @@ export const NO_FT_DIALS: FtDials = { FT8: {}, FT4: {} };
 export function operatingDialHz(band: BandId, mode: Mode, hound: boolean, dials: HoundDials, own: FtDials = NO_FT_DIALS): number | null {
   if (dialHz(band, mode) === null) return null;
   if (hound && mode === 'FT8' && dials[band] !== undefined) return dials[band];
-  if (mode === 'FT8' || mode === 'FT4') return own[mode][band] ?? dialHz(band, mode);
+  if (mode === 'FT8' || mode === 'FT4' || mode === 'LQ8') return own[mode][band] ?? dialHz(band, mode);
   return dialHz(band, mode);
 }
 

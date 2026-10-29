@@ -4,10 +4,13 @@ import { SLOT_MS, SLOT_SAMPLES, nextSlotStart, parity, slotIndex, slotProgress, 
 const T = Date.UTC(2026, 9, 13, 13, 14, 52, 250); // 13:14:52.250
 
 describe('slot arithmetic', () => {
-  it('has 15 s FT8, 7.5 s FT4 and 120 s WSPR slots of 180000, 90000 and 1440000 samples', () => {
-    expect(SLOT_MS).toEqual({ FT8: 15000, FT4: 7500, WSPR: 120000 });
-    expect(SLOT_SAMPLES).toEqual({ FT8: 180000, FT4: 90000, WSPR: 1440000 });
-    for (const m of ['FT8', 'FT4', 'WSPR'] as const) expect(SLOT_SAMPLES[m]).toBe((SLOT_MS[m] / 1000) * 12000);
+  it('has 15 s FT8 and LQ8, 7.5 s FT4 and 120 s WSPR slots of 180000, 90000 and 1440000 samples', () => {
+    expect(SLOT_MS).toEqual({ FT8: 15000, FT4: 7500, LQ8: 15000, WSPR: 120000 });
+    expect(SLOT_SAMPLES).toEqual({ FT8: 180000, FT4: 90000, LQ8: 180000, WSPR: 1440000 });
+    for (const m of ['FT8', 'FT4', 'LQ8', 'WSPR'] as const) expect(SLOT_SAMPLES[m]).toBe((SLOT_MS[m] / 1000) * 12000);
+    // LQ8 slots fall where FT8's do: :00 and :30 even.
+    expect(parity(Date.UTC(2026, 9, 13, 13, 14, 30), 'LQ8')).toBe('even');
+    expect(parity(Date.UTC(2026, 9, 13, 13, 14, 45), 'LQ8')).toBe('odd');
   });
 
   it('starts WSPR slots on even UTC minutes', () => {

@@ -35,7 +35,7 @@ export function mhzText(hz: number): string {
   return (hz / 1e6).toFixed(6).replace(/0{1,3}$/, '');
 }
 
-/** The mode a row shows: FT8 or FT4 when detected, else the spotted mode. */
+/** The mode a row shows: FT8, FT4 or LQ8 when detected, else the spotted mode. */
 export function modeText(s: Spot): string {
   return s.digital ?? s.mode;
 }
@@ -105,7 +105,7 @@ export function emptyText(view: SpotFeedView, filter: SpotFilter, ctx: FilterCon
     return 'Fetching spots.';
   }
   const isNew = filter.newOnly && ctx.isNew ? 'new ' : '';
-  const digital = filter.digitalOnly ? 'FT8 or FT4 ' : '';
+  const digital = filter.digitalOnly ? 'FT8, FT4 or LQ8 ' : '';
   const bands = filter.myBandsOnly && ctx.myBands.length ? ' on your bands' : '';
   return `No ${isNew}${digital}${classWords(view.classes, chosen)}spots${bands}.`;
 }

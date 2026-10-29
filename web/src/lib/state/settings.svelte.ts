@@ -182,7 +182,7 @@ export interface Settings {
   houndBands: BandId[];
   /** The DXpedition's dial frequency entered for Hound mode, Hz, by band. */
   houndDialHz: HoundDials;
-  /** The operator's own FT8 and FT4 dials, Hz, by mode and band; the usual one where none. */
+  /** The operator's own FT8, FT4 and LQ8 dials, Hz, by mode and band; the usual one where none. */
   ftDialHz: FtDials;
   features: Features;
   /** Decode colours in priority order: the first enabled match colours a decode. */
@@ -259,7 +259,7 @@ export const DEFAULTS: Settings = {
   exchangeSerial: 1,
   houndBands: [],
   houndDialHz: {},
-  ftDialHz: { FT8: {}, FT4: {} },
+  ftDialHz: { FT8: {}, FT4: {}, LQ8: {} },
   features: { ...FEATURES_OFF },
   highlights: defaultHighlights(),
   waterfallContrast: 'normal',
@@ -412,7 +412,7 @@ export function validate(raw: unknown): Settings {
   if (r.monoFont === 'system' || r.monoFont === 'jetbrains' || r.monoFont === 'roboto') s.monoFont = r.monoFont;
   if (typeof r.monoDecodes === 'boolean') s.monoDecodes = r.monoDecodes;
   if (isBand(r.band)) s.band = r.band;
-  if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
+  if ((r.mode === 'FT8' || r.mode === 'FT4' || r.mode === 'LQ8' || r.mode === 'WSPR' || r.mode === 'RTTY') && dialHz(s.band, r.mode) !== null) s.mode = r.mode;
   else if (dialHz(s.band, s.mode) === null) s.mode = 'WSPR';
   if (typeof r.inputDeviceId === 'string' && r.inputDeviceId) s.inputDeviceId = r.inputDeviceId;
   if (typeof r.inputDeviceLabel === 'string') s.inputDeviceLabel = r.inputDeviceLabel;
@@ -448,8 +448,8 @@ export function validate(raw: unknown): Settings {
     for (const [b, hz] of Object.entries(dials)) if (ft8(b) && typeof hz === 'number' && inBand(b, hz)) s.houndDialHz[b] = Math.round(hz);
   }
   const own = r.ftDialHz as Record<string, unknown> | undefined;
-  s.ftDialHz = { FT8: {}, FT4: {} };
-  for (const m of ['FT8', 'FT4'] as const) {
+  s.ftDialHz = { FT8: {}, FT4: {}, LQ8: {} };
+  for (const m of ['FT8', 'FT4', 'LQ8'] as const) {
     const byBand = own && typeof own === 'object' ? (own[m] as Record<string, unknown> | undefined) : undefined;
     if (byBand && typeof byBand === 'object')
       for (const [b, hz] of Object.entries(byBand)) if (isBand(b) && dialHz(b, m) !== null && typeof hz === 'number' && inBand(b, hz)) s.ftDialHz[m][b] = Math.round(hz);

@@ -92,7 +92,7 @@ export class Sim {
       this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: false, nowMs: this.at(i, haltAtS) });
       return;
     }
-    const dur = this.mode === 'FT8' ? 12.64 : 5.04;
+    const dur = this.mode === 'FT4' ? 5.04 : 12.64;
     this.send({ type: 'txEnded', slotStartMs: p.slotStartMs, text: p.text, complete: true, nowMs: p.slotStartMs + (p.startOffsetS + dur) * 1000 });
   }
 

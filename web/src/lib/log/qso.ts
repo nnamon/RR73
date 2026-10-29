@@ -33,14 +33,18 @@ export function formatReport(r: number | string): string {
   return (v < 0 ? '-' : '+') + String(Math.abs(v)).padStart(2, '0');
 }
 
-/** ADIF MODE and SUBMODE for an operator mode: FT4 is MODE MFSK with SUBMODE FT4 (ADIF 3.1). */
+/**
+ * ADIF MODE and SUBMODE for an operator mode: FT4 is MODE MFSK with SUBMODE FT4 (ADIF 3.1), LQ8
+ * is MODE DATA with SUBMODE LQ8, as the LQ8 portal specifies (lq8.org, ADIF section).
+ */
 export function adifMode(mode: string): { mode: string; submode: string } {
   const m = mode.trim().toUpperCase();
   if (m === 'FT4') return { mode: 'MFSK', submode: 'FT4' };
+  if (m === 'LQ8') return { mode: 'DATA', submode: 'LQ8' };
   return { mode: m, submode: '' };
 }
 
-/** The mode as the operator says it: FT4 for MFSK/FT4, else MODE. */
+/** The mode as the operator says it: FT4 for MFSK/FT4, LQ8 for DATA/LQ8, else MODE. */
 export function displayMode(q: Pick<Qso, 'mode' | 'submode'>): string {
   return q.submode || q.mode;
 }

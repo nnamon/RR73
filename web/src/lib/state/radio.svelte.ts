@@ -293,7 +293,7 @@ export function txKeyer(): Keyer | null {
 
 /**
  * The radio's dial shift for a transmission at audio `hz` in `mode`, Hz (lib/cat/passband.ts): with
- * Keep Tx audio centred on, the IC-705 keyed by CAT and in USB, for FT8 and FT4; 0 otherwise. The
+ * Keep Tx audio centred on, the IC-705 keyed by CAT and in USB, for FT8, FT4 and LQ8; 0 otherwise. The
  * dial moves up by it and the audio down, so the RF frequency stays the receive dial plus `hz`. In
  * another mode than USB the dial and the audio would not add up to the same RF. WSPR (1410 to
  * 1590 Hz) and RTTY are left out (docs/design/cat.md, Passband shift).
@@ -301,7 +301,7 @@ export function txKeyer(): Keyer | null {
 export function txShiftHz(mode: Mode, hz: number): number {
   // Elecraft's documents give no transmit passband for the KX2's DATA A to centre the audio in.
   if (settings.cat.radio !== 'ic705') return 0;
-  if (!settings.cat.shiftDial || (mode !== 'FT8' && mode !== 'FT4') || !txKeyer() || rig.mode !== 'usb' || rig.hz === null) return 0;
+  if (!settings.cat.shiftDial || (mode !== 'FT8' && mode !== 'FT4' && mode !== 'LQ8') || !txKeyer() || rig.mode !== 'usb' || rig.hz === null) return 0;
   return txDialShiftHz(hz);
 }
 

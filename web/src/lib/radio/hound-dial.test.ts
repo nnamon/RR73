@@ -35,7 +35,7 @@ describe('Hound dial frequency', () => {
 });
 
 describe('the operator’s own FT8 and FT4 dials', () => {
-  const own = { FT8: { '60m': 5_313_000, '20m': 14_076_000 }, FT4: { '40m': 7_048_000 } } as const;
+  const own = { FT8: { '60m': 5_313_000, '20m': 14_076_000 }, FT4: { '40m': 7_048_000 }, LQ8: { '20m': 14_085_000 } } as const;
 
   it('apply by band and mode, Hound’s dial first while Hound is on', () => {
     expect(operatingDialHz('60m', 'FT8', false, {}, own)).toBe(5_313_000);
@@ -47,6 +47,10 @@ describe('the operator’s own FT8 and FT4 dials', () => {
     // WSPR and RTTY keep theirs; a mode with no dial on the band has none.
     expect(operatingDialHz('20m', 'WSPR', false, {}, own)).toBe(14_095_600);
     expect(operatingDialHz('70cm', 'FT4', false, {}, own)).toBeNull();
+    // LQ8 has its own dials, the portal's where the operator has none.
+    expect(operatingDialHz('20m', 'LQ8', false, {}, own)).toBe(14_085_000);
+    expect(operatingDialHz('40m', 'LQ8', false, {}, own)).toBe(7_084_000);
+    expect(operatingDialHz('80m', 'LQ8', false, {}, own)).toBeNull();
   });
 
   it('show 3 decimals, or 4 where the dial needs them', () => {
@@ -56,8 +60,8 @@ describe('the operator’s own FT8 and FT4 dials', () => {
   });
 
   it('are stored per mode and band, inside the band, on bands with that mode', () => {
-    const s = validate({ ftDialHz: { FT8: { '60m': 5_313_000, '20m': 7_074_000, xx: 1, '2m': 144_175_000 }, FT4: { '160m': 1_840_000, '40m': 7_048_000.4, '70cm': 432_170_000 }, WSPR: { '20m': 14_000_000 } } });
-    expect(s.ftDialHz).toEqual({ FT8: { '60m': 5_313_000, '2m': 144_175_000 }, FT4: { '40m': 7_048_000 } });
-    expect(validate({}).ftDialHz).toEqual({ FT8: {}, FT4: {} });
+    const s = validate({ ftDialHz: { FT8: { '60m': 5_313_000, '20m': 7_074_000, xx: 1, '2m': 144_175_000 }, FT4: { '160m': 1_840_000, '40m': 7_048_000.4, '70cm': 432_170_000 }, LQ8: { '20m': 14_085_000, '80m': 3_580_000 }, WSPR: { '20m': 14_000_000 } } });
+    expect(s.ftDialHz).toEqual({ FT8: { '60m': 5_313_000, '2m': 144_175_000 }, FT4: { '40m': 7_048_000 }, LQ8: { '20m': 14_085_000 } });
+    expect(validate({}).ftDialHz).toEqual({ FT8: {}, FT4: {}, LQ8: {} });
   });
 });

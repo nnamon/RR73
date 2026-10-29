@@ -23,7 +23,7 @@
   import { gridPath } from '../lib/reference/grid';
   import { notReady, type HuntOrder, type QueueOrder } from '../lib/qso/sequencer';
   import { barText, houndText, huntText, runTally, watchdogText } from '../lib/qso/view';
-  import { TX_NUMS } from '../lib/qso/messages';
+  import { txNums } from '../lib/qso/messages';
   import { messages } from '../lib/qso/sequencer';
   import { layout } from '../lib/app/layout.svelte';
   import { active, barSteps, txButton } from '../lib/operate/bar';
@@ -32,7 +32,7 @@
   import { callCq, chooseNext, endQso, houndOn, qso, runRate, setHound, setHunt, setRun, setStopAfter, setTxEnabled } from '../lib/state/qso.svelte';
   import { halt, startTune, tx } from '../lib/state/station.svelte';
   import { practice } from '../lib/state/practice.svelte';
-  import { scenarioOf } from '../lib/practice/scenarios';
+  import { scenarioIn, scenariosIn } from '../lib/practice/scenarios';
   import ScenarioSheet from './ScenarioSheet.svelte';
   import CallSheet from './CallSheet.svelte';
   import { showNight } from '../lib/state/night.svelte';
@@ -203,7 +203,7 @@
       <button class="edit" onclick={onmessages}>Edit messages</button>
     </div>
     <div class="msgs" role="radiogroup" aria-labelledby="tx-messages">
-      {#each TX_NUMS as n (n)}
+      {#each txNums(st.config.mode) as n (n)}
         <button
           class="m"
           class:cur={st.current === n && (st.txEnabled || !!onAir)}
@@ -272,7 +272,7 @@
       </button>
       {#if practice.on}
         <button class="mi" role="menuitem" onclick={act(() => (scenarioOpen = true))}>
-          Practice scenario <span class="v">{scenarioOf(practice.scenario).name}</span>
+          Practice scenario <span class="v">{scenariosIn(settings.mode).find((s) => s.id === scenarioIn(practice.scenario, settings.mode))?.name}</span>
         </button>
       {/if}
     </div>

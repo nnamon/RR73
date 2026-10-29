@@ -7,7 +7,7 @@ import { PROGRAMMES, spotClasses, type Spot, type SpotClass } from './types';
 export interface SpotFilter {
   /** Classes shown: programmes, and DX for spots without a reference. */
   classes: readonly SpotClass[];
-  /** Only FT8 and FT4 spots. */
+  /** Only FT8, FT4 and LQ8 spots. */
   digitalOnly: boolean;
   /** Only spots on the operator's bands. */
   myBandsOnly: boolean;
@@ -15,7 +15,7 @@ export interface SpotFilter {
   newOnly: boolean;
 }
 
-/** Programme spots only (no plain DX), FT8 and FT4 only, all bands, worked or not. */
+/** Programme spots only (no plain DX), FT8, FT4 and LQ8 only, all bands, worked or not. */
 export function defaultFilter(): SpotFilter {
   return { classes: [...PROGRAMMES], digitalOnly: true, myBandsOnly: false, newOnly: false };
 }

@@ -67,7 +67,7 @@ afterEach(() => {
 });
 
 describe('SpotList rows', () => {
-  it('shows FT8 and FT4 activation spots, newest first, by default', () => {
+  it('shows FT8, FT4 and LQ8 activation spots, newest first, by default', () => {
     expect(calls(render())).toEqual(['JE1QEV', 'KC5JEC', 'JL1VNI/P']);
   });
 
@@ -133,18 +133,18 @@ describe('SpotList rows', () => {
 
 describe('SpotList chips', () => {
   it('shows class chips only with more than one class, and My bands and New only when supplied', () => {
-    expect(chips(render({ feed: POTA_ONLY }))).toEqual(['FT8 and FT4 on']);
+    expect(chips(render({ feed: POTA_ONLY }))).toEqual(['FT8, FT4, LQ8 on']);
     unmount(app!);
-    expect(chips(render({ myBands: ['40m'], isNew: () => true }))).toEqual(['POTA on', 'SOTA on', 'WWFF on', 'IOTA on', 'DX', 'FT8 and FT4 on', 'My bands', 'New only']);
+    expect(chips(render({ myBands: ['40m'], isNew: () => true }))).toEqual(['POTA on', 'SOTA on', 'WWFF on', 'IOTA on', 'DX', 'FT8, FT4, LQ8 on', 'My bands', 'New only']);
   });
 
-  it('adds DX spots with DX, and every mode with FT8 and FT4 off', () => {
+  it('adds DX spots with DX, and every mode with FT8, FT4, LQ8 off', () => {
     const el = render();
     click(chip(el, 'DX'));
     expect(chip(el, 'DX').getAttribute('aria-pressed')).toBe('true');
     expect(calls(el)).toEqual(['JE1QEV', 'DL9DBJ', 'KC5JEC', 'JL1VNI/P']);
     click(chip(el, 'DX'));
-    click(chip(el, 'FT8 and FT4'));
+    click(chip(el, 'FT8, FT4, LQ8'));
     expect(calls(el)).toEqual(['ZL1KS', 'JE1QEV', 'KC5JEC', 'JL1VNI/P', 'PD4US/P']);
     expect(row(el, 'ZL1KS').querySelector('.ref')?.textContent).toBe('POTA NZ-0008, IOTA OC-134 · Long Bay Regional Park');
   });
@@ -160,7 +160,7 @@ describe('SpotList chips', () => {
   it('says which filters hide everything', () => {
     const el = render({ myBands: ['15m'] });
     click(chip(el, 'My bands'));
-    expect(el.querySelector('.none')?.textContent).toBe('No FT8 or FT4 activation spots on your bands.');
+    expect(el.querySelector('.none')?.textContent).toBe('No FT8, FT4 or LQ8 activation spots on your bands.');
     for (const c of ['POTA', 'SOTA', 'WWFF', 'IOTA']) click(chip(el, c));
     expect(el.querySelector('.none')?.textContent).toBe('Choose POTA, SOTA, WWFF, IOTA or DX to see spots.');
   });
