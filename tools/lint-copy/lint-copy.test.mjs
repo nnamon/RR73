@@ -37,6 +37,17 @@ test('flags headings that end in a full stop or a question mark', () => {
   assert.deepEqual(rules('A sentence that asks why?'), []);
 });
 
+test('flags the reach words, empty frames and intensifiers of the style guide', () => {
+  assert.deepEqual(rules('A crucial step'), ['error:hype']);
+  assert.deepEqual(rules('It showcases the decoder'), ['error:corporate']);
+  assert.deepEqual(rules('The ham radio ecosystem'), ['error:plain-words']);
+  assert.deepEqual(rules('Hope this helps'), ['error:residue']);
+  assert.deepEqual(rules('It is truly fast'), ['error:filler']);
+  assert.deepEqual(rules('The relay plays a key role in spotting'), ['error:meta']);
+  assert.deepEqual(rules('Generally speaking, FT8 is slow'), ['error:hedge']);
+  assert.deepEqual(rules('An underscore separates the words.'), []);
+});
+
 test('flags inflated words, idioms and conversational residue', () => {
   for (const w of ['Delve into the log', 'Navigate to Settings', 'The FT8 landscape', 'In the realm of FT8', 'A tapestry of decodes', 'Your FT8 journey', 'Utilise the decoder'])
     assert.deepEqual(rules(w), ['error:plain-words'], w);

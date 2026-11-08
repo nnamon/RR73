@@ -27,37 +27,37 @@ const ERROR_RULES = [
   { id: 'emoji', re: /\p{Extended_Pictographic}/gu, message: 'emoji' },
   {
     id: 'hype',
-    re: /\b(seamless(?:ly)?|robust|powerful|intuitive|effortless(?:ly)?|cutting-edge|comprehensive|delightful|blazing(?:ly)?|world-class|game-chang\w*)\b/gi,
+    re: /\b(seamless(?:ly)?|robust|powerful|intuitive|effortless(?:ly)?|cutting-edge|comprehensive|delightful|blazing(?:ly)?|world-class|game-chang\w*|holistic|elegant(?:ly)?|crucial|pivotal|state-of-the-art|best-in-class)\b/gi,
     message: 'hype word; state a measurement or a concrete property',
   },
   {
     id: 'corporate',
-    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive)\b/gi,
+    re: /\b(leverag\w*|unlock\w*|empower\w*|elevat(?:e|es|ing)|supercharg\w*|harness(?:es|ing)\b|harness the|streamlin\w*|dive into|deep dive|showcas\w*|foster(?:s|ed|ing)?|underscor(?:es|ed|ing))\b/gi,
     message: 'corporate verb; name the specific action',
   },
   {
     id: 'plain-words',
-    re: /\b(delv(?:e|es|ed|ing)|navigat(?:e|es|ed|ing)|landscapes?|realms?|tapestr(?:y|ies)|journeys?|utili[sz](?:e|es|ed|ing))\b/gi,
+    re: /\b(delv(?:e|es|ed|ing)|navigat(?:e|es|ed|ing)|landscapes?|realms?|tapestr(?:y|ies)|journeys?|utili[sz](?:e|es|ed|ing)|ecosystems?|testament|repays? reading|worth a look)\b/gi,
     message: 'inflated word; use the plain one or name the thing',
   },
   {
     id: 'idiom',
-    re: /\b(under the hood|footguns?|gotchas?|secret sauce|the real killer)\b/gi,
+    re: /\b(under the hood|footguns?|gotchas?|secret sauce|the real killer|happily runs?)\b/gi,
     message: 'idiom in place of the mechanism; say what fails, when and how',
   },
   {
     id: 'residue',
-    re: /\b(you're right|you are right|good catch|fair point|to be clear|the short answer|key takeaways?)\b/gi,
+    re: /\b(you're right|you are right|good catch|fair point|to be clear|the short answer|key takeaways?|hope this helps|happy to help|let me know)\b/gi,
     message: 'conversational residue; state the fact',
   },
   {
     id: 'filler',
-    re: /\b(simply|easily|obviously|of course|basically|actually|really)\b/gi,
+    re: /\b(simply|easily|obviously|of course|basically|actually|really|genuinely|truly|essentially|fundamentally|notably)\b/gi,
     message: 'filler word; delete it',
   },
   {
     id: 'meta',
-    re: /\b(let's|let us|here's|here is how|this (?:section|document|page|screen) (?:describes|explains|shows|covers)|in this (?:section|document|guide)|it's worth|it is worth|worth noting|importantly|in summary|in conclusion|to summari[sz]e)\b|(?:^|[.?]\s+)overall,/gi,
+    re: /\b(let's|let us|here's|here is how|this (?:section|document|page|screen) (?:describes|explains|shows|covers)|in this (?:section|document|guide)|it's worth|it is worth|worth noting|importantly|in summary|in conclusion|to summari[sz]e|it is important to|plays? a (?:key|crucial|vital) role|serves as an?|at its core|in the world of)\b|(?:^|[.?]\s+)overall,/gi,
     message: 'meta narration or throat-clearing; start with the content',
   },
   {
@@ -65,7 +65,7 @@ const ERROR_RULES = [
     re: /\b(not (?:just|only|merely) [^.]{1,40}, (?:but )?(?:it's|it is|also)|isn't (?:just )?about [^.]{1,40}\. it's about)\b/gi,
     message: 'contrast cliché; state the point directly',
   },
-  { id: 'hedge', re: /\b(may potentially|could possibly|might possibly)\b/gi, message: 'stacked hedge' },
+  { id: 'hedge', re: /\b(may potentially|could possibly|might possibly|generally speaking)\b/gi, message: 'stacked hedge' },
   {
     id: 'contrast-semicolon',
     re: /\b(?:no longer|(?:is|are) (?:gone|removed))\b[^.;:!?\n]*;/gi,
