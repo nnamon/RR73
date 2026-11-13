@@ -536,6 +536,13 @@ jobs:
       - name: Build
         working-directory: desktop
         run: npx tauri build --ci --bundles ${{ matrix.bundles }} ${{ matrix.target && format('--target {0}', matrix.target) || '' }}
+      # Smoke tests against the Linux build (desktop/e2e, docs/testing.md): tauri-driver drives the
+      # app under Xvfb in the desktop-e2e image, with no network. The image builds without context.
+      - name: Smoke tests against the app
+        if: matrix.os == 'Linux'
+        run: |
+          docker build --target e2e -t rr73-desktop-e2e - < docker/desktop.Dockerfile
+          docker run --rm --network none -v "$PWD:/work" -e RR73_APP=/work/target/desktop/release/rr73 rr73-desktop-e2e desktop/e2e/run.sh
       - uses: actions/cache/save@v4
         if: github.ref == 'refs/heads/main' && steps.cache.outputs.cache-hit != 'true'
         with:

@@ -154,6 +154,18 @@ test('Settings shows the version, and it opens the version history', async ({ pa
   await expect(section).toContainText('This version');
 });
 
+test('the web app never looks for a newer release: it updates itself', async ({ page }) => {
+  const asked: string[] = [];
+  page.on('request', (r) => {
+    if (r.url().includes('api.github.com')) asked.push(r.url());
+  });
+  await page.goto('./#/settings');
+  await expect(page.getByRole('button', { name: /^Reload app/ })).toBeVisible();
+  await expect(page.getByText('Check for new versions')).toHaveCount(0);
+  await expect(page.getByTestId('release-notice')).toHaveCount(0);
+  expect(asked).toEqual([]);
+});
+
 test('Settings › About › Credits shows each third-party licence in full', async ({ page }) => {
   await page.goto('./#/settings');
   await page.getByRole('link', { name: 'Credits' }).click();

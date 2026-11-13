@@ -50,7 +50,7 @@ services:
 
   # The desktop app's Linux build and its checks (docs/design/desktop.md).
   desktop:
-    build: { context: ., dockerfile: docker/desktop.Dockerfile }
+    build: { context: ., dockerfile: docker/desktop.Dockerfile, target: build }
     image: rr73-desktop:1.98.1
     <<: *workspace
     volumes:
@@ -59,6 +59,17 @@ services:
       - cargo-target:/work/target
       - web-node-modules:/work/web/node_modules
       - desktop-node-modules:/work/desktop/node_modules
+
+  # The end-to-end tests against the built desktop app (desktop/e2e, docs/testing.md). No network:
+  # the tests stub the release feed and the time server on localhost, and nothing else is reachable.
+  desktop-e2e:
+    build: { context: ., dockerfile: docker/desktop.Dockerfile, target: e2e }
+    image: rr73-desktop-e2e:1.98.1
+    <<: *workspace
+    network_mode: none
+    volumes:
+      - .:/work
+      - cargo-target:/work/target
 
   wsjtx:
     build: { context: tools/wsjtx }

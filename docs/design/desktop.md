@@ -2,7 +2,7 @@
 
 RR73 also ships as a desktop app for Windows, macOS and Linux. It is the same web build in a Tauri 2 window, with two native parts the browser cannot give: serial ports for rig control on every desktop system, and the computer's clock measured against an NTP server. The PWA and its GitHub Pages deploy are unchanged.
 
-Phase 1 covers the shell, the serial ports, the clock and unsigned installers built by CI.
+Phase 1 covers the shell, the serial ports, the clock and unsigned installers built by CI. Phase 2 adds a notice of a newer release and smoke tests that drive the Linux build.
 
 ## Decision
 
@@ -44,6 +44,35 @@ A new measurement moves the audio clock's mapping by the change in offset. The m
 - macOS: the bundle carries a microphone usage string, so the system asks for the microphone once.
 - Linux: the app turns on WebKitGTK's media streams and Web Audio, and grants the page's microphone requests, which WebKitGTK otherwise refuses.
 
+## Updates
+
+The desktop app says when a newer release exists and links to its page. It installs nothing: the builds are unsigned, so the operator downloads and installs the new version as the first one. The PWA updates itself through its service worker and never checks.
+
+- At start, once the settings have loaded, and then every 24 h while the app runs, `web/src/lib/state/release.svelte.ts` reads `https://api.github.com/repos/nnamon/RR73/releases/latest`. That endpoint answers with the newest release that is neither a draft nor a pre-release, without a token, and allows any origin. The Rust side names the feed (`release_feed` in `desktop/src/lib.rs`), so the smoke tests can serve their own through `RR73_RELEASE_FEED`.
+- The tag (`v0.29.0`) gives the version, compared with the running one by semantic versioning (`compareVersions` in `web/src/lib/app/changelog.ts`). A tag that is not a version, a draft or a pre-release counts as no answer.
+- A newer version floats "Version 0.29.0 is available" with Open release over the screen for 10 s, once for each version (localStorage keeps the last one shown), and Settings › About shows Open release page while it is newer. Both open `https://github.com/nnamon/RR73/releases/tag/v<version>` in the system's browser through `tauri-plugin-opener`, whose capability allows only `https://github.com/nnamon/RR73/releases/*`. The page link is built from the version; the feed's `html_url` is not used.
+- A failed check (no network, a refusal, GitHub's rate limit of 60 requests an hour per address, or an answer that is not a release) changes nothing on screen, and the next check comes at the next interval.
+- Check for new versions in Settings › About, on by default and shown only in the desktop app, turns the check off: nothing is read, and the notice and the row go.
+
+## Tests
+
+`desktop/e2e` drives the built Linux app end to end. `tauri-driver` 2.0.4 starts it through WebKitGTK's `WebKitWebDriver` under Xvfb, and `smoke.test.mjs` speaks W3C WebDriver to it over `fetch`, with no npm packages. The `desktop-e2e` Docker service has no network: a local HTTP server stands in for the release feed and a local SNTP server on port 123 for the time server, and the app's own start-up measurement against the public pool fails at once. The tests check that:
+
+- the app starts on Operate;
+- the stub release shows the notice and the Settings row, and Check for new versions turns the check off and on;
+- Time server set to the stub corrects the clock: Timing shows 5 s slow and Operate's UTC clock runs 5 s ahead of the system time;
+- Connect radio lists the system's serial ports through the native bridge and opens the chosen one. The container's `/dev/ttyS0` is pointed at one end of a socat pseudo-terminal pair, and the test reads rig control's CI-V request (`FE FE …`) at the other end.
+
+CI runs them in the Linux `desktop` job against the binary it has built, in the `e2e` stage of `docker/desktop.Dockerfile`. Locally, build the web app and the binary, then run the suite:
+
+```sh
+docker compose run --rm node npm --prefix web run build
+docker compose run --rm desktop sh -c 'cd desktop && npx tauri build --no-bundle'
+docker compose run --rm desktop-e2e desktop/e2e/run.sh
+```
+
+WebKitWebDriver exists only for WebKitGTK, so the Windows (WebView2) and macOS (WKWebView) builds are not driven. Microphone capture, audio output and keying a radio are not covered: Xvfb has no sound device, and the tests never transmit.
+
 ## Build
 
 - Linux, locally: the `desktop` Docker service carries the Rust toolchain, Node and the GTK and WebKitGTK headers. Build the web app with base `/` (`npm --prefix web run build` in the `node` service), then run `npx tauri build --bundles deb,appimage` in `desktop/` in the `desktop` service (AGENTS.md, Tooling). The bundles land in the `cargo-target` volume under `desktop/release/bundle`.
@@ -52,6 +81,8 @@ A new measurement moves the audio clock's mapping by the change in offset. The m
 
 ## Alternatives rejected
 
+- Reading the release feed on the Rust side: needs an HTTP client with TLS in the app, where the web app's `fetch` already reaches GitHub. Fetching in the web app also keeps the logic in vitest.
+- Playwright against the desktop build: Playwright drives its own browser builds and cannot attach to WebKitGTK inside a Tauri window. WebDriver through `tauri-driver` is the way Tauri supports.
 - Electron: bundles Chromium, so Web Serial would work unchanged, but an installer is over 100 MB and every release ships a browser to patch.
 - A browser extension or a native helper beside the PWA: two things to install and keep in step, and no answer for the clock in the browser.
 - The `tauri-plugin-serialplugin` plugin: more surface than RR73 uses, and its behaviour on open (the lines) would be another project's choice. RR73's own manager is about 200 lines over `serialport`.
@@ -67,11 +98,12 @@ A new measurement moves the audio clock's mapping by the change in offset. The m
 - Port loss when a cable is pulled is Unverified on each system: the reader expects a failed read or end of file. On Linux a test opens a pseudo-terminal as the radio through the same code (`desktop/src/system.rs`): bytes go both ways, and closing the other end gives `lost`.
 - Fetches from the app's origin (`tauri://localhost` on macOS and Linux, `http://tauri.localhost` on Windows) meet the same CORS rules as the PWA's origin, with a different origin. Services that allow only the PWA's origin refuse them. Unverified for Wavelog, PSK Reporter and the relay.
 - The Linux build links the system's GTK and WebKitGTK (LGPL) and, through `serialport`, libudev (LGPL), all dynamically. The AppImage bundles GTK and WebKitGTK. No LGPL code is read or copied into the repository.
+- GitHub sees the computer's address at each start and once a day while the update check is on. Check for new versions in Settings › About turns it off.
+- Opening the release page through `tauri-plugin-opener` is Unverified on each system: the smoke tests run in a container with no browser. Links the guide opens with `target="_blank"` (`GuidePage.svelte`) are Unverified in the desktop app.
 - The NTP server sees the computer's address every 10 minutes. Settings › Radio and audio › Timing chooses the server (the public pool when empty) and turns the measurement off.
 - macOS and Windows builds come from CI only; they have not been opened on a device. The Linux arm64 build was started under Xvfb in Docker: Operate and Settings render, Time server showed a measured offset, and Connect radio listed the container's serial ports in the port chooser.
 
-## Phase 2
+## Later
 
-- Updates: the Tauri updater with a signing key, or a notice of a newer release.
-- Signing and notarisation once certificates exist.
-- Playwright runs against the desktop build, and a device check on each system with an IC-705 and a KX2.
+- Signing and notarisation once certificates exist. The Tauri updater could then install a new version in place; it needs its own update signing key, held as a CI secret, and a manifest published with each release.
+- Smoke tests on Windows through Microsoft Edge Driver, and a device check on each system with an IC-705 and a KX2.

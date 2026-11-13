@@ -57,6 +57,18 @@ These tests needed retries while they ran in the `chromium` project, for two rea
 
 `e2e/hound.spec.ts` runs Hound with injected decodes: the band sheet's dial frequency (refused outside the band, then set), calling the Fox, the report read from a multi-call message, and the Hound item in •••. CI runs it in light at 375 x 667; the review projects run it in both themes at both sizes and save its 4 screenshots.
 
+## Desktop app
+
+`desktop/e2e` drives the built Linux desktop app through `tauri-driver` and WebKitWebDriver under Xvfb, in the `desktop-e2e` service, which has no network. Stubs on localhost stand in for GitHub's release feed and the NTP server, and a socat pseudo-terminal pair for the radio. What the four tests check, and why only the Linux build runs them, is in `docs/design/desktop.md`, Tests. Build the web app and the binary first:
+
+```sh
+docker compose run --rm node npm --prefix web run build
+docker compose run --rm desktop sh -c 'cd desktop && npx tauri build --no-bundle'
+docker compose run --rm desktop-e2e desktop/e2e/run.sh
+```
+
+`RR73_APP` names another binary, such as `/usr/bin/rr73` from the deb. CI runs the suite in the Linux `desktop` job after the build.
+
 ## A hidden window
 
 Playwright keeps every page visible and starts Chromium with timer throttling off, so the end-to-end tests cannot hide RR73. `web/e2e/hidden-window/measure.mjs` launches Playwright's Chromium itself, in new headless mode, drives it over the DevTools protocol, and hides RR73 behind a second tab. It records each transmission's start against slot + 0.5 s with the output worklet of `tap.ts`, the start the scheduler gave it, how late a chained 250 ms page timer runs, and the slots decoded while hidden, to `web/test-results`:

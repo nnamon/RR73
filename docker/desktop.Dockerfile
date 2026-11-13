@@ -2,7 +2,7 @@
 # command line and the web build, and the GTK and WebKitGTK headers Tauri links against.
 FROM node:24-slim AS node
 
-FROM rust:1.98.1-slim-bookworm
+FROM rust:1.98.1-slim-bookworm AS build
 RUN apt-get update \
  && apt-get install -y --no-install-recommends ca-certificates curl git file xdg-utils pkg-config gcc libc6-dev make \
       libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev libayatana-appindicator3-dev libudev-dev libssl-dev patchelf \
@@ -16,3 +16,12 @@ RUN ln -s ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
 # The AppImage tools run without FUSE inside a container.
 ENV CARGO_TARGET_DIR=/work/target/desktop APPIMAGE_EXTRACT_AND_RUN=1
 WORKDIR /work
+
+# The end-to-end tests against the built app (desktop/e2e): tauri-driver over WebKitWebDriver,
+# an X server without a screen, and socat for a virtual serial pair.
+FROM build AS e2e
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends webkit2gtk-driver xvfb xauth socat dbus-x11 \
+ && rm -rf /var/lib/apt/lists/*
+RUN cargo install tauri-driver --version 2.0.4 --locked --root /usr/local \
+ && rm -rf /usr/local/cargo/registry
