@@ -87,6 +87,7 @@ export const ICONS = {
   person: { stroke: ['M5.5 19c1.2-3.3 3.6-5 6.5-5s5.3 1.7 6.5 5'], rings: [[12, 9, 3.5, 3.5]], width: 2.2 },
   wave: { stroke: ['M3 12h3l2.2-6 3.4 12 3.2-9 2 3H21'], width: 2.2 },
   book: { stroke: ['M6 4h10a3 3 0 0 1 3 3v13H9a3 3 0 0 1-3-3zM9.5 8.5h6'], width: 2.2 },
+  openbook: { stroke: ['M12 6.6C10 5.1 7.5 4.6 4 5v13c3.5-.4 6 .1 8 1.6 2-1.5 4.5-2 8-1.6V5c-3.5-.4-6 .1-8 1.6zM12 6.6v13'], width: 2 },
   play: { stroke: ['M8.5 6l9 6-9 6z'], width: 2.2 },
   addbox: { stroke: ['M7 4h10a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V7a3 3 0 0 1 3-3zM12 8.5v7M8.5 12h7'], width: 2.2 },
   colours: { stroke: ['M12 4.5v15'], rings: [[12, 12, 7.5, 7.5]], width: 2.2 },

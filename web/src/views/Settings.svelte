@@ -465,7 +465,7 @@
     <div class="section">
       <div class="group">
         <a class="row link" href={href('settings', 'guide')}>
-          <span class="ic" aria-hidden="true"><Icon name="book" size={20} /></span>
+          <span class="ic" aria-hidden="true"><Icon name="openbook" size={20} /></span>
           <span class="row-main"><span class="row-title">Guide</span><span class="row-sub">QSOs, your radio and logging</span></span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>

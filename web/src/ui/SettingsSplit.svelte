@@ -38,7 +38,7 @@
 
   const groups = $derived<Item[][]>([
     [
-      { id: 'guide', title: 'Guide', icon: 'book', tile: 'blue' },
+      { id: 'guide', title: 'Guide', icon: 'openbook', tile: 'blue' },
       { id: 'station', title: 'Station', icon: 'person', tile: 'blue', value: settings.callsign || 'Required' },
       { id: 'ft8', title: 'FT8 and FT4', icon: 'wave', tile: 'indigo' },
       { id: 'wspr', title: 'WSPR', icon: 'antenna', tile: 'indigo', value: `${settings.wspr.txPct}% · ${settings.wspr.powerDbm} dBm` },
