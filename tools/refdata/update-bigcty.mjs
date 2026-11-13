@@ -17,6 +17,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
 import { download } from './http.mjs';
+import { PREFIXES_FILE, committedPrefixesText } from './prefixes.mjs';
 import { BIGCTY_DIR, bigCtyZipFiles, convertBigCtyFiles, convertCommittedBigCty, ctyCsvColumns, findLatestBigCty, readBigCtyRelease } from './cty.mjs';
 
 /** Entities by primary prefix, and the number of prefixes and callsigns listed, from converted cty.json. */
@@ -80,7 +81,14 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const at = process.argv.indexOf('--dir');
   const dir = at > 0 ? pathToFileURL(`${resolve(process.argv[at + 1] ?? '.')}/`) : BIGCTY_DIR;
   updateBigCty({ dir, log: (line) => console.log(`update-bigcty: ${line}`) }).then(
-    () => process.exit(0),
+    (r) => {
+      // The decoder's prefix table follows the committed release (experiment 0015).
+      if (r.changed && dir === BIGCTY_DIR) {
+        writeFileSync(PREFIXES_FILE, committedPrefixesText());
+        console.log('update-bigcty: rewrote crates/rr73-decode/data/prefixes.txt');
+      }
+      process.exit(0);
+    },
     (e) => {
       console.error(`update-bigcty: ${e instanceof Error ? e.message : String(e)}`);
       process.exit(1);

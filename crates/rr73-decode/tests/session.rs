@@ -503,3 +503,55 @@ fn faded_stations_on_one_frequency_decode_with_their_neighbours_removed() {
         }
     }
 }
+
+/// Steps the session until it leaves the start of stage `stage`.
+fn step_into_stage(session: &mut DecodeSession, stage: usize) {
+    while session.stage() < stage || session.next_step_kind() == "start-stage" {
+        session.step();
+    }
+}
+
+#[test]
+fn a_restarting_stage_rebuilds_the_residual_strongest_first() {
+    use rr73_decode::stages::Subtractor;
+    use rr73_decode::subtract::{ModelSubtract, SubtractScratch};
+    let audio = crowded();
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let stages = Stage::plan("subtract-3-osd2; subtract-3-osd2 subtract.restart=true").expect("plan");
+    let mut session = DecodeSession::new(&slot, stages);
+    let first = session.next_stage().expect("stage 1");
+    assert!(first.len() >= 4, "{first:?}");
+    step_into_stage(&mut session, 1);
+
+    let mut order = first.clone();
+    order.sort_by(|a, b| b.snr_db.total_cmp(&a.snr_db));
+    let mut expected = audio.clone();
+    let model = ModelSubtract {
+        smooth_s: 0.16,
+        refine: true,
+    };
+    let layout = rr73_decode::pipeline::layout(Mode::Ft8);
+    let mut scratch = SubtractScratch::default();
+    for d in &order {
+        model.subtract(layout, &mut expected, std::slice::from_ref(d), &mut scratch);
+    }
+    assert_eq!(session.residual(), &expected[..]);
+}
+
+#[test]
+fn the_rebuild_skips_slots_with_more_decodes_than_its_limit() {
+    let audio = crowded();
+    let slot = SlotAudio::new(&audio, Mode::Ft8);
+    let run = |plan: &str| {
+        let mut session = DecodeSession::new(&slot, Stage::plan(plan).expect("plan"));
+        session.next_stage().expect("stage 1");
+        step_into_stage(&mut session, 1);
+        session.residual().to_vec()
+    };
+    let plain = run("subtract-3-osd2; subtract-3-osd2");
+    let limited =
+        run("subtract-3-osd2; subtract-3-osd2 subtract.restart=true subtract.restart_max_decodes=2");
+    let rebuilt = run("subtract-3-osd2; subtract-3-osd2 subtract.restart=true");
+    assert_eq!(limited, plain);
+    assert_ne!(rebuilt, plain);
+}

@@ -27,6 +27,7 @@ pub mod ldpc;
 pub mod osd;
 pub mod passband;
 pub mod pipeline;
+pub mod prefix;
 pub mod refine;
 pub mod report;
 pub mod search;

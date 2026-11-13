@@ -504,6 +504,11 @@ pub struct ValidateParams {
     /// The same floor for FT4 slots, in dB, where it differs: FT4 decodes need more SNR than
     /// FT8. `None` uses `osd_min_snr_db`.
     pub osd_ft4_min_snr_db: Option<f32>,
+    /// Farthest an OSD codeword's locator may lie from the DXCC entities its sender's callsign
+    /// prefix belongs to, in km (`validate::plausible_place`). `None` turns the check off
+    /// (experiment 0015).
+    #[serde(default)]
+    pub osd_locator_max_km: Option<f32>,
 }
 
 impl ValidateParams {
@@ -554,6 +559,15 @@ pub struct SubtractParams {
     /// Refine start and frequency from the decoded tones before subtracting (used by
     /// `model`).
     pub refine: bool,
+    /// At the start of the stage, rebuild the residual from the slot audio by subtracting every
+    /// earlier decode again, strongest first (experiment 0015).
+    #[serde(default)]
+    pub restart: bool,
+    /// The rebuild runs only in slots with at most this many decodes so far; the busiest slots
+    /// are the slowest, and the rebuild adds most to their time (experiment 0015). `None` sets
+    /// no limit.
+    #[serde(default)]
+    pub restart_max_decodes: Option<usize>,
 }
 
 impl DecoderConfig {
@@ -647,11 +661,14 @@ impl DecoderConfig {
                 osd_messages: OsdMessages::Standard,
                 osd_min_snr_db: -24.0,
                 osd_ft4_min_snr_db: None,
+                osd_locator_max_km: None,
             },
             subtract: SubtractParams {
                 kind: SubtractKind::None,
                 smooth_s: 0.16,
                 refine: false,
+                restart: false,
+                restart_max_decodes: None,
             },
             passes: 1,
             ap: ApParams::default(),
@@ -670,6 +687,8 @@ impl DecoderConfig {
             kind: SubtractKind::Model,
             smooth_s: 0.16,
             refine: true,
+            restart: false,
+            restart_max_decodes: None,
         };
         c
     }
@@ -746,9 +765,11 @@ impl DecoderConfig {
     }
 
     /// OSD messages without `R` before a locator, and `CQ` tried a priori with belief
-    /// propagation on every FT8 and FT4 candidate that fails (experiment 0013).
+    /// propagation on every FT8 and FT4 candidate that fails (experiment 0013). OSD locators
+    /// within 6000 km of the sender's country (experiment 0015).
     fn with_hf_rules(mut self) -> Self {
         self.validate.osd_messages = OsdMessages::StandardHf;
+        self.validate.osd_locator_max_km = Some(6000.0);
         self.ap.cq = true;
         self
     }

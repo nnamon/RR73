@@ -14,6 +14,7 @@ use crate::report::DecodedMessage;
 use crate::config::OsdMessages;
 use crate::layout::CODEWORD_BITS;
 use crate::ldpc::LdpcOutcome;
+use crate::prefix;
 
 /// A codeword that passed validation.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -74,12 +75,15 @@ pub trait Validator {
 pub struct CrcUnpack {
     /// Messages accepted from OSD codewords.
     pub osd_messages: OsdMessages,
+    /// See [`crate::config::ValidateParams::osd_locator_max_km`].
+    pub osd_locator_max_km: Option<f32>,
 }
 
 impl Default for CrcUnpack {
     fn default() -> Self {
         Self {
             osd_messages: OsdMessages::Standard,
+            osd_locator_max_km: None,
         }
     }
 }
@@ -130,6 +134,22 @@ pub fn plausible(message: &Message, rule: OsdMessages, hashes: &CallsignHashes) 
         OsdMessages::StandardHf => !matches!(exchange, Exchange::Grid { ack: true, .. }),
         _ => true,
     }
+}
+
+/// The place check on a standard message decoded by OSD: a locator lies within `max_km` of an
+/// entity the sender's callsign prefix belongs to (experiment 0015). A sender with no prefix in
+/// the country file, or from a country whose prefixes span several CQ zones, passes, and so do
+/// messages without a locator; [`plausible`] judges them.
+pub fn plausible_place(message: &Message, max_km: f32) -> bool {
+    let Message::Standard {
+        de: Station::Call(de),
+        exchange: Exchange::Grid { grid, .. },
+        ..
+    } = message
+    else {
+        return true;
+    };
+    prefix::locator_distance_km(de, grid).is_none_or(|km| km <= max_km)
 }
 
 /// Applies `rule` to an LQ8 message decoded by OSD: any message for [`OsdMessages::Any`],
@@ -202,7 +222,12 @@ impl Validator for CrcUnpack {
             return Err(Rejection::ZeroPayload);
         }
         let message = message::unpack(&payload, hashes).map_err(Rejection::Unpack)?;
-        if outcome.osd && !plausible(&message, self.osd_messages, hashes) {
+        if outcome.osd
+            && (!plausible(&message, self.osd_messages, hashes)
+                || self
+                    .osd_locator_max_km
+                    .is_some_and(|km| !plausible_place(&message, km)))
+        {
             return Err(Rejection::Implausible);
         }
         let text = message.to_string();
@@ -283,6 +308,42 @@ mod tests {
         for bad in ["K1ABC W9XYZ R EN61", "G4ABC/P PA9XYZ R JO22"] {
             assert!(check(bad, OsdMessages::Standard), "{bad}");
             assert!(!check(bad, OsdMessages::StandardHf), "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_locator_check_rejects_far_locators_from_osd_only() {
+        let mut hashes = CallsignHashes::new();
+        let validator = CrcUnpack {
+            osd_messages: OsdMessages::StandardHf,
+            osd_locator_max_km: Some(6000.0),
+        };
+        let codeword = |text: &str| {
+            let m = Message::parse(text).expect(text);
+            let payload = message::pack(&m, &mut CallsignHashes::new()).expect(text);
+            ldpc::encode(&crc::message91(Mode::Ft8, &payload))
+        };
+        let bp = LdpcOutcome {
+            converged: true,
+            ..LdpcOutcome::default()
+        };
+        let osd = LdpcOutcome { osd: true, ..bp };
+        for (text, from_osd) in [
+            ("CQ 9V1NE OJ11", true),
+            ("9V1NE G4ABC IO91", true),
+            // Exempt: a country spanning several CQ zones, and a prefix in no country.
+            ("CQ K1ABC BL11", true),
+            ("CQ X14BED HM23", true),
+            ("7L8MLD TP2VHE/R QF76", false),
+            ("IO8SRB A24MJW FF25", false),
+        ] {
+            let c = codeword(text);
+            assert!(
+                validator.validate(Mode::Ft8, &c, &bp, &mut hashes).is_ok(),
+                "{text}"
+            );
+            let r = validator.validate(Mode::Ft8, &c, &osd, &mut hashes);
+            assert_eq!(r.is_ok(), from_osd, "{text}");
         }
     }
 }

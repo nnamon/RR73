@@ -35,7 +35,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `crates/rr73-ft8` | FT8, FT4 and LQ8 protocol: message model, 77-bit packing, callsign hashes, CRC-14, LDPC (174,91) code, tone mapping, GFSK synthesis; `lq8` holds LQ8's message layer (design/lq8.md). No decoding logic. |
 | `crates/rr73-wspr` | WSPR protocol: message types 1 to 3, 50-bit packing, the 15-bit callsign hash, the K = 32 rate 1/2 convolutional code, bit-reversal interleaving, the sync vector, 4-FSK synthesis. No decoding logic. |
 | `crates/rr73-dsp` | Shared DSP: FFT plans, windows, spectrogram with configurable bin and time resolution, resampling. |
-| `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. |
+| `crates/rr73-decode` | Decoder pipeline. Every stage is a trait with named implementations, selected by `DecoderConfig`. `data/prefixes.txt` holds the callsign prefixes and entity positions of the OSD locator check, written from `refdata/bigcty`. |
 | `crates/rr73-rtty` | RTTY: the ITA2 code with US and ITA2 figures, the continuous-phase AFSK encoder and the streaming decoder. See `docs/experiments/0005-rtty.md`. |
 | `crates/rr73-chansim` | Channel simulator: AWGN at a given SNR in 2500 Hz, Watterson fading, drift, DT offsets, crowded-band scenes; continuous signals with the SNR in 3000 Hz. |
 | `crates/rr73-corpus` | Corpus format: slot WAV plus sidecar JSON, reading, writing, and decode matching and scoring. |
@@ -52,7 +52,7 @@ The decoder and the protocol code are Rust crates. The app runs them as WebAssem
 | `tools/minimodem` | minimodem in a container, the reference RTTY decoder for `rr73-bench rtty`. Never linked or copied. |
 | `tools/wasm-cost` | Cost of the WebAssembly exports per second of audio in headless Chromium and WebKit. |
 | `tools/lint-copy` | Copy lint for the style guide in `docs/writing-style.md`. |
-| `tools/refdata` | Build-time conversion of the country file and download and conversion of the POTA and SOTA lists into `web/public/data/`, and the Big CTY update command. See `docs/reference-data.md`. |
+| `tools/refdata` | Build-time conversion of the country file and download and conversion of the POTA and SOTA lists into `web/public/data/`, the decoder's prefix table (`prefixes.mjs`), and the Big CTY update command. See `docs/reference-data.md`. |
 | `refdata/bigcty` | The Big CTY release the app ships as its country file (MIT licence). |
 | `fixtures/` | Small committed test data: codec vectors, a handful of slots for unit tests. |
 | `corpus/` | The research corpus. Git-ignored. Format in `docs/corpus.md`. |

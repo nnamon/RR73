@@ -74,7 +74,7 @@ export const PRESET = 'subtract-3-osd2';
 export const DEEP: DeepStages = {
   plan: [
     'subtract-3-osd2 spectrogram.time_osr=4 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ap.my_anywhere=false',
-    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null spectrogram.freq_max_hz=3000 demod.ft8_extra_sets=[[3,"normalised"],[1,"normalised"]]',
+    'subtract-3-osd2 spectrogram.time_osr=8 spectrogram.freq_osr=4 spectrogram.window_symbols=2 search.skip_silent_frames=true validate.osd_min_snr_db=-23 ldpc.osd_window=91 search.max_candidates=400 search.min_score_db=2 ap.my_anywhere=false search.ft8_dt_max_s=2.5 search.ft4_dt_max_s=1.0 search.partial_min_score_db=null spectrogram.freq_max_hz=3000 demod.ft8_extra_sets=[[3,"normalised"],[1,"normalised"]] subtract.restart=true subtract.restart_max_decodes=55',
   ].join('; '),
   budgetMs: 2000,
 };

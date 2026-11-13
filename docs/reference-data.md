@@ -35,6 +35,12 @@ Fields kept:
 - POTA: reference, name, position (4 decimals, 11 m) and active flag. 2,783 parks have no usable position (empty, outside ±90° or ±180°, or exactly 0,0) and are kept without one; the list's `K-TEST` row is dropped.
 - SOTA: summit code, name, association and region names, position, height (m), points, valid-from and valid-to dates. A valid-to date in 2099 or later means no end date.
 
+## The decoder's prefix table
+
+The decoder rejects an OSD codeword whose locator lies more than 6000 km from the sender's country (experiment 0015). It reads the country from `crates/rr73-decode/data/prefixes.txt`, which `tools/refdata/prefixes.mjs` writes from the committed release: every prefix alias without a `/`, with the position of its entity and of the entities of the exact callsigns that start with it, and a `*` on the prefixes of a country whose aliases span several CQ zones, which the check exempts. The file is 60 kB, compiled into the decoder with `include_str!` and parsed on first use, so the decoder worker needs no request and the bench reads the same table. `update-bigcty.mjs` rewrites it with each new release, and `prefixes.test.mjs` (in `npm run test:tools`) fails when it is stale.
+
+Rejected: sending the app's `cty.json` to the decoder worker. The bench would need a second loader, and the decoder's results would depend on what its caller passed.
+
 ## Loading and offline use
 
 The country file is core: the service worker precaches it with the app, and no switch turns it off. The precache is 1.67 MB with it, against the 3 MB limit in `e2e/service-worker.spec.ts`. `reference.countries()` loads it once and `loadedCountries()` returns it synchronously afterwards, for lists of decodes.

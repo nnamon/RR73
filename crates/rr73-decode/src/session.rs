@@ -293,6 +293,11 @@ pub struct DecodeSession {
     decodes: Vec<Decode>,
     stage_of: Vec<usize>,
     subtracted: usize,
+    /// The slot audio, kept when a stage rebuilds its residual (`subtract.restart`).
+    original: Vec<f32>,
+    /// Decodes in the order a restarting stage subtracts them, the next one to subtract, and
+    /// the stage they are for.
+    restart: Option<(Vec<usize>, usize, usize)>,
     pass_start: usize,
     stats: DecodeStats,
     timings: StageTimings,
@@ -347,6 +352,11 @@ impl DecodeSession {
         let mut residual = std::mem::take(&mut ctx.ws.audio);
         residual.clear();
         residual.extend_from_slice(audio.samples);
+        let original = if stages.iter().any(|s| s.config.subtract.restart) {
+            audio.samples.to_vec()
+        } else {
+            Vec::new()
+        };
         let count = stages.len();
         // The CQ hypothesis comes first, so it is tried last; each stage's `ap.cq` turns it on.
         let mut hyps: Vec<Hypothesis> = ap::cq_hypothesis(audio.mode).into_iter().collect();
@@ -371,6 +381,8 @@ impl DecodeSession {
             decodes: Vec::new(),
             stage_of: Vec::new(),
             subtracted: 0,
+            original,
+            restart: None,
             pass_start: 0,
             stats: DecodeStats::default(),
             timings: StageTimings::default(),
@@ -563,10 +575,59 @@ impl DecodeSession {
         }
     }
 
+    /// One step of a restarting stage's rebuild: the residual reset to the slot audio, then up
+    /// to [`SUBTRACTIONS_PER_STEP`] earlier decodes subtracted, strongest first. `false` when the
+    /// stage does not restart or the rebuild is done.
+    fn restart_step(&mut self) -> bool {
+        let stage = &self.stages[self.stage];
+        if !stage.config.subtract.restart
+            || stage.config.subtract.kind == SubtractKind::None
+            || self.decodes.is_empty()
+            || stage
+                .config
+                .subtract
+                .restart_max_decodes
+                .is_some_and(|n| self.decodes.len() > n)
+            || self.original.len() != self.audio.len()
+        {
+            return false;
+        }
+        if self.restart.as_ref().is_none_or(|r| r.2 != self.stage) {
+            self.audio.copy_from_slice(&self.original);
+            let mut order: Vec<usize> = (0..self.decodes.len()).collect();
+            order.sort_by(|&a, &b| self.decodes[b].snr_db.total_cmp(&self.decodes[a].snr_db));
+            self.restart = Some((order, 0, self.stage));
+            return true;
+        }
+        let Some((order, next, _)) = self.restart.as_mut() else {
+            return false;
+        };
+        if *next >= order.len() {
+            self.subtracted = self.decodes.len();
+            return false;
+        }
+        let to = (*next + SUBTRACTIONS_PER_STEP).min(order.len());
+        let sw = Stopwatch::start();
+        for &i in &order[*next..to] {
+            stage.pipeline.subtractor.subtract(
+                self.layout,
+                &mut self.audio,
+                std::slice::from_ref(&self.decodes[i]),
+                &mut self.ctx.ws.subtract,
+            );
+        }
+        *next = to;
+        self.timings.subtract_s += sw.elapsed_s();
+        true
+    }
+
     /// Subtracts up to [`SUBTRACTIONS_PER_STEP`] decodes that earlier stages left in the
     /// audio, with this stage's subtractor; once none are left, sets up the stage's
     /// spectrogram and search range.
     fn start_stage(&mut self) {
+        if self.restart_step() {
+            return;
+        }
         let from = self.subtracted;
         let stage = &self.stages[self.stage];
         if stage.config.subtract.kind != SubtractKind::None && from < self.decodes.len() {

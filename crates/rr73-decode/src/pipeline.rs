@@ -245,6 +245,7 @@ impl Pipeline {
         let validator: Box<dyn Validator> = match config.validate.kind {
             ValidateKind::CrcUnpack => Box::new(CrcUnpack {
                 osd_messages: config.validate.osd_messages,
+                osd_locator_max_km: config.validate.osd_locator_max_km,
             }),
         };
         let subtractor: Box<dyn Subtractor> = match config.subtract.kind {

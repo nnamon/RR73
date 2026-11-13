@@ -51,6 +51,20 @@ pub const WSPR_SLOW_FADING: Watterson = Watterson {
 /// Slots in the `noise-ci` set.
 pub const NOISE_CI_SLOTS: usize = 200;
 
+/// The home of a callsign in the country file, where realistic synthetic sets place its locator.
+fn home(call: &str) -> Option<(f32, f32)> {
+    rr73_ft8::Callsign::new(call)
+        .ok()
+        .as_ref()
+        .and_then(rr73_decode::prefix::home)
+}
+
+/// Turns home locators on or off for every synthetic message rendered from then on
+/// (`--home-locators`, experiment 0015).
+pub fn home_locators(on: bool) {
+    rr73_chansim::messages::set_home(on.then_some(home as rr73_chansim::messages::HomeFn));
+}
+
 /// Sizes that `synth` options can change.
 #[derive(Clone, Debug)]
 pub struct SynthOptions {
@@ -255,8 +269,8 @@ pub fn jobs_for(name: &str, base: &Path, opts: &SynthOptions) -> Result<Vec<Job>
                     q += 1;
                     push("callers", c, &mut |r| {
                         let mut s = single(Mode::Ft8, f64::from(snr), None, r);
-                        s.signals[0].message =
-                            format!("{AP_MY} {} {}", messages::callsign(r), messages::grid(r));
+                        let call = messages::callsign(r);
+                        s.signals[0].message = format!("{AP_MY} {call} {}", messages::locator(r, &call));
                         JobScene::Ft(s)
                     });
                     c += 1;

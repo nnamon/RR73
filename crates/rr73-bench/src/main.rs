@@ -50,6 +50,10 @@ enum Command {
         /// Slots per subset in crowded.
         #[arg(long, default_value_t = 20)]
         crowded_count: usize,
+        /// Give each synthetic message with a locator one near its sender's country, from the
+        /// country file (experiment 0015); without it locators are random.
+        #[arg(long)]
+        home_locators: bool,
     },
     /// Decode every slot under the paths and write a results file.
     Run {
@@ -98,6 +102,10 @@ enum Command {
         /// Slots per subset in crowded sets rendered with --synth.
         #[arg(long, default_value_t = 20)]
         crowded_count: usize,
+        /// Give each synthetic message with a locator one near its sender's country, from the
+        /// country file (experiment 0015); without it locators are random.
+        #[arg(long)]
+        home_locators: bool,
         /// A priori decoding of every slot for this operator's callsign, in place of the
         /// context a slot's metadata gives.
         #[arg(long, value_name = "CALL")]
@@ -330,7 +338,9 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             noise_count,
             per_step,
             crowded_count,
+            home_locators,
         } => {
+            synth::home_locators(home_locators);
             let opts = synth::SynthOptions {
                 noise_count,
                 per_step,
@@ -361,12 +371,14 @@ fn run_cli(cli: Cli) -> Result<ExitCode, String> {
             noise_count,
             per_step,
             crowded_count,
+            home_locators,
             ap_my,
             ap_dx,
             ap_dx_hz,
             carry_callsigns,
             paths,
         } => {
+            synth::home_locators(home_locators);
             let opts = run::RunOptions {
                 preset,
                 overrides,
