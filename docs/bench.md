@@ -32,6 +32,7 @@ Each receiver and day is a set of its own, `kiwi/<receiver>/<YYYYMMDD>`, recorde
 | --- | --- | --- | --- | --- |
 | The SARTS receiver in Singapore | 350 readable FT8 slots (10 WSPR slots alongside) | 4210 | 40m, 20m, 17m, 15m, 10m | 2026-10-12, 13 |
 | 6 public receivers in Europe, North America, South America and Australia | 1648 FT8 slots | 44840 | 40m, 30m, 20m, 17m, 15m, 10m | 2026-10-21, 22 |
+| 4 of those receivers, in Europe and North America | 441 FT8 slots | 9940 | 40m, 30m, 20m, 17m | 2026-11-13 |
 
 The reference lists keep `jt9`'s a priori decodes with their marks removed: without a QSO context `jt9` tries a CQ hypothesis (`a1`) and its built-in callsign K1ABC (`a2`, which decodes only noise as `K1ABC` messages). On the 6 receivers 921 of the 44840 references are a priori, 209 of them also marked low-confidence (experiment 0013).
 
