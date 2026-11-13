@@ -4,7 +4,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.28.5 · 2026-11-13
 
-- The desktop app shows when a newer release is out and opens its page in your browser. Check for new versions in Settings › About turns the daily check off.
+- The desktop app says when a newer release is out and opens its page in your browser (Check for new versions in Settings › About turns the daily check off).
 
 ## 0.28.4 · 2026-11-13
 
@@ -17,7 +17,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.28.2 · 2026-11-13
 
-- LQ8 callsign hashes from stations that send the 20-bit hash in the reference library's form now resolve.
+- LQ8 resolves callsign hashes from stations that send the 20-bit hash in the reference library's form.
 
 ## 0.28.1 · 2026-10-29
 
@@ -41,7 +41,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## 0.27.7 · 2026-10-24
 
 - Guide is the first row of Settings, and Operate's empty decode list links to Getting started until a callsign is set.
-- The guide shows annotated screenshots, tables and QSO ladders, and every page is rewritten around them with about a third of the prose.
+- The guide has annotated screenshots, tables and QSO ladders, and every page was rewritten around them in about a third of the words.
 
 ## 0.27.6 · 2026-10-23
 
@@ -54,7 +54,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## 0.27.4 · 2026-10-23
 
 - Log rows show the contest exchanges sent and received after the reports.
-- Practice scenario in Operate's ••• opens the list of practice scenarios, which kept a long list out of the menu.
+- Practice scenario in Operate's ••• opens the scenarios in a sheet of their own (the list had made the menu long).
 
 ## 0.27.3 · 2026-10-23
 
@@ -181,7 +181,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The radio badge shows FIL2 or FIL3 in amber when the IC-705’s filter cuts most of the FT8 range.
 - An answer from the radio that is cut short leaves the next answer intact.
 - Halt sends no PTT off when RR73 holds no PTT and the radio reads receive.
-- On the KX2, Halt stops delaying other requests by 0.6 s.
+- On the KX2, Halt no longer holds up other requests for 0.6 s.
 - Settings › Appearance › Font: Automatic, System or Inter; Automatic uses Apple's system font on Apple devices and Inter elsewhere.
 - Monospaced text on Windows uses Cascadia Mono or Consolas.
 - When the browser holds audio paused until a tap, the audio banner says so within 1 s and Resume audio starts it; audio had stayed at starting with a black waterfall.
@@ -362,7 +362,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 ## 0.21.1 · 2026-10-15
 
-- Clock badge: from 1 s off by the decodes, a badge beside the band and a notice say how far the phone's clock is off.
+- When decodes show the phone's clock 1 s or more off, a Clock badge beside the band and a notice say by how much.
 - The Clock badge opens Radio and audio at Timing, where Phone clock shows the reading and how to set the clock.
 
 ## 0.21.0 · 2026-10-15
@@ -569,7 +569,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - Slots are named Even and Odd everywhere, as on the decode list's slot bars. ••• says Transmit in 1st (Even) or 2nd (Odd), and the status line "Tx6 · CQ 9V1NE OJ11 · Even · :30".
 - Hunt calls, in Settings › FT8 and FT4, sets how many times Hunt calls a silent station before the next CQ, 4 by default; a station that answers gets the usual repeats.
 - Calling a station in the first 2 s of a slot your CQ is on air in (1 s in FT4) replaces the CQ with the call; it had waited 30 s.
-- Later in the slot the CQ plays out and the call goes a cycle later, as the part of the CQ already sent would weaken it.
+- Later in the slot the CQ plays out and the call goes a cycle later (the part of the CQ already sent would weaken the call).
 - A reply can start up to 4.5 s into an FT8 slot and 1.75 s into an FT4 slot (was 2 s and 1.5 s); a late reply leaves out its first part, ends on time and still decodes at −16 dB in FT8 and −12 dB in FT4.
 - An FT4 transmission that starts about 1 s late leaves out its first part; at the old limit it could not be decoded at any level.
 
@@ -648,7 +648,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 - The bar at the top of Log, Spots, Settings and their screens stays in place as the screen scrolls, and takes the bar material once content passes under it.
 - Sheets have 10 pt corners.
 - Reload app, Clear cached copy and Send to Wavelog show their blue at reduced opacity while they cannot act.
-- Hunt leaves a station alone for 10 min once it has answered other stations twice while Hunt called it; such a station does not hear you well.
+- Hunt leaves a station alone for 10 min once it has answered other stations twice while Hunt called it (it isn't hearing you).
 
 ## 0.10.4 · 2026-10-14
 
@@ -664,7 +664,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## 0.10.2 · 2026-10-13
 
 - The Logged notice and the update notices float above Operate's buttons; in 0.10.1 they pushed the buttons up.
-- Every line in Operate's status line has one style, and its notices are shorter: "Tx set to 908 Hz", "No reply from VK2LAW", "Watchdog stopped Tx after 6 min".
+- Every line in Operate's status line has one style, and its notices are shorter: "Tx set to 908 Hz", "No reply from AB4SS", "Watchdog stopped Tx after 6 min".
 - Run in ••• is renamed Repeat CQ, and the Run tag in the status line is removed.
 - Work dupes in Run, in Settings, is renamed Work dupes.
 - Choosing a practice scenario shows its name in the status line: "Practice · Pile-up".
@@ -695,11 +695,11 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 
 - Hunt, a new button in Operate, answers CQs one after another until you stop it, logging each QSO.
 - Hunt skips stations in a QSO, stations worked today on this band and mode, and for 10 min stations that did not answer it; it answers plain CQs only until reference data covers directed CQs.
-- Hunt order in ••• picks by Not worked (on this band and mode, strongest first), Strongest, Newest, Farthest or New call, and the status line reads "Hunt · calling VJ6X (−12 dB) · 2 QSOs".
+- Hunt order in ••• picks by Not worked (on this band and mode, strongest first), Strongest, Newest, Farthest or New call, and the status line reads "Hunt · calling 9V1DE (−12 dB) · 2 QSOs".
 - Hunt and CQ stop each other, and Halt, End QSO and the watchdog stop Hunt.
 - Run is a switch in Operate's •••, stored and off by default: on, CQ answers the next caller or calls CQ again after each QSO; off, Tx turns off once the QSO ends.
 - Double-tapping a station while calling CQ ends CQ until that QSO is done; an unanswered call had gone back to CQ after the repeats.
-- When the station you call sends a report, R-report, RR73 or 73 to another station, calling stops and the bar says who it answered: "VK2LAW answered DV5CEL".
+- When the station you call sends a report, R-report, RR73 or 73 to another station, calling stops and the bar says who it answered: "AB4SS answered OE3OGC".
 - Tail-end, in Settings › FT8 and FT4 and on by default, calls a station once more in the slot after its RR73 or 73 to the other station, never during their QSO; 1 unanswered call ends it.
 - Settings › FT8 and FT4 sets the watchdog to any number of minutes, or off (6 min by default).
 - Practice scenario Hunt: busy band carries at least 6 CQs a slot, and stations weaker than −10 dB do not hear you.
@@ -810,8 +810,7 @@ User-visible changes to RR73, newest first. Each release is tagged `v<version>` 
 ## 0.6.0 · 2026-10-13
 
 - RR73 transmits FT8 and FT4, each message starting 0.5 s into its slot (not tested with a radio).
-- To answer a station, tap a decode and then Call, or double-tap the decode.
-- Call CQ calls CQ.
+- To answer a station, tap a decode and then Call, or double-tap the decode. Call CQ calls CQ.
 - In loopback tests in desktop Chromium, CQ started 20 to 40 ms after the slot start plus 0.5 s, and Halt silenced the output 35 to 42 ms after the tap (not timed on an iPhone).
 - RR73 sends Tx1 to Tx6 in the standard QSO sequence and logs the QSO when it completes, and Operate shows the steps, the next message and when it starts.
 - A call too late for this slot starts up to 1.5 s late in FT8 (1.0 s in FT4) or waits for the next slot, and Operate says which.
