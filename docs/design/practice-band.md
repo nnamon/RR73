@@ -1,6 +1,6 @@
 # Practice band
 
-A simulated FT8, FT4 and LQ8 band for practising and testing calling CQ, answering CQs and logging with no radio connected. Settings › Practice band turns it on; it is off by default. Code lives in `web/src/lib/practice/`.
+The practice band is a simulated FT8, FT4 and LQ8 band, for practising and testing CQ, answering CQs and logging with no radio connected. It is off by default, and Settings › Practice band turns it on. Code lives in `web/src/lib/practice/`.
 
 ## Decision
 
