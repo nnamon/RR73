@@ -1,12 +1,12 @@
 # Architecture
 
-RR73 has three parts. The app and the bench share one signal-processing core.
+RR73 has three parts, and the app and the bench share one signal-processing core.
 
 - **The app** (`web/`): a Svelte single-page app installed to the iPhone home screen. It captures radio audio from the headset microphone contact, shows the band, decodes, sequences QSOs, transmits through the headphone contact and keeps the log.
 - **The research bench** (`crates/rr73-bench`, `tools/`): measures decoder builds against a corpus of recorded and synthetic slots, with WSJT-X's `jt9` as the reference.
 - **The relay** (`crates/rr73-qsp`): QSP, an optional server for the services a web page cannot reach directly. It carries web SDR receive and reports to PSK Reporter. See `docs/design/qsp.md`.
 
-The decoder and the protocol code are Rust crates. The app runs them as WebAssembly in Web Workers. The bench runs the same crates natively.
+The decoder and the protocol code are Rust crates, which the app runs as WebAssembly in Web Workers and the bench runs natively, so a bench result describes the code the app ships.
 
 ```
             radio audio (headset mic contact)
@@ -187,7 +187,7 @@ The service worker (vite-plugin-pwa, Workbox) precaches every file of a build. A
 - Desktop Chrome and Edge add Web Serial, which rig control uses (`docs/design/cat.md`). The rig control settings show only where it exists.
 - The desktop app (`docs/design/desktop.md`) runs the same build in a Tauri window on Windows, macOS and Linux. Rig control there uses native serial ports behind Web Serial's interfaces (`lib/cat/native.ts`), and slot and transmit timing use the system time corrected by NTP (`lib/clock/utc.ts`).
 - Desktop Chrome and Edge keep capture running in a hidden page: RR73 receives, decodes and transmits there with its window minimised, covered or in a background tab. Elsewhere hiding stops capture and Tx, as on iOS (`docs/decisions/0010-hidden-window.md`).
-- GitHub Pages cannot send cross-origin isolation headers, so workers receive copies of slot audio. Shared memory waits for a measured gain.
+- GitHub Pages cannot send cross-origin isolation headers, so workers receive copies of slot audio. We'll move to shared memory only when a measurement shows it gains something (decision 0004).
 - Every network call has an offline path. The log is the source of truth; destinations get copies.
 
 ## Licensing
