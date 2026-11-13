@@ -1,6 +1,6 @@
 # Settings reference
 
-Each setting by the screen it is on, with its default.
+Every setting, grouped by the screen it's on, with its default and a link to the page that covers it.
 
 ## Station
 
@@ -24,9 +24,9 @@ Each setting by the screen it is on, with its default.
 | Depth | Deep | Fast runs the first decoding stage only and decodes about 3% fewer stations |
 | A priori decoding | On | Tries the messages expected next on weak signals near the station you work |
 
-LQ8 QSOs follow these settings too. In LQ8 the screen hides Confirm with, the Contest exchange groups and A priori decoding, which LQ8 has no use for ([LQ8](lq8.md#what-lq8-lacks)).
+LQ8 QSOs follow these settings too. In LQ8 the screen hides Confirm with, the Contest exchange groups and A priori decoding, since LQ8 has no use for them ([LQ8](lq8.md#what-lq8-lacks)).
 
-Hunt order, in Operate's •••: Not worked, the default, puts stations not worked on this band and mode first. Strongest, Newest, Farthest and New call order by signal, by how recently their CQs started, by distance, and stations never worked first.
+Hunt order lives in Operate's •••. Not worked, the default, puts stations not worked on this band and mode first. Strongest orders by signal, Newest by how recently their CQs started, Farthest by distance, and New call puts stations you've never worked first.
 
 ## WSPR, RTTY and Macros
 
@@ -48,11 +48,11 @@ Hunt order, in Operate's •••: Not worked, the default, puts stations not w
 
 ## Rig control
 
-In Chrome and Edge on a computer, and in the desktop app. [Rig control](your-radio.md#rig-control-in-chrome-or-edge)
+Rig control is in Chrome and Edge on a computer, and in the desktop app. See [Rig control](your-radio.md#rig-control-in-chrome-or-edge).
 
 | Setting | Default | Effect |
 | --- | --- | --- |
-| Rig control | Off | Off, VOX keys the radio |
+| Rig control | Off | With it off, VOX keys the radio |
 | Radio | Icom IC-705 | Or Elecraft KX2, with Connection and Baud rate |
 | Key the radio with CAT | Off | [Keying by CAT](your-radio.md#keying-by-cat) |
 | Keep Tx audio centred | Off | IC-705: moves the dial for each transmission |
@@ -108,7 +108,7 @@ In Chrome and Edge on a computer, and in the desktop app. [Rig control](your-rad
 
 ## Guide and About
 
-Guide, the first row of Settings, opens these pages. About holds Version history, Credits, Reload app and Clear cached copy and reload. Both reloads stop audio.
+Guide, the first row of Settings, opens these pages. About holds Version history, Credits, Reload app and Clear cached copy and reload, and either reload stops audio.
 
 | Setting | Default | Effect |
 | --- | --- | --- |

@@ -1,18 +1,18 @@
 # Making QSOs
 
-RR73 sends each message in its slot, fills in the reports and logs the QSO when it completes. Set your callsign and grid in Settings and start audio first.
+RR73 runs the QSO for you: it sends each message in its slot, fills in the reports and logs the QSO when it completes. Before your first QSO, set your callsign and grid in Settings and start audio.
 
 ## The transmit controls
 
 ![Operate's transmit controls during a QSO with AB4SS](img/operate-tx.webp)
 
-1. Status line: the message going next, its slot and second. The bars under it show the QSO's progress.
-2. The watchdog's time left.
-3. Tx: turns transmitting on or off. It reads On air while transmitting.
-4. CQ: calls CQ.
-5. Hunt: answers CQs one after another.
-6. •••: the other actions and switches.
-7. Halt: stops any transmission, turns Tx off and stops Hunt. Esc does the same.
+1. Status line, with the message going out next and the slot and second it goes in. The bars under it show how far the QSO has got.
+2. Time left before the watchdog stops Tx.
+3. Tx turns transmitting on or off, and reads On air while RR73 transmits.
+4. CQ.
+5. Hunt, which answers CQs one after another.
+6. •••, with the other actions and switches.
+7. Halt stops any transmission, turns Tx off and stops Hunt. Esc does the same.
 
 ## Answering a CQ
 
@@ -25,9 +25,9 @@ Them: 9V1NE AB4SS RR73 | Logged
 You: AB4SS 9V1NE 73 | Tx5, then Tx goes off
 ```
 
-Double-tap a message to you and RR73 answers from the step it has reached. A station that sends RR73 before your R-report has gone ends the QSO unlogged.
+If a station calls you first, double-tap its message and RR73 answers from the step the QSO has reached. A station that sends RR73 before your R-report has gone out ends the QSO, and RR73 doesn't log it.
 
-Call a station, in •••, calls a station you have not decoded. A call up to 4 s late (1.25 s in FT4) still goes out in that slot.
+To call a station you haven't decoded, use Call a station in •••. A call started up to 4 s late (1.25 s in FT4) still goes out in that slot.
 
 ## Calling CQ
 
@@ -39,7 +39,7 @@ Them: 9V1NE AB4SS R-08
 You: AB4SS 9V1NE RR73 | Tx4. Logged
 ```
 
-CQ repeats until someone calls. A caller silent through 3 repeats is dropped, and the next caller or CQ follows.
+CQ repeats until someone calls. If a caller stays silent through 3 repeats, RR73 drops them and goes on to the next caller, or back to CQ.
 
 ## After RR73
 
@@ -50,7 +50,7 @@ You: AB4SS 9V1NE RR73 | Sent again, up to 3 times. The log keeps 1 entry
 Them: 9V1NE AB4SS 73 | The QSO ends
 ```
 
-Silence also ends the QSO.
+If they stay silent instead, the QSO ends too.
 
 ## No reply
 
@@ -65,7 +65,7 @@ You: AB4SS 9V1NE OJ11 | Repeat 3 of 3
 Them: | Status line: No reply from AB4SS
 ```
 
-Tx stays on. Double-tap the station to call again.
+Tx stays on after the third repeat. Double-tap the station to call again.
 
 ## A station that answers someone else
 
@@ -77,7 +77,7 @@ Them: OE3OGC AB4SS RR73
 You: AB4SS 9V1NE OJ11 | Tail-end calls once more
 ```
 
-Tail-end is in Settings › FT8 and FT4, on by default. It gives up after 8 slots. Off, the call pauses at once.
+Tail-end, in Settings › FT8 and FT4, is on by default and gives up after 8 slots. With it off, your call pauses as soon as the station answers someone else.
 
 ## Options in •••
 
@@ -95,7 +95,7 @@ Tail-end is in Settings › FT8 and FT4, on by default. It gives up after 8 slot
 
 ## Hunt
 
-Hunt calls the first CQ heard in each slot, until you stop it. It calls a silent station 4 times, and moves on at once when the station answers someone else. Hunt and CQ stop each other.
+Hunt works one CQ after another until you stop it, calling the first CQ it hears in each slot. It calls a silent station 4 times, and moves on at once if the station answers someone else. Starting CQ stops Hunt, and starting Hunt stops CQ.
 
 | CQ | Hunt answers |
 | --- | --- |
@@ -105,16 +105,16 @@ Hunt calls the first CQ heard in each slot, until you stop it. It calls a silent
 | CQ JA and other prefixes | When you are in that DXCC entity |
 | CQ TEST, CQ FD | Never |
 
-Hunt skips dupes, stations heard sending anything but CQ, and stations that ignored it in the last 10 min.
+Hunt skips dupes, stations it has heard sending anything other than CQ, and stations that ignored it in the last 10 min.
 
 ## Logging
 
-The notice `Logged AB4SS 20m FT8 −08 / −11` shows for 10 s with Edit and Undo. If audio stops after reports have gone both ways, Log QSO on the audio strip logs the QSO.
+Each logged QSO shows a notice such as `Logged AB4SS 20m FT8 −08 / −11` for 10 s, with Edit and Undo. If audio stops after reports have gone both ways, tap Log QSO on the audio strip to log the QSO anyway.
 
 ## Dupes
 
-A dupe is a station already in this device's log on the same band, mode and UTC day, in the same activation. Repeat CQ and Hunt skip dupes. A station you call by hand is always called.
+A dupe is a station already in this device's log on the same band, mode and UTC day, and in the same activation. Repeat CQ and Hunt skip dupes, but a station you call yourself is always called.
 
 ## Watchdog
 
-The watchdog stops Tx and Hunt after 6 min with no touch, click or key press. A QSO under way finishes first. Settings › FT8 and FT4 sets the limit or turns it off.
+The watchdog stops Tx and Hunt after 6 min with no touch, click or key press, so an unattended station doesn't keep transmitting. A QSO under way finishes first. Change the limit, or turn the watchdog off, in Settings › FT8 and FT4.

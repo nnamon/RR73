@@ -1,6 +1,6 @@
 # Your radio
 
-RR73 sends and receives audio through the device's audio input and output. It keys the radio by VOX, or by CAT with rig control.
+RR73 sends and receives audio through the device's audio input and output, and keys the radio by VOX, or by CAT when rig control is on.
 
 ## iPhone and VOX
 
@@ -8,13 +8,13 @@ RR73 sends and receives audio through the device's audio input and output. It ke
 2. Set the radio to USB with VOX on.
 3. Set the radio's dial to the one Change band shows.
 
-Before you transmit, in Settings › Radio and audio, is a checklist. Its Keying check passes when receive audio drops while the start chime or Tune plays.
+Then go through the Before you transmit checklist in Settings › Radio and audio. Its Keying check passes when receive audio drops while the start chime or Tune plays, which shows the radio keyed.
 
 ## Receive audio
 
 | Setting | Effect |
 | --- | --- |
-| Input | The audio input. System default uses the device's choice |
+| Input | The audio input. System default takes whatever the device chooses |
 | Level | Keep band noise inside −30 to −14 dBFS, with the radio's AGC on |
 | Waterfall contrast | Low, Normal or High |
 
@@ -28,26 +28,27 @@ Before you transmit, in Settings › Radio and audio, is a checklist. Its Keying
 
 ## Setting levels with Tune
 
-Tune for 10 s, in Settings › Radio and audio or in Operate's •••, plays a tone at your Tx frequency. Set Output level to 4 to 5 bars of ALC on a KX2, or within the ALC zone on an IC-705.
+1. Tap Tune for 10 s, in Settings › Radio and audio or in Operate's •••. It plays a tone at your Tx frequency.
+2. While it plays, set Output level for 4 to 5 bars of ALC on a KX2, or within the ALC zone on an IC-705.
 
 ## Rig control in Chrome or Edge
 
 ![Settings › Rig control with the IC-705 chosen](img/rig-control.webp)
 
-1. Rig control on.
-2. The radio: an IC-705 over its USB cable, or a KX2 through a Digirig or KX2 cable.
-3. Baud rate, for the KX2: its MENU › RS232 setting, 4800 by default.
-4. Connect radio, then the port: IC-705 Serial Port A (CI-V), the Digirig's CP210x port or the KX2 cable's port.
-5. Key the radio with CAT. Off, VOX keys the radio.
-6. Test keying transmits for 1 s with no audio. Use low power into a dummy load.
+1. Rig control.
+2. The radio: an IC-705 on its USB cable, or a KX2 through a Digirig or a KX2 cable.
+3. Baud rate, for the KX2 only. Match the radio's MENU › RS232 setting, which is 4800 by default.
+4. Connect radio, then choose the port: IC-705 Serial Port A (CI-V), the Digirig's CP210x port or the KX2 cable's port.
+5. Key the radio with CAT. With it off, VOX keys the radio.
+6. Test keying, which transmits for 1 s with no audio. Use low power into a dummy load.
 
-Once connected, Change band sets the radio's dial and data mode.
+Once the radio is connected, Change band sets its dial and data mode.
 
 ## Keying by CAT
 
-Choose the radio's own audio device as Output in Settings › Radio and audio. With System default, nothing transmits.
+With CAT keying, choose the radio's own audio device as Output in Settings › Radio and audio. Left on System default, nothing transmits.
 
-Keep Tx audio centred, on the IC-705, moves the dial in 500 Hz steps for a Tx frequency outside 1500 to 2000 Hz. The signal then stays in the middle of the transmit passband.
+On the IC-705, Keep Tx audio centred moves the dial in 500 Hz steps whenever the Tx frequency is outside 1500 to 2000 Hz, so the signal stays in the middle of the radio's transmit passband.
 
 | Status line | Action |
 | --- | --- |
@@ -56,11 +57,11 @@ Keep Tx audio centred, on the IC-705, moves the dial in 500 Hz steps for a Tx fr
 | `No reply from radio · Tx off` | Check the cable. Tx went off |
 | `PTT off not confirmed · unkey radio` | Unkey the radio by hand |
 
-The KX2 has no transmit time-out.
+The KX2 has no transmit time-out of its own.
 
 ## The desktop app
 
-The desktop app has rig control on Windows, macOS and Linux, and checks the clock against [a time server](timing.md#the-desktop-app-s-time-server). The installers on each GitHub release are not signed.
+The desktop app gives you rig control on Windows, macOS and Linux and checks the clock against [a time server](timing.md#the-desktop-app-s-time-server). Download the installer for your system from a GitHub release. The installers aren't signed, so each system warns you the first time.
 
 | System | File | First start |
 | --- | --- | --- |
@@ -70,6 +71,10 @@ The desktop app has rig control on Windows, macOS and Linux, and checks the cloc
 
 ## Desktop app updates
 
-The desktop app looks for a newer release on GitHub at start and once a day. When one exists, a notice names the new version once, and Settings › About shows Open release page until you install it. Both open the release page in your browser. Download the installer for your system there and install it as you did the first one. The app never installs anything by itself.
+The desktop app looks for a newer release on GitHub when it starts and once a day after that. When it finds one, a notice names the new version once, and Settings › About shows Open release page until you install it. The app never installs anything itself:
 
-Check for new versions in Settings › About turns the check off. A check that fails shows nothing.
+1. Tap the notice or Open release page. The release page opens in your browser.
+2. Download the installer for your system.
+3. Install it the way you installed the first one.
+
+A check that fails shows nothing. To stop the checks, turn off Check for new versions in Settings › About.

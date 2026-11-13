@@ -1,24 +1,24 @@
 # Operate
 
-Operate holds the waterfall, the decode list and the [transmit controls](making-qsos.md).
+Operate is where you work stations: the waterfall at the top, the decode list under it and the [transmit controls](making-qsos.md) at the bottom.
 
 ![Operate with 2 slots of decodes](img/operate-decodes.webp)
 
-1. Tx, red. Tap or drag on the waterfall to move it.
-2. Rx, green. Start a drag on it to move it.
-3. Slot bar: UTC start, decode count and parity.
-4. A message to you, with a red left edge.
+1. Tx, in red. Tap or drag on the waterfall to move it.
+2. Rx, in green. Start a drag on it to move it.
+3. Slot bar, with the slot's UTC start, its decode count and its parity.
+4. A message to you, marked with a red left edge.
 5. A CQ.
 6. Filters.
-7. Save a recent slot as a recording.
+7. Saves a recent slot as a recording.
 
 ## The waterfall
 
-The waterfall runs from 0 to 3000 Hz, newest at the top. Tx moves in 5 Hz steps within 200 to 2800 Hz in FT8 and 200 to 2767 Hz in FT4. With a mouse, click sets Tx and Shift-click sets Rx. Find clear Tx, in •••, moves Tx to the quietest part.
+The waterfall shows 0 to 3000 Hz, with the newest signals at the top. Tx moves in 5 Hz steps and stays within 200 to 2800 Hz in FT8, or 200 to 2767 Hz in FT4. With a mouse, click to set Tx and Shift-click to set Rx. To get away from other signals, use Find clear Tx in •••, which moves Tx to the quietest part.
 
 ## The decode list
 
-The list keeps an hour of slots, newest first, and holds still while you touch it. Rows unrelated to the station you work dim.
+The list keeps an hour of slots with the newest at the top, and it stops scrolling while you touch it. Once you're working a station, rows that have nothing to do with that QSO dim.
 
 ## Selecting and calling
 
@@ -28,11 +28,11 @@ The list keeps an hour of slots, newest first, and holds still while you touch i
 | Call | Double-tap | Double-click, or Return |
 | Open the station's sheet | Touch and hold | Right-click |
 
-Hold Tx frequency, in Settings › FT8 and FT4, keeps Tx where it is when you call. It is on by default.
+Calling a station leaves Tx where it is, because Hold Tx frequency in Settings › FT8 and FT4 is on by default. Turn it off and calling moves Tx to the station's frequency as well.
 
 ## Colours
 
-Settings › Decode colours sets the categories. The first that matches tints the row. The default scheme marks, in order: My call, New grid, New call, Ending a QSO, CQ, Sent and Worked before.
+Each row takes the colour of the first category it matches. The default scheme checks them in this order: My call, New grid, New call, Ending a QSO, CQ, Sent and Worked before. Change the categories in Settings › Decode colours.
 
 ## Marks and tags
 
@@ -51,10 +51,10 @@ Settings › Decode colours sets the categories. The first that matches tints th
 | --- | --- |
 | All | Every decode |
 | CQ | CQ calls |
-| New | Decodes a New colour category marks |
+| New | Decodes marked by one of the New colour categories |
 | To me | Messages with your callsign |
 | Rx freq | Decodes within 10 Hz of Rx |
-| Hide worked | Every decode but dupes. Messages to you stay |
-| Sort | Each slot by kind of message, then by frequency |
+| Hide worked | Every decode except dupes, though messages to you always show |
+| Sort | Each slot sorted by kind of message, then by frequency |
 
-On an iPad or a computer the list splits into Band activity and Rx frequency, which holds decodes within 50 Hz of Rx, messages to you and your own.
+On an iPad or a computer the list splits into Band activity and Rx frequency. Rx frequency holds decodes within 50 Hz of Rx, messages to you and your own transmissions.
