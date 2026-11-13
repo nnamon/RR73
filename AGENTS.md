@@ -84,7 +84,7 @@ Check every UI change against these before it ships, and compare the screen side
 
 - Buttons are a verb and an object: "Log QSO", "Resume audio", "Change band".
 - Status says what is true now: "Transmitting", "Waiting for signal", "Refused by Wavelog".
-- Operate's status line states the event or the new value in a few words, with no full stop: "Tx set to 908 Hz", "No reply from VK2LAW". No reasons or instructions unless the operator has to act. Every line has one style. Its notices live in `web/src/lib/qso/status.ts`, and the copy lint holds them to 6 words.
+- Operate's status line states the event or the new value in a few words, with no full stop: "Tx set to 908 Hz", "No reply from AB4SS". No reasons or instructions unless the operator has to act. Every line has one style. Its notices live in `web/src/lib/qso/status.ts`, and the copy lint holds them to 6 words.
 - Errors say what happened, the cause if known, and what to do: "Wavelog refused the API key: it can read but not write. Create a read-write key in Wavelog." Never raw exception text.
 - Confirmations name the consequence: "End activation? The 7 QSOs stay on this phone."
 - Empty states say what will appear and when.
