@@ -335,7 +335,7 @@ Settings › Station gains Name and QTH, for {MYNAME} and {MYQTH}.
 | Serial digits | 3 | 1 to 4: 001 or 1. |
 | Exchange | 599 {NR} | Text with fields. |
 
-- Settings › Macros is shared by every keyboard mode. A control at the top switches between the QSO and Contest sets. Each row shows the label and the first line of text; a tap opens the macro: Label, Text, a row of field buttons that insert {CALL} and the rest at the cursor, Return to Rx and Log QSO when sent, and Sends now: the text with the fields of the QSO in progress. Rows reorder by drag. Swipe to delete, with Undo. Add macro at the end of the set. Restore defaults with one confirmation, which names the consequence: "Restore 8 default macros? Your 3 edited macros are replaced."
+- Settings › Macros is shared by every keyboard mode. A control at the top switches between the QSO and Contest sets. Each row shows the label and the first line of text; a tap opens the macro: Label, Text, a row of field buttons that insert {CALL} and the rest at the cursor, Return to Rx and Log QSO when sent, and Preview: the text with the fields of the QSO in progress. Rows reorder by drag. Swipe to delete, with Undo. Add macro at the end of the set. Restore defaults with one confirmation, which names the consequence: "Restore 8 default macros? Your 3 edited macros are replaced."
 - Settings schema 8 adds an `rtty` object, a `keyboard` object (macro sets, contest, serial) and the station's name and QTH, at their defaults, and leaves every other value where it was, as schema 7 did for WSPR.
 
 ## RTTY modem API
