@@ -8,7 +8,7 @@ The owner can't publish iOS apps. A native wrapper would add CoreBluetooth and U
 
 ## Decision
 
-Ship only as a web app installed from Safari to the home screen, served from GitHub Pages. Minimum iOS 26.
+Ship only as a web app, served from GitHub Pages and installed from Safari to the home screen, with iOS 26 as the minimum.
 
 ## Consequences
 

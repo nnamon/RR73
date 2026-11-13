@@ -8,7 +8,7 @@ iFTx decodes slowly and finds fewer stations than WSJT-X. ft8_lib (MIT) finds 8 
 
 ## Decision
 
-Write the FT8 and FT4 decoders from the protocol paper (Franke, Somerville and Taylor, QEX 2020) in Rust, compiled to WebAssembly for the app and natively for the bench. ft8_lib is the bit-exact oracle for the codec and may be ported with attribution. Nobody on the project reads GPL decoder code.
+Write the FT8 and FT4 decoders from the protocol paper (Franke, Somerville and Taylor, QEX 2020) in Rust, compiled to WebAssembly for the app and natively for the bench. ft8_lib is the bit-exact oracle for the codec and may be ported with attribution, and nobody on the project reads GPL decoder code.
 
 ## Consequences
 
