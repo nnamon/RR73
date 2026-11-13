@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.28.6 · 2026-11-13
 
 - Settings and the other screens drop most row subtitles. What remains reads as plain phrases and sentences.
 - The decode colour preset with the classic FT8 colours is now called Traditional.
