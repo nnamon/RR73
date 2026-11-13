@@ -3,8 +3,11 @@
 //
 // Scans prose: Markdown outside code, string literals and markup text in web/src, and commit
 // messages. Interface sources also get the length limits and the subject rule from the copy
-// rules: a footer of at most 15 words, a subtitle of at most 6, and no sentence in web/src/views
-// that opens with "RR73". Errors fail the run; warnings print for a reviewer. A region between
+// rules: a footer of at most 40 words, a subtitle of at most 10 written as a phrase (no full stop,
+// no opening "You"), and no sentence in web/src/views that opens with "RR73". They also get the
+// fragment rules: no sentence that opens with a verb
+// and no subject ("Installs any update"), and no 1- or 2-word sentence stacked against another
+// ("Audio stops."). Errors fail the run; warnings print for a reviewer. A region between
 // `lint-copy: off` and `lint-copy: on` markers (in any comment syntax) is skipped, for quoted
 // examples of what not to write.
 
@@ -123,9 +126,59 @@ const SOURCE_RULES = [
  */
 const FOOTER_FRAGMENT = /^\s*[A-Z][a-z]+s\s+(?:the|a|an|your|to|no|web|each|every|its|their|this|from|with|all|any)\b/;
 
-/** A footer says only what stops a costly mistake; a subtitle only what the title would get wrong. */
-export const FOOTER_MAX_WORDS = 15;
-export const SUBTITLE_MAX_WORDS = 6;
+/**
+ * A footer says only what stops a costly mistake; a subtitle only what the title would get wrong.
+ * The limits catch a paragraph. They leave room for a whole phrase or sentence: tighter limits
+ * pushed copy into fragments such as "Installs any update. Audio stops."
+ */
+export const FOOTER_MAX_WORDS = 40;
+export const SUBTITLE_MAX_WORDS = 10;
+
+/**
+ * A subtitle is a short phrase, as iOS writes them: "Today on this band and mode". A full stop
+ * makes it a sentence, which belongs in a footer, and "You…" opens an explanation.
+ */
+function subtitleShape(t) {
+  if (/[.]\s*$/.test(t.trim())) return ['subtitle-sentence', 'subtitle ends in a full stop; make it a short phrase, or move the sentence to a footer'];
+  if (/^\s*You\b/.test(t)) return ['subtitle-you', 'subtitle opens with "You"; make it a short phrase, or drop it'];
+  return null;
+}
+
+/** Plural nouns that open a sentence the way a verb in -s would: "Callsigns on the waterfall". */
+const PLURAL_OPENERS = 'Callsigns|Activations|Activators|Spots|Decodes|Slots|Stations|Files|Dupes|Messages|Macros|Calls|Grids|Bands|Parks|Summits|Colours|Receivers|Settings|Times|Seconds|Minutes|Reports|Edits|Rows|Tags|Listeners|Contacts|This|Its|Was';
+
+/**
+ * A sentence that opens with a verb in -s and no subject: "Installs any update", "Keys the radio
+ * when audio starts", "Needs a relay". The verb's object or a preposition must follow, so "Dismiss
+ * the notice" (an imperative) and a heading such as "Callsigns on the waterfall" pass.
+ */
+export const SUBJECTLESS = new RegExp(
+  `(?:^\\s*|[.?!]\\s+)(?!(?:${PLURAL_OPENERS})\\b)(?:Needs\\s+\\S|[A-Z][a-z]*[a-rt-z]s\\s+(?:the|a|an|your|to|no|web|each|every|its|their|this|from|with|all|any|on|off|until|when|while|after|before|at|in|for|by|it|them|only)\\b)`,
+  'g',
+);
+
+/** Text with each `{…}`, a Svelte expression or a template value, read as the value N. */
+function maskBraces(t) {
+  for (let prev = ''; prev !== t; ) {
+    prev = t;
+    t = t.replace(/\{[^{}]*\}/g, 'N');
+  }
+  return t;
+}
+
+/**
+ * The 1- or 2-word sentence in a string of several, as in "Installs any update. Audio stops." or
+ * "Simulated stations. No radio needed."; null if there is none. A sentence holding a value (N),
+ * one with no lower-case word, one ending in an abbreviation ("Fed.", "Virgin Is.") and a string
+ * that does not end as a sentence, such as a name, pass.
+ */
+export function stackedFragment(text) {
+  const t = maskBraces(text).trim();
+  if (!/[.?!]$/.test(t)) return null;
+  const sentences = t.split(/(?<=[.?!])\s+(?=[A-Z0-9\u201c"])/);
+  if (sentences.length < 2) return null;
+  return sentences.find((s) => countWords(s) <= 2 && /[a-z]{2}/.test(s) && !/\bN\b/.test(s) && !/(?:^|\s)[A-Z][a-z]{0,3}\.$/.test(s)) ?? null;
+}
 
 /** "RR73" opening a string, a run of markup text, a sentence or a clause after a colon, followed by a verb or a possessive. "RR73 or RRR" names the message. */
 const RR73_SUBJECT = /(?:^\s*|[.?!:]\s+)RR73(?=\s+(?!or\b|and\b)[a-z]|[\u2019']s\b)/g;
@@ -376,10 +429,15 @@ export function lengthFindings(text, ext, file = 'x') {
     findings.push({ file, line: line + 1, level: 'error', rule, match: body.replace(/\s+/g, ' ').trim().slice(0, 80), message: `${what} of ${words} words; at most ${max}` });
   let m;
   const at = lineOf(code);
+  const shape = (line, text) => {
+    const bad = subtitleShape(text);
+    if (bad) findings.push({ file, line: line + 1, level: 'error', rule: bad[0], match: text.trim().slice(0, 80), message: bad[1] });
+  };
   const sub = /\bsub:\s*(['"`])((?:\\.|(?!\1)[^\\\n])*)\1/g;
   while ((m = sub.exec(code))) {
     const words = countWords(m[2].replace(/\$\{[^}]*\}/g, ' '));
     if (words > SUBTITLE_MAX_WORDS) add(at(m.index), 'subtitle-length', words, SUBTITLE_MAX_WORDS, 'subtitle', m[2]);
+    shape(at(m.index), m[2]);
   }
   if (ext !== '.svelte') return findings;
   const exprs = [];
@@ -395,6 +453,13 @@ export function lengthFindings(text, ext, file = 'x') {
     const limit = classes.includes('section-foot') ? ['footer-length', FOOTER_MAX_WORDS, 'footer'] : classes.includes('row-sub') ? ['subtitle-length', SUBTITLE_MAX_WORDS, 'subtitle'] : null;
     if (!limit) continue;
     const body = elementBody(markup, m[1], open.lastIndex);
+    if (limit[0] === 'subtitle-length')
+      for (const branch of body.split('\u0002')) {
+        const parts = branch.replace(/<[^<>]*>/g, ' ').split(/(\u0001\d+\u0001)/);
+        const literal = parts.filter((x) => !/^\u0001\d+\u0001$/.test(x)).join(' ');
+        if (/[A-Za-z]{2}/.test(literal)) shape(mat(m.index), literal);
+        for (const x of parts) if (/^\u0001\d+\u0001$/.test(x)) for (const lit of literalsIn(exprs[Number(x.slice(1, -1))].slice(1, -1))) if (/^[A-Z]/.test(lit.trim())) shape(mat(m.index), lit);
+      }
     if (limit[0] === 'footer-length') {
       const first = body.split('\u0002')[0].replace(/<[^<>]*>/g, ' ').replace(/\u0001\d+\u0001/g, ' ');
       if (FOOTER_FRAGMENT.test(first))
@@ -430,6 +495,28 @@ export function programFindings(text, ext, file = 'x') {
     if (isProse(m[2])) continue;
     const hit = PROGRAM.exec(m[2]);
     if (hit) findings.push({ file, line: at(m.index) + 1, level: 'error', rule: 'other-program', match: m[2].slice(0, 80), message: 'another program named on screen; state what RR73 does' });
+  }
+  return findings;
+}
+
+/**
+ * Fragments in interface strings: a sentence with a verb and no subject, and a 1- or 2-word
+ * sentence stacked against another. An aria-label may read "IC-705 connected. Open Rig control",
+ * a state and the action, so the stacking rule leaves aria-label attributes out.
+ */
+export function fragmentFindings(text, ext, file = 'x') {
+  const findings = [];
+  const add = (p, rule, match, message) => findings.push({ file, line: p.line + 1, level: 'error', rule, match: match.trim().slice(0, 80), message });
+  for (const p of sourcePieces(text, ext)) {
+    const t = maskBraces(p.text);
+    SUBJECTLESS.lastIndex = 0;
+    const m = SUBJECTLESS.exec(t);
+    if (m) add(p, 'subjectless', t.slice(m.index, m.index + 40), 'sentence opens with a verb and no subject; write it as a person would say it, or drop it');
+  }
+  const unlabelled = text.replace(/aria-label="[^"]*"/g, blank);
+  for (const p of sourcePieces(unlabelled, ext)) {
+    const short = stackedFragment(p.text);
+    if (short) add(p, 'stacked-fragment', short, `"${short.trim()}" is a fragment stacked against another sentence; join the facts into one sentence`);
   }
   return findings;
 }
@@ -535,6 +622,7 @@ export function lintFile(root, rel) {
     ...lintText(sourceProse(text, ext), rel, { screen, source: true }),
     ...lengthFindings(text, ext, rel),
     ...programFindings(text, ext, rel),
+    ...fragmentFindings(text, ext, rel),
     ...(isViewFile(rel) ? subjectFindings(text, ext, rel) : []),
     ...(rel === STATUS_FILE ? statusFindings(text, rel) : []),
   ];

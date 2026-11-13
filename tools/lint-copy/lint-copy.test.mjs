@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, subjectFindings, statusFindings, countWords, maskExpressions, programFindings, withValues, sourcePieces } from './lint-copy.mjs';
+import { lintText, markdownProse, sourceProse, isProse, isScreenFile, isViewFile, stripComments, stripDisabled, stripQuoted, lengthFindings, fragmentFindings, stackedFragment, subjectFindings, statusFindings, countWords, maskExpressions, programFindings, withValues, sourcePieces } from './lint-copy.mjs';
 
 const rules = (text) => lintText(text, 'x').map((f) => `${f.level}:${f.rule}`);
 const screen = (text) => lintText(text, 'x', { screen: true }).map((f) => `${f.level}:${f.rule}`);
@@ -176,9 +176,11 @@ test('masks expressions and block tags, keeping line breaks', () => {
   assert.equal(maskExpressions('{#if a}\nb{/if}', (t) => (t.startsWith('{#') ? '<>' : '')).split('\n').length, 2);
 });
 
-test('flags a footer over 15 words and passes a short one', () => {
-  const foot = '<div>\n<p class="section-foot">Decodes addressed to this callsign show in red. Transmitting needs the callsign and the grid. Both stay on this phone.</p>\n</div>';
+test('flags a footer over 40 words and passes a sentence or two', () => {
+  const foot =
+    '<div>\n<p class="section-foot">Decodes addressed to this callsign show in red, and decodes from stations you have worked today on this band and mode show in grey. You need a callsign and a grid to transmit, and both are saved with each QSO you log, so check them before you start.</p>\n</div>';
   assert.deepEqual(lengths(foot), ['2:footer-length']);
+  assert.deepEqual(lengths('<p class="section-foot">Test keying transmits for 1 s with no audio, so use low power into a dummy load.</p>'), []);
   assert.deepEqual(lengths('<p class="section-foot">Needed to transmit.</p>'), []);
   assert.deepEqual(lengths('<p class="section-foot err" role="alert">{gridError}</p>'), []);
   assert.deepEqual(lengths('<p class="section-foot">Set the level for <b>4 to 5 ALC bars</b> during Tune, no more.</p>'), []);
@@ -201,20 +203,64 @@ test('flags a footer that opens with a verb and no subject', () => {
   assert.deepEqual(lengths('<span class="row-sub">Keys the radio when audio starts</span>'), []);
 });
 
-test('flags a subtitle over 6 words, in markup, in expressions and in sub strings', () => {
-  assert.deepEqual(lengths('<span class="row-sub">Stations already worked today on this band and mode</span>'), ['1:subtitle-length']);
-  assert.deepEqual(lengths('<span class="row-sub">Same day, band and mode</span>'), []);
-  assert.deepEqual(lengths("<span class=\"row-sub\">{on ? `Tx stays on ${hz} Hz when you call a station` : 'Tx moves'}</span>"), ['1:subtitle-length']);
-  assert.deepEqual(lengths("const a = [\n  { title: 'Activations', sub: 'Start POTA, SOTA, WWFF and IOTA activations, and follow their progress.' },\n];", '.ts'), ['2:subtitle-length']);
+test('flags a subtitle over 10 words, in markup, in expressions and in sub strings', () => {
+  const long = 'Stations you have already worked today on this band and mode, in this activation or outside it, show with grey text and a solid edge';
+  assert.deepEqual(lengths(`<span class="row-sub">${long}</span>`), ['1:subtitle-length']);
+  assert.deepEqual(lengths('<span class="row-sub">Today on this band and mode</span>'), []);
+  assert.deepEqual(lengths(`<span class="row-sub">{on ? '${long}' : 'Tx moves'}</span>`), ['1:subtitle-length']);
+  assert.deepEqual(lengths(`const a = [\n  { title: 'Activations', sub: '${long}' },\n];`, '.ts'), ['2:subtitle-length']);
   assert.deepEqual(lengths("const a = [{ title: 'Cluster spots', sub: 'Spots from the DX cluster' }];", '.ts'), []);
 });
 
 test('subtitle length counts copy, measures the longest branch and leaves values out', () => {
   assert.deepEqual(lengths("<span class=\"row-sub\">Tested {utcHm(t)} UTC · {ok ? 'can read and write' : message}</span>"), []);
   assert.deepEqual(lengths('<span class="row-sub">{time} · {snr} dB · DT {dt} s · {hz} Hz</span>'), []);
-  assert.deepEqual(lengths('<span class="row-sub">{#if a}Not checked yet. Start audio.{:else}Passed at {t}.{/if}</span>'), []);
-  assert.deepEqual(lengths('<span class="row-sub">{#if a}Not checked yet. Start audio with the chime on.{:else}Passed.{/if}</span>'), ['1:subtitle-length']);
+  assert.deepEqual(lengths('<span class="row-sub">{#if a}Not checked yet{:else}Passed at {t}{/if}</span>'), []);
+  assert.deepEqual(lengths('<span class="row-sub">{#if a}Not checked yet, so start audio with the chime on and run Tune{:else}Passed{/if}</span>'), ['1:subtitle-length']);
   assert.deepEqual(lengths('<span class="row-title">Send edits to QSOs already sent to any destination</span>'), []);
+});
+
+test('flags a subtitle written as a sentence or opening with You', () => {
+  assert.deepEqual(lengths('<span class="row-sub">The chime keys the radio when audio starts.</span>'), ['1:subtitle-sentence']);
+  assert.deepEqual(lengths("<span class=\"row-sub\">{on ? 'Off while CAT keys the radio' : 'Reloading stops the audio.'}</span>"), ['1:subtitle-sentence']);
+  assert.deepEqual(lengths("const a = [{ key: 'focus', title: 'Focus mode on', sub: 'Otherwise iOS sounds can key the radio.' }];", '.ts'), ['1:subtitle-sentence']);
+  assert.deepEqual(lengths('<span class="row-sub">You still transmit on your radio</span>'), ['1:subtitle-you']);
+  assert.deepEqual(lengths('<span class="row-sub">Tx stays on the radio</span>'), []);
+  assert.deepEqual(lengths("<span class=\"row-sub\">Tested {utcHm(t)} UTC · {ok ? 'can read and write' : message}</span>"), []);
+  // Computed text is a value: status and error text follow their own rules.
+  assert.deepEqual(lengths('<span class="row-sub">{keyingText}</span>'), []);
+});
+
+test('flags a sentence that opens with a verb and no subject, anywhere in an interface string', () => {
+  const frags = (text, ext = '.svelte') => fragmentFindings(text, ext).map((f) => `${f.line}:${f.rule}`);
+  assert.deepEqual(frags('<span class="row-sub">Keys the radio when audio starts</span>'), ['1:subjectless']);
+  assert.deepEqual(frags("<script>\n  const s = ok ? 'Stays on while audio runs' : 'Off';\n</script>"), ['2:subjectless']);
+  assert.deepEqual(frags("const r = () => 'Needs a relay';", '.ts'), ['1:subjectless']);
+  assert.deepEqual(frags("const s = 'Needs Key the radio with CAT';", '.ts'), ['1:subjectless']);
+  assert.deepEqual(frags("const s = 'The screen follows Auto-Lock, so set it to Never. Follows the system’s settings otherwise.';", '.ts'), ['1:subjectless']);
+  assert.deepEqual(frags('<span class="row-sub">The chime keys the radio when audio starts.</span>'), []);
+  assert.deepEqual(frags('<span class="row-title">Callsigns on the waterfall</span>'), []);
+  assert.deepEqual(frags('<button aria-label="Dismiss the notice">x</button>'), []);
+  assert.deepEqual(frags('<p>Spots appear here after each slot ends.</p>'), []);
+  assert.deepEqual(frags('<p>Activations you start appear here.</p>'), []);
+});
+
+test('flags a 1- or 2-word sentence stacked against another', () => {
+  const frags = (text, ext = '.svelte') => fragmentFindings(text, ext).map((f) => `${f.line}:${f.rule}`);
+  assert.equal(stackedFragment('Keeps settings and QSOs. Audio stops.'), 'Audio stops.');
+  assert.equal(stackedFragment('Simulated stations. No radio needed.'), 'Simulated stations.');
+  assert.equal(stackedFragment('No connection. Send when the phone is online.'), 'No connection.');
+  assert.equal(stackedFragment('Your settings and QSOs stay, but the audio stops.'), null);
+  assert.equal(stackedFragment('Audio did not start. Start audio again.'), null);
+  // Values, abbreviations and names are not fragments.
+  assert.equal(stackedFragment('Logged {call}. Undo.'.replace('Undo.', '{undo}')), null);
+  assert.equal(stackedFragment('Fed. Rep. of Germany'), null);
+  assert.equal(stackedFragment('US Virgin Is.'), null);
+  assert.equal(stackedFragment('Copied'), null);
+  assert.deepEqual(frags("const s = 'Installs any update. Audio stops.';", '.ts'), ['1:subjectless', '1:stacked-fragment']);
+  assert.deepEqual(frags('<p class="note">Choosing a message sends it next.\nTx6 keeps its text. Done now.</p>'), ['1:stacked-fragment']);
+  // An aria-label may name a state, then the action.
+  assert.deepEqual(frags('<a aria-label="{Device} clock {off}. Open Timing" href="x">Clock</a>'), []);
 });
 
 test('flags RR73 opening a sentence in the views, and passes RR73 as a message', () => {
