@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.28.3 · 2026-11-13
 
 - Guide has its own open-book icon in Settings; Logging keeps the closed book.
 
