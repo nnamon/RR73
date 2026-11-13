@@ -112,7 +112,7 @@
 <ActivationSheet bind:open={editing} edit />
 
 <Sheet bind:open={ending} title="End activation?">
-  <p class="confirm-text">The {qsos.length} {qsos.length === 1 ? 'QSO stays' : 'QSOs stay'} on this {device}. Files and Wavelog deliveries carry on from the log.</p>
+  <p class="confirm-text">The {qsos.length} {qsos.length === 1 ? 'QSO stays' : 'QSOs stay'} on this {device}. Files and Wavelog still get them from the log.</p>
   <button class="btn tx wide" onclick={() => void end()}>End activation</button>
   <button class="btn wide keep" onclick={() => (ending = false)}>Keep operating</button>
 </Sheet>

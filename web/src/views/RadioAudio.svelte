@@ -37,7 +37,7 @@
    * own device.
    */
   const outputFoot = $derived.by(() => {
-    if (outputChoice && settings.outputDeviceId === null && keysByCat()) return `Key the radio with CAT needs ${settings.cat.radio === 'kx2' && settings.cat.kx2Link === 'cable' ? 'the KX2’s audio interface' : radioTraits().audioDevice} here.`;
+    if (outputChoice && settings.outputDeviceId === null && keysByCat()) return `To key the radio with CAT, choose ${settings.cat.radio === 'kx2' && settings.cat.kx2Link === 'cable' ? 'the KX2’s audio interface' : radioTraits().audioDevice} here.`;
     if (!outputChoice || settings.outputDeviceId === null) return null;
     if (outputMissing) return 'The chosen output is not connected, so transmit audio plays through the system default.';
     if (audio.output.error === 'failed') return 'The browser refused the chosen output, so transmit audio plays through the system default.';
@@ -88,7 +88,7 @@
   const processingText = $derived(
     r ? `Echo cancellation ${onOff(r.echoCancellation)}, noise suppression ${onOff(r.noiseSuppression)}, auto gain ${onOff(r.autoGainControl)}` : 'Unknown until audio starts',
   );
-  const screenText = $derived(audio.wake === 'refused' || audio.wake === 'unsupported' ? advice.screen : 'Stays on while audio runs');
+  const screenText = $derived(audio.wake === 'refused' || audio.wake === 'unsupported' ? advice.screen : 'On while audio runs');
 
   const CONTRASTS: { id: Contrast; label: string }[] = [
     { id: 'low', label: 'Low' },
@@ -165,7 +165,7 @@
     const by = clockText(off);
     const air = `${Math.abs(off).toFixed(1)} s ${off > 0 ? 'late' : 'early'}`;
     if (settings.txClockFix) return `The ${device}’s clock runs ${by} by the decodes. Each transmission starts ${Math.abs(off).toFixed(1)} s ${off > 0 ? 'earlier' : 'later'} to match.`;
-    return `The ${device}’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input reads the same.' : ''} ${advice.clockFix}`;
+    return `The ${device}’s clock runs ${by} by the decodes, so other stations hear you ${air}.${off < 0 ? ' A slow audio input can also cause this.' : ''} ${advice.clockFix}`;
   });
   const offsetText = $derived(timing.inputOffsetS === 0 ? 'None yet' : `${secs(timing.inputOffsetS)} on receive audio`);
   const sourceText = $derived(
@@ -188,7 +188,7 @@
   const lagText = $derived(timing.captureLagMs === null ? 'Unknown until audio starts' : `${Math.round(timing.captureLagMs)} ms`);
   const heardText = $derived.by(() => {
     const h = timing.heardBack;
-    if (!h.length) return 'Shows after you transmit';
+    if (!h.length) return 'Waiting for your first transmission';
     const last = h.find((x) => x.dtS !== null);
     if (!last) return `Not heard back in the last ${h.length === 1 ? 'transmission' : `${h.length} transmissions`}`;
     return `DT ${secs(last.dtS!)} at ${utcTime(last.slotStartUtcMs)} UTC, ${signed(last.snrDb ?? 0)} dB`;
@@ -345,7 +345,7 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">{catKeys ? 'Off while CAT keys the radio' : 'Keys the radio when audio starts'}</span>
+            <span class="row-sub">{catKeys ? 'Off while CAT keys the radio' : 'A short transmission when audio starts'}</span>
           </span>
         </label>
       </div>
@@ -406,7 +406,7 @@
           {#each timing.decodeTimes as d (d.mode)}
             <span class="row-sub" data-testid="timing-decode">{d.mode}: {Math.round(d.lastMs)} ms last, 95 % within {Math.round(d.p95Ms)} ms</span>
           {:else}
-            <span class="row-sub" data-testid="timing-decode">Shows after the first slot</span>
+            <span class="row-sub" data-testid="timing-decode">Waiting for the first slot</span>
           {/each}
         </span>
       </div>
@@ -441,7 +441,7 @@
         {/if}
       {/if}
       <label class="row">
-        <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">From the clock error in decodes</span></span>
+        <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">Using the clock error in the decodes</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.txClockFix} onchange={(e) => void updateSettings({ txClockFix: e.currentTarget.checked })} />
       </label>
       <div class="row">
@@ -485,7 +485,6 @@
       <p class="section-foot">{advice.copyRefused}</p>
       <textarea class="report" readonly aria-label="Timing report" value={reportText}></textarea>
     {/if}
-    <p class="section-foot">Your Tx, heard back shows the timing of the transmit audio.</p>
   </div>
 </section>
 

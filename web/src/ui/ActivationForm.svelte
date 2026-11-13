@@ -132,7 +132,7 @@
     nearbyNote = found.refs.length
       ? found.complete
         ? ''
-        : 'Part of the park and summit lists needs a connection.'
+        : 'Some of the park and summit lists need a connection.'
       : found.complete
         ? `No active parks or summits within ${NEARBY_KM} km.`
         : 'The park and summit lists need a connection.';
@@ -274,7 +274,7 @@
         </button>
       {/each}
     </div>
-    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else if nearbyNote}<p class="section-foot" role="status">{nearbyNote}</p>{:else}<p class="section-foot">One activation can hold several parks.</p>{/if}
+    {#if refError}<p class="section-foot err" role="alert">{refError}</p>{:else if nearbyNote}<p class="section-foot" role="status">{nearbyNote}</p>{:else}<p class="section-foot">You can add several parks to one activation.</p>{/if}
   </div>
 
   <div class="block">
@@ -299,7 +299,7 @@
       {/if}
     </div>
     {#if gpsError}<p class="section-foot err" role="alert">{gpsError}</p>{:else if gpsNote}<p class="section-foot" role="status">{gpsNote}</p>{/if}
-    {#if mismatch}<p class="section-foot err">{mismatch}</p>{:else if stations.length}<p class="section-foot">QSOs of this activation go to this Wavelog station location.</p>{/if}
+    {#if mismatch}<p class="section-foot err">{mismatch}</p>{:else if stations.length}<p class="section-foot">This activation’s QSOs go to this Wavelog station location.</p>{/if}
   </div>
 
   <div class="block buttons">

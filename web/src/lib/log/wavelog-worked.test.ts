@@ -286,7 +286,7 @@ describe('mapContacts', () => {
     expect(mapContacts(ok({ status: 'successful', message: 'Export successful', lastfetchedid: 9, exported_qsos: 1, adif: '<CALL:5>K1ABC<eor>' }), 'h')).toEqual({ kind: 'refused', message: sayRead.tooOld('h') });
     const net = mapContacts({ kind: 'network' }, 'log.example.com');
     expect(net).toEqual({ kind: 'retry', message: sayRead.unreachable('log.example.com'), retryAfterMs: 0 });
-    expect(sayRead.unreachable('log.example.com')).toBe('Could not reach Wavelog at log.example.com. Check that this phone is online. Reading the log needs Wavelog 2.5.1 or later. RR73 tries again later.');
+    expect(sayRead.unreachable('log.example.com')).toBe('Could not reach Wavelog at log.example.com. Check that this phone is online and that Wavelog is 2.5.1 or later. RR73 tries again later.');
   });
 
   it('retries server errors, timeouts and replies it cannot read', () => {

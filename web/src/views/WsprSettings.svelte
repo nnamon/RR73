@@ -93,7 +93,7 @@
   const uploadText = $derived.by(() => {
     const hold = wsprnetHold();
     if (hold === 'off') return '';
-    if (hold === 'station') return 'Needs your callsign and grid';
+    if (hold === 'station') return 'Waiting for your callsign and grid in Settings';
     if (hold === 'practice') return 'Paused while the practice band is on';
     if (hold === 'web-sdr') return 'Paused while receiving from a web SDR';
     if (hold === 'mode') return 'Paused outside WSPR';
@@ -202,7 +202,7 @@
       </label>
     </div>
     {#if uploadText}<p class="section-foot" role="status" data-testid="wsprnet-status">{uploadText}</p>{/if}
-    <p class="section-foot">WSPRnet sends no confirmation. Check your spots on wsprnet.org.</p>
+    <p class="section-foot">Check your spots on wsprnet.org, since WSPRnet doesn’t confirm uploads.</p>
   </div>
 </section>
 

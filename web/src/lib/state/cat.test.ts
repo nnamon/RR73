@@ -456,7 +456,7 @@ describe('the connection log', () => {
     await run(OPEN_SETTLE_MS + 300);
     resetCat();
     await initCat();
-    expect(rig.lastStop).toBe('The last connection stopped at opening the port at 115200 baud.');
+    expect(rig.lastStop).toBe('The last connection stopped while opening the port at 115200 baud.');
     // A failure RR73 saw is named.
     chosen.open = async () => Promise.reject(new DOMException('Failed to open serial port.', 'NetworkError'));
     const busy = reconnectRadio();
@@ -465,7 +465,7 @@ describe('the connection log', () => {
     expect(rig.lastStop).toBeNull();
     resetCat();
     await initCat();
-    expect(rig.lastStop).toBe('The last connection failed at opening the port at 115200 baud: another program had the port open.');
+    expect(rig.lastStop).toBe('The last connection failed while opening the port at 115200 baud: another program had the port open.');
   });
 
   it('keeps the attempt before when the chooser is closed', async () => {
@@ -1066,7 +1066,7 @@ describe('keying', () => {
     expect(chosen.ptt.at(-1)).toBe('00');
     await run(100);
     expect(chosen.sim.transmit).toBe(false);
-    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Stopped by Halt. RR73 sent PTT off.' });
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Halt stopped the test, and RR73 sent PTT off.' });
     await run(2000);
     await t;
     expect(chosen.ptt).toEqual(['01', '00']);
@@ -1128,7 +1128,7 @@ describe('keying', () => {
     const t = testKeying();
     await run(TEST_KEY_MS + 1500);
     await t;
-    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'Keyed. PTT off was not confirmed.' });
+    expect(rig.test).toMatchObject({ state: 'done', ok: false, text: 'The radio keyed, but PTT off was not confirmed.' });
     // Sent 4 times, 100 ms apart, then read: still transmitting. The 1 s poll sends it again.
     expect(chosen.ptt.slice(0, 5)).toEqual(['01', '00', '00', '00', '00']);
     expect(chosen.ptt.slice(1).every((p) => p === '00')).toBe(true);

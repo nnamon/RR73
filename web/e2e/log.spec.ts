@@ -220,7 +220,7 @@ test('disables Send to Wavelog offline, with the reason, and sends one QSO from 
   await addQso(page, 'VK3ARR', { grid: 'QF22' });
   await context.setOffline(true);
   await expect(sendButton(page)).toBeDisabled();
-  await expect(page.getByText('No connection. Send when the computer is online.')).toBeVisible();
+  await expect(page.getByText('This computer is offline. Send when it’s back online.')).toBeVisible();
   await context.setOffline(false);
   await expect(sendButton(page)).toBeEnabled();
 
@@ -248,7 +248,7 @@ test('with Send automatically on, keeps QSOs waiting offline and sends them when
   expect(posts(mock)).toHaveLength(0);
   await seg(page, 'To do').click();
   await expect(page.getByTestId('send-bar')).toContainText('1 QSO waiting for Wavelog.');
-  await expect(page.getByText('No connection. Send when the computer is online.')).toBeVisible();
+  await expect(page.getByText('This computer is offline. Send when it’s back online.')).toBeVisible();
 
   await context.setOffline(false);
   // Delivered QSOs leave To do.

@@ -53,7 +53,7 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Practice band</span>
-          <span class="row-sub">Simulated stations. No radio needed.</span>
+          <span class="row-sub">Simulated stations, no radio needed</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.on} onchange={(e) => void setPracticeOn(e.currentTarget.checked)} />
       </label>
@@ -66,7 +66,6 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Play Tx audio</span>
-          <span class="row-sub">Can key a connected radio</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={practice.playTx} onchange={(e) => void setPlayTx(e.currentTarget.checked)} />
       </label>

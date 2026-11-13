@@ -74,7 +74,7 @@ test('a CQ sends no TX with Key the radio with CAT off; on, TX goes before the a
   const keying = page.getByRole('switch', { name: /^Key the radio with CAT/ });
   await keying.click();
   await expect(keying).toBeChecked();
-  await expect(page.getByTestId('rig-output')).toHaveText('Key the radio with CAT needs the Tx audio on the radio. Choose the Digirig’s sound card in Settings › Radio and audio › Output. Until then each transmission is refused.');
+  await expect(page.getByTestId('rig-output')).toHaveText('To key the radio with CAT, choose the Digirig’s sound card in Settings › Radio and audio › Output. Until then each transmission is refused.');
   // A new output halts, and Halt sends RX while CAT keys the radio: chosen with the switch off.
   await keying.click();
   await chooseOutput(page);

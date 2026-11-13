@@ -40,7 +40,7 @@ test('connects a KX2, lowers the lines at once, reads its dial and settings, and
   await expect(micAdvice).toContainText('Set MENU › MIC BTN to OFF.');
   await expect(micAdvice).toHaveClass(/err/);
   // Connected in USB: TX would transmit in USB.
-  await expect(page.getByTestId('rig-mode')).toHaveText('The KX2 is in USB. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.');
+  await expect(page.getByTestId('rig-mode')).toHaveText('The KX2 is in USB, and a transmission would go out in that mode. Choose a band to set DATA A.');
   await expect(page.getByRole('listitem').filter({ hasText: 'Filter' })).toContainText('2.80 kHz');
   await expect(page.getByRole('listitem').filter({ hasText: 'Split' })).toContainText('Off');
   await expect(page.getByRole('listitem').filter({ hasText: 'RIT' })).toContainText('Off');
@@ -115,7 +115,7 @@ test('a KX2 left in its MIC BTN menu entry is not read, and Rig control says to 
   await page.goto('./');
   await page.evaluate(() => (window.__kx2.menu = 82));
   await connectKx2(page);
-  await expect(page.getByTestId('rig-advice').filter({ hasText: 'Tap DISP' })).toHaveText('The KX2 shows its MIC BTN menu entry, as a read cut off by a lost port leaves it. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.');
+  await expect(page.getByTestId('rig-advice').filter({ hasText: 'Tap DISP' })).toHaveText('The KX2 is showing its MIC BTN menu entry, left open when the port closed during a read. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.');
   expect((await kx2Log(page)).map((w) => w.text)).not.toContain('MN082;MP;MN255;');
   expect(await page.evaluate(() => window.__kx2.menu)).toBe(82);
 });
@@ -124,7 +124,7 @@ test('a KX2 already transmitting at connecting shows Transmitting; with Key the 
   await installFakeKx2(page, { tx: true, micBtn: 0 });
   await page.goto('./');
   await connectKx2(page, 'Transmitting');
-  await expect(page.getByTestId('rig-help')).toHaveText('The KX2 reports transmitting, and RR73 holds no PTT: VOX, its own PTT or another program keys it.');
+  await expect(page.getByTestId('rig-help')).toHaveText('The KX2 is transmitting, but not by PTT from RR73. VOX, its own PTT or another program is keying it.');
   expect(await kx2Ptt(page)).toEqual([]);
   // Key the radio with CAT on, and connect again: RX, confirmed.
   await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
@@ -170,7 +170,7 @@ test('a KX2 that keeps transmitting after RX: Test keying says to unkey it, and 
   await connectKx2(page);
   await page.evaluate(() => (window.__kx2.ignoreRx = true));
   await page.getByRole('button', { name: 'Test keying' }).click();
-  await expect(page.getByTestId('rig-test')).toHaveText('Keyed. PTT off was not confirmed.', { timeout: 5000 });
+  await expect(page.getByTestId('rig-test')).toHaveText('The radio keyed, but PTT off was not confirmed.', { timeout: 5000 });
   await expect(page.getByTestId('rig-status')).toHaveText('PTT off not confirmed');
   await expect(page.getByTestId('rig-help')).toHaveText('The KX2 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.');
   const rx = (await kx2Ptt(page)).filter((w) => w.text === 'RX;TQ;');

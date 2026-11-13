@@ -26,7 +26,7 @@
     if (!w.url || !w.apiKey) return 'Set up Wavelog in Settings › Logging to send QSOs.';
     if (!w.enabled) return 'Use Wavelog is off in Settings › Logging › Wavelog.';
     if (!w.stationId) return 'Run Test connection in Settings › Logging › Wavelog to choose a station location.';
-    if (!log.online) return `No connection. Send when the ${device} is online.`;
+    if (!log.online) return `This ${device} is offline. Send when it’s back online.`;
     return null;
   });
   const setup = $derived(!w.url || !w.apiKey || !w.stationId);
@@ -39,7 +39,7 @@
     if (!count) return '';
     const before = recent ? `${recent.text} ` : '';
     if (notSent) return `${before}${qsos(notSent)} not sent to Wavelog.`;
-    const next = status?.pausedUntil && status.pausedUntil > clock.ms ? ` Next try ${utcHm(status.pausedUntil)} UTC.` : '';
+    const next = status?.pausedUntil && status.pausedUntil > clock.ms ? ` The next try is at ${utcHm(status.pausedUntil)} UTC.` : '';
     return `${before}${qsos(count)} waiting for Wavelog.${next}`;
   });
 </script>

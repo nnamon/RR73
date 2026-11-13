@@ -15,7 +15,7 @@
   {#if pages.length === 0}
     <div class="empty">
       <h2>No guide in this build</h2>
-      <p>The guide's pages appear here in builds that include them.</p>
+      <p>The guide’s pages appear here in builds that include them.</p>
     </div>
   {:else}
     <div class="section">

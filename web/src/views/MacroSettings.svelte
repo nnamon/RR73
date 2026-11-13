@@ -271,7 +271,7 @@
       </div>
     </div>
     <div class="section">
-      <h2 class="section-head">Sends now</h2>
+      <h2 class="section-head">Preview</h2>
       <div class="group"><p class="sends mono" data-testid="macro-sends">{sends}</p></div>
     </div>
     <div class="section">

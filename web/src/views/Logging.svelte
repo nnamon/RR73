@@ -63,11 +63,11 @@
     status = r.ok ? '' : r.reason;
   }
 
-  const files: { id: FileDestinationId; title: string; sub: string; icon: 'doc' | 'tree' | 'mountain'; bg: string }[] = [
-    { id: 'pota-file', title: 'POTA', sub: 'File to upload at pota.app', icon: 'tree', bg: 'green' },
-    { id: 'sota-file', title: 'SOTA', sub: 'File for the SOTA database', icon: 'mountain', bg: 'orange' },
-    { id: 'wwff-file', title: 'WWFF', sub: 'File for your WWFF coordinator', icon: 'tree', bg: 'teal' },
-    { id: 'adif-file', title: 'ADIF file', sub: 'One per activation, all fields', icon: 'doc', bg: 'grey' },
+  const files: { id: FileDestinationId; title: string; icon: 'doc' | 'tree' | 'mountain'; bg: string }[] = [
+    { id: 'pota-file', title: 'POTA', icon: 'tree', bg: 'green' },
+    { id: 'sota-file', title: 'SOTA', icon: 'mountain', bg: 'orange' },
+    { id: 'wwff-file', title: 'WWFF', icon: 'tree', bg: 'teal' },
+    { id: 'adif-file', title: 'ADIF file', icon: 'doc', bg: 'grey' },
   ];
 </script>
 
@@ -108,13 +108,12 @@
           <span class="ic {f.bg}" aria-hidden="true"><Icon name={f.icon} size={20} /></span>
           <span class="row-main">
             <span class="row-title">{f.title}</span>
-            <span class="row-sub">{f.sub}</span>
           </span>
           <input type="checkbox" role="switch" class="switch" checked={log.files[f.id].enabled} onchange={(e) => void setFileDestination(f.id, e.currentTarget.checked)} />
         </label>
       {/each}
     </div>
-    {#if features.activations}<p class="section-foot">Files take only QSOs made in an activation.</p>{/if}
+    {#if features.activations}<p class="section-foot">Only QSOs made in an activation go into these files.</p>{/if}
   </div>
 
   <div class="section">
@@ -129,12 +128,11 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Send edits to QSOs already sent</span>
-          <span class="row-sub">Where the destination accepts changes</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={log.settings.sendEdits} onchange={(e) => void setLoggingSettings({ sendEdits: e.currentTarget.checked })} />
       </label>
     </div>
-    <p class="section-foot">Wavelog takes no edits, so repeat each edit in Wavelog.</p>
+    <p class="section-foot">Wavelog doesn’t take edits. Make each edit in Wavelog too.</p>
   </div>
 
   <div class="section">
@@ -143,7 +141,6 @@
       <button class="row act" disabled={practice.on || !log.qsos.length} onclick={() => void backUp()}>
         <span class="row-main">
           <span class="row-title">Back up the log</span>
-          <span class="row-sub">QSOs, activations and what Wavelog holds</span>
         </span>
       </button>
       <label class="row act" class:off={practice.on}>

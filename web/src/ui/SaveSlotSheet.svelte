@@ -47,7 +47,7 @@
 
 <Sheet bind:open title="Save a slot" onclose={closed}>
   {#if recent.slots.length === 0}
-    <p class="note">No slots yet. Slots appear here as each one ends while audio runs.</p>
+    <p class="note">No slots yet. While audio runs, each slot appears here as it ends.</p>
   {:else}
     <ul class="group slots" aria-label="Recent slots">
       {#each recent.slots as s (s.startUtcMs)}
@@ -70,7 +70,7 @@
       <a class="btn tint" href={links.json.url} download={links.json.name}>Download {links.json.name}</a>
     </div>
   {/if}
-  <p class="note">RR73 keeps the last 8 slots, about 2 min. Each slot saves as a 16-bit 12 kHz mono WAV with a JSON sidecar for the decoder corpus.</p>
+  <p class="note">RR73 keeps the last 8 slots, about 2 min of audio, and saves each one as a 16-bit 12 kHz mono WAV with a JSON sidecar for the decoder corpus.</p>
 </Sheet>
 
 <style>

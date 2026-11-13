@@ -36,8 +36,8 @@
   // What to type for the contests that use FT8 and FT4's exchange formats.
   const GUIDE = [
     { title: 'Field Day', sub: 'Class and ARRL section', example: '1D WI' },
-    { title: 'RTTY and FT Roundup', sub: 'State or province, # elsewhere', example: 'WI' },
-    { title: 'European VHF contests', sub: 'Serial number, grid from Station', example: '#' },
+    { title: 'RTTY and FT Roundup', sub: 'State or province, or # for a serial number', example: 'WI' },
+    { title: 'European VHF contests', sub: '# for a serial number, with the grid from Station', example: '#' },
   ];
 
   // What the exchange sends in each format, as on air, for a station heard at −10 dB.
@@ -102,15 +102,15 @@
       {/if}
       <label class="row">
         <!-- Dupes count within one activation (docs/design/sequencer.md). With Activations off, QSOs are logged outside any. -->
-        <span class="row-main"><span class="row-title">Work dupes</span><span class="row-sub">{features.activations ? 'Same day, band, mode and activation' : 'Same day, band and mode'}</span></span>
+        <span class="row-main"><span class="row-title">Work dupes</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.workDupes} onchange={(e) => void updateSettings({ workDupes: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
-        <span class="row-main"><span class="row-title">Tail-end</span><span class="row-sub">Call once more after their QSO</span></span>
+        <span class="row-main"><span class="row-title">Tail-end</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.tailEnd} onchange={(e) => void updateSettings({ tailEnd: (e.currentTarget as HTMLInputElement).checked })} />
       </label>
       <label class="row">
-        <span class="row-main"><span class="row-title">Hunt calls</span><span class="row-sub">Then moves to the next CQ</span></span>
+        <span class="row-main"><span class="row-title">Hunt calls</span></span>
         <input
           class="field num count"
           type="text"
@@ -143,7 +143,7 @@
           <span class="unit">min</span>
         </label>
         <label class="row">
-          <span class="row-main"><span class="row-title">Responses refresh watchdog</span><span class="row-sub">Each new message restarts it</span></span>
+          <span class="row-main"><span class="row-title">Responses refresh watchdog</span></span>
           <input class="switch" type="checkbox" role="switch" checked={settings.watchdogRefresh} onchange={(e) => void updateSettings({ watchdogRefresh: (e.currentTarget as HTMLInputElement).checked })} />
         </label>
       {/if}
@@ -172,7 +172,7 @@
           autocomplete="off"
           spellcheck="false"
           maxlength="20"
-          placeholder="Empty outside contests"
+          placeholder="Optional"
           aria-label="Contest exchange"
         />
       </label>
@@ -200,7 +200,7 @@
         </label>
       {/if}
     </div>
-    <p class="section-foot">Goes out when a station calls CQ FD or CQ RU, or sends an exchange.</p>
+    <p class="section-foot">The exchange goes out when a station calls CQ FD or CQ RU, or sends you an exchange.</p>
   </div>
 
   <div class="section">

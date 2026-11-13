@@ -100,7 +100,7 @@ const RR73: Record<HighlightId, string> = {
 };
 
 export const CATEGORIES: readonly HighlightCategory[] = [
-  { id: 'myCall', rank: 1, label: 'My call in the message', sub: 'Including portable forms', style: 'background', colour: RR73.myCall, spoken: 'my call' },
+  { id: 'myCall', rank: 1, label: 'My call in the message', style: 'background', colour: RR73.myCall, spoken: 'my call' },
   { id: 'newContinent', rank: 2, label: 'New continent', style: 'background', colour: RR73.newContinent, spoken: 'new continent' },
   { id: 'newContinentBand', rank: 3, onBand: true, label: 'New continent on this band', style: 'background', colour: RR73.newContinentBand, spoken: 'new continent on this band' },
   { id: 'newCqZone', rank: 4, label: 'New CQ zone', style: 'background', colour: RR73.newCqZone, spoken: 'new CQ zone' },
@@ -116,7 +116,7 @@ export const CATEGORIES: readonly HighlightCategory[] = [
   { id: 'ending', rank: 14.5, label: 'Ending a QSO', sub: 'RR73 or 73 to another station', style: 'background', colour: RR73.ending, spoken: 'ending a QSO' },
   { id: 'cq', rank: 15, label: 'CQ in the message', style: 'background', colour: RR73.cq, spoken: 'CQ' },
   { id: 'sent', rank: 16, label: 'Sent', style: 'background', colour: RR73.sent, spoken: 'sent' },
-  { id: 'worked', rank: 17, label: 'Worked before', sub: 'Dupe: today, this band and mode', style: 'text', colour: RR73.worked, spoken: 'worked before' },
+  { id: 'worked', rank: 17, label: 'Worked before', sub: 'Dupes: today on this band and mode', style: 'text', colour: RR73.worked, spoken: 'worked before' },
 ];
 
 const BY_ID = new Map(CATEGORIES.map((c) => [c.id, c]));
@@ -272,9 +272,7 @@ export const PRESETS: readonly Preset[] = [
   { id: 'quiet', label: 'Quiet', colours: RR73, off: [...PLACE_IDS, 'newGrid', 'newGridBand', 'newCall', 'newCallBand', 'worked'] },
   {
     id: 'wsjtx',
-    // lint-copy: off
-    label: 'WSJT-X',
-    // lint-copy: on
+    label: 'Traditional',
     colours: {
       myCall: '#FF6666',
       newContinent: '#FF0063',

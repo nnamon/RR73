@@ -183,7 +183,7 @@ export class KeyboardSession {
     };
   }
 
-  /** The text a macro would send now, for Settings › Macros' Sends now. */
+  /** The text a macro would send now, for Settings › Macros' Preview. */
   preview(text: string): string {
     const t = expand(text, this.fieldValues()).text;
     return this.ports.config().upperCaseOnly ? t.toUpperCase() : t;

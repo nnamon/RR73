@@ -271,8 +271,8 @@ test('the Quiet preset keeps CQ coloured and turns the new-station colours off, 
 test('the WSJT-X preset takes WSJT-X’s own colours and switches', async ({ page }) => {
   await page.goto('./#/settings/colours');
   const example = page.getByTestId('colours-example');
-  await choose(page, 'WSJT-X');
-  await expect(preset(page, 'WSJT-X')).toBeChecked();
+  await choose(page, 'Traditional');
+  await expect(preset(page, 'Traditional')).toBeChecked();
   // CQ green, Sent yellow, the ITU zone and new-station categories and the 2 RR73-only ones off.
   for (const r of await example.locator('[data-hl="cq"]').all()) expect(await hlOf(r)).toBe('#66FF66');
   expect(await hlOf(example.locator('[data-hl="sent"]'))).toBe('#FFFF00');
@@ -281,7 +281,7 @@ test('the WSJT-X preset takes WSJT-X’s own colours and switches', async ({ pag
   for (const name of ['New ITU zone', 'New ITU zone on this band', 'New DXCC entity', 'New DXCC entity on this band', 'New grid', 'New grid on this band', 'New call', 'New call on this band', 'Ending a QSO', 'Worked before']) await expect(page.getByRole('switch', { name, exact: true })).not.toBeChecked();
   for (const name of ['My call in the message', 'New continent', 'New continent on this band', 'New CQ zone', 'New CQ zone on this band', 'CQ in the message', 'Sent']) await expect(page.getByRole('switch', { name, exact: true })).toBeChecked();
   await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('WSJT-X');
+  await expect(page.getByRole('link', { name: /^Decode colours/ })).toContainText('Traditional');
 });
 
 test('each editor scheme applies with RR73’s switches: every category on but the place categories', async ({ page }) => {

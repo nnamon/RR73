@@ -152,7 +152,7 @@
 </script>
 
 {#snippet bandButton()}
-  <button class="band" onclick={onband} aria-label="Change band. Now {band} {mode}, {dialHz === null ? '' : mhz(dialHz)} USB{dialFallback ? ', the band’s own dial: the radio’s is not in use' : ''}.">
+  <button class="band" onclick={onband} aria-label="Change band from {band} {mode}, {dialHz === null ? '' : mhz(dialHz)} USB{dialFallback ? ', the band’s own dial: the radio’s is not in use' : ''}.">
     <b class="b">{band}</b>
     <span class="mode">{mode}</span>
     <Icon name="chevdown" size={12} class="chev" />

@@ -35,7 +35,7 @@ test('Operate shows the band, the frequency and the empty decode list', async ({
   await expect(band).toContainText('20m');
   await expect(band).toContainText('FT8');
   await expect(band).toContainText('14.074');
-  await expect(band).toHaveAccessibleName('Change band. Now 20m FT8, 14.074 MHz USB.');
+  await expect(band).toHaveAccessibleName('Change band from 20m FT8, 14.074 MHz USB.');
   await expect(page.getByText('No decodes yet')).toBeVisible();
   await expect(page.getByText('Decodes appear here 13.5 s into each 15 s slot, while audio runs.')).toBeVisible();
 });
@@ -50,7 +50,7 @@ test('a tap on a band applies it at once', async ({ page }) => {
   await sheet.getByText('40m', { exact: true }).click();
   await expect(sheet).toBeHidden();
   const band = page.getByRole('button', { name: /^Change band/ });
-  await expect(band).toHaveAccessibleName('Change band. Now 40m FT4, 7.0475 MHz USB.');
+  await expect(band).toHaveAccessibleName('Change band from 40m FT4, 7.0475 MHz USB.');
   await expect(band).toContainText('7.0475');
 });
 
@@ -254,7 +254,7 @@ test('Clear cached copy waits for a connection', async ({ page, context }) => {
   await page.goto('./#/settings');
   await context.setOffline(true);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeDisabled();
-  await expect(page.getByText('Needs a connection', { exact: true })).toBeVisible();
+  await expect(page.getByText('Not available offline', { exact: true })).toBeVisible();
   await context.setOffline(false);
   await expect(page.getByRole('button', { name: /^Clear cached copy and reload/ })).toBeEnabled();
 });

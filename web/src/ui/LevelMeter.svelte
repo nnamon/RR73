@@ -17,7 +17,7 @@
   const tone = $derived(!hasSignal ? 'off' : inside ? 'ok' : 'warn');
   const message = $derived(
     !live
-      ? 'No audio. Start audio to see the input level.'
+      ? 'Start audio to see the input level.'
       : !hasSignal
         ? 'The input is silent. Check the cable and the radio’s audio output.'
         : inside

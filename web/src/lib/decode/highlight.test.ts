@@ -308,7 +308,7 @@ describe('presets', () => {
     expect(presetOf(moveBackground(defaultHighlights(), at('cq'), at('ending')))).toBe('custom');
     expect(presetOf(moveBackground(presetHighlights('quiet'), at('cq'), at('ending')))).toBe('custom');
     expect(presetOf([])).toBe('custom');
-    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['RR73', 'Quiet', 'WSJT-X', 'Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']);
+    expect(PRESETS.map((p) => presetLabel(p.id))).toEqual(['RR73', 'Quiet', 'Traditional', 'Monokai', 'Solarized', 'Dracula', 'Nord', 'Gruvbox']);
     expect(presetLabel('custom')).toBe('Custom');
   });
 

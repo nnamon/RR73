@@ -127,12 +127,14 @@ function failureText(f: FailingSource): string {
 export function statusText(view: SpotFeedView): string {
   if (!view.sources.length) return '';
   const at = view.updatedAt === null ? null : `${utcHm(view.updatedAt)} UTC`;
-  if (!view.online) return at ? `Offline. The list is from ${at} and refreshes when the ${device} is back online.` : '';
+  if (!view.online) return at ? `This ${device} is offline. The list is from ${at} and refreshes when it’s back online.` : '';
   if (view.failing.length) {
     const parts = view.failing.map(failureText);
-    if (at) parts.push(`Showing spots from ${at}.`);
     const retry = view.failing.flatMap((f) => (f.retryAt === null ? [] : [f.retryAt]));
-    if (retry.length) parts.push(`Next try at ${utcHm(Math.min(...retry))} UTC.`);
+    const next = retry.length ? `${utcHm(Math.min(...retry))} UTC` : null;
+    if (at && next) parts.push(`The list is from ${at}, and the next try is at ${next}.`);
+    else if (at) parts.push(`The list is from ${at}.`);
+    else if (next) parts.push(`The next try is at ${next}.`);
     return parts.join(' ');
   }
   return at ? `Updated ${at}` : '';

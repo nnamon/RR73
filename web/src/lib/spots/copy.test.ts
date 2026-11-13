@@ -149,21 +149,21 @@ describe('statusText', () => {
   });
 
   it('says when the list is offline and how old it is', () => {
-    expect(statusText(view({ online: false }))).toBe('Offline. The list is from 13:21 UTC and refreshes when the phone is back online.');
+    expect(statusText(view({ online: false }))).toBe('This phone is offline. The list is from 13:21 UTC and refreshes when it’s back online.');
     expect(statusText(view({ online: false, updatedAt: null }))).toBe('');
   });
 
   it('explains each failure and gives the next try', () => {
-    expect(statusText(view({ failing: [failing('network')] }))).toBe('POTA is unreachable. Showing spots from 13:21 UTC. Next try at 13:25 UTC.');
-    expect(statusText(view({ failing: [failing('timeout', { afterMs: 15_000 })] }))).toBe('POTA did not answer within 15 s. Showing spots from 13:21 UTC. Next try at 13:25 UTC.');
-    expect(statusText(view({ failing: [failing('http', { status: 503 })] }))).toBe('POTA answered with error 503. Showing spots from 13:21 UTC. Next try at 13:25 UTC.');
-    expect(statusText(view({ failing: [failing('http')] }))).toBe('POTA answered with an error. Showing spots from 13:21 UTC. Next try at 13:25 UTC.');
-    expect(statusText(view({ failing: [failing('format')], updatedAt: null }))).toBe('POTA sent spots RR73 cannot read. Next try at 13:25 UTC.');
-    expect(statusText(view({ failing: [failing('network', { retryAt: null })] }))).toBe('POTA is unreachable. Showing spots from 13:21 UTC.');
+    expect(statusText(view({ failing: [failing('network')] }))).toBe('POTA is unreachable. The list is from 13:21 UTC, and the next try is at 13:25 UTC.');
+    expect(statusText(view({ failing: [failing('timeout', { afterMs: 15_000 })] }))).toBe('POTA did not answer within 15 s. The list is from 13:21 UTC, and the next try is at 13:25 UTC.');
+    expect(statusText(view({ failing: [failing('http', { status: 503 })] }))).toBe('POTA answered with error 503. The list is from 13:21 UTC, and the next try is at 13:25 UTC.');
+    expect(statusText(view({ failing: [failing('http')] }))).toBe('POTA answered with an error. The list is from 13:21 UTC, and the next try is at 13:25 UTC.');
+    expect(statusText(view({ failing: [failing('format')], updatedAt: null }))).toBe('POTA sent spots RR73 cannot read. The next try is at 13:25 UTC.');
+    expect(statusText(view({ failing: [failing('network', { retryAt: null })] }))).toBe('POTA is unreachable. The list is from 13:21 UTC.');
   });
 
   it('lists two failing sources and the earlier retry', () => {
     const two = [failing('network'), failing('http', { source: 'hamqth', name: 'HamQTH', status: 500, retryAt: at(13, 23) })];
-    expect(statusText(view({ failing: two }))).toBe('POTA is unreachable. HamQTH answered with error 500. Showing spots from 13:21 UTC. Next try at 13:23 UTC.');
+    expect(statusText(view({ failing: two }))).toBe('POTA is unreachable. HamQTH answered with error 500. The list is from 13:21 UTC, and the next try is at 13:23 UTC.');
   });
 });

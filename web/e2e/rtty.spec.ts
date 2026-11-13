@@ -329,7 +329,7 @@ for (const theme of ['light', 'dark'] as const) {
     await checkLayout(page);
     await shot(page, info, SHOTS, `${theme}-macroedit`, 200);
 
-    // An edit shows in Sends now; Delete macro offers Undo; Restore defaults names what it replaces.
+    // An edit shows in Preview; Delete macro offers Undo; Restore defaults names what it replaces.
     const macroText = page.getByRole('textbox', { name: 'Text' });
     await macroText.fill('ur rst {rst} {rst}');
     await expect(page.getByTestId('macro-sends')).toHaveText('UR RST 599 599');

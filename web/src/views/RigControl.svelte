@@ -90,7 +90,7 @@
           case 'signals':
             return kx2
               ? { text: 'The port’s DTR and RTS lines could not be set low, so the port was closed. RTS keys the Digirig’s PTT. Set MENU › MIC BTN on the KX2 to OFF, then tap Reconnect radio.', bad: true }
-              : { text: 'DTR and RTS could not be set low, and USB SEND does not read OFF. The port is closed. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
+              : { text: 'The port is closed because DTR and RTS could not be set low and USB SEND does not read OFF. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF, then tap Reconnect radio.', bad: true };
           case 'no-wasm':
             return { text: 'Rig control did not load. Reload the app.', bad: true };
           case 'gone':
@@ -103,8 +103,8 @@
             return { text: 'The port did not open. Unplug the USB cable, plug it in again, then tap Reconnect radio.', bad: true };
         }
       case 'connected':
-        if (usbSendOn()) return { text: 'Tx stays off until USB SEND is OFF. Radio settings, below, gives the menu path.', bad: true };
-        return transmittingAlone ? { text: `The ${radioName()} reports transmitting, and RR73 holds no PTT: VOX, its own PTT or another program keys it.`, bad: false } : null;
+        if (usbSendOn()) return { text: 'Tx stays off until USB SEND is OFF. The menu path is under Radio settings below.', bad: true };
+        return transmittingAlone ? { text: `The ${radioName()} is transmitting, but not by PTT from RR73. VOX, its own PTT or another program is keying it.`, bad: false } : null;
       default:
         return rig.error === 'refused' ? { text: 'The browser did not allow the port. Tap Connect radio again.', bad: true } : null;
     }
@@ -153,8 +153,8 @@
   const notDataMode = $derived.by(() => {
     if (!connected || rigInDataMode() !== false) return null;
     return kx2
-      ? `The KX2 is in ${rigModeText()}. A transmission keyed by TX goes out in that mode: choose a band to set DATA A.`
-      : `The IC-705 is in ${rigModeText()}. A transmission goes out in that mode: choose a band to set USB-D.`;
+      ? `The KX2 is in ${rigModeText()}, and a transmission would go out in that mode. Choose a band to set DATA A.`
+      : `The IC-705 is in ${rigModeText()}, and a transmission would go out in that mode. Choose a band to set USB-D.`;
   });
 
   /** The radio's dial on another band than RR73's, or outside them all: transmissions are refused, and the badge is amber. */
@@ -170,9 +170,9 @@
    * interface Digirig says RF can stop from returning to receive (Troubleshooting Digital Modes).
    */
   const KX2_RISK =
-    'The KX2 has no transmit time-out. Digirig reports that RF can stop its interface returning to receive. Keyed by CAT, a stuck interface leaves the KX2 transmitting until you unkey it. Keyed by VOX, it stops when the audio stops.';
+    'The KX2 has no transmit time-out, and RF can stop the Digirig returning to receive. If that happens while CAT keys the radio, the KX2 transmits until you unkey it. With VOX it stops when the audio stops.';
 
-  const KX2_RISK_CABLE = 'The KX2 has no transmit time-out. Keyed by CAT, it transmits until RR73 or you unkey it. Keyed by VOX, it stops when the audio stops.';
+  const KX2_RISK_CABLE = 'Keyed by CAT, the KX2 transmits until RR73 or you unkey it, because it has no transmit time-out. With VOX it stops when the audio stops.';
 
   /** RR73's FT8 and FT4 audio runs from 200 to 2800 Hz; Elecraft's SSB filters are 2.7 or 2.8 kHz wide (docs/design/cat.md). */
   const FILTER_MIN_HZ = 2700;
@@ -237,7 +237,7 @@
       const mic = m.mic_btn;
       if (m.product !== undefined && m.product !== KX2_PRODUCT && m.product !== KX3_PRODUCT)
         out.push({ text: 'The radio does not report itself as a KX2 or KX3, so RR73 does not read MIC BTN. Check MENU › MIC BTN at the radio: OFF.', bad: false });
-      if (mic === undefined && m.menu_entry === 82) out.push({ text: 'The KX2 shows its MIC BTN menu entry, as a read cut off by a lost port leaves it. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.', bad: false });
+      if (mic === undefined && m.menu_entry === 82) out.push({ text: 'The KX2 is showing its MIC BTN menu entry, left open when the port closed during a read. Tap DISP on the KX2 to leave the menu, and RR73 reads MIC BTN.', bad: false });
       if (mic === -1) out.push({ text: 'MIC BTN could not be read. Check MENU › MIC BTN at the radio: OFF.', bad: false });
       if (digirig && mic !== undefined && mic >= 0 && mic & 1)
         out.push({ text: 'MIC BTN reads the mic jack’s ring as PTT, and the Digirig’s KX cable puts its PTT line there: the KX2 transmits while the browser opens the port. Set MENU › MIC BTN to OFF.', bad: true });
@@ -249,7 +249,7 @@
       if (m.vox === 0 && !settings.cat.keyPtt && (rig.mode === 'data' || rig.mode === 'data-rev'))
         out.push({ text: 'With VOX off, nothing keys the radio for a transmission. Turn on Key the radio with CAT, or set MENU › VOX MD to ON in DATA A.', bad: true });
       if (digirig && !settings.cat.keyPtt)
-        out.push({ text: 'ERR PTT at power-on turns VOX off in every mode until MENU › VOX MD is set again. The Digirig’s PTT line, held while RTS is asserted, causes it.', bad: false });
+        out.push({ text: 'If the KX2 shows ERR PTT at power-on, the Digirig held its PTT line, and VOX stays off in every mode until you set MENU › VOX MD again.', bad: false });
       if (m.bandwidth !== undefined && m.bandwidth < FILTER_MIN_HZ)
         out.push({ text: `The receive filter is ${khz(m.bandwidth)} wide, and FT8 and FT4 use 200 to 2800 Hz. Tap FIL on the KX2 and turn AF/MON to widen it to ${khz(FILTER_MIN_HZ)} or more.`, bad: false });
       if (m.split === 1) out.push({ text: 'Split is on: the KX2 transmits on VFO B, away from the frequency RR73 logs. Turn split off on the KX2.', bad: true });
@@ -257,7 +257,7 @@
       if (m.rit === 1 && m.offset_hz)
         out.push({ text: `RIT is on: the KX2 receives ${offsetText(m.offset_hz)} VFO A, so replies land ${Math.abs(m.offset_hz)} Hz from the station they answer. Tap RIT on the KX2 to turn it off.`, bad: true });
       else if (m.rit === 1) out.push({ text: 'RIT is on with a 0 Hz offset. Tap RIT on the KX2 to turn it off before the offset moves the receive frequency.', bad: false });
-      out.push({ text: 'MENU › AUTO OFF, when set, turns the KX2 off after that many minutes without use of its controls. Keep it at INFINITE while RR73 runs the radio.', bad: false });
+      out.push({ text: 'Set MENU › AUTO OFF to INFINITE, or the KX2 turns itself off when its controls go unused for that many minutes.', bad: false });
       return out;
     }
     if (usbSendOn()) out.push({ text: 'USB SEND keys the radio on a line of the port, so Tx stays off. Set SET › Connectors › USB SEND/Keying › USB SEND to OFF.', bad: true });
@@ -287,7 +287,7 @@
     if (!catKeys()) return null;
     switch (txOutput()) {
       case 'default':
-        return `Key the radio with CAT needs the Tx audio on the radio. Choose ${radioAudio} in Settings › Radio and audio › Output. Until then each transmission is refused.`;
+        return `To key the radio with CAT, choose ${radioAudio} in Settings › Radio and audio › Output. Until then each transmission is refused.`;
       case 'missing':
         return `The Tx output chosen in Settings › Radio and audio is not connected, so each transmission is refused. Connect it, or choose ${radioAudio} there.`;
       case 'refused':
@@ -299,14 +299,14 @@
     }
   });
 
-  const shiftText = $derived(!settings.cat.keyPtt ? 'Needs Key the radio with CAT' : settings.cat.shiftDial ? 'Signal stays on your Tx frequency' : 'Off: the dial stays put');
+  const shiftText = $derived(!settings.cat.keyPtt ? 'Only with Key the radio with CAT on' : 'Signal stays on your Tx frequency');
 
   const testing = $derived(rig.test?.state === 'running');
   const testResult = $derived(rig.test?.state === 'done' ? rig.test : null);
 
   const radios = [
-    { id: 'ic705', title: 'Icom IC-705', sub: 'USB cable' },
-    { id: 'kx2', title: 'Elecraft KX2', sub: 'Digirig or KX2 cable' },
+    { id: 'ic705', title: 'Icom IC-705' },
+    { id: 'kx2', title: 'Elecraft KX2' },
   ] as const;
 </script>
 
@@ -320,7 +320,7 @@
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.enabled} onchange={(e) => void setRigEnabled(e.currentTarget.checked)} />
       </label>
     </div>
-    {#if !settings.cat.enabled}<p class="section-foot">Off, transmissions key the radio by VOX.</p>{/if}
+    {#if !settings.cat.enabled}<p class="section-foot">With rig control off, VOX keys the radio.</p>{/if}
     {#if !settings.cat.enabled && rig.unkeyFailed}<p class="section-foot err" role="alert">{unkeyFailedText()}</p>{/if}
   </div>
 
@@ -331,7 +331,7 @@
     <div class="group" role="radiogroup" aria-labelledby="rig-radio">
       {#each radios as r (r.id)}
         <button class="row pick" role="radio" aria-checked={settings.cat.radio === r.id} onclick={() => void chooseRadio(r.id)}>
-          <span class="row-main"><span class="row-title">{r.title}</span><span class="row-sub">{r.sub}</span></span>
+          <span class="row-main"><span class="row-title">{r.title}</span></span>
           {#if settings.cat.radio === r.id}<Icon name="check" size={17} class="chk" />{/if}
         </button>
       {/each}
@@ -366,7 +366,7 @@
     {#if kx2}
       <p class="section-foot">Baud rate must match the KX2’s MENU › RS232, which is 4800 by default.</p>
     {:else}
-      <p class="section-foot" data-testid="rig-baud">Over USB the IC-705 answers at any rate. It has no baud rate setting.</p>
+      <p class="section-foot" data-testid="rig-baud">The IC-705 answers at any baud rate over USB and has no setting for it.</p>
     {/if}
   </div>
 
@@ -417,7 +417,7 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Key the radio with CAT</span>
-          <span class="row-sub">{settings.cat.keyPtt ? (kx2 ? 'PTT by TX and RX commands' : 'PTT over CI-V') : 'Off: VOX keys the radio'}</span>
+          <span class="row-sub">VOX keys the radio when off</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={settings.cat.keyPtt} onchange={(e) => void updateSettings({ cat: { ...settings.cat, keyPtt: e.currentTarget.checked } })} />
       </label>
@@ -431,7 +431,7 @@
     {#if outputText}<p class="section-foot err" role="alert" data-testid="rig-output">{outputText}</p>{/if}
     {#if notDataMode}<p class="section-foot err" role="alert" data-testid="rig-mode">{notDataMode}</p>{/if}
     {#if offBand}<p class="section-foot err" role="alert" data-testid="rig-band">{offBand}</p>{/if}
-    <p class="section-foot">Test keying transmits 1 s with no audio. Use low power into a dummy load.</p>
+    <p class="section-foot">Test keying transmits for 1 s with no audio. Use low power into a dummy load.</p>
     {#if kx2}<p class="section-foot" data-testid="rig-risk">{digirig ? KX2_RISK : KX2_RISK_CABLE}</p>{/if}
   </div>
 

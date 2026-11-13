@@ -74,7 +74,7 @@ test('starts off and reads nothing from Wavelog', async ({ page }) => {
   const { mock, strays } = await start(page);
   await toWavelog(page);
   await expect(readSwitch(page)).not.toBeChecked();
-  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this computer’s log only.')).toBeVisible();
+  await expect(page.getByText('Dupes, Hunt and Repeat CQ check only the log on this computer.')).toBeVisible();
   await expect(page.getByRole('button', { name: /Refresh from Wavelog/ })).toHaveCount(0);
   await toOperate(page);
   await decoded(page, [['CQ JA1KXM PM95', -8]]);
@@ -265,7 +265,7 @@ test('says what an older Wavelog means for reading, and keeps the switch', async
   await page.getByRole('button', { name: 'Test connection' }).click();
   await expect(page.getByText('Connected to Wavelog 3.2.4 at', { exact: false })).toBeVisible();
   await expect(page.getByTestId('wavelog-version-note')).toHaveCount(0);
-  await expect(page.getByText('Dupes, Hunt and Repeat CQ count this computer’s log only.')).toBeVisible();
+  await expect(page.getByText('Dupes, Hunt and Repeat CQ check only the log on this computer.')).toBeVisible();
   expect(strays).toEqual([]);
 });
 
@@ -281,7 +281,7 @@ test('keeps the switch in reach with the key gone, and Remove Wavelog deletes wh
   await expect(page.getByText('Type the address and API key above to read Wavelog’s log.')).toBeVisible();
   expect(await databases(page)).toContain(WORKED_DB);
   await page.getByRole('button', { name: 'Remove Wavelog…' }).click();
-  await expect(page.getByRole('dialog', { name: 'Remove Wavelog?' })).toContainText('Deletes the address, the API key and what RR73 read from Wavelog’s log. QSOs stay in the log.');
+  await expect(page.getByRole('dialog', { name: 'Remove Wavelog?' })).toContainText('This deletes the address, the API key and what RR73 read from Wavelog’s log. Your QSOs stay in the log.');
   await page.getByRole('dialog', { name: 'Remove Wavelog?' }).getByRole('button', { name: 'Remove Wavelog' }).click();
   await expect.poll(() => databases(page)).not.toContain(WORKED_DB);
   await expect(readSwitch(page)).toHaveCount(0);

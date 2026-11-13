@@ -77,7 +77,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await openScreen(page, 'Log');
   await expect(views(page)).toHaveText(['All', 'To do', 'Activations']);
   await page.goto('./#/settings/logging');
-  await expect(page.getByText('File to upload at pota.app')).toBeVisible();
+  await expect(page.getByRole('switch', { name: 'POTA', exact: true })).toBeVisible();
   // The Activate tab of earlier versions opens Spots.
   await page.goto('./#/activate');
   await expect(page.getByRole('heading', { level: 1, name: 'Spots' })).toBeVisible();
@@ -94,7 +94,7 @@ test('turning Activations on brings Spots back with the activation, and turning 
   await expect(views(page)).toHaveText(['All', 'To do']);
   await page.goto('./#/settings/logging');
   await expect(page.getByRole('heading', { level: 1, name: 'Logging' })).toBeVisible();
-  await expect(page.getByText('File to upload at pota.app')).toHaveCount(0);
+  await expect(page.getByRole('switch', { name: 'POTA', exact: true })).toHaveCount(0);
   await page.goto('./#/spots');
   await expect(page).toHaveURL(/#\/settings\/features$/);
 });

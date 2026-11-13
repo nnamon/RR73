@@ -209,12 +209,12 @@
           class:cur={st.current === n && (st.txEnabled || !!onAir)}
           role="radio"
           aria-checked={st.current === n}
-          aria-label="Tx{n}: {all[n] || 'needs a station'}"
+          aria-label="Tx{n}: {all[n] || 'no station chosen'}"
           disabled={!all[n]}
           onclick={() => chooseNext(n)}
         >
           <small aria-hidden="true">Tx{n}</small>
-          {#if all[n]}<span class="t" aria-hidden="true">{all[n]}</span>{:else}<span class="ph" aria-hidden="true">Needs a station</span>{/if}
+          {#if all[n]}<span class="t" aria-hidden="true">{all[n]}</span>{:else}<span class="ph" aria-hidden="true">No station chosen</span>{/if}
         </button>
       {/each}
     </div>

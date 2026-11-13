@@ -111,7 +111,7 @@ for (const theme of ['light', 'dark'] as const) {
     });
     await bar.getByRole('button', { name: 'Beacon' }).click();
     await expect(bar.getByRole('button', { name: 'Tx at :06' })).toHaveAttribute('aria-pressed', 'true');
-    await expect(bar.getByRole('status')).toHaveText(/Stops at 15:05/);
+    await expect(bar.getByRole('status')).toHaveText(/Beacon until 15:05/);
     await expect(page.getByTestId('wspr-next')).toHaveText(/Next\s*9V1NE OJ11 37\s*in 0:33/);
     await checkLayout(page);
     await shot(page, info, SHOTS, `${theme}-beacon`, 300);

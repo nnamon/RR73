@@ -474,7 +474,7 @@ function testFailed(why: 'ng' | 'timeout' | 'closed' | 'dial'): string {
       // The KX2's TX has no answer: TQ stayed at receive, or the radio answered ?;. TX does nothing
       // in FSK D and PSK D (Programmer's Reference p. 28).
       return settings.cat.radio === 'kx2'
-        ? 'The KX2 did not key on TX. RR73 sent PTT off and the radio confirmed it. It ignores TX in FSK D and PSK D: choose a band to set DATA A.'
+        ? 'The KX2 did not key on TX because it ignores TX in FSK D and PSK D. RR73 sent PTT off and the radio confirmed it. Choose a band to set DATA A.'
         : `The ${name} refused PTT. RR73 sent PTT off and the radio confirmed it.`;
     case 'timeout':
       return `No reply to PTT from the ${name} within 0.3 s. RR73 sent PTT off and the radio confirmed it.`;
@@ -502,7 +502,7 @@ export function unkeyFailedText(): string {
   return `The ${radioName()} did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.`;
 }
 /** Test keying's result then; the instruction is unkeyFailedText's, shown with it. */
-const UNKEY_TEST = 'Keyed. PTT off was not confirmed.';
+const UNKEY_TEST = 'The radio keyed, but PTT off was not confirmed.';
 
 /**
  * Test keying: stops any transmission, keys the radio for TEST_KEY_MS with no audio, sends PTT off,
@@ -625,7 +625,7 @@ export async function initCat(): Promise<void> {
   offHalt = onHalt(() => {
     if (rig.test?.state === 'running') {
       testGen++;
-      rig.test = { state: 'done', ok: false, text: 'Stopped by Halt. RR73 sent PTT off.', atMs: utcNow() };
+      rig.test = { state: 'done', ok: false, text: 'Halt stopped the test, and RR73 sent PTT off.', atMs: utcNow() };
     }
     const c = current;
     // PTT off unless nothing can be keyed: RR73 holds no PTT and the radio last read receive. The

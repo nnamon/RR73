@@ -44,8 +44,8 @@
 
   const optional: { id: FeatureId; title: string; sub?: string }[] = [
     { id: 'activations', title: 'Activations', sub: 'POTA, SOTA, WWFF and IOTA' },
-    { id: 'potaSpots', title: 'POTA spots', sub: 'Activators from pota.app' },
-    { id: 'clusterSpots', title: 'Cluster spots', sub: 'DX cluster from HamQTH' },
+    { id: 'potaSpots', title: 'POTA spots' },
+    { id: 'clusterSpots', title: 'Cluster spots' },
   ];
 
   let callsign = $state(settings.callsign);
@@ -126,14 +126,14 @@
     void (kind === 'reload' ? reloadApp() : clearCacheAndReload());
   }
 
-  const reloadSub = $derived(reloading === 'reload' ? 'Checking for updates' : 'Installs any update. Audio stops.');
+  const reloadSub = $derived(reloading === 'reload' ? 'Checking for updates' : 'Reloading stops the audio');
 
   const clearSub = $derived(
     !online
-      ? 'Needs a connection'
+      ? 'Not available offline'
       : reloading === 'clear'
         ? 'Removing the cached copy'
-        : 'Keeps settings and QSOs. Audio stops.',
+        : 'Settings and QSOs stay',
   );
 
   const themes: { id: Theme; label: string }[] = [
@@ -233,7 +233,7 @@
       </label>
     </div>
     {#if gridError}<p class="section-foot err" role="alert">{gridError}</p>{:else if gridNote}<p class="section-foot" role="status">{gridNote}</p>{/if}
-    <p class="section-foot">Transmitting needs a callsign and grid.</p>
+    <p class="section-foot">You need a callsign and grid to transmit.</p>
   </div>
 
 {/snippet}
@@ -355,7 +355,7 @@
     </div>
     <div class="group night">
       <div class="row stack">
-        <span class="row-main"><span class="row-title" id="font-choice">Font</span><span class="row-sub">Automatic: Inter on Linux and Android</span></span>
+        <span class="row-main"><span class="row-title" id="font-choice">Font</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="font-choice">
           {#each fonts as f (f.id)}
             <label class="seg-i" class:on={settings.font === f.id}>
@@ -366,7 +366,7 @@
         </span>
       </div>
       <div class="row stack">
-        <span class="row-main"><span class="row-title" id="mono-choice">Monospace</span><span class="row-sub">Messages, times and callsigns</span></span>
+        <span class="row-main"><span class="row-title" id="mono-choice">Monospace</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="mono-choice">
           {#each monos as m (m.id)}
             <label class="seg-i" class:on={settings.monoFont === m.id}>
@@ -400,11 +400,11 @@
         </span>
       </div>
       <label class="row">
-        <span class="row-main"><span class="row-title">Callsigns on the waterfall</span><span class="row-sub">FT8 and FT4</span></span>
+        <span class="row-main"><span class="row-title">Callsigns on the waterfall</span></span>
         <input type="checkbox" role="switch" class="switch" checked={settings.waterfallCalls} onchange={(e) => void updateSettings({ waterfallCalls: e.currentTarget.checked })} />
       </label>
       <div class="row stack">
-        <span class="row-main"><span class="row-title" id="night-after">Night display</span><span class="row-sub">After Operate sits untouched</span></span>
+        <span class="row-main"><span class="row-title" id="night-after">Night display</span></span>
         <span class="seg" role="radiogroup" aria-labelledby="night-after">
           {#each NIGHT_AFTER as m (m)}
             <label class="seg-i" class:on={settings.nightAfterMin === m}>
@@ -445,7 +445,7 @@
           </button>
         {/if}
         <label class="row">
-          <span class="row-main"><span class="row-title">Check for new versions</span><span class="row-sub">At start and once a day</span></span>
+          <span class="row-main"><span class="row-title">Check for new versions</span></span>
           <input class="switch" type="checkbox" role="switch" checked={settings.releaseCheck} onchange={(e) => void updateSettings({ releaseCheck: e.currentTarget.checked }).then(restartReleaseCheck)} />
         </label>
       {/if}
@@ -481,7 +481,7 @@
       <div class="group">
         <a class="row link" href={href('settings', 'guide')}>
           <span class="ic" aria-hidden="true"><Icon name="openbook" size={20} /></span>
-          <span class="row-main"><span class="row-title">Guide</span><span class="row-sub">QSOs, your radio and logging</span></span>
+          <span class="row-main"><span class="row-title">Guide</span></span>
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       </div>

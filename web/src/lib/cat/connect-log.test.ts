@@ -73,8 +73,8 @@ describe('the connection log', () => {
       return stoppedText(lastAttempt(), 'ic705');
     };
     expect(at({ step: 'chooser' })).toBe('The last connection stopped in the browser’s port chooser.');
-    expect(at({ step: 'open', options: { baudRate: 9600 } })).toBe('The last connection stopped at opening the port at 9600 baud.');
-    expect(at({ step: 'signals' })).toBe('The last connection stopped at setting the port’s DTR and RTS lines low.');
+    expect(at({ step: 'open', options: { baudRate: 9600 } })).toBe('The last connection stopped while opening the port at 9600 baud.');
+    expect(at({ step: 'signals' })).toBe('The last connection stopped while setting the port’s DTR and RTS lines low.');
     expect(at({ step: 'reply' })).toBe('The last connection stopped while waiting for the IC-705’s first reply.');
     logFailure('signals');
     expect(stoppedText(lastAttempt(), 'ic705')).toBe('The last connection failed while waiting for the IC-705’s first reply: the lines could not be set low, and USB SEND did not read OFF.');

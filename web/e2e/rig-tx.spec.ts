@@ -79,7 +79,7 @@ test('a CQ keys no PTT with Key the radio with CAT off; on, PTT goes on before t
   // which still starts at slot + 0.5 s, and unkeys after the audio ends. Keying by CAT needs the
   // Tx output chosen: with System default Rig control says so, and transmissions are refused.
   await setKeying(page, true);
-  await expect(page.getByTestId('rig-output')).toHaveText('Key the radio with CAT needs the Tx audio on the radio. Choose the IC-705’s USB audio in Settings › Radio and audio › Output. Until then each transmission is refused.');
+  await expect(page.getByTestId('rig-output')).toHaveText('To key the radio with CAT, choose the IC-705’s USB audio in Settings › Radio and audio › Output. Until then each transmission is refused.');
   // A new output halts, and Halt sends PTT off while CAT keys the radio: chosen with the switch off.
   await setKeying(page, false);
   await chooseOutput(page);

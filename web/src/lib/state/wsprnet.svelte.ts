@@ -84,7 +84,7 @@ const queue = new WsprnetQueue(post, {
     wsprnetStatus.waiting = queue.waiting;
   },
   failed(_body, _e, final) {
-    wsprnetStatus.error = final ? 'WSPRnet unreachable for 1 h, spots dropped' : 'WSPRnet unreachable, trying again';
+    wsprnetStatus.error = final ? 'RR73 dropped the spots after WSPRnet was unreachable for 1 h' : 'WSPRnet is unreachable, and RR73 retries for up to 1 h';
     wsprnetStatus.waiting = queue.waiting;
   },
 });

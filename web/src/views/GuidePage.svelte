@@ -41,7 +41,7 @@
   {#if !page}
     <div class="empty">
       <h2>No such page in this version</h2>
-      <p>Settings › Guide lists the guide's pages.</p>
+      <p>Go back to Settings › Guide to see the guide’s pages.</p>
     </div>
   {:else}
     {#each page.sections as s, si (si)}

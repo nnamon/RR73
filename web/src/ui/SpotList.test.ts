@@ -178,7 +178,7 @@ describe('SpotList states', () => {
   it('keeps the list offline and says how old it is', () => {
     const el = render({ feed: { ...BOTH, online: false } });
     expect(calls(el)).toHaveLength(3);
-    expect(el.querySelector('p.status')?.textContent).toBe('Offline. The list is from 05:56 UTC and refreshes when the phone is back online.');
+    expect(el.querySelector('p.status')?.textContent).toBe('This phone is offline. The list is from 05:56 UTC and refreshes when it’s back online.');
   });
 
   it('says what happens before the first list', () => {
@@ -191,7 +191,7 @@ describe('SpotList states', () => {
 
   it('explains a failure and the next try', () => {
     const feed: SpotFeedView = { ...BOTH, failing: [{ source: 'hamqth', name: 'HamQTH', kind: 'http', status: 503, afterMs: null, retryAt: Date.UTC(2026, 9, 13, 5, 59) }] };
-    expect(render({ feed }).querySelector('p.status')?.textContent).toBe('HamQTH answered with error 503. Showing spots from 05:56 UTC. Next try at 05:59 UTC.');
+    expect(render({ feed }).querySelector('p.status')?.textContent).toBe('HamQTH answered with error 503. The list is from 05:56 UTC, and the next try is at 05:59 UTC.');
   });
 
   it('says how to turn spots on, without chips or status, while every source is off', () => {

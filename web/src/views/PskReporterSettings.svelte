@@ -44,9 +44,9 @@
   const stateText = $derived.by(() => {
     const hold = pskHold();
     if (hold === 'off') return '';
-    if (hold === 'relay') return 'Needs a relay';
+    if (hold === 'relay') return 'Waiting for a relay';
     if (offered === false) return 'This relay does not report to PSK Reporter';
-    if (hold === 'station') return 'Needs your callsign and grid';
+    if (hold === 'station') return 'Waiting for your callsign and grid in Settings';
     if (hold === 'practice') return 'Paused while the practice band is on';
     if (hold === 'web-sdr') return 'Paused while receiving from a web SDR';
     if (hold === 'mode') return 'Paused in WSPR and RTTY';
@@ -57,11 +57,11 @@
 
   const heardText = $derived.by(() => {
     if (!heardYou.on) return '';
-    if (!settings.callsign.trim()) return 'Needs your callsign';
+    if (!settings.callsign.trim()) return 'Waiting for your callsign in Settings';
     if (practice.on) return 'Paused while the practice band is on';
     if (heard.feed === 'live') return heard.list.length ? `Live · ${heard.list.length} in the last 30 min` : 'Live';
     if (heard.feed === 'refused') return 'PSK Reporter’s feed refused the connection';
-    if (heard.feed === 'retrying') return 'Feed unreachable, trying again';
+    if (heard.feed === 'retrying') return 'PSK Reporter’s feed is unreachable';
     return 'Connecting';
   });
 </script>
@@ -74,7 +74,6 @@
       <label class="row">
         <span class="row-main">
           <span class="row-title">Report to PSK Reporter</span>
-          <span class="row-sub">Stations your radio decodes</span>
         </span>
         <input type="checkbox" role="switch" class="switch" checked={pskReporter.on} onchange={(e) => void updatePskReporter({ on: e.currentTarget.checked })} />
       </label>

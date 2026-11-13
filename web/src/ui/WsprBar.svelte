@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * WSPR's bottom bar. The status line gives the message and the Tx frequency ("9V1NE OJ11 37 ·
-   * 1500 Hz") or the latest notice, and on the right "Beacon off", "Stops at 16:05" or the time
+   * 1500 Hz") or the latest notice, and on the right "Beacon off", "Beacon until 16:05" or the time
    * left on air. Under it: Beacon, the Tx percentage, ••• and Halt.
    *
    * Beacon reads "Beacon" with a grey dot when off, "Tx at :06" in the accent tint while a
@@ -44,7 +44,7 @@
     else if (onAir) {
       const left = Math.max(0, Math.ceil((onAir.endMs - now) / 1000));
       aside = `${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')} left`;
-    } else if (wspr.beacon.on) aside = wspr.beacon.stopsAtMs === null ? 'Beacon on' : `Stops at ${utcHm(wspr.beacon.stopsAtMs)}`;
+    } else if (wspr.beacon.on) aside = wspr.beacon.stopsAtMs === null ? 'Beacon on' : `Beacon until ${utcHm(wspr.beacon.stopsAtMs)}`;
     else aside = 'Beacon off';
     if (tx.tuning) return { text: `Tune · ${w.txHz} Hz`, aside };
     if (onAir) return { text: `${onAir.text} · ${w.txHz} Hz`, aside };

@@ -12,8 +12,8 @@ test('Timing shows the clock, the median DT, the input offset and your Tx heard 
   await expect(page.getByTestId('timing-source')).toHaveText('Unknown until audio starts');
   await expect(page.getByTestId('timing-median')).toHaveText('Waiting for strong decodes');
   await expect(page.getByTestId('timing-clock')).toHaveText('Waiting for strong decodes');
-  await expect(page.getByTestId('timing-heard')).toHaveText('Shows after you transmit');
-  await expect(page.getByTestId('timing-decode')).toHaveText('Shows after the first slot');
+  await expect(page.getByTestId('timing-heard')).toHaveText('Waiting for your first transmission');
+  await expect(page.getByTestId('timing-decode')).toHaveText('Waiting for the first slot');
   await expect(page.getByTestId('timing-skipped')).toHaveText('None since the app opened');
 
   await page.getByRole('button', { name: 'Start audio' }).click();
@@ -97,7 +97,7 @@ test.describe('on Windows', () => {
     await expect(page.getByRole('heading', { name: 'Timing' })).toBeInViewport();
     await expect(page.getByTestId('timing-clock')).toHaveText('1.3 s slow by the decodes');
     await expect(page.getByTestId('timing-clock-foot')).toHaveText(
-      'The computer’s clock runs 1.3 s slow by the decodes, so other stations hear you 1.3 s late. In Windows Settings › Time & language › Date & time, turn on Set time automatically and select Sync now. It needs a network.',
+      'The computer’s clock runs 1.3 s slow by the decodes, so other stations hear you 1.3 s late. Connect to a network, then turn on Set time automatically in Windows Settings › Time & language › Date & time and select Sync now.',
     );
 
     // Correct Tx timing on: each transmission starts 1.3 s earlier, and the notice says so.

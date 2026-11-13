@@ -67,13 +67,13 @@
           autocomplete="off"
           spellcheck="false"
           maxlength="37"
-          placeholder={tx <= 5 ? 'Needs a station' : ''}
+          placeholder={tx <= 5 ? 'No station chosen' : ''}
         />
       </div>
       {#if errors[tx]}<p class="err" role="alert">{errors[tx]}</p>{/if}
     {/each}
   </fieldset>
-  <p class="note">Choosing a message sends it next. Edits to Tx1 to Tx5 last until you call another station. Tx6 keeps its text.{#if lq8} Text other than these messages goes as free text, up to about 17 characters.{/if}</p>
+  <p class="note">The message you choose goes out next. Your edits to Tx1 to Tx5 last until you call another station, and Tx6 keeps its text.{#if lq8} Text other than these messages goes as free text, up to about 17 characters.{/if}</p>
 </Sheet>
 
 <style>

@@ -29,7 +29,6 @@ async function practiceWithRadio(page: Page, playTx: boolean) {
   await page.evaluate(() => (location.hash = '#/settings/practice'));
   await expect(page.getByTestId('practice-keys')).toHaveText('With Play Tx audio on, practice transmissions key a connected radio, by CAT or VOX.');
   const play = page.getByRole('switch', { name: /^Play Tx audio/ });
-  await expect(play).toHaveAccessibleName(/Can key a connected radio/);
   await play.setChecked(playTx);
   const on = page.getByRole('switch', { name: /^Practice band/ });
   await on.check();

@@ -20,7 +20,7 @@
     if (!settings.callsign.trim()) return 'Set your callsign in Settings to see who hears you.';
     if (practice.on) return 'Paused while the practice band is on.';
     if (heard.feed === 'refused') return 'PSK Reporter’s feed refused the connection.';
-    if (heard.feed === 'retrying') return 'PSK Reporter’s feed is unreachable. Trying again.';
+    if (heard.feed === 'retrying') return 'PSK Reporter’s feed is unreachable. RR73 tries again within 5 min.';
     if (heard.feed === 'connecting') return 'Connecting to PSK Reporter’s feed.';
     return 'Stations that report your signal to PSK Reporter appear here within minutes of each transmission.';
   });

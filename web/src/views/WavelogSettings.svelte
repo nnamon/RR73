@@ -99,7 +99,7 @@
           type="url"
           bind:value={url}
           onblur={() => void saveAddress(true)}
-          placeholder="https://log.example.com"
+          placeholder="Required"
           autocapitalize="off"
           autocomplete="off"
           spellcheck="false"
@@ -108,7 +108,7 @@
       </label>
       <label class="row">
         <span class="row-title">API key</span>
-        <input class="row-field mono" type="password" bind:value={apiKey} onblur={() => void saveKey()} placeholder="Read-write key" autocapitalize="off" autocomplete="off" spellcheck="false" />
+        <input class="row-field mono" type="password" bind:value={apiKey} onblur={() => void saveKey()} placeholder="Required" autocapitalize="off" autocomplete="off" spellcheck="false" />
       </label>
     </div>
     {#if addressError}
@@ -162,11 +162,11 @@
       <h2 class="section-head">Radio status</h2>
       <div class="group">
         <label class="row">
-          <span class="row-main"><span class="row-title">Send radio status</span><span class="row-sub">Dial and mode</span></span>
+          <span class="row-main"><span class="row-title">Send radio status</span></span>
           <input class="switch" type="checkbox" role="switch" checked={settings.wavelogRadio} onchange={(e) => void updateSettings({ wavelogRadio: (e.currentTarget as HTMLInputElement).checked })} />
         </label>
       </div>
-      <p class="section-foot">Wavelog shows RR73 as a radio with its dial and mode, sent on each change.</p>
+      <p class="section-foot">Wavelog shows RR73 as a radio, with the dial and mode updated on each change.</p>
     </div>
   {/if}
   <!-- With the switch on and the address or key gone, the section stays, so it can be turned off. -->
@@ -177,7 +177,7 @@
         <label class="row" class:off={practice.on}>
           <span class="row-main">
             <span class="row-title">Read Wavelog’s log</span>
-            <span class="row-sub">Decode colours, New and Hide worked</span>
+            <span class="row-sub">For decode colours and Hide worked</span>
           </span>
           <input type="checkbox" role="switch" class="switch" checked={w.readWorked && !practice.on} disabled={practice.on} onchange={(e) => void setReadWorked(e.currentTarget.checked)} />
         </label>
@@ -199,7 +199,7 @@
       {:else if !w.url || !w.apiKey}
         <p class="section-foot">Type the address and API key above to read Wavelog’s log.</p>
       {:else}
-        <p class="section-foot">Dupes, Hunt and Repeat CQ count this {device}’s log only.</p>
+        <p class="section-foot">Dupes, Hunt and Repeat CQ check only the log on this {device}.</p>
       {/if}
     </div>
   {/if}
@@ -212,7 +212,7 @@
 </section>
 
 <Sheet bind:open={removing} title="Remove Wavelog?">
-  <p class="confirm-text">{w.readWorked ? 'Deletes the address, the API key and what RR73 read from Wavelog’s log.' : 'Deletes the address and API key.'} QSOs stay in the log.</p>
+  <p class="confirm-text">{w.readWorked ? 'This deletes the address, the API key and what RR73 read from Wavelog’s log.' : 'This deletes the address and API key.'} Your QSOs stay in the log.</p>
   <button class="btn tx full" onclick={() => void remove()}>Remove Wavelog</button>
   <button class="btn full keep" onclick={() => (removing = false)}>Keep Wavelog</button>
 </Sheet>

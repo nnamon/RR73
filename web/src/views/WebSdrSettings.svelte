@@ -71,7 +71,7 @@
           <Icon name="chevright" size={13} class="row-chevron" />
         </a>
       </div>
-      <p class="section-foot">Web SDR receive needs a relay.</p>
+      <p class="section-foot">To receive from a web SDR, choose a relay in Settings › Relay.</p>
     </div>
   {:else}
     <div class="section">

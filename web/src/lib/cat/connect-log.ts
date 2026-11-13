@@ -157,7 +157,7 @@ export function restoreAttempt(before: ConnectAttempt | null) {
 
 const NAMES: Record<CatRadioId, string> = { ic705: 'IC-705', kx2: 'KX2' };
 
-/** Where the attempt stopped, as the rest of a sentence: "at opening the port at 115200 baud". */
+/** Where the attempt stopped, as the rest of a sentence: "while opening the port at 115200 baud". */
 function stoppedAt(a: ConnectAttempt): string {
   const last = a.steps.at(-1);
   switch (last?.step) {
@@ -166,13 +166,13 @@ function stoppedAt(a: ConnectAttempt): string {
     case 'port':
       return a.via === 'connect' ? 'after the port was chosen' : 'after the allowed port was found';
     case 'forget':
-      return 'at forgetting the other allowed ports';
+      return 'while forgetting the other allowed ports';
     case 'open':
-      return `at opening the port at ${last.options.baudRate} baud`;
+      return `while opening the port at ${last.options.baudRate} baud`;
     case 'signals':
-      return 'at setting the port’s DTR and RTS lines low';
+      return 'while setting the port’s DTR and RTS lines low';
     case 'usb-send':
-      return 'at reading USB SEND';
+      return 'while reading USB SEND';
     default:
       return `while waiting for the ${NAMES[a.radio]}’s first reply`;
   }

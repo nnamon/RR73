@@ -145,7 +145,7 @@ test('Call a station calls a typed callsign in the Transmit in slot, and refuses
   await expect(sheet.getByRole('status')).toHaveText('Tx1 goes out on 1500 Hz in the 1st (Even) slot.');
   await field.fill('hello');
   await sheet.getByRole('button', { name: 'Call' }).click();
-  await expect(sheet.getByRole('status')).toHaveText('Not a callsign. Type it as sent, such as K1ABC or VK3/9V1NE.');
+  await expect(sheet.getByRole('status')).toHaveText('That isn’t a callsign. Type it as sent, such as K1ABC or VK3/9V1NE.');
   await expect(sheet).toBeVisible();
   await field.fill('k1abc');
   await field.press('Enter');

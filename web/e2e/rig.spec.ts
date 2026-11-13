@@ -131,7 +131,7 @@ test('a radio that keeps transmitting after PTT off: Test keying says to unkey i
   await connect(page);
   await page.evaluate(() => (window.__rig.ignorePttOff = true));
   await page.getByRole('button', { name: 'Test keying' }).click();
-  await expect(page.getByTestId('rig-test')).toHaveText('Keyed. PTT off was not confirmed.', { timeout: 5000 });
+  await expect(page.getByTestId('rig-test')).toHaveText('The radio keyed, but PTT off was not confirmed.', { timeout: 5000 });
   await expect(page.getByTestId('rig-status')).toHaveText('PTT off not confirmed');
   await expect(page.getByTestId('rig-help')).toHaveText('The IC-705 did not confirm PTT off. If it still transmits, unkey it at the radio or turn it off.');
   // PTT off: once, then 3 more 100 ms apart, then read every second while the radio transmits.
@@ -156,13 +156,13 @@ test('Radio and audio says that Key the radio with CAT needs the radio’s audio
   await rigOn(page);
   await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
   await page.evaluate(() => (location.hash = '#/settings/radio'));
-  await expect(foot).toHaveText('Key the radio with CAT needs the IC-705’s USB audio here.');
+  await expect(foot).toHaveText('To key the radio with CAT, choose the IC-705’s USB audio here.');
   // The KX2 names the Digirig's sound card.
   await page.evaluate(() => (location.hash = '#/settings/rig'));
   await rigOn(page);
   await page.getByRole('radio', { name: /^Elecraft KX2/ }).click();
   await page.evaluate(() => (location.hash = '#/settings/radio'));
-  await expect(foot).toHaveText('Key the radio with CAT needs the Digirig’s sound card here.');
+  await expect(foot).toHaveText('To key the radio with CAT, choose the Digirig’s sound card here.');
   await page.evaluate(() => (location.hash = '#/settings/rig'));
   await rigOn(page);
   await page.getByRole('switch', { name: /^Key the radio with CAT/ }).click();
@@ -178,10 +178,10 @@ test('Keep Tx audio centred is off by default and works only with Key the radio 
   const shift = page.getByRole('switch', { name: /^Keep Tx audio centred/ });
   await expect(shift).not.toBeChecked();
   await expect(shift).toBeDisabled();
-  await expect(page.getByTestId('rig-shift')).toHaveText('Needs Key the radio with CAT');
+  await expect(page.getByTestId('rig-shift')).toHaveText('Only with Key the radio with CAT on');
   await keying.click();
   await expect(shift).toBeEnabled();
-  await expect(page.getByTestId('rig-shift')).toHaveText('Off: the dial stays put');
+  await expect(page.getByTestId('rig-shift')).toHaveText('Signal stays on your Tx frequency');
   await shift.click();
   await expect(shift).toBeChecked();
   await expect(page.getByTestId('rig-shift')).toHaveText('Signal stays on your Tx frequency');
@@ -193,7 +193,7 @@ test('Keep Tx audio centred is off by default and works only with Key the radio 
   await expect(shift).toBeChecked();
   await keying.click();
   await expect(shift).toBeDisabled();
-  await expect(page.getByTestId('rig-shift')).toHaveText('Needs Key the radio with CAT');
+  await expect(page.getByTestId('rig-shift')).toHaveText('Only with Key the radio with CAT on');
   // Turning it on sends nothing to the radio.
   expect(rigFrames(await rigLog(page)).filter((f) => f.body.startsWith('05 '))).toEqual([]);
 });

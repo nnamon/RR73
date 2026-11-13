@@ -48,7 +48,7 @@
       </label>
     </div>
     <p class="section-foot" class:off={refused} role="status">
-      {refused ? 'Not a callsign. Type it as sent, such as K1ABC or VK3/9V1NE.' : `Tx1 goes out on ${settings.txHz} Hz in the ${settings.cqParity === 'even' ? '1st (Even)' : '2nd (Odd)'} slot.`}
+      {refused ? 'That isn’t a callsign. Type it as sent, such as K1ABC or VK3/9V1NE.' : `Tx1 goes out on ${settings.txHz} Hz in the ${settings.cqParity === 'even' ? '1st (Even)' : '2nd (Odd)'} slot.`}
     </p>
     <div class="start">
       <button class="btn primary" type="submit" disabled={!call.trim()}>Call</button>

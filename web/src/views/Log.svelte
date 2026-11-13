@@ -206,7 +206,7 @@
     {#if !todo.length && !fileActivations.length}
       <div class="empty">
         <h2>Nothing to do</h2>
-        <p>QSOs not sent to Wavelog, refused or changed, and activation files not yet submitted, appear here.</p>
+        <p>Unsent, refused and changed QSOs appear here, with activation files you haven’t submitted.</p>
       </div>
     {:else}
       {#if todo.length}
