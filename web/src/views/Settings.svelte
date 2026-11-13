@@ -18,9 +18,13 @@
   import { loggingSummary as logging, radioSummary as radio } from '../lib/state/summaries';
   import { catSupported } from '../lib/state/cat.svelte';
   import { rigSummary } from '../lib/state/radio.svelte';
+  import { isDesktop } from '../lib/app/desktop';
+  import { openRelease, release, restartReleaseCheck } from '../lib/state/release.svelte';
 
   // Rig control needs Web Serial: desktop Chrome and Edge. Safari has none, so the row never shows there.
   const rigShown = catSupported();
+  // The desktop app says when a newer release exists; the web app updates itself.
+  const desktop = isDesktop();
 
   /**
    * "features" scrolls to Optional features, as when Spots is hidden and its path opens Settings.
@@ -434,6 +438,17 @@
         <span class="row-main"><span class="row-title">Credits</span></span>
         <Icon name="chevright" size={13} class="row-chevron" />
       </a>
+      {#if desktop}
+        {#if release.latest}
+          <button class="row reload" onclick={() => void openRelease()} data-testid="release-row">
+            <span class="row-main"><span class="row-title acc">Open release page</span><span class="row-sub">Version {release.latest} is available</span></span>
+          </button>
+        {/if}
+        <label class="row">
+          <span class="row-main"><span class="row-title">Check for new versions</span><span class="row-sub">At start and once a day</span></span>
+          <input class="switch" type="checkbox" role="switch" checked={settings.releaseCheck} onchange={(e) => void updateSettings({ releaseCheck: e.currentTarget.checked }).then(restartReleaseCheck)} />
+        </label>
+      {/if}
       <button class="row reload" disabled={reloading !== null} onclick={() => tapReload('reload')}>
         <span class="row-main"><span class="row-title acc">Reload app</span><span class="row-sub" aria-live="polite">{reloadSub}</span></span>
       </button>

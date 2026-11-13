@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- The desktop app shows when a newer release is out and opens its page in your browser. Check for new versions in Settings › About turns the daily check off.
+
 ## 0.28.4 · 2026-11-13
 
 - FT8 and FT4 decode more signals that overlap others on busy bands (about 0.4 % more decodes on 6 busy receivers).

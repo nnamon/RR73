@@ -67,3 +67,9 @@ The desktop app has rig control on Windows, macOS and Linux, and checks the cloc
 | Windows | `.exe` or `.msi` | At Windows protected your PC, select More info, then Run anyway |
 | macOS | `.dmg` | Drag RR73 to Applications and open it once. Then select Open Anyway in System Settings › Privacy & Security |
 | Linux | `.AppImage` or `.deb` | For rig control, add your user to the `dialout` group (`uucp` on Arch Linux) and log in again |
+
+## Desktop app updates
+
+The desktop app looks for a newer release on GitHub at start and once a day. When one exists, a notice names the new version once, and Settings › About shows Open release page until you install it. Both open the release page in your browser. Download the installer for your system there and install it as you did the first one. The app never installs anything by itself.
+
+Check for new versions in Settings › About turns the check off. A check that fails shows nothing.

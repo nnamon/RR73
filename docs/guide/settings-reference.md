@@ -109,3 +109,7 @@ In Chrome and Edge on a computer, and in the desktop app. [Rig control](your-rad
 ## Guide and About
 
 Guide, the first row of Settings, opens these pages. About holds Version history, Credits, Reload app and Clear cached copy and reload. Both reloads stop audio.
+
+| Setting | Default | Effect |
+| --- | --- | --- |
+| Check for new versions | On | Desktop app only. Looks for a newer release on GitHub at start and once a day. [Updates](your-radio.md#desktop-app-updates) |

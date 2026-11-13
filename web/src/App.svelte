@@ -9,6 +9,8 @@
   import StationBar from './ui/StationBar.svelte';
   import StatusNotice from './ui/StatusNotice.svelte';
   import UpdateNotice from './ui/UpdateNotice.svelte';
+  import ReleaseNotice from './ui/ReleaseNotice.svelte';
+  import { release } from './lib/state/release.svelte';
   import Log from './views/Log.svelte';
   import DecodeColours from './views/DecodeColours.svelte';
   import Logging from './views/Logging.svelte';
@@ -279,7 +281,7 @@
       </div>
     {/if}
   </main>
-  {#if update.notice}<UpdateNotice version={update.notice} />{/if}
+  {#if update.notice}<UpdateNotice version={update.notice} />{:else if release.notice && release.latest}<ReleaseNotice version={release.latest} />{/if}
   <div class="floats">
     <StatusNotice />
     <LogNotice />

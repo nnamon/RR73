@@ -6,6 +6,9 @@
 //!   which gives them Web Serial's shape.
 //! - `clock_offset`: the system clock's offset from an NTP server ([`rr73_desktop::sntp`]),
 //!   which `web/src/lib/clock/utc.ts` adds to the system time.
+//! - `release_feed`: where the web app reads the latest release for its update notice
+//!   (`web/src/lib/state/release.svelte.ts`). The opener plugin shows the release page in the
+//!   system's browser, and the capability allows only the project's release pages.
 //! - Closing the window first asks the web app to Halt, so a radio keyed over CAT gets PTT off
 //!   before the ports close.
 
@@ -29,6 +32,10 @@ const NTP_TRIES: usize = 4;
 const NTP_TIMEOUT: Duration = Duration::from_millis(1500);
 /// Pause between exchanges.
 const NTP_GAP: Duration = Duration::from_millis(200);
+/// The project's latest GitHub release, read by the update notice.
+const RELEASE_FEED: &str = "https://api.github.com/repos/nnamon/RR73/releases/latest";
+/// Replaces RELEASE_FEED when set: the end-to-end tests serve a release from localhost.
+const RELEASE_FEED_ENV: &str = "RR73_RELEASE_FEED";
 /// Longest the window waits for the web app's Halt before it closes anyway.
 const CLOSE_WAIT: Duration = Duration::from_millis(2000);
 
@@ -86,6 +93,17 @@ async fn clock_offset(server: Option<String>) -> Result<Sample, String> {
         .map_err(|e| e.to_string())
 }
 
+/// The release feed: `RR73_RELEASE_FEED` when set and not empty, else GitHub's latest release.
+fn feed_url(over: Option<String>) -> String {
+    over.filter(|s| !s.trim().is_empty())
+        .unwrap_or_else(|| RELEASE_FEED.to_owned())
+}
+
+#[tauri::command]
+fn release_feed() -> String {
+    feed_url(std::env::var(RELEASE_FEED_ENV).ok())
+}
+
 /// The web app has halted after `rr73://close`: the ports close and the app exits.
 #[tauri::command]
 fn app_quit(app: tauri::AppHandle, state: State<'_, AppState>) {
@@ -119,6 +137,7 @@ fn allow_media(window: &tauri::WebviewWindow) {
 /// Runs the app.
 pub fn run() {
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(AppState {
             ports: Ports::new(SystemPorts),
             closing: AtomicBool::new(false),
@@ -130,6 +149,7 @@ pub fn run() {
             serial_lines,
             serial_close,
             clock_offset,
+            release_feed,
             app_quit
         ])
         .setup(|app| {
@@ -166,5 +186,20 @@ pub fn run() {
     if let Err(e) = result {
         eprintln!("RR73 did not start: {e}");
         std::process::exit(1);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn release_feed_defaults_to_github() {
+        assert_eq!(feed_url(None), RELEASE_FEED);
+        assert_eq!(feed_url(Some("  ".into())), RELEASE_FEED);
+        assert_eq!(
+            feed_url(Some("http://127.0.0.1:8123/latest".into())),
+            "http://127.0.0.1:8123/latest"
+        );
     }
 }

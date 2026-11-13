@@ -382,7 +382,7 @@ OTHER DEALINGS IN THE FONT SOFTWARE.
 
 ## Tauri
 
-The desktop app (`desktop/`, `docs/design/desktop.md`) runs the web app in a [Tauri](https://tauri.app) 2 window: the `tauri` 2.12 and `tauri-build` 2.7 crates, and `@tauri-apps/api` and `@tauri-apps/cli` 2.12.4. Tauri is under the MIT licence or the Apache License 2.0, at the user's choice; RR73 takes it under the MIT licence:
+The desktop app (`desktop/`, `docs/design/desktop.md`) runs the web app in a [Tauri](https://tauri.app) 2 window: the `tauri` 2.12, `tauri-build` 2.7 and `tauri-plugin-opener` 2.7 crates, and `@tauri-apps/api` and `@tauri-apps/cli` 2.12.4. Tauri is under the MIT licence or the Apache License 2.0, at the user's choice; RR73 takes it under the MIT licence:
 
 ```text
 MIT License

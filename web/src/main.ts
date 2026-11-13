@@ -26,7 +26,8 @@ const SETTINGS_WAIT_MS = 500;
 
 checkUpdated(__APP_VERSION__);
 // The desktop app serves its files from the installed bundle and updates with a new installer: no
-// service worker. It corrects the clock by NTP and halts before the window closes.
+// service worker. It corrects the clock by NTP, halts before the window closes and says when a
+// newer release exists (below, once the settings have loaded).
 if (isDesktop()) void import('./lib/state/desktop.svelte').then((m) => m.initDesktop()).catch(() => undefined);
 else void registerServiceWorker();
 
@@ -55,6 +56,8 @@ const pskLoaded = loadPskReporter();
 const heardLoaded = loadHeardYou();
 const wsprnetLoaded = loadWsprnet();
 const settingsLoaded = loadSettings();
+// The desktop app's release check starts after the settings, so a check the operator turned off never runs.
+if (isDesktop()) void settingsLoaded.then(() => import('./lib/state/release.svelte')).then((m) => m.initReleaseCheck()).catch(() => undefined);
 void Promise.race([Promise.all([settingsLoaded, practiceLoaded, relayLoaded, pskLoaded, heardLoaded, wsprnetLoaded]), new Promise((resolve) => setTimeout(resolve, SETTINGS_WAIT_MS))]).finally(() => {
   mount(App, { target: document.getElementById('app')! });
   // Rig control, in desktop Chromium: opens the radio's port again once the settings say to.

@@ -1,7 +1,13 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window: core events and the app's own commands.",
+  "description": "The main window: core events, the app's own commands, and the project's release pages in the system's browser.",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "https://github.com/nnamon/RR73/releases/*" }]
+    }
+  ]
 }
