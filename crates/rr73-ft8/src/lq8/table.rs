@@ -117,9 +117,14 @@ impl CallTable {
         self.by24.get(&hash).map(|e| e.call.as_str())
     }
 
-    /// The callsign with this 20-bit hash.
+    /// The callsign with this 20-bit hash. The reference transmitter sends a 24-bit hash
+    /// below 2^20 whole instead of its top 20 bits, so a miss falls back to the 24-bit
+    /// table; a callsign whose correct hash matches always wins.
     pub fn resolve20(&self, hash: u32) -> Option<&str> {
-        self.by20.get(&hash).map(|e| e.call.as_str())
+        self.by20
+            .get(&hash)
+            .or_else(|| self.by24.get(&hash))
+            .map(|e| e.call.as_str())
     }
 
     /// The callsign of the QSO under way with this 16-bit hash.
@@ -131,6 +136,15 @@ impl CallTable {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn resolves_the_reference_transmitters_whole_24_bit_hash_as_a_20_bit_hash() {
+        let mut t = CallTable::new();
+        t.insert("W1AW");
+        assert!(hash24("W1AW") < 1 << 20);
+        assert_eq!(t.resolve20(hash24("W1AW")), Some("W1AW"));
+        assert_eq!(t.resolve20(hash20("W1AW")), Some("W1AW"));
+    }
 
     #[test]
     fn resolves_the_most_recent_callsign_and_forgets_the_oldest() {

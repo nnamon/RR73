@@ -20,7 +20,7 @@ LQ8 is FT8 on the air apart from its sync: 8-GFSK, 6.25 Hz tone spacing, 0.160 s
 
 Where RR73 departs from the reference:
 
-- **A named type 7 target.** The reference hashes `<AB4SS>` in a type 7 call by taking the 24-bit hash and dropping its low 4 bits only when it is 2^20 or more, so a callsign whose CRC-24 is below 2^20 (W1AW, TU2TU) goes out with the wrong 20-bit hash. RR73 hashes a named target in 20 bits from its callsign, as the specification defines. Hexadecimal input is read as the reference reads it.
+- **A named type 7 target.** The reference hashes `<AB4SS>` in a type 7 call by taking the 24-bit hash and dropping its low 4 bits only when it is 2^20 or more, so a callsign whose CRC-24 is below 2^20 (W1AW, TU2TU) goes out with the wrong 20-bit hash. RR73 hashes a named target in 20 bits from its callsign, as the specification defines. On receive, a 20-bit hash that names no heard callsign is looked up as a whole 24-bit hash too, so a call from the reference transmitter still resolves. Hexadecimal input is read as the reference reads it.
 - **Free text that does not fit.** The reference cuts it short. RR73 refuses it ("free text holds 14 of its 23 characters"), so what goes out is what the operator typed.
 - **Unresolved hashes on screen.** The reference shows them in hexadecimal (`<01a4f2>`); RR73 shows `<...>`, as for FT8 (`Message::render`). `Display` keeps the hexadecimal for the golden vectors.
 

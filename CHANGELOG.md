@@ -2,6 +2,10 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- LQ8 callsign hashes from stations that send the 20-bit hash in the reference library's form now resolve.
+
 ## 0.28.1 · 2026-10-29
 
 - POTA files write LQ8 QSOs as mode MFSK with no submode; POTA accepts LQ8 only that way.
