@@ -93,7 +93,7 @@
   const uploadText = $derived.by(() => {
     const hold = wsprnetHold();
     if (hold === 'off') return '';
-    if (hold === 'station') return 'Waiting for your callsign and grid in Settings';
+    if (hold === 'station') return 'Set your callsign and grid in Settings';
     if (hold === 'practice') return 'Paused while the practice band is on';
     if (hold === 'web-sdr') return 'Paused while receiving from a web SDR';
     if (hold === 'mode') return 'Paused outside WSPR';

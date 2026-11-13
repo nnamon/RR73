@@ -47,7 +47,7 @@ const IOS: Advice = {
   allowPrompt: 'Allow the microphone if Safari asks.',
   screen: 'Set Auto-Lock to Never',
   checklist: [
-    { key: 'focus', title: 'Focus mode on', sub: 'No iOS sounds on the air' },
+    { key: 'focus', title: 'Focus mode on' },
     { key: 'clicks', title: 'Keyboard clicks off' },
     { key: 'volume', title: 'Phone volume at maximum' },
   ],

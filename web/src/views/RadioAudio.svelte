@@ -345,7 +345,7 @@
           <input type="checkbox" class="box" checked={settings.startTone} onchange={() => void updateSettings({ startTone: !settings.startTone })} />
           <span class="row-main">
             <span class="row-title">Start chime</span>
-            <span class="row-sub">{catKeys ? 'Off while CAT keys the radio' : 'A short transmission when audio starts'}</span>
+            <span class="row-sub">{catKeys ? 'Off while CAT keys the radio' : 'A tone that keys the radio by VOX'}</span>
           </span>
         </label>
       </div>
@@ -441,7 +441,7 @@
         {/if}
       {/if}
       <label class="row">
-        <span class="row-main"><span class="row-title">Correct Tx timing</span><span class="row-sub">Using the clock error in the decodes</span></span>
+        <span class="row-main"><span class="row-title">Correct Tx timing</span></span>
         <input class="switch" type="checkbox" role="switch" checked={settings.txClockFix} onchange={(e) => void updateSettings({ txClockFix: e.currentTarget.checked })} />
       </label>
       <div class="row">

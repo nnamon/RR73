@@ -10,7 +10,7 @@ describe('adviceFor', () => {
     expect(a.allowPrompt).toBe('Allow the microphone if Safari asks.');
     expect(a.screen).toBe('Set Auto-Lock to Never');
     expect(a.checklist).toEqual([
-      { key: 'focus', title: 'Focus mode on', sub: 'No iOS sounds on the air' },
+      { key: 'focus', title: 'Focus mode on' },
       { key: 'clicks', title: 'Keyboard clicks off' },
       { key: 'volume', title: 'Phone volume at maximum' },
     ]);
