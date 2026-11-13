@@ -2,7 +2,7 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
-## Unreleased
+## 0.28.2 · 2026-11-13
 
 - LQ8 callsign hashes from stations that send the 20-bit hash in the reference library's form now resolve.
 
