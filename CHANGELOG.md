@@ -2,6 +2,13 @@
 
 User-visible changes to RR73, newest first. Each release is tagged `v<version>` with the same notes. The app shows this file as Version history.
 
+## Unreleased
+
+- Settings and the other screens drop most row subtitles. What remains reads as plain phrases and sentences.
+- The decode colour preset with the classic FT8 colours is now called Traditional.
+- Missing-setting messages in WSPR and PSK Reporter now say what to set and where.
+- The guide and Version history are rewritten in plainer language.
+
 ## 0.28.5 · 2026-11-13
 
 - The desktop app says when a newer release is out and opens its page in your browser. Check for new versions in Settings › About turns that daily check off.
