@@ -101,7 +101,7 @@ These figures come from `rr73-bench`. SNR is measured in a 2500 Hz bandwidth, an
 | LQ8 SNR50, Watterson fading | −18.7 dB | −18.9 dB |
 | FT8, reference decodes found in 350 slots recorded on 40m | 95% | 96% |
 
-Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots, and the later stages gave none in 5000 LQ8 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.4 to −22.7 dB, also with no false decodes in 5000 noise-only slots. The method and data sets are in `docs/bench.md`, decision records 0007 and 0009 and experiments 0008, 0011 and 0012.
+Neither column gave a false decode in 5000 FT8 or 10000 FT4 noise-only slots, and the later stages gave none in 5000 LQ8 noise-only slots. A priori decoding moves the SNR50 of FT8 replies in a QSO from −21.4 to −22.7 dB, also with no false decodes in 5000 noise-only slots. On 1648 recorded FT8 slots from 6 public web SDRs, the app's three passes match 42950 of the 44840 decodes `jt9 -d 3` makes (experiment 0015). The method and data sets are in `docs/bench.md`, decision records 0007 and 0009 and experiments 0008, 0011, 0012, 0013 and 0015.
 
 ## Requirements
 
@@ -136,7 +136,7 @@ RR73 keeps receiving and transmitting while its window is minimised or behind an
 
 ### Desktop app
 
-The desktop app for Windows, macOS and Linux is the same app in its own window. It adds rig control on every system through the computer's serial ports, and corrects slot and Tx timing against an NTP server, with the measured offset in Settings › Radio and audio › Timing (`docs/design/desktop.md`). Each release on GitHub carries the installers: `.exe` (NSIS) or `.msi` for Windows, `.dmg` for macOS (Apple silicon and Intel), and `.AppImage` or `.deb` for Linux.
+The desktop app for Windows, macOS and Linux is the same app in its own window. It adds rig control on every system through the computer's serial ports, and corrects slot and Tx timing against an NTP server, with the measured offset in Settings › Radio and audio › Timing (`docs/design/desktop.md`). It checks GitHub once a day for a newer release and shows a notice with a link to it; the installers aren't signed, so it never installs anything itself. Each release on GitHub carries the installers: `.exe` (NSIS) or `.msi` for Windows, `.dmg` for macOS (Apple silicon and Intel), and `.AppImage` or `.deb` for Linux.
 
 The installers are not signed, so Windows and macOS show a warning before the first start.
 
@@ -156,7 +156,7 @@ Anyone can run a relay. Each release includes QSP binaries for x86-64 and ARM64 
 
 | Path | Contents |
 | --- | --- |
-| `crates/` | Rust: FT8, FT4, WSPR and RTTY codecs, DSP, decoders, channel simulator, corpus format, bench, WebAssembly bindings, and QSP. |
+| `crates/` | Rust: FT8, FT4, LQ8, WSPR and RTTY codecs, DSP, decoders, channel simulator, corpus format, bench, WebAssembly bindings, and QSP. |
 | `web/` | The app: Svelte 5, TypeScript, Vite. |
 | `tools/` | FT8 codec test oracle, reference decoder tools, web SDR corpus recorder, reference data build, copy lint, release scripts. |
 | `docs/` | Architecture, design documents, decision records, experiments, testing. |

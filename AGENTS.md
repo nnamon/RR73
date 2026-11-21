@@ -1,6 +1,6 @@
 # Working on RR73
 
-Rules for everyone changing this repository, people and coding agents alike. Read `docs/architecture.md` before changing code.
+Rules for everyone changing this repository, people and coding agents alike. Read `docs/status.md` for where the project stands and what is open, and `docs/architecture.md` before changing code.
 
 ## Tooling
 
@@ -41,6 +41,9 @@ docker compose run --rm wsjtx reference.py corpus/kiwi        # add jt9 referenc
 - Every user-visible change adds a line under `## Unreleased` in `CHANGELOG.md`, in the style guide's voice. The app shows the file as Version history.
 - Release often: every merge that changes the app or the decoder is followed by a release.
 - A minor version (0.x.0) marks a substantial new capability: a new screen or workflow, transmitting, the log, a log destination, a new mode. A patch (0.x.y) covers fixes and improvements to what already exists: decoder accuracy and speed, UI polish, copy, settings. 0.3.0 and 0.4.0 were decoder improvements released as minors before this rule was written down; they stay as published.
+- Before preparing a release that changes behaviour, rebase onto `origin/main` (docs merges move it), then run lint:copy, lint:css, vitest and the full Playwright suite on a fresh build: `wasm-pack build`, then `npm --prefix web run build`. A stale `web/dist` hides a precache budget overrun that CI then catches.
+- `tools/release/ship.sh <worktree> <version> <previous version> <full SHA>` waits for CI on the release commit, fast-forwards `main` and publishes. Afterwards `gh release view v<version> --json assets` lists 7 assets: 2 QSP tarballs and the 5 desktop installers.
+- A release whose CI fails is rebuilt on a new branch. Never force-push `main` or reuse a failed release commit.
 - Releases take two steps so CI tests the exact release commit. On the branch, `tools/release/release.sh prepare patch|minor|x.y.z` dates the changelog, bumps both versions and commits "Release x.y.z". After CI is green on the branch and `main` is fast-forwarded to it, `tools/release/release.sh publish` on `main` checks that a CI run passed on that exact commit (the branch's run counts), tags `v<version>`, pushes the tag and publishes the GitHub release with the changelog entries. The tag's CI run skips the tests its commit passed on the branch, builds the app and deploys it to GitHub Pages.
 
 ## Code
@@ -107,7 +110,7 @@ Check every UI change against these before it ships, and compare the screen side
 | decode | One message recovered from a slot. |
 | QSO | A contact between two stations. |
 | callsign | One word. |
-| band, mode | 20m, 40m; FT8, FT4, WSPR. |
+| band, mode | 20m, 40m; FT8, FT4, LQ8, WSPR, RTTY. |
 | Tx, Rx | Transmit, receive. |
 | Repeat CQ | The switch in Operate's ••• that keeps CQ going after each QSO: the next caller, or CQ again. Off, Tx goes off after the QSO. Called `run` in the code. |
 | Hunt | Answers CQs one after another, logging each QSO, until stopped. |
