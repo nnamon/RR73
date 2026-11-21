@@ -57,7 +57,8 @@ Rules the owner has set that AGENTS.md doesn't spell out:
 
 ## Working setup
 
-- **Worktrees.** Work happens in a worktree per task beside the main checkout (`git worktree add ../rr73-<task> -b <branch> origin/main`), with `.env` copied in. Remove the worktree and its Docker volumes (`docker volume ls`, named after the worktree) once its branch is merged; build output runs to gigabytes per worktree.
-- **Corpus.** Recordings live outside the repository on an external drive, at the path `RR73_CORPUS` gives in `.env`; `docker compose` mounts it at `corpus/`.
+- **Layout.** The owner's project directory holds the repository as `rr73/`, task worktrees under `worktrees/`, and local files that stay out of this public repository (release notes for the relay, the LQ8 reference library). Sessions work inside that directory only.
+- **Worktrees.** Each task gets its own worktree, made from the project directory with `git -C rr73 worktree add "$PWD/worktrees/<task>" -b <branch> origin/main`, with `.env` copied in. Remove the worktree and its Docker volumes (`docker volume ls`, named after the worktree directory) once its branch is merged; build output runs to gigabytes per worktree.
+- **Corpus.** Recordings live outside the repository on an external drive, at the path `RR73_CORPUS` gives in `.env`. Only `docker compose` reads it, mounted at `corpus/`.
 - **Releasing.** `tools/release/release.sh prepare patch|minor` on the branch, push, then `tools/release/ship.sh <worktree> <version> <previous version> <full commit SHA>`, which waits for CI, fast-forwards `main`, publishes and checks the deploy. AGENTS.md lists the checks to run first.
-- **Relay deployment.** The owner runs a QSP relay at the app's version and updates it after each release. Its access details are kept outside this public repository.
+- **Relay deployment.** The owner runs a QSP relay at the app's version and updates it after each release. Its access details and update script are in `release-tools/` in the project directory, outside this public repository.
